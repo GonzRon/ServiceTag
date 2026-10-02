@@ -1,6 +1,20 @@
-# #69 — resources owned by SupplyItems and installed components, and Share intake to all three owners: plan and briefs (rev 1, 2026-10-01)
+# #69 — resources owned by SupplyItems and installed components, and Share intake to all three owners: plan and briefs (rev 1.1, 2026-10-01)
 
-> **Status: PLANNING ONLY — at the owner gate.** Four owner questions are open (§6: R69-0 the scope sentence, R69-2
+> **Rev 1.1 (2026-10-01)** folds in the independent plan review (`.superpowers/sdd/2026-10-01-issue-69/plan-review.md`,
+> APPROVE WITH CONDITIONS; the seam split R69-14 upheld) under the controller's rulings. **Conditions:** C-1 (the
+> migration tests measure the latest schema) → C8, §3's B1a pins, "Briefs — common"'s confirm grep, B1a; C-2
+> (`AssetReferenceDto.assetId` stays `String` in B1b) → C9, C10, C13, §4, B1b, B2b; C-3 (uploads to the new owners
+> stream) → C19, row 43a, §4 (B4), B4; C-4 (compile-forced sites) → Global constraints' forced-arms rule, C5, C13,
+> C26, §3's pins, §4's touches, every brief; C-5 (the two race doubles) → C17, row 26, B2b2; C-6 (`OwnerMissing` by
+> the handler) → C2, C20, §4 (B4), B4; C-7 (split up front: **eighteen dispatches**, every one ≤ 1 h by estimate, no
+> clause left that triggers past 1 h; C11 and row 20 to B2a2) → header, §4, briefs §9–§26; C-8 (the gate budget)
+> → §3's device rows, §4, §6 F-1, §7; C-9 (a deleted SupplyItem resource returns) → §1 limit 2a, row 37a. **Notes:**
+> N-1 → §4 "Between-brief gaps"; N-2 → row 31; N-3 → row 8; N-4 → C21, row 43; N-5 → row 39; N-6 → G2; N-7 → C14;
+> N-8 → C27, row 51; N-9 → C27; N-10 → C30; N-11 → C6, B1a; N-12 → C2, C20; N-13 → C31; N-14 → C8; N-15 → B2a2;
+> N-16 → C11; N-17 → §5 (P69-1, -2, -4 replaced by the reviewer's words as the recommendation; the owner ratifies the
+> block); N-18 → no change.
+
+> **Rev 1 — Status: PLANNING ONLY — at the owner gate.** Four owner questions are open (§6: R69-0 the scope sentence, R69-2
 > the vendor URL, R69-3 Share's first step, R69-4 the Asset detail) and §5's strings await ratification as **one
 > block**. Every other R69 ruling is a controller default the owner may overrule. **Dispatch precondition:** R69-0,
 > R69-2, R69-3 and R69-4 ruled, §5 ratified. **Release line:** no version bump and no release — `versionName` /
@@ -22,8 +36,8 @@
 > **Ledger:** `.superpowers/sdd/2026-10-01-issue-69/progress.md` (the controller's; implementers never write it).
 > **Audit (inventory of record):** `.superpowers/sdd/2026-10-01-issue-69/audit.md`, every citation read on `ad49b788`.
 > This planner re-read on the same base every site it cites beyond the audit, and **corrects the audit in five
-> places** (§4, "Audit corrections"). **Fifteen dispatches on one branch `issue-69`:** B1a, B1b, B2a, B2a2, B2b, B3a,
-> B3b, B3c, then **B4 ∥ (B6a → B6b → B6c → B7)**, then B5, B8 — each `<base>` the previous accepted tip; **B1a's `<base>`
+> places** (§4, "Audit corrections"). **Eighteen dispatches on one branch `issue-69`:** B1a, B1b, B2a, B2a2, B2b,
+> B2b2, B3a, B3b, B3c, then **B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7b)**, then B5, B8 — each `<base>` the previous accepted tip; **B1a's `<base>`
 > is master at dispatch** (today `ad49b788`: 1.6.0 / code 19, Room schema 19 / backup format 19, MCP 89 tools, gitlink
 > `7e0377a`) plus this plan's commit. One task review each, at most one bounded fix round each, one whole-branch review,
 > the merge, one merged-tip gate.
@@ -77,6 +91,11 @@ the last comment); the audit; the #47 plan rev 1.1 with its §20 errata
   attachments, B2b references) that writes every arm the compiler forces, each to its contract here, with its rows;
   the **semantics the compiler does not force** (merge availability, the pack, the return's references, the delete's
   bytes, the restore order) follow in B3a–B3c. Every brief leaves `:core:test` and `:app:testDebugUnitTest` green.
+  **The forced-arms rule (C-4):** a brief whose contract adds a member, changes a field or removes a port method owns
+  **every compile error that change forces, in any source set** — arguments and receivers only, each listed in its
+  report; §4 names the sites the review counted. The gaps this leaves between briefs are listed in §4 ("Between-brief
+  gaps"), each unreachable on the branch (no UI or API path writes a new owner before B4, B6 or B7) and each closed by
+  a named row.
 - **The twin-pin rule, up front (#15 §20, #47 E-4).** A shipped assertion moves only where §3's moving-pins table names
   it for the brief. A **twin** — an assertion outside the table pinning the same fact for the same reason (a format
   literal, a key order, a strip list, a route count, a tool docstring) — moves under the same rule and is listed in the
@@ -164,6 +183,10 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
    its resources travel in every pack whose rows name it, bytes included, and are never read-only. **Editing one while
    a pack naming its item is out makes that pack's return a `CONFLICT`** refusing the whole return, as an edited
    SupplyItem already does (`C/merge/MergePlanner.kt:572`; `applicable = conflicts.isEmpty()`).
+2a. **A SupplyItem's file or link deleted at home while a pack naming its item is out comes back on the return (C-9).**
+   The pack carries the row; locally it is absent; its owner is available; so the plan answers INSERT and the pack's
+   own bytes land (`ImportTransferPack.kt:127`). Rows added on the borrowing phone land too; only edits refuse (limit
+   2). Pinned by row 37a; the person removes it again after the return.
 3. **Pack size.** A large manual on a SupplyItem rides every pack that names the item (R69-7's cost).
 4. **The vendor link is a reference row like any other (R69-2 as recommended).** "Preferred" is the owner's naming
    ("Vendor — …"), not a marker; several web references coexist (AC11).
@@ -195,9 +218,10 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   `NO_SUCH_SUPPLY_ITEM` (404); `NO_SUCH_INSTALLED_COMPONENT` (404); the shipped reference duplicate and refusal codes
   (`ReferenceProblem` → the shipped mapper); the shipped attachment codes; the guard's 409 `asset_transferred_out`;
   `400 bad_request` for a body naming **no owner or more than one** on `POST /v1/references` (G1's sentence, the #47
-  E-19/E-20 precedent of a ratified developer-facing 400) and for any unknown key. A refusal naming a SupplyItem or
-  component the path names: 404 with no `field`; one the body names: 404 with `field` `supplyItemId` or
-  `installedComponentId`.
+  E-19/E-20 precedent of a ratified developer-facing 400) and for any unknown key — a create that omits `assetId` now
+  answers G1's 400 rather than the decoder's (a B4 twin, N-12). A refusal naming a SupplyItem or component the path
+  names: 404 with no `field`; one the body names: 404 with `field` `supplyItemId` or `installedComponentId` (the two
+  new keys only); the asset arm keeps today's `no_such_asset` with no `field` (C-6).
 - **C3, the wire shapes.** Additive, API version 1; every row reuses the archive's DTO (`A/api/ReferenceDtos.kt:4-8`,
   `:26-29`; `A/api/AttachmentDtos.kt:33-37`), so the owner keys reach every response with no handler change:
 
@@ -224,7 +248,7 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   fields **appended after `source_name`** (column order = ALTER order). `requireExactlyOneOwner` (`Mappers.kt:165-169`)
   counts **four** columns. **Fallback, pre-authorised:** if `Migration19To20Test`'s migrated-equals-fresh compare
   rejects the ALTER-added FK (audit concern 1), B1a rebuilds `attachment` the 12-step way (as C7) instead — same
-  columns, same index names — and records it in the report; it is not a stop.
+  columns, same index names — and records it in the report; it is not a stop (N-11: unlikely — `:329` validated).
 - **C7, `asset_reference` (fact 2; R69-1).** Rebuilt: `CREATE TABLE _new_asset_reference` with Room's exact v20 DDL
   (from `20.json`), `INSERT … SELECT` copying every v19 column with `NULL` for the two new ones, `DROP`, `RENAME`, then
   the four indices recreated under Room's names: `UNIQUE(asset_id, uri)` and `Index(asset_id)` (kept, `AssetReferenceEntity.kt:42-45`),
@@ -235,9 +259,17 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   (three owners; I-6; I-7 per owner). A reference twin of `requireExactlyOneOwner` (three columns) runs on every Room
   write of a reference.
 - **C8, the step, the DAOs and the pins.** `MIGRATION_19_20` in `A/data/room/Migrations.kt` (after `MIGRATION_18_19`,
-  `:827`); `version = 20` (`A/data/room/AppDatabase.kt:103`); `SCHEMA_VERSION = 20` (`A/di/AppGraph.kt:1097`); both
-  migration lists in `AppGraph` and `T/data/room/MigrationTestSupport.kt:69`; `app/schemas/…/20.json` generated.
-  **No new table, so `V19_TABLES` and the whole-chain table sets do not move.** The DAOs gain owner-keyed reads beside
+  `:827`); `version = 20` (`A/data/room/AppDatabase.kt:103`); `SCHEMA_VERSION = 20` (`A/di/AppGraph.kt:1097`); the
+  migration list in `AppGraph` (`:275`) and the test chain (`T/data/room/MigrationTestSupport.kt:69`); `20.json`
+  generated. **No new table, so `V19_TABLES` and the whole-chain table sets do not move** — but **every
+  `MigrationNToN+1Test` measures the latest schema** (`openMigrated` registers the whole chain), so the column-shape
+  pins on the two changed tables move in B1a in #85's `dropLast` shape (C-1): `Migration9To10Test.kt:67`, `:69` and
+  `Migration15To16Test.kt:80`, `:82` (`attachment` 20 → 22 columns; drop a `V20_ATTACHMENT_COLUMNS` list before the
+  shipped take/drop), `Migration16To17Test.kt:74`, `:76` (`asset_reference` 10 → 12; drop a `V20_REFERENCE_COLUMNS`
+  list), and `Migration18To19Test.kt:129-137` (`everyV18TableIsUnchanged`) **narrowed to every v18 table but
+  `attachment` and `asset_reference`** — whose row preservation is rows 1–2's. The two entity constructions in
+  `T/data/room/AttachmentDaoTest.kt:202` and `ReferenceDaoConstraintTest.kt:39` take the new fields (arguments
+  only; the fields keep no default, the #85 precedent). The DAOs gain owner-keyed reads beside
   the shipped ones (`dao/AttachmentDao.kt:26-42`; `dao/AssetReferenceDao.kt:19-49`): rows and observed rows by
   `supply_item_id` and by `installed_component_id`, and `findByUri` per owner column, each ordered as its asset twin.
   **B1a is app-only and additive:** the domain is untouched, so the mappers still build only asset/event owners; the
@@ -247,8 +279,9 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
 
 - **C9, the DTOs (fact 3).** `AttachmentDto` (`C/backup/BackupFormat.kt:395-416`) gains `supplyItemId: String? = null`
   and `installedComponentId: String? = null` **appended after `sourceName`**; `AssetReferenceDto` (`:428-439`) gains
-  the same two **appended after `role`**, and its `assetId` becomes `String?` **with no default** (the key is always
-  written; a missing key stays a decode failure). The KDocs name format 20 as the keys' first format, in the shipped
+  the same two **appended after `role`**; **its `assetId` stays `String` in B1b** (C-2: a nullable one breaks
+  `C/merge/MergePlanner.kt:1061`, `:1087-1088`, which B1b never touches) and becomes `String?` **with no default** in
+  B2b (C13), the brief that owns that planner pass. The KDocs name format 20 as the keys' first format, in the shipped
   `role`/`source` paragraph shape. Defaults keep a format ≤ 19 archive decoding.
 - **C10, the gate and exactly-one.** `FORMAT_VERSION = 20` (`BackupCodec.kt:181`); `internal const val
   FIRST_RESOURCE_OWNER_FORMAT = 20` beside `:231`, KDoc "the first format that can carry a SupplyItem or installed
@@ -256,13 +289,13 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   **The field gate**, in the shape of `:420-452`, after the reference-role gate: a format < 20 archive with a non-null
   `supplyItemId` or `installedComponentId` on any attachment or reference is `BackupCorrupt` naming the list and the
   row (G2). Explicit nulls are accepted. **Exactly-one in `toDomain`:** `AttachmentDto.toDomain` (`:1149-1154`)
-  counts every owner key; `AssetReferenceDto.toDomain` (`:1340-1348`) refuses a row with no owner key or more than
-  one (G2: "reference {id} must name exactly one owner, an asset, a supply item or an installed component"). **At B1b's
-  tip the domain holds only the shipped owners**, so a row whose one owner key is a new one is refused by that
-  exactly-one rule (B2a and B2b widen it — rows 14 and 23); nothing writes such a row before then. The ~28 format pins
+  counts every owner key; `AssetReferenceDto.toDomain` (`:1340-1348`) refuses a row naming a new owner key beside its
+  (still required) `assetId` (G2: "reference {id} must name exactly one owner, an asset, a supply item or an installed
+  component"). **At B1b's tip the domain holds only the shipped owners**, so a row naming a new owner key is refused by
+  that exactly-one rule (B2a and B2b widen it — rows 14 and 23); nothing writes such a row before then. The ~28 format pins
   move here (§3). No graph check, merge, pack or use case changes in B1b.
 
-### B2a — the attachment owners, the seam (C4, C5, C11)
+### B2a — the attachment owners, the seam (C4, C5; C11 is B2a2's)
 
 - **C4, the domain (audit §2; R69-1, R69-6; H6).** In `C/model/Attachment.kt`:
 
@@ -286,7 +319,8 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
     removed**; constructor `+ supplyItems: SupplyItemRepository, installedComponents: InstalledComponentRepository`
     (C-1: B2a owns the `AppGraph` line, the `FakeGraph` line and every construction site `git grep` names — arguments
     only). The `require(owner.accepts(cmd.role))` message (`:54`) is restated owner-neutrally ("a document role
-    belongs on an asset's, a supply item's or an installed component's file, not an entry's").
+    belongs on an asset's, a supply item's or an installed component's file, not an entry's"); so is
+    `C/usecase/UpdateAttachment.kt:30`'s (G2, N-6).
   - `BackupFormat`: `Attachment.toDto` (`:1119-1122`) writes the owner's key and nulls the others;
     `AttachmentDto.toDomain` builds the four owners from exactly one key (C10's rule, widened); its role refusal
     (`:1156-1158`) now reads only for an entry's file (G2 unchanged in shape).
@@ -312,14 +346,22 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
     `CT/transfer/TransferOwnershipTest.kt:30`'s double — the audit named two (correction 1).
   - Room: `Mappers.kt:171-177` and `:202-205` map four owners; `RoomRepositories.kt:108-124` branches `forOwner` /
     `observeForOwner` onto B1a's DAO reads.
+  - **Two exhaustive `when`s in test sources (C-4):** `CT/usecase/BackupUseCasesTest.kt:651-654`
+    (`FkCheckingAttachmentRepository`, which fails an upsert whose owner is not in yet) gains two arms asking the
+    install's SupplyItem and component doubles, as the FK would (two `lateinit` lookups beside `assets` and `events`;
+    the shipped case never reaches them); `CT/transfer/TransferImportTesting.kt:153-158` (`reproduceRoomCascades`,
+    the asset delete's cascade over attachments) answers **`false`** for both — a SupplyItem's row never goes with an
+    asset, and a component's goes by C11's registration, not by this fake.
   The guarded ports (`HeldWriteGuard.kt:409-420`) are unchanged: they already ask `TransferOwnership.of`.
 - **C11, the core doubles (#47 C-2).** The core attachment and reference doubles cascade from nothing today
   (`CT/testing/InMemoryRepositories.kt:153-159`'s KDoc), so a test of "the asset delete takes its components'
-  resources" would pass vacuously. B2a adds, in `CT/testing/`: the component double (`InstalledComponentFixtures.kt`)
+  resources" would pass vacuously. **B2a2** adds (moved from B2a, C-7), in `CT/testing/`: the component double (`InstalledComponentFixtures.kt`)
   reports the ids its `cascadeFromAsset` removes to registered listeners, and `BackupInstall` registers the attachment
   double's `cascadeFromInstalledComponents(ids)` (removes rows owned by those ids — **only** those: asset-owned rows
-  keep today's behaviour, so no shipped test moves). B2b registers the reference double's twin. No owner-existence
-  check in either double (Room proves the FKs, rows 4–5).
+  keep today's behaviour, so no shipped test moves). The KDoc at `InMemoryRepositories.kt:151-156` is restated to name
+  the component-owned registration and the deliberate asymmetry (N-16); row 20 pins both halves. B2b registers the
+  reference double's twin (its `findByUri` and uniqueness are B2b's; the cascade registration is a two-line twin). No
+  owner-existence check in either double (Room proves the FKs, rows 4–5).
 
 ### B2b — the reference owner, the seam (C12, C13, C17)
 
@@ -345,9 +387,12 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
 - **C13, the forced arms.** `AddReference.run(owner: ReferenceOwner, cmd)` (`C/usecase/AddReference.kt:47`): the
   owner step (`:69-71`) resolves each owner (an archived SupplyItem and a removed component accepted, R69-10) through
   `+ supplyItems, installedComponents` constructor parameters; the duplicate step (`:72`) is `findByUri(owner, uri)`;
-  the step order and every refusal are unchanged (I-2). `MaterializeReference` (C17). `BackupFormat`:
-  `AssetReference.toDto` (`:1320-1331`) writes one owner key; `AssetReferenceDto.toDomain` builds the three owners
-  (C10 widened). The codec's reference owner check (`BackupCodec.kt:808-816`) **moves after `componentIds` (`:997`)**
+  the step order and every refusal are unchanged (I-2). `MaterializeReference` **stays asset-keyed in B2b** (C-7) by
+  one-line compile fixes — `takeIf { it.owner == ReferenceOwner.OfAsset(assetId) }` at `:73`, and the API's `:282`
+  reads the asset through `(reference.owner as? ReferenceOwner.OfAsset)` (any other owner answers the shipped
+  no-such-reference) — and B2b2 takes C17 whole. `BackupFormat`: `AssetReferenceDto.assetId` becomes `String?` with no
+  default (C-2, from B1b); `AssetReference.toDto` (`:1320-1331`) writes one owner key; `AssetReferenceDto.toDomain`
+  builds the three owners (C10 widened). The codec's reference owner check (`BackupCodec.kt:808-816`) **moves after `componentIds` (`:997`)**
   — it runs before the SupplyItem and component id sets exist today (correction 2) — and checks each owner kind,
   shipped asset message unchanged. The merge's second identity (`MergePlanner.kt:310-311`, `:364-365`, `:1061`)
   becomes the pair **`(owner, uri)`** with the owner value-typed (H3: `(null, uri)` and an id string shared by an asset
@@ -356,11 +401,17 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   `OWNER_NOT_AVAILABLE` with the owner's id. `ReturnScope.of` (`:315`) drops a reference owned by a returning asset or
   one of its components. `TransferOwnership.of(reference)` (`:106`) maps as C5. App: `ReferenceMappers`,
   `ReferenceRepositories` (`RoomReferenceRepository`, `:16`), `ReferenceHandlers.kt:83` (`ReferenceOwner.OfAsset`, the
-  shipped create — C20 widens it), `AttachmentHandlers.kt:280-289` (passes `reference.owner` to `prepare`; the held
-  check keeps its asset arm only, and C21 in B4 adds the component arm with row 44 — a test-only gap between B2b and
-  B4), and the callers' arguments: `ReferencesSectionViewModel.kt:114`, `:225` (`OfAsset(assetId)`),
-  `ShareIntakeViewModel.kt:367-376`, the materialize view model — **arguments only**, no behaviour.
-- **C17, materialize keyed by the reference's owner (fact 9; H4; AC13).** The five asset-bound sites of
+  shipped create — C20 widens it), and the callers' arguments: `ReferencesSectionViewModel.kt:114`, `:225`
+  (`OfAsset(assetId)`), `ShareIntakeViewModel.kt:367-376` — **arguments only**, no behaviour. **The compile-forced test
+  sites (C-4):** the **16** `AssetReference(` constructions (2 in core main, 1 in app main, 9 in `CT/`, 4 in `T/`) and
+  ~20 `.assetId` reads and removed-port calls in eight test files — `CT/backup/BackupFormat7Test.kt:192`, `:458`,
+  `:492-493`; `CT/usecase/UpdateReferenceTest.kt:108`; `CT/testing/InMemoryRepositories.kt:690-693`;
+  `CT/transfer/TransferImportTesting.kt:162`; `T/api/ReferenceRoutesTest.kt:167`, `:267`;
+  `T/ui/references/ReferencesSectionViewModelTest.kt:441`, `:462`, `:480`; `T/share/ShareIntakeViewModelTest.kt:158`,
+  `:185`, `:427`, `:461`, `:482`, `:633`, `:647` (`graph.references.forAsset`; B7's file, arguments here) — receivers
+  and arguments only.
+- **C17, materialize keyed by the reference's owner (fact 9; H4; AC13) — B2b2's whole contract (C-7).** The five
+  asset-bound sites of
   `C/usecase/MaterializeReference.kt` take the owner, and the downloader stays one: `prepare(owner: ReferenceOwner,
   referenceId, onProgress)` (`:67-74`) answers `NoSuchReference` unless `reference.owner == owner`; eligibility, the
   store, the network permission and the one `FetchDocument` call (`:79-101`) are unchanged; the duplicate check (`:108`)
@@ -368,7 +419,13 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   asset never refuse a SupplyItem's save, and the reverse); `Prepared.Ready.assetId` (`:182-183`) becomes `owner:
   ReferenceOwner`; `commit` (`:147`) calls `addAttachment.run(ready.owner.asAttachmentOwner(), …)` with the snapshot's
   role (R69-6 makes it acceptable on every owner a reference can have) and the shipped source. KDocs (`:61-66`,
-  `:119-124`, `:175-181`) restated owner-neutrally ("on the reference's owner").
+  `:119-124`, `:175-181`) restated owner-neutrally ("on the reference's owner"). Callers' arguments: the API's
+  `saveAsDocument` passes `reference.owner` (its held check stays B2b's interim asset arm until C21), and
+  `MaterializeViewModel` passes its owner (B6a generalises the sheet). **The two shipped race doubles move with the
+  check (C-5):** `CT/usecase/MaterializeReferenceTest.kt:771-785` (`WatchedAttachments`, asserted at `:662` and `:677`)
+  and `T/ui/references/MaterializeViewModelTest.kt:170-173` (`afterDuplicateCheck`, used by the cancel race at `:483`)
+  override `forOwner` instead of `forAsset`, the same gate; assertions unchanged; the report shows the gate still fires
+  (e.g. `:662`'s `waiting == 1`).
 
 ### B3a — the merge and the restore order (C14)
 
@@ -388,7 +445,8 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   - **The replace restore's order moves (H1):** `ImportBackupReplace.kt:218-220` writes references straight after the
     assets, before the SupplyItems (`:223`) and the components (`:227-228`); the reference line moves **after `:228`**
     (the attachments are already last, `:257-258`), and its comment (`:218-219`) is restated ("after every owner:
-    assets, SupplyItems and installed components"). The wipe needs no change: attachments (`:171`) and references
+    assets, SupplyItems and installed components"), as is the wipe's stale "References point only at assets" (`:179`,
+    N-7). The wipe needs no change: attachments (`:171`) and references
     (`:180`) are cleared before SupplyItems (`:205`).
 
 ### B3b — the pack, the return and the delete (C15–C16a)
@@ -437,15 +495,23 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   over one hundred and one …"**. A wrong verb is the shipped 405; the asset sub-resources (27) are unchanged.
   Handlers: `ReferenceHandlers.listForOwner(owner)` and `AttachmentHandlers.listForOwner` / `upload(owner, …)`
   generalise the shipped asset handlers (`AttachmentHandlers.kt:153-176`), never copy them; the 404s are C2's.
+  **The wire recognizer (C-3):** `isAttachmentUpload` (`A/api/HttpWire.kt:41-45`) matches only `POST
+  /v1/assets/<id>/attachments`, and it decides both the body cap (`ApiRouter.kt:57-61`, `MAX_UPLOAD_BYTES` versus
+  64 KiB) and whether the body stays on the socket as a stream (`HttpWire.kt:142-144`); it is widened to **exactly** the
+  two new canonical POST shapes (`/v1/supply-items/<id>/attachments`, `/v1/installed-components/<id>/attachments`),
+  its KDoc restated, every other method on those shapes still framed. Without it an upload over 64 KiB to a new owner
+  is a 413 before authentication, invisible to the router-level row 43 (`upload` falls back to
+  `ByteArrayInputStream(request.body)`, `:153`) — row 43a proves it on the real wire.
 - **C20, the create.** `CreateReferenceRequest` (`A/api/ReferenceDtos.kt:44-51`) takes `assetId: String? = null`,
   `supplyItemId: String? = null`, `installedComponentId: String? = null`; the handler maps exactly one non-null key to
   a `ReferenceOwner` (none or several → 400 G1, before any read); the rest is `AddReference`'s. `ignoreUnknownKeys =
   false` stays. **The vendor link is one of these rows** (R69-2 as recommended): no `vendor`/`preferred` key.
-  **`OwnerMissing` maps by the owner the handler passed** — today it is always `no_such_asset`
-  (`A/api/ApiJson.kt:429`, `:726`; `A/api/AttachmentHandlers.kt:347-349`): an asset keeps `no_such_asset`, a SupplyItem
-  answers `NO_SUCH_SUPPLY_ITEM` and a component `NO_SUCH_INSTALLED_COMPONENT` (each with the body key as `field` on the
-  create, no `field` on a path). The mapper takes the owner kind as an argument — an exhaustive `when`, no `else`; the
-  handler never re-reads the owner.
+  **`OwnerMissing` is mapped in the handler (C-6),** by the owner it passed, to the shipped typed 404s — as
+  `addRefusal` already does (`A/api/AttachmentHandlers.kt:346-352`): `NoSuchAsset` (today's `no_such_asset`, no
+  `field`), `NoSuchSupplyItem` (`A/api/ApiJson.kt:576`) and the installed-component 404 (`:863-866`), with the body
+  key as `field` on the create (the two new keys only) and none on a path — an exhaustive `when` over the owner, no
+  `else`; the handler never re-reads the owner. **`referenceProblemCode` and `ApiJson.kt:424-429` stay
+  byte-identical**, so `T/api/ReferenceRoutesTest.kt:450-470` (`everyReferenceProblemHasItsOwnCode`) does not move.
 - **C21, the held checks and the upload id (H9).** Materialize (`AttachmentHandlers.kt:280-283`) and upload (`:176`)
   ask the owner's asset: an asset itself; a component's `assetId`; a SupplyItem none (never held). A component on a
   held asset → 409 `asset_transferred_out` naming that asset. **The upload's derived id:** `attachmentOperationId`
@@ -453,8 +519,11 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   vectors in `docs/api/attachment-operation-ids.json` unchanged). The two new owners derive with a **new prefix**
   `servicetag:attachment-upload:v3` and the text `prefix \n installationId \n ownerKind \n ownerId \n operationKey`,
   `ownerKind` ∈ {`supply-item`, `installed-component`} (domain separation: an id string shared across owner kinds can
-  never derive the same row id). The golden file gains a **new top-level key** (`ownerVectors`, fictional ids, at
-  least two per kind) so its shipped readers are untouched; the MCP twin (C23) reads both.
+  never derive the same row id). The golden file gains **new top-level keys** — `ownerPrefix` (the v3 prefix) beside
+  `ownerVectors` (fictional ids, at least two per kind) — so its shipped readers are untouched; the vectors are
+  **computed independently of the Kotlin code** (e.g. `printf '%s\n%s\n%s\n%s\n%s' … | sha256sum`, then the version
+  and variant bits by hand; the command recorded in the report), never by running the function they pin (N-4); the MCP
+  twin (C23) reads both.
 - **C22, the document.** `docs/api/v1.md`: the owner keys on both row shapes ("exactly one is set"; `assetId` may be
   `null` on a reference read through a SupplyItem or component route); the six new rows; the create's owner rule and
   its 400; the held rule; the v3 derivation; the import range "format **1–20**" (`:209` and its twin) and the status
@@ -490,16 +559,22 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
 - **C26, the SupplyItem detail (R69-10).** `SupplyDetailScreen` (`A/ui/supplies/SupplyDetailScreen.kt:52-60`) gains,
   **below "Used by"** — the slot its KDoc reserves (`:44-45`, restated) — `AttachmentsSection(owner =
   OfSupplyItem)` then `ReferencesSection(owner = ReferenceOwner.OfSupplyItem)`, and a `SnackbarHost` (it has none).
-  Writable for an archived item too; never read-only (a SupplyItem is never held). `onOpenSettings` and the link
-  launcher are passed as `AssetDetailScreen` passes them. Nothing else on the screen moves.
+  Writable for an archived item too; never read-only (a SupplyItem is never held). `SupplyDetailScreen` has no
+  `onOpenSettings` today (`:52-58`), so it gains one and the link launcher, passed as `AssetDetailScreen`'s are, and
+  **B6b edits `A/ui/nav/ServiceTagRoot.kt:580-589`** to pass them (C-4; B6c edits the same file later, in sequence).
+  Nothing else on the screen moves.
 - **C27, the installed-component screen (H7; R69-8, R69-9).** A component lives only inside a bottom sheet
   (`A/ui/installed/InstalledComponentSheets.kt:71-90`) and the sections open their own sheets (#47 E-30: one sheet
   at a time), so the smallest honest surface is **a route and a screen**: `Route.InstalledComponentDetail(val id:
   String)` beside `Route.SupplyDetail` (`A/ui/nav/Route.kt:168`), its `entry` in `A/ui/nav/ServiceTagRoot.kt` beside
   `:580-589`. Reached from the row sheet by a **"Documents" action (P69-1)** offered on **every** row — current,
   removed, and on a held asset (where it opens read-only) — through a new `onOpenDocuments(id)` from
-  `InstalledComponentsSection` (`InstalledComponentsSection.kt:58-64`) via `AssetDetailScreen` to the root. The
-  screen: a top bar with the component's name and the shipped "Back"; then **two ownerships, in order**:
+  `InstalledComponentsSection` (`InstalledComponentsSection.kt:58-64`) via `AssetDetailScreen` to the root. **The
+  action closes the row sheet, then navigates** (`model.closeRow()` first, as `onOpenSupply` does,
+  `InstalledComponentsSection.kt:88`, `:98`), so Back returns to the asset with no sheet stacked (#47 E-30), and the new
+  `AssetDetailScreen` parameter takes a default `= {}` as `onOpenSupply` does (`AssetDetailScreen.kt:233`), so its
+  `AT/` call sites do not move (N-9). The screen: a `Scaffold` with a `SnackbarHost` (the sections take `snackbars`,
+  C26's shape), a top bar with the component's name and the shipped "Back"; then **two ownerships, in order**:
   1. **its own** — the heading P69-2, then `AttachmentsSection(owner = OfInstalledComponent)` and
      `ReferencesSection(owner = ReferenceOwner.OfInstalledComponent)`, writable unless the component's asset is held
      (the shipped `readOnly` flags, `DocumentsSection.kt:150-154`; `ReferencesSection.kt:78-79`);
@@ -508,9 +583,11 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
      heading P69-3 "From {name}" (a tap opens `SupplyDetail`, writing nothing — the "Used by" rows' shape), the quiet
      line P69-4, then the same two sections for `OfSupplyItem` with **`readOnly = true`** (open-only; edits on the
      SupplyItem's own detail). An archived SupplyItem's group is drawn (its resources are still its product's).
-  A component whose asset is deleted while the screen is open goes back (no sentence). The view model reads the row
-  through `InstalledComponentRepository.get` and the catalog's names through the shipped list rows; it writes nothing
-  itself (the sections own their writes).
+  **Observed reads (N-8):** the view model reads the row through `observeForAsset(row.assetId)` filtered by id (one
+  `get` first to learn the asset), the held state through the same flow the asset detail reads, and the catalog's
+  names through the shipped list rows — so a component whose asset is deleted while the screen is open goes back (no
+  sentence), and a hold or release while it is open flips `readOnly`. It writes nothing itself (the sections own their
+  writes).
 - **C28, the owner-worded sentences.** Four shipped sentences name "asset" and are reached from every owner; each
   keeps its asset wording and gains **a SupplyItem twin and a component twin** (P69-11…16), chosen by the owner kind
   in one small function per home (no shipped pin moves): `IntakeStrings.DUPLICATE_URI`
@@ -535,8 +612,11 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   `AssetsViewModel(graph, excludeHeld = true)`, `ShareIntakeActivity.kt:106`); Supply → the shipped `SupplyItemPicker`
   (`A/ui/supplies/SupplyItemPicker.kt:27`, a plain `LazyColumn`, so it fits a step) handed **unarchived** SupplyItems
   by the intake view model (its KDoc's rule, `:22-24`); Installed component → the `AssetPicker` step, then that
-  asset's **current** components as an indented tree under the title P69-9 (the #47 section's current-tree derivation
-  reused, never re-implemented), empty → the shipped P47-2 "No installed components". Held assets are excluded at the
+  asset's **current** components as an indented tree under the title P69-9 — the rows from
+  `C/model/InstalledComponentTree.current` (the derivation the section uses, `InstalledComponentsSectionViewModel.kt:261`),
+  never re-implemented; the step **draws its own plain tappable rows** (the section's `InstalledComponentsList`
+  carries actions a picker must not), each row's depth read by TalkBack through the shipped P47-5 "Inside %s" (N-10);
+  empty → the shipped P47-2 "No installed components". Held assets are excluded at the
   asset step, so their components are never offered. A **prose** share skips "Attach to" and opens the Asset picker as
   today. "Change" (`:90`) returns to "Attach to" for link and bytes, to the asset picker for prose. The dead ends are
   unchanged (`NO_ASSETS` when the install has no asset; a SupplyItem with no asset is still reachable — the "Attach to"
@@ -549,7 +629,8 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   seeding nothing new on the older side, then making SupplyItem- and component-owned files and links through the
   phone (SupplyItem detail, the component screen, Share), the API and the MCP, materializing one of each, and proving
   the pre-upgrade export re-plans with zero INSERT and the format-20 round trip (export → import → re-plan) `IDENTICAL`.
-  `docs/design/04-domain-data-model.md` §9's amendment (`:440`): "`vendor_url` is #69's" becomes "#69 keeps a
+  `docs/design/04-domain-data-model.md` §9: the table row listing `vendor_url` as a column (`:452`) is restated (N-13),
+  and the amendment (`:440`): "`vendor_url` is #69's" becomes "#69 keeps a
   SupplyItem's vendor and product links as ordinary references the SupplyItem owns; there is no `vendor_url` column"
   (or option D's wording if ruled). `docs/design/14-asset-model.md`: a resources paragraph (three owners; ownership
   follows what a resource is about; visibility by navigation; the child-Asset rule). `docs/versioning.md` untouched.
@@ -585,7 +666,7 @@ untyped owner key collides observably.
 | 5 | C8 DAO reads | same · `rowsAndObservedRowsBySupplyItemAndByComponentInTheShippedOrder` | the component read filters `supply_item_id` |
 | 6 | C8 schema pins | `VersionAgreementTest.kt:86`, `:157`; `MaintenanceRoutesTest.kt:1551` → 20 | none: pins |
 | 7 | C9 round trip of the envelope | `CT/backup/BackupFormat20Test` (new) · `assetAndEventRowsWriteBothNewKeysAsExplicitNulls`; `theDtosCarryExactlyTheseKeysInOrder` (both descriptors pinned) | `supplyItemId` given no default (a format-19 archive no longer decodes) |
-| 8 | C10 the gate | same · `aFormat19ArchiveWithANewOwnerKeyIsCorrupt` (each key × each list); `explicitNullsInAFormat19ArchiveDecode` | the gate removed |
+| 8 | C10 the gate | same · `aFormat19ArchiveWithANewOwnerKeyIsCorrupt` (each key × each list); `explicitNullsInAFormat19ArchiveDecode` — each refusal **asserts G2's gate message** (N-3: without the gate, exactly-one still refuses, with another message) | the gate removed (the message assertion fails) |
 | 9 | C10 exactly-one | same · `aReferenceWithNoOwnerKeyIsCorrupt`; `twoOwnerKeysAreCorrupt` (both lists) | the reference check removed (`AssetId(null)` throws an NPE, not `BackupCorrupt`) |
 | 10 | C10 newer refused | same · `aFormat21ArchiveIsRefusedAsNewer` | none: pin |
 | 11 | C10 format pins | §3's B1b pins | none: pins |
@@ -596,31 +677,33 @@ untyped owner key collides observably.
 | 16 | C5 AddAttachment | `CT/usecase/AttachmentUseCasesTest` (+5) · `addsToASupplyItemArchivedIncluded`; `addsToAComponentRemovedIncluded`; `bytesLandUnderTheOwnersDirectory`; `anUnknownSupplyItemOrComponentIsOwnerMissing`; `aRoleOnAnEntryStillThrows` | `ownerExists` answers true for an unknown SupplyItem |
 | 17 | C5 I5 resolution | `CT/transfer/TransferOwnershipTest` (+3) · `aSupplyItemsResourceHasNoOwner`; `aComponentsResourceResolvesToItsAsset`; `anUnknownComponentResolvesToNothing` | the `resolve` arm adds nothing (fails open) |
 | 18 | C5 the guard | `HeldWriteGuardTest` (+3) · `aComponentsFileOnAHeldAssetThrows` (upsert and delete); `aSupplyItemsFilePassesWhileEveryAssetNamingItIsHeld` | `Lookup.fetch` skips `OfInstalledComponent` |
-| 19 | C5 the return, attachments (H2) | `CT/usecase/ReturnScopeTest` or `ImportTransferPackTest` (+2) · `aReturningAssetsComponentFilesLeaveTheSnapshotAndTheirLocatorsAreSwept`; `aSupplyItemsFileStays` | the arm answers `false` for a component (the snapshot keeps the row, the locator is not listed) |
-| 20 | C11 the doubles | `CT/testing/ResourceOwnerDoubleTest` (new) · `anAssetDeleteThroughBackupInstallTakesItsComponentsFilesAndLinks`; `assetOwnedRowsDoNotCascadeInTheDouble` (unchanged behaviour); `aSecondOwnerUriPairThrows` | the registration line removed |
+| 19 | C5 the return, attachments (H2) | `CT/usecase/ReturnScopeTest` or `ImportTransferPackTest` (+2) · `aReturningAssetsComponentFilesLeaveTheSnapshotAndTheirLocatorsAreSwept`; `aSupplyItemsFileStays` — the component-owned rows are **local only**, never in the pack (N-15: the planner's attachment arm is B3a's) | the arm answers `false` for a component (the snapshot keeps the row, the locator is not listed) |
+| 20 | C11 the doubles | `CT/testing/ResourceOwnerDoubleTest` (new) · `anAssetDeleteThroughBackupInstallTakesItsComponentsFilesAndLinks`; `assetOwnedRowsDoNotCascadeInTheDouble` (unchanged behaviour); B2b adds `aSecondOwnerUriPairThrows` and the reference twin's cascade case | the registration line removed |
 | 21 | C12 the owner map | `CT/model/ReferenceOwnerTest` (new) · `asAttachmentOwnerIsTotalAndSameNamed`; `updateReferenceNeverChangesTheOwner` | `OfSupplyItem` mapped to `OfAsset` |
 | 22 | C13 AddReference (H3) | `CT/usecase/AddReferenceTest` (+5) · `addsToEachOwner`; `theSameUriOnAnAssetAndASupplyItemSharingAnIdStringIsTwoRows`; `aDuplicateIsPerOwner`; `anArchivedSupplyItemAndARemovedComponentAccept`; `theStepOrderIsUnchanged` (owner-missing still after the name) | `findByUri` keyed by the id string alone |
 | 23 | C13 the codec, references | `BackupFormat20Test` (+3) · `aSupplyItemsAndAComponentsLinksRoundTrip`; `anOwnerNotInTheFileIsCorrupt`; `theOwnerCheckSeesSupplyItemsAndComponents` (the moved block) | the moved check run before `supplyIds` exists (a valid file refused) |
 | 24 | C13 the merge pair (H3) | `CT/merge/MergePlannerReferenceTest` (+3) · `aSupplyItemsLinkDoesNotMatchAnAssetsLinkSharingIdAndUri` (INSERT, not `REFERENCE_HELD_BY_A_LOCAL_ROW`); `theSecondIdentityIsPerOwnerInTheArchive`; `anAbsentSupplyItemOrComponentIsOwnerNotAvailable` | the pair keyed `(ownerIdString, uri)` |
 | 25 | C13 the return, references | `ImportTransferPackTest` (+1) · `aReturningAssetsComponentLinkLeavesTheSnapshotAndTheReturnLands` | the `ReturnScope` reference filter checks the asset only (the borrowed-phone link edit refuses `CONFLICT`) |
-| 26 | C17 materialize (AC13, H4) | `CT/usecase/MaterializeReferenceTest` (+5) · `prepareOnASupplyItemsLinkAndCommitLandsOnTheSupplyItem`; `…onAComponentsLink…`; `theDuplicateCheckIsTheOwnersOwnFiles` (the same bytes on the asset do not refuse a SupplyItem's save); `theRoleAndSourceTravel`; `aReferenceOfAnotherOwnerIsNoSuchReference` | `commit` writes `OfAsset` / the duplicate check reads another owner |
+| 26 | C17 materialize (AC13, H4) | `CT/usecase/MaterializeReferenceTest` (+5) · `prepareOnASupplyItemsLinkAndCommitLandsOnTheSupplyItem`; `…onAComponentsLink…`; `theDuplicateCheckIsTheOwnersOwnFiles` (the same bytes on the asset do not refuse a SupplyItem's save); `theRoleAndSourceTravel`; `aReferenceOfAnotherOwnerIsNoSuchReference`; the two race doubles on `forOwner` with their shipped assertions (`:662`, `:677`; `MaterializeViewModelTest.kt:483`, C-5) | `commit` writes `OfAsset` / the duplicate check reads another owner |
 | 27 | C13 Room, references | `T/data/room/ReferenceDaoConstraintTest` (+2) · `threeOwnersRoundTrip`; `theMapperRefusesNoOwner` | `toEntity` writes `asset_id` for every owner |
-| 28 | C13 pins and arguments | the 17 `AssetReference(` sites take `owner = ReferenceOwner.OfAsset(…)`; `ReferencesSectionViewModelTest`, `MaterializeViewModelTest` green unchanged in assertions | none: pins |
+| 28 | C13 pins and arguments | the 16 `AssetReference(` sites take `owner = ReferenceOwner.OfAsset(…)`; C13's ~20 test reads and port calls move to the owner (receivers and arguments); `ReferencesSectionViewModelTest`, `ShareIntakeViewModelTest` green unchanged in assertions | none: pins |
 | 29 | C14 attachment availability | `CT/merge/MergePlannerTest` (+4) · `aSupplyItemOrComponentOwnerHereOrAcceptedIsAvailable`; `anAbsentOneIsOwnerNotAvailableNamingIt`; `aComponentThisPlanRefusesRefusesItsFiles` | `dto.assetId ?: dto.eventId!!` kept (the NPE) |
 | 30 | C14 M2 | `MergePlannerTransferTest` (+2) · `aComponentsFileInsertedForAHeldAssetIsTransferredOut`; `aSupplyItemsFileIsNot` | the planner's `installedComponent` lookup answers `null` |
-| 31 | C14 no older-archive exception | `MergePlannerTest` (+1) · `aFormat19ExportAgainstAnInstallWithNewOwnersResourcesIsApplicableAndIdentical` (no decision for rows the archive does not name) | a `sameAttachment` arm comparing without the new keys |
+| 31 | C14 no older-archive exception | `MergePlannerTest` (+1) · `aFormat19ExportAgainstAnInstallWithNewOwnersResourcesIsApplicableAndIdentical` (no decision for rows the archive does not name) | `Attachment.toDto` writing a non-null new key on an asset row (N-2: the local DTO differs, `CONFLICT`) |
 | 32 | C14 H1 restore order | `T/backup/ResourceOwnersRestoreTest` (new, Room-backed `FakeGraph`) · `aShuffledArchiveWithSupplyItemAndComponentLinksRestoresByteEqual` | the reference line moved back before the SupplyItems (SQLite's FK fails the restore) |
 | 33 | C14 apply order on Room | `ApiRouterTest` (+1) · `aMergeInsertingSupplyItemsComponentsAndTheirResourcesCommits` | references applied before components (the FK fails) |
 | 34 | C14 tallies | no new table: the report and tally pins **unchanged** and re-run | none: pins |
 | 35 | C15 select | `CT/transfer/TransferGraphTest` (+3) · `aPackCarriesItsComponentsFilesAndLinks`; `aPackCarriesTheResourcesOfEverySupplyItemInUseWithBytes`; `anUnusedSupplyItemsResourcesStayHome` | the supply arm dropped from `select` |
 | 36 | C15 retain | `TransferGraphRetainTest` (+2) · `aHeldAssetsComponentsResourcesDropAndTheKeptArchiveDecodes`; `aSupplyItemsResourcesAreKeptWhenOnlyHeldRowsNameIt` | `retain` keeps component-owned rows (the kept archive is corrupt: owner not in file) |
 | 37 | C15 H5 | `ImportTransferPackTest` (+1) · `aSupplyItemsFileEditedHereWhileThePackIsOutRefusesTheReturnAsConflict` (the limit, pinned) | none: a limit's pin |
+| 37a | C15, limit 2a (C-9) | same (+1) · `aSupplyItemsFileRemovedHereWhileThePackIsOutComesBackOnReturn` (row and bytes re-inserted) | none: a limit's pin |
 | 38 | C16a delete (H2) | `CT/usecase/RetireDeleteAssetTest` (+2) · `deletingAnAssetSweepsItsComponentsBytesCurrentAndRemoved`; `aSupplyItemsBytesAreNotSwept` | the component locators not read inside the write |
-| 39 | C16b the scenario (E1–E7, AC3, AC4, AC12) | `CT/usecase/ResourceOwnersFixtureTest` (new) · both components naming the battery SupplyItem read **the same** rows by `forOwner(OfSupplyItem)` (no copy: row and byte counts equal before and after); no component's resource appears under a SupplyItem and the reverse; export → replace import into an empty install reads every owner back; the export re-planned against the non-empty install `IDENTICAL`; a merge into an install without them inserts all, owners before resources | the replace import drops `installedComponentId` (the re-plan reads `INSERT`) |
+| 39 | C16b the scenario (E1–E7, AC3, AC4, AC12) | `CT/usecase/ResourceOwnersFixtureTest` (new) · both components naming the battery SupplyItem read **the same** rows by `forOwner(OfSupplyItem)` (no copy: row and byte counts equal before and after); no component's resource appears under a SupplyItem and the reverse; export → replace import into an empty install reads every owner back; the export re-planned against the non-empty install `IDENTICAL`; a merge into an install without them inserts all, owners before resources | the replace import drops `installedComponentId` (the restore refuses the row by exactly-one, or the re-plan reads `CONFLICT` `CONTENT_DIFFERS` — N-5; quote whichever fires) |
 | 40 | AC14 | same · `aChildAssetsFileIsAnAssetOwnedRow` | none of its own: C33.4's grep |
 | 41 | C19 routes | `T/api/ResourceOwnerRoutesTest` (new) · each GET lists only that owner's rows in the shipped order; `aMissingSupplyItemOrComponentIs404`; `aHeldAssetsComponentReadsAsAnyOther`; `theAssetSubResourcesAreUnchanged` | the SupplyItem route reads the asset's rows |
 | 42 | C20 the create | same · `exactlyOneOwnerKey` (none, two, a lone `null` → 400; each owner → 201); `anUnknownOwnerIs404WithItsCodeAndField` (each kind's own code, C20); `aDuplicateIsPerOwner`; `aPatchNamingAnOwnerKeyIs400` | two keys accepted, the first winning |
-| 43 | C21 upload (H9) | same · `uploadToASupplyItemAndAComponent` (201, locator directory); `aHeldAssetsComponentIs409`; `theAssetDerivationIsByteIdenticalToTheShippedVectors`; `theNewOwnersMatchTheV3Vectors` | the v3 text omits `ownerKind` (the vectors fail) |
+| 43 | C21 upload (H9) | same · `uploadToASupplyItemAndAComponent` (201, locator directory); `aHeldAssetsComponentIs409`; `theAssetDerivationIsByteIdenticalToTheShippedVectors`; `theNewOwnersMatchTheV3Vectors` (independently computed, N-4) | the v3 text omits `ownerKind` (the vectors fail) |
+| 43a | C19 the wire (C-3) | `T/api/HttpWireTest` (+3) · `aPostOverSixtyFourKibToASupplyItemsAttachmentsStreams`; `…toAComponentsAttachmentsStreams` (no 413; the body is a stream); `otherMethodsOnThoseShapesAreFramed` | `isAttachmentUpload` left asset-only (413) |
 | 44 | C21 materialize route (AC13) | `MaterializeRoutesTest` (+3) · `aSupplyItemsLinkSavesOnTheSupplyItem`; `aComponentsLinkSavesOnTheComponent`; `aHeldAssetsComponentLinkIs409` | the held check reads `(owner as OfAsset)` (a component's link on a held asset proceeds) |
 | 45 | C22 the document | `everyNewRouteIsInV1md`; the import range and status pins (§3) | a route missing from `v1.md` |
 | 46 | C23 the tools | `M/tests/test_reference_tools.py`, `test_attachment_tools.py` (+~12) · each widened tool's method, path and body per owner; none/several owners refused locally, nothing sent; `materialize_reference` recovers through the owner's routes; `add_attachment`'s v3 id equals the golden `ownerVectors` | `add_reference` sends `assetId` for a SupplyItem |
@@ -628,10 +711,10 @@ untyped owner key collides observably.
 | 48 | C23 pins | 89 tools unchanged; "1–20"; the argument guard | none: pins |
 | 49 | C25 sections by owner (H4) | `T/ui/references/ReferencesSectionViewModelTest` (+4) · `stateIsTheOwnersRows`; `theSavedMarkReadsTheOwnersOwnFiles`; `addPassesTheOwner`; `theDuplicateSentenceIsTheOwnersTwin`; `MaterializeViewModelTest` (+2) · `preparePassesTheOwner`; `alreadyHaveIsTheOwnersTwin`; `AttachmentsSectionViewModelTest` (+2) · `rolesOfferedOnASupplyItemAndAComponent`; `notOnAnEntry` | the saved mark reads `OfAsset` |
 | 50 | C26 SupplyItem detail | `SupplyDetailViewModelTest` (+1) · `anArchivedItemIsWritable`; **Compose** `AT/ui/supplies/SupplySurfacesTest` (+3) · both sections drawn below "Used by"; add actions present with a folder; an archived item's sections draw | none in-brief: device cases |
-| 51 | C27 the component screen | `T/ui/installed/InstalledComponentDetailViewModelTest` (new) · `ownSectionsAreKeyedByTheComponent`; `oneGroupPerDistinctSupplyItemDirectFirstThenEntries`; `anArchivedSupplyItemsGroupIsDrawn`; `aHeldAssetMakesOwnSectionsReadOnly`; `aRemovedComponentIsWritable`; `aDeletedAssetGoesBack` | a SupplyItem named by the link and an entry drawn twice |
-| 52 | C27 drawn | **Compose** `AT/ui/installed/InstalledComponentDetailTest` (new, ~10 cases) · the title; P69-2 then both own sections; each "From {name}" group with P69-4 and no add or edit action; a group tap opens the SupplyItem; held → no add action; empty sections' shipped lines; **Compose** `InstalledComponentsSectionTest` (+2) · the row sheet offers P69-1 on a current, a removed and a held row; the tap reports the id | none in-brief: device cases |
+| 51 | C27 the component screen | `T/ui/installed/InstalledComponentDetailViewModelTest` (new) · `ownSectionsAreKeyedByTheComponent`; `oneGroupPerDistinctSupplyItemDirectFirstThenEntries`; `anArchivedSupplyItemsGroupIsDrawn`; `aHeldAssetMakesOwnSectionsReadOnly`; `aRemovedComponentIsWritable`; `aDeletedAssetGoesBack` (observed, N-8); `aHoldWhileOpenMakesItReadOnly` | a SupplyItem named by the link and an entry drawn twice |
+| 52 | C27 drawn | **Compose** `AT/ui/installed/InstalledComponentDetailTest` (new, ~10 cases) · the title; P69-2 then both own sections; each "From {name}" group with P69-4 and no add or edit action; a group tap opens the SupplyItem; held → no add action; empty sections' shipped lines; **Compose** `InstalledComponentsSectionTest` (+2) · the row sheet offers P69-1 on a current, a removed and a held row; the tap closes the sheet, then reports the id | none in-brief: device cases (B6c2; compiled there, first run at the merged-tip gate) |
 | 53 | C29–C30 Share state | `T/share/ShareIntakeViewModelTest` (+~12) · link and bytes open "Attach to", prose does not; each owner's save calls the one use case with that owner; the Supply picker gets unarchived items only; the component step lists **current** rows of the chosen asset as a tree; a held asset is never offered; Cancel writes nothing on each path; "Change" returns to the right step; `savedTo` per target; the duplicate twin per target | the component step lists removed rows |
-| 54 | C30 drawn | **Compose** `AT/share/ShareIntakeScreenTest` (+5) · the three choices in order; the Supply picker step; the component tree step with P69-9 and P47-2 when empty; the chosen component line P69-10 with "Change"; a prose share opens the asset picker directly | none in-brief: device cases |
+| 54 | C30 drawn | **Compose** `AT/share/ShareIntakeScreenTest` (+5) · the three choices in order; the Supply picker step; the component tree step with P69-9 and P47-2 when empty; the chosen component line P69-10 with "Change"; a prose share opens the asset picker directly; and the three shipped behaviour pins `:166`, `:308`, `:368` moved to the second step | none in-brief: device cases (B7b; compiled there, first run at the gate) |
 | 55 | the boundary unchanged | `AT/share/ShareBoundaryTest` (3), `ShareResolutionContractTest` (4), `SharedItemLiftTest` (7): untouched, re-run at the gate | none: re-run |
 | 56 | C31 the documents | `ReleaseProofPolicyTest` unchanged and green; B8's anchored greps (§7) | none: tripwire |
 | 57 | C33 the fence | the six greps at every brief | none: greps |
@@ -642,14 +725,19 @@ re-read on `ad49b788`; each brief confirms by grep and lists twins).
 | pin | brief | moves, because |
 |---|---|---|
 | `T/VersionAgreementTest.kt:86`, `:157`; `T/api/MaintenanceRoutesTest.kt:1551`; `T/data/room/MigrationTestSupport.kt:69` (the chain) | B1a | the schema is 20 |
+| `Migration9To10Test.kt:67`, `:69`; `Migration15To16Test.kt:80`, `:82`; `Migration16To17Test.kt:74`, `:76` (in #85's `dropLast` shape, C8); `Migration18To19Test.kt:129-137` (`everyV18TableIsUnchanged`, narrowed to every v18 table but `attachment` and `asset_reference`); the entity constructions `AttachmentDaoTest.kt:202`, `ReferenceDaoConstraintTest.kt:39` (arguments) | B1a | the chain measures the latest schema: `attachment` 20 → 22 columns, `asset_reference` 10 → 12 (C-1, C-4) |
 | the format literals: `VersionAgreementTest.kt:87`, `:158`; `MaintenanceRoutesTest.kt:1197`, `:1552`, `:1599`; `CT/backup/BackupCodecTest.kt:1071`; `BackupFormat6Test:363`, `8Test:281`, `9Test:70`, `13Test:54`, `14Test:48`, `15Test:48`, `17Test:99`, `:223`, `18Test:74`, `:350`, `19Test:111`, `:384`; `CT/usecase/ExportBackupSetTest.kt:51`; `Format7ImportIdentityTest.kt:248`; `AT/backup/Format7RestoreContractTest.kt:164` | B1b | the format is 20. The 26 `assertEquals(19,` hits on `ad49b788` are **24 pins** (3 schema in B1a, 21 format here) **plus 2 that never move**: `VersionAgreementTest.kt:61` (the versionCode) and `MaterializeStringsTest.kt:100` (a MIME label) |
 | the one-past archives and their `refusal.found` lines: `BackupFormat8Test:277`, `:280`; `17Test:218`, `:222`; `18Test:345`, `:349`; `19Test:379`, `:383` | B1b | "one format past this build" becomes 21 |
-| the strip lists `BackupFormat9Test:116`, `:120`; `BackupCodecTest.kt:1201` (the `sourceKeys` idiom); the reference key orders in `BackupFormat7Test` and `BackupFormat17Test` | B1b | two keys appended to each DTO |
-| **unchanged, re-run:** `counts.size` 31 (`BackupFormat6Test:411`, `7Test:299`, `8Test:310`, `13Test:68`, `14Test:65`, `15Test:63`, `18Test:334`, `19Test:368`); `MergeTable` 23 (`6Test:292`, `7Test:225`, `MergePlannerTransferTest.kt:383`); the key positions; the manifest-count maps; `V19_TABLES`; `Migration9To10Test:69`, `Migration15To16Test:82` (column counts at v10 and v16) | — | columns only: no list, table, key or count moves (a hit here stops the brief) |
-| the 17 `AssetReference(` construction sites (9 in `CT/`, 4 in `T/`, 4 in main) | B2b | the field is `owner` (arguments only) |
+| the strip lists `BackupFormat9Test:116`, `:120`; `BackupCodecTest.kt:1201` (the `sourceKeys` idiom); the reference key orders in `BackupFormat7Test` and `BackupFormat17Test` | B1b | two keys appended to each DTO (the reference's `assetId` stays `String`, C-2) |
+| **unchanged, re-run:** `counts.size` 31 (`BackupFormat6Test:411`, `7Test:299`, `8Test:310`, `13Test:68`, `14Test:65`, `15Test:63`, `18Test:334`, `19Test:368`); `MergeTable` 23 (`6Test:292`, `7Test:225`, `MergePlannerTransferTest.kt:383`); the key positions; the manifest-count maps; `V19_TABLES` | — | columns only: no list, table, key or count moves (a hit here stops the brief) |
+| the 16 `AssetReference(` construction sites (9 in `CT/`, 4 in `T/`, 3 in main) and C13's eight test files of `.assetId` reads and removed-port calls (`ShareIntakeViewModelTest` included) | B2b | the field is `owner`; the port is owner-keyed (receivers and arguments only, C-4) |
+| `BackupUseCasesTest.kt:651-654`, `TransferImportTesting.kt:153-158` (two `when`s, C5) | B2a | two members added |
+| `MaterializeReferenceTest.kt:771-785` (asserted `:662`, `:677`); `MaterializeViewModelTest.kt:170-173` (used `:483`) | B2b2 | the duplicate check is `forOwner` (C-5) |
+| the `T/api` handler construction sites if a handler constructor grows: `MaintenanceFixtures.kt:60`, `:132`; `AttachmentUploadRoutesTest.kt:140`; `LoopbackApiServerTest.kt:717`, `:777`; `MaterializeRoutesTest.kt:106`; a create omitting `assetId` now G1's 400 | B4 | the new routes' handlers (C-4, N-12) |
 | `T/api/CommandShapesGoldenTest.kt:137-139`, `:176-180`; `T/api/ReferenceRoutesTest.kt:748-760`; `InstalledComponentRoutesTest.kt:746-750`; `SupplyRoutesTest.kt:634`; `ApiRouter.kt:98`'s KDoc | B4 | range 1–20, "20 since #69", 81 shapes / 101 rows |
 | `M/tests/test_tools.py:979-994`; `test_argument_guard.py`; the "89" docstrings (`test_reference_tools.py:35`, `test_installed_component_tools.py:45`, `test_maintenance_tools.py:45`, `test_supply_tools.py:45`); `server.py:1265` | B5 | range 1–20; the widened signatures (the count stays 89) |
-| `AT/share/ShareIntakeScreenTest.kt` (13; notably `:166`, `:308`, `:368`, where the picker is now the second step); `T/share/ShareIntakeViewModelTest.kt` (47) | B7 | "Attach to" precedes the asset picker for link and bytes |
+| `T/share/ShareIntakeViewModelTest.kt` (47); `AT/share/ShareIntakeScreenTest.kt` argument-only compile fixes | B7 | "Attach to" precedes the asset picker for link and bytes |
+| `AT/share/ShareIntakeScreenTest.kt:166`, `:308`, `:368` (the picker is now the second step) | B7b | the three behaviour pins (C-7) |
 | `AT/ui/references/ReferencesSectionTest` (12) | B6a | the composable's parameter is an owner (arguments only) |
 
 **Device rows.** No device-boundary class (planning policy's hard rule): the Share grant from another UID is
@@ -658,9 +746,12 @@ target-independent and already proven by `ShareBoundaryTest`; SAF directory crea
 `SafTreeAttachmentStoreContractTest`. What remains is Compose drawing an already-proven state: **one new class**
 (`InstalledComponentDetailTest`, ~10 cases; budget up to ~14, #47's E-33 overran by 4) and cases added to
 `SupplySurfacesTest` (+3), `InstalledComponentsSectionTest` (+2) and `ShareIntakeScreenTest` (+5).
-**Gate growth:** 58 → **59** device classes, 318 → ~338–342 tests. At #47's clean per-class rate (~12.4 min / 57
-classes; ~2.4 s per case) about **+0.8–1.0 min → ~13.3–13.7 min**: under the 14- and 15-minute reporting lines, but
-the closest yet; #90's trigger is not reached. **Known cost:** the SupplyItem detail grows below "Used by", and the
+**Gate growth (C-8, restated):** 58 → **59** device classes, 318 → ~338–342 tests. **#47's base was never timed in
+a clean single run** (#47 §20); the only measured rate is #15's (12.37 min for ~300 tests, **~2.47 s per test**), by
+which today's 318 tests are already **~13.1 min** and #69's tip is **~13.9–14.1 min — at the 14-minute warning line,
+under 15** — and the new cases draw graph-backed screens, dearer per case than the list cases they are compared with.
+Reporting only; #90's 15-minute trigger is not reached; **the #69 merged-tip gate owes the clean single-run
+measurement**, and the #90 question goes to the owner as a flag (§6 F-1), not a ruling. **Known cost:** the SupplyItem detail grows below "Used by", and the
 installed-component row sheet gains one action, under the shipped `SupplySurfacesTest` and
 `InstalledComponentsSectionTest` — first seen at the merged-tip gate (one fix round, accepted as #15's N-12).
 
@@ -668,32 +759,37 @@ installed-component row sheet gains one action, under the shipped `SupplySurface
 
 | brief | touches | never touches |
 |---|---|---|
-| B1a | `A/data/room/entities/{AttachmentEntity,AssetReferenceEntity}.kt`; `A/data/room/dao/{AttachmentDao,AssetReferenceDao}.kt`; `A/data/room/{Migrations,AppDatabase,Mappers,ReferenceMappers}.kt` (the exactly-one twins and the interim `requireNotNull` only); `A/di/AppGraph.kt` (`SCHEMA_VERSION`, the migration list); `T/testing/FakeGraph.kt` (the migration list if it holds one); `app/schemas/…/20.json` (generated); `T/data/room/{Migration19To20Test (new),ResourceOwnerDaoConstraintTest (new),MigrationTestSupport}.kt`; B1a's pins | `C/**`, `A/api`, `A/ui`, `A/share`, `19.json`, `docs`, `tools` |
+| B1a | `A/data/room/entities/{AttachmentEntity,AssetReferenceEntity}.kt`; `A/data/room/dao/{AttachmentDao,AssetReferenceDao}.kt`; `A/data/room/{Migrations,AppDatabase,Mappers,ReferenceMappers}.kt` (the exactly-one twins and the interim `requireNotNull` only); `A/di/AppGraph.kt` (`SCHEMA_VERSION`, the migration list `:275`); `app/schemas/…/20.json` (generated); `T/data/room/{Migration19To20Test (new),ResourceOwnerDaoConstraintTest (new),MigrationTestSupport}.kt`; the C-1 pins `T/data/room/{Migration9To10Test,Migration15To16Test,Migration16To17Test,Migration18To19Test}.kt`; the C-4 constructions `T/data/room/{AttachmentDaoTest,ReferenceDaoConstraintTest}.kt` (arguments); B1a's other pins | `C/**`, `A/api`, `A/ui`, `A/share`, `19.json`, `docs`, `tools` |
 | B1b | `C/backup/{BackupFormat,BackupCodec}.kt` (the DTO keys, the constant, the gate, exactly-one); `CT/backup/BackupFormat20Test.kt` (new); B1b's pins in `CT/`, `T/`, `AT/backup/` | `C/model`, `C/merge`, `C/transfer`, `C/usecase`, `A/**` main, `docs`, `tools` |
-| B2a | `C/model/{Attachment,DocumentRole}.kt`; `C/usecase/AddAttachment.kt`; `C/backup/{BackupFormat,BackupCodec}.kt` (the attachment arms); `C/usecase/ApplyBackupMergePlan.kt` (`ReturnScope.of`'s attachment arm only); `C/transfer/{TransferOwnership,HeldWriteGuard}.kt`; `C/merge/MergePlanner.kt` (the lookup object only); `A/ui/maintenance/ScheduleDetailViewModel.kt` (`InHand`, one method); `A/data/room/{Mappers,RoomRepositories}.kt`; `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the two constructors); the construction sites (arguments only); `CT/testing/{InMemoryRepositories,InstalledComponentFixtures,BackupInstall}.kt` (C11); the classes of rows 12–20; `CT/testing/ResourceOwnerDoubleTest.kt` (new) | `C/model/AssetReference.kt`, the reference arms, `C/merge` beyond the lookup, `A/api` bar arguments, `A/ui` bar `InHand`, `A/share`, `docs`, `tools` |
-| B2a2 | `CT/transfer/{TransferOwnershipTest,HeldWriteGuardTest}.kt`; the return's test class (`CT/transfer/ImportTransferPackTest.kt` or `CT/usecase/ReturnScopeTest.kt`, new) — rows 17–19 only | every main file |
-| B2b | `C/model/AssetReference.kt`; `C/ports/Repositories.kt` (the reference port); `C/usecase/{AddReference,MaterializeReference}.kt`; `C/backup/{BackupFormat,BackupCodec}.kt` (the reference arms; the moved block); `C/merge/MergePlanner.kt` (the reference pair and availability); `C/usecase/ApplyBackupMergePlan.kt` (`ReturnScope.of`'s reference filter only); `C/transfer/TransferOwnership.kt` (`of(reference)`); `A/data/room/{ReferenceMappers,ReferenceRepositories}.kt`; `A/api/{ReferenceHandlers,AttachmentHandlers}.kt` (arguments and C21's minimal held read); `A/ui/references/{ReferencesSectionViewModel,MaterializeViewModel}.kt`, `A/share/ShareIntakeViewModel.kt` (arguments only); `AppGraph`, `FakeGraph` (constructors); `CT/testing/InMemoryRepositories.kt`, `BackupInstall.kt`; the 17 sites; the classes of rows 21–28 | `C/model/Attachment.kt`, `C/transfer/TransferGraph.kt`, `A/ui` composables, `A/share/ShareIntakeScreen.kt`, `docs`, `tools` |
+| B2a | `C/model/{Attachment,DocumentRole}.kt`; `C/usecase/{AddAttachment,UpdateAttachment}.kt` (the latter: its `require` message only); `C/backup/{BackupFormat,BackupCodec}.kt` (the attachment arms); `C/usecase/ApplyBackupMergePlan.kt` (`ReturnScope.of`'s attachment arm only); `C/transfer/{TransferOwnership,HeldWriteGuard}.kt`; `C/merge/MergePlanner.kt` (the lookup object only); `A/ui/maintenance/ScheduleDetailViewModel.kt` (`InHand`, one method); `A/data/room/{Mappers,RoomRepositories}.kt`; `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the two constructors); the construction sites (`AddAttachment(` 21, `HeldWriteGuard(` 8; arguments only); `CT/usecase/BackupUseCasesTest.kt` and `CT/transfer/TransferImportTesting.kt` (the two test `when`s, C5); `CT/transfer/TransferOwnershipTest.kt` (its lookup double, one method); the classes of rows 12–16 | `C/model/AssetReference.kt`, the reference arms, `C/merge` beyond the lookup, `CT/testing` doubles (B2a2), `A/api` bar arguments, `A/ui` bar `InHand`, `A/share`, `docs`, `tools` |
+| B2a2 | `CT/testing/{InMemoryRepositories,InstalledComponentFixtures,BackupInstall}.kt` (C11 and its KDoc); `CT/testing/ResourceOwnerDoubleTest.kt` (new); `CT/transfer/{TransferOwnershipTest,HeldWriteGuardTest}.kt`; the return's test class (`CT/transfer/ImportTransferPackTest.kt` or `CT/usecase/ReturnScopeTest.kt`, new) — rows 17–20 | every main file |
+| B2b | `C/model/AssetReference.kt`; `C/ports/Repositories.kt` (the reference port); `C/usecase/AddReference.kt`; `C/usecase/MaterializeReference.kt` (the one-line `takeIf` only); `C/backup/{BackupFormat,BackupCodec}.kt` (the reference arms; `assetId` nullable; the moved block); `C/merge/MergePlanner.kt` (the reference pair and availability); `C/usecase/ApplyBackupMergePlan.kt` (`ReturnScope.of`'s reference filter only); `C/transfer/TransferOwnership.kt` (`of(reference)`); `A/data/room/{ReferenceMappers,ReferenceRepositories}.kt`; `A/api/{ReferenceHandlers,AttachmentHandlers}.kt` (arguments and the interim `as? OfAsset` read); `A/ui/references/ReferencesSectionViewModel.kt`, `A/share/ShareIntakeViewModel.kt` (arguments only); `AppGraph`, `FakeGraph` (`AddReference`'s constructor, 7 sites); `CT/testing/{InMemoryRepositories,BackupInstall}.kt`; the 16 construction sites and C13's eight test files; the classes of rows 21–25, 27–28 | `C/model/Attachment.kt`, `C/transfer/TransferGraph.kt`, `A/ui` composables, `A/share/ShareIntakeScreen.kt`, `docs`, `tools` |
+| B2b2 | `C/usecase/MaterializeReference.kt` (C17 whole); `A/api/AttachmentHandlers.kt` (`saveAsDocument`'s argument); `A/ui/references/MaterializeViewModel.kt` (argument); `CT/usecase/MaterializeReferenceTest.kt` (row 26; the race double, C-5); `T/ui/references/MaterializeViewModelTest.kt` (the race double); any other `prepare(` caller `git grep` names (arguments) | `C/backup`, `C/merge`, `C/transfer`, `A/ui` composables, `AppGraph`, `FakeGraph`, `docs`, `tools` |
 | B3a | `C/merge/MergePlanner.kt` (the attachment availability); `C/usecase/ImportBackupReplace.kt` (one line moved, its comment); `CT/merge/{MergePlannerTest,MergePlannerTransferTest}.kt`; `T/backup/ResourceOwnersRestoreTest.kt` (new); `T/api/ApiRouterTest.kt` (row 33 only) | `C/backup`, `C/transfer`, `C/model`, other use cases, `A/**` main, `AppGraph`, `FakeGraph`, `docs`, `tools` |
 | B3b | `C/transfer/TransferGraph.kt` (`select`, `retain`, the `CLASSES` KDoc); `C/usecase/DeleteAsset.kt`; `AppGraph`, `FakeGraph` (`DeleteAsset`'s constructor — **the last edit of either**); the construction sites; `CT/transfer/{TransferGraphTest,TransferGraphRetainTest,ImportTransferPackTest}.kt`, `CT/usecase/RetireDeleteAssetTest.kt` | `C/backup`, `C/merge`, `C/model`, `A/api`, `A/ui`, `docs`, `tools` |
 | B3c | `CT/usecase/ResourceOwnersFixtureTest.kt` (new) only | every main file |
-| B4 | `A/api/{ApiRouter,ApiJson,ReferenceHandlers,AttachmentHandlers,ReferenceDtos,AttachmentOperationIds}.kt`; `docs/api/v1.md`; `docs/api/attachment-operation-ids.json` (the new key only); `T/api/{ResourceOwnerRoutesTest (new),MaterializeRoutesTest,AttachmentRoutesTest,CommandShapesGoldenTest,ReferenceRoutesTest,InstalledComponentRoutesTest,SupplyRoutesTest}.kt` | `C/**`, `A/ui/**`, `A/share`, `A/data`, `A/di`, `FakeGraph`, `tools`, `command-shapes.json` |
+| B4 | `A/api/{ApiRouter,HttpWire,ReferenceHandlers,AttachmentHandlers,ReferenceDtos,AttachmentOperationIds}.kt`; `A/api/ApiJson.kt` (`:941-944`'s message only, G2 — `:424-429` and `referenceProblemCode` byte-identical); `docs/api/v1.md`; `docs/api/attachment-operation-ids.json` (the new keys only); `T/api/{ResourceOwnerRoutesTest (new),HttpWireTest,MaterializeRoutesTest,AttachmentRoutesTest,CommandShapesGoldenTest,ReferenceRoutesTest,InstalledComponentRoutesTest,SupplyRoutesTest}.kt`; the C-4 handler construction sites in `T/api` (arguments) | `C/**`, `A/ui/**`, `A/share`, `A/data`, `A/di`, `FakeGraph`, `tools`, `command-shapes.json` |
 | B5 | `M/src/servicetag_mcp/server.py`; `M/README.md`; `M/tests/{test_reference_tools,test_attachment_tools,test_tools,test_argument_guard,test_installed_component_tools,test_maintenance_tools,test_supply_tools}.py` | `app/**`, `core/**`, `S/**`, `docs` |
 | B6a | `A/ui/references/{ReferencesSection,ReferencesSectionViewModel,MaterializeSheet,MaterializeViewModel,MaterializeStrings,ReferenceSheets}.kt`; `A/ui/asset/AssetDetailScreen.kt` (the one call); `T/ui/references/*`; `AT/ui/references/ReferencesSectionTest.kt` (arguments) | `C/**`, `A/api`, `A/data`, `A/di`, `A/share`, `A/ui/supplies`, `A/ui/installed`, `docs`, `tools` |
-| B6b | `A/ui/supplies/{SupplyDetailScreen,SupplyDetailViewModel}.kt`; `T/ui/supplies/SupplyDetailViewModelTest.kt`; `AT/ui/supplies/SupplySurfacesTest.kt` | as B6a, and `A/ui/references` |
-| B6c | `A/ui/installed/{InstalledComponentDetailScreen (new),InstalledComponentDetailViewModel (new),InstalledComponentSheets,InstalledComponentsSection,InstalledComponentStrings}.kt`; `A/ui/nav/{Route,ServiceTagRoot}.kt`; `A/ui/asset/AssetDetailScreen.kt` (one parameter); `T/ui/installed/InstalledComponentDetailViewModelTest.kt` (new); `AT/ui/installed/{InstalledComponentDetailTest (new),InstalledComponentsSectionTest}.kt` | as B6b, and `A/ui/supplies` |
-| B7 | `A/share/{ShareIntakeScreen,ShareIntakeViewModel,ShareIntakeActivity}.kt`; `T/share/ShareIntakeViewModelTest.kt`; `AT/share/ShareIntakeScreenTest.kt` | `C/**`, `A/api`, `A/ui/**` main (reuses `SupplyItemPicker` and the #47 tree as they are), the three boundary classes, the manifest, `docs`, `tools` |
+| B6b | `A/ui/supplies/{SupplyDetailScreen,SupplyDetailViewModel}.kt`; `A/ui/nav/ServiceTagRoot.kt` (`:580-589`'s arguments only, C-4); `T/ui/supplies/SupplyDetailViewModelTest.kt`; `AT/ui/supplies/SupplySurfacesTest.kt` | as B6a, and `A/ui/references` |
+| B6c | `A/ui/installed/{InstalledComponentDetailScreen (new),InstalledComponentDetailViewModel (new),InstalledComponentSheets,InstalledComponentsSection,InstalledComponentStrings}.kt`; `A/ui/nav/{Route,ServiceTagRoot}.kt`; `A/ui/asset/AssetDetailScreen.kt` (one defaulted parameter); `T/ui/installed/InstalledComponentDetailViewModelTest.kt` (new) — row 51 | as B6b, and `A/ui/supplies`, `AT/**` |
+| B6c2 | `AT/ui/installed/{InstalledComponentDetailTest (new),InstalledComponentsSectionTest}.kt` — row 52 | every main file |
+| B7 | `A/share/{ShareIntakeScreen,ShareIntakeViewModel,ShareIntakeActivity}.kt`; `T/share/ShareIntakeViewModelTest.kt` — row 53; `AT/share/ShareIntakeScreenTest.kt` (argument-only compile fixes) | `C/**`, `A/api`, `A/ui/**` main (reuses `SupplyItemPicker` and `InstalledComponentTree` as they are), the three boundary classes, the manifest, `docs`, `tools` |
+| B7b | `AT/share/ShareIntakeScreenTest.kt` — row 54 and the pins `:166`, `:308`, `:368` | every main file |
 | B8 | `docs/release-proofs.md`; `docs/design/{04-domain-data-model,14-asset-model}.md` | any `.kt`, `.py`, `tools`, `docs/api`, `docs/versioning.md`, `README.md` |
 
-**B4 ∥ (B6a → B6b → B6c → B7) — the one parallel pair.** B4's files are `A/api/**`, `docs/api/**` and `T/api/**`; the
+**B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7b) — the one parallel pair.** B4's files are `A/api/**`, `docs/api/**` and
+`T/api/**`; the
 UI lane's are `A/ui/references/**`, `A/ui/supplies/{SupplyDetailScreen,SupplyDetailViewModel}.kt`, `A/ui/installed/**`,
 `A/ui/nav/{Route,ServiceTagRoot}.kt`, two lines of `AssetDetailScreen.kt`, `A/share/**` and their tests — **no file in
 common**, and neither edits `AppGraph` or `FakeGraph`. Under the two-lane rule the UI lane may run in a second worktree
 off B3c's tip; the controller lands it before B5, whose `<base>` holds both.
 
-**Order:** B1a → B1b (→ B1b2) → B2a → B2a2 → B2b (→ B2b2) → B3a → B3b → B3c → { B4 (→ B4b) ∥ (B6a → B6b → B6c (→ B6c2)
-→ B7 (→ B7b)) } → B5 → B8 — **fifteen dispatches** with B2a2 taken by default; more only by a split clause. B1b needs nothing of B1a's (core only) but follows it so the schema and format move one at a time; B2a
-needs both (its Room arms read B1a's DAO, its DTO arms B1b's keys); B2b needs B2a's `OwnerRef` and doubles; B3a needs
-B2a's lookup; B3b B2b's reference owner; B3c everything core; B4 and B6 the use cases; B7 B6a's owner twins; B5 B4's
+**Order:** B1a → B1b → B2a → B2a2 → B2b → B2b2 → B3a → B3b → B3c → { B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7b) } →
+B5 → B8 — **eighteen dispatches**, every one ≤ 1 h by estimate, split **up front** (C-7); no clause is left that
+triggers past an hour. B1b needs nothing of B1a's (core only) but follows it so the schema and format move one at a
+time; B2a needs both (its Room arms read B1a's DAO, its DTO arms B1b's keys); B2a2 B2a's arms; B2b B2a's `OwnerRef`
+and B2a2's doubles; B2b2 B2b's owner type; B3a B2a's lookup; B3b B2b's reference owner; B3c everything core; B4 and B6 the use cases; B7 B6a's owner twins; B5 B4's
 routes; B8 describes everything.
 
 **The owner shape, costed (R69-1; the audit's §2).**
@@ -733,16 +829,30 @@ sentences, not one (C28).
 | asset sub-resources; router | 27 unchanged; 77/95 → **81/101** |
 | new API codes | **0** (one ratified 400 sentence, G1) |
 | MCP tools | **89 unchanged** (5 widened) |
-| moving pins | 24 literal + 4 one-past pairs + strip/key-order twins + the 17 construction sites + B4's and B5's ranges, plus 10–20 twins |
-| construction sites (C-1) | `AddAttachment`, `HeldWriteGuard` (8) in B2a; `AddReference` in B2b; `DeleteAsset` in B3b — each `git grep`-counted by its brief |
+| moving pins | 24 literal + 4 one-past pairs + 7 migration-test assertions (C-1) + strip/key-order twins + the 16 construction sites and ~20 test reads (C-4) + 2 race doubles (C-5) + B4's and B5's ranges, plus 10–20 twins |
+| construction sites (C-1) | `AddAttachment` (21), `HeldWriteGuard` (8) in B2a; `AddReference` (7) in B2b; `DeleteAsset` (5) in B3b — the review's counts, each re-counted by its brief |
 | new phone strings | **16** (P69-1…16), 0 relabels |
-| device classes | 58 → **59**, ~+20–24 cases, **~13.3–13.7 min** |
-| dispatches | **15** (B2a2 by default; B1b2, B2b2, B4b, B6c2, B7b by clause; +1 B2d if R69-2 = D) |
+| device classes | 58 → **59**, ~+20–24 cases, **~13.9–14.1 min** by #15's measured rate (C-8) |
+| dispatches | **18**, all split up front (+1 B2d if R69-2 = D) |
 
 **Gate budget** at the merged tip (estimates; B1a records the base's exact counts): core +~95 (format 15, domain and
 seams 30, merge 10, pack, return and delete 12, scenario 6, use cases 22); app +~75 (Room 12, routes 25, view models
-24, Share 14); MCP +~20; loader unchanged; device classes **59**. Timed against #47's per-class rate, reporting only,
-no rerun-until-green.
+24, Share 14, wire 3); MCP +~20; loader unchanged; device classes **59**, **~13.9–14.1 min at #15's measured ~2.47
+s per test — at the 14-minute warning line, under 15** (C-8). #47's base was never timed in a clean single run; the
+#69 merged-tip gate owes that measurement. Reporting only, no rerun-until-green; #90 is the owner's (§6 F-1).
+
+**Between-brief gaps (N-1)** — each unreachable on the branch (no UI or API path writes a new owner before B4, B6 or
+B7), each closed by its row:
+
+| from → to | the gap | closed by |
+|---|---|---|
+| B2a → B3a | the planner's attachment arm `dto.assetId ?: dto.eventId!!` throws on a new owner (`MergePlanner.kt:998`) | row 29 |
+| B2a → B3b | `select` carries no new-owner resource; `retain` keeps a held asset's component-owned rows (the kept archive is corrupt) | rows 35–36 |
+| B2a → B3b | `DeleteAsset` orphans component-owned bytes | row 38 |
+| B2a → B2a2 | the core doubles do not yet cascade component-owned rows (test-only) | row 20 |
+| B2b → B2b2 | materializing a SupplyItem's or component's reference answers no-such-reference | row 26 |
+| B2b → B3a | the replace restore writes references before SupplyItems and components (the FK fails) | row 32 |
+| B2b → B4 | every `OwnerMissing` answers `no_such_asset`; the materialize route's held check is asset-only | rows 42, 44 |
 
 ## 5. Strings
 
@@ -751,10 +861,10 @@ one-line function for a format) at the home named, and imported, never copied.
 
 | id | proposed wording | home · where (contract) |
 |---|---|---|
-| P69-1 | "Documents" | `InstalledComponentStrings.kt` · the row sheet's action opening the component screen, on every row (C27) |
-| P69-2 | "This component" | same · the heading over the component's own Documents and References (C27) |
+| P69-1 | "Documents and references" — **the recommendation** (rev 1 "Documents"; both words the shipped headings, `DocumentsSection.kt:93`, `ReferencesSection.kt:171`) | `InstalledComponentStrings.kt` · the row sheet's action opening the component screen, on every row (C27) |
+| P69-2 | "This installed component" — **the recommendation** (rev 1 "This component"; P69-8's noun, since the asset detail keeps a child-Asset "Components" section until #98) | same · the heading over the component's own Documents and References (C27) |
 | P69-3 | "From %s" — `%s` the SupplyItem's name | same · each open-only group's heading; a tap opens the SupplyItem (C27) |
-| P69-4 | "Added and changed on the supply." | same · the quiet line under each group's heading (C27) |
+| P69-4 | "Open the supply to add or change these." — **the recommendation** (rev 1 "Added and changed on the supply."; "Open" from `ReferencesSection.kt:245`) | same · the quiet line under each group's heading (C27) |
 | P69-5 | "Attach to" | `IntakeStrings` · the Share step's title (C30) |
 | P69-6 | "Asset" | same · the first choice (C30) |
 | P69-7 | "Supply" | same · the second choice (C30) |
@@ -762,7 +872,7 @@ one-line function for a format) at the home named, and imported, never copied.
 | P69-9 | "Choose an installed component" | same · the component step's title (C30; "Choose a supply"'s shape) |
 | P69-10 | "%1$s · %2$s" — the asset's name, then the component's | same · the chosen component's line on the form and in "Saved to %s" (C29) |
 | P69-11 | "That link is already on this supply" | `A/ui/references/ReferencesSectionViewModel.kt` beside `:283` (declared by B6a; `IntakeStrings` imports it in B7) (C28) |
-| P69-12 | "That link is already on this component" | as P69-11 (C28) |
+| P69-12 | "That link is already on this component" — P69-12, -14 and -16 follow the owner's P69-2 choice ("…this installed component…" with the recommendation, N-17) | as P69-11 (C28) |
 | P69-13 | "The link is removed from this supply. Nothing in the other app is changed." | `ReferenceSheets.kt` (C28) |
 | P69-14 | "The link is removed from this component. Nothing in the other app is changed." | as P69-13 (C28) |
 | P69-15 | "This supply already has this file: %s." | `MaterializeStrings.kt` (C28; P85-17's shape) |
@@ -796,7 +906,10 @@ asset-worded originals of P69-11…16 for an asset.
 - **G1** — the create's 400: "a reference names exactly one owner: assetId, supplyItemId or installedComponentId".
 - **G2** — the codec's `BackupCorrupt` messages (C10, C5, C13) in the shipped templates: the field gate ("…a format N
   archive cannot carry a supply item or installed component owner (attachment X)"), exactly-one, and the two "points
-  at … which is not in …" lines; the owner-neutral `require` in `AddAttachment` (C5).
+  at … which is not in …" lines; the owner-neutral `require`s in `AddAttachment` and `UpdateAttachment.kt:30` (C5);
+  and the API's `ATTACHMENT_ROLE_NOT_ALLOWED` message (`A/api/ApiJson.kt:941-944`, "a document role belongs on an
+  asset's attachment") restated owner-neutrally by B4 — "a document role cannot go on an entry's attachment" — code
+  and status unchanged, any test pin of the text a B4 twin (N-6).
 - **G3** — the MCP's `APP_SCHEMA_TOO_OLD` feature name "supply item and installed component resources".
 
 **Not drawn anywhere (decided by the contracts):** a "move to another owner" action (I2); an aggregated resource list
@@ -821,6 +934,7 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
 | R69-12 | controller default | **API/MCP shape:** owner keys on the create (exactly one), +4 shapes / +6 rows, five MCP tools widened (89 stays, six new tools rejected), the v3 upload derivation for the new owners with v2 byte-identical for assets. | C19–C24 |
 | R69-13 | controller default | **Owner-worded sentences:** per-owner twins for the four asset-worded sentences, the asset wording unchanged (no shipped pin moves), rather than one owner-neutral rewrite. | C28, P69-11…16 |
 | R69-14 | controller default | **The brief split** (§4's order) replaces the audit's §13: substrate, two seams, then semantics — the sealed extension is compile-atomic. | §4, briefs |
+| **F-1** | **owner — a flag, not a ruling (C-8)** | **#90 and the gate time:** at #15's measured ~2.47 s per test the base is already ~13.1 min and #69's tip ~13.9–14.1 min — at the 14-minute warning line, under 15. #47's base was never timed in a clean run; the #69 merged-tip gate records the first clean single-run time. Whether #90 (the gate's split or speed-up) moves ahead of the next feature is the owner's call once that number exists. | §3, §4, §7 |
 
 ## 7. Proofs
 
@@ -830,8 +944,10 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
 - **The merged-tip gate, once:** R1 (JVM from scratch), R2 (the connected suite on the emulator: **59 classes**, zero
   skips; rows 50, 52 and 54 run here first — a red is one post-merge fix round), R3 (the three Python suites), R5
   (`ManifestContractTest`, `MergedManifestContractTest`, `VersionAgreementTest`), R6 greps. `ReleaseProofPolicyTest`
-  unchanged and green. **Record the environment** (#47 §20: which emulator, how started, whether one run): the 14/15
-  min lines are judged only on a clean single run, reporting only.
+  unchanged and green. **Record the environment** (#47 §20: which emulator, how started, whether one run). **A clean
+  single-run wall time is owed here** (#47's base was never measured in one): estimated ~13.9–14.1 min at #15's
+  ~2.47 s per test — at the 14-minute warning line, under 15; reporting only (C-8, §6 F-1). B6c2's and B7b's Compose
+  cases (rows 52, 54) and B6b's (row 50) first run here.
 - **R6 greps (anchored; `git grep -nE`), expected counts at the tip:**
   - `'^    const val FORMAT_VERSION = 20$'` → 1; `'^    internal const val FIRST_RESOURCE_OWNER_FORMAT = 20$'` → 1;
     `LegacyArchive.kt` diff → empty.
@@ -850,6 +966,8 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
     → 1 (unchanged).
   - `'servicetag:attachment-upload:v2'` in `AttachmentOperationIds.kt` → 1 and `'…:v3'` → 1; the golden file's
     `vectors` array diff → empty.
+  - `'"supply-items"'` and `'"installed-components"'` inside `isAttachmentUpload` (`HttpWire.kt`) → 1 each (read
+    it); `git diff <base> -U0 -- A/api/ApiJson.kt` touches `:941-944` only (`referenceProblemCode` unchanged).
   - `'Eighty-one path shapes over one hundred and one'` in `ApiRouter.kt` → 1; `'1–19'` in `v1.md` → 0; `'else ->'`
     inside the new mapping `when`s → 0.
   - `'^@mcp\.tool\('` in `server.py` → 89; `'^_MIN_RESOURCE_OWNER_SCHEMA_VERSION = 20$'` → 1; `'format 1–20'` → 1 and
@@ -884,16 +1002,19 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
   **#76** — the roadmap of record. **#90** — the gate-time trigger is not reached (§3). **#62** — no black-box UI
   driving; rows 50, 52 and 54 are tier-2 Compose semantics.
 
-## Briefs — common to every brief (fifteen dispatches)
+## Briefs — common to every brief (eighteen dispatches)
 
 Read §1–§8, the audit, issue #69 (`.superpowers/sdd/2026-10-01-issue-69/issue-69.md`, the FINAL clarification) and
 every earlier report on this branch. **Dispatch precondition:** R69-0, R69-2, R69-3, R69-4 ruled and §5 ratified. **The
-core doubles (C11):** every core brief from B2a builds its fixtures through `BackupInstall`, never a bare list, so a
+core doubles (C11):** every core brief from B2a2 builds its fixtures through `BackupInstall`, never a bare list, so a
 missing cascade fails for the right reason. **Fenced words (C-3):** no KDoc, docstring, document or test name added by
 a brief carries a purchasing, #95 or #96 word, even to deny it. **Constructor plumbing (C-1):** a brief whose contract
 adds a constructor parameter owns its `AppGraph` line, its `FakeGraph` line and every construction site `git grep`
-names — arguments only; no `AppGraph` or `FakeGraph` edit after B3b. **Forced arms (R69-14):** a seam brief writes
-exactly the arms its contract names; a compile error it meets **outside** its "touches" list stops it.
+names — arguments only; no `AppGraph` or `FakeGraph` edit after B3b. **Forced arms (R69-14, C-4):** a brief whose
+contract adds a member, changes a field or removes a port method owns **every compile error that change forces, in any
+source set** — arguments and receivers only, each listed in its report — and writes exactly the arms its contract
+names; §4 lists the sites the review counted, and a forced site §4 missed is fixed and reported, not a stop. A compile
+error **not** caused by the brief's own change stops it.
 
 **Gate.** `./gradlew :core:test :app:testDebugUnitTest --rerun`, zero failures and skips;
 `:app:compileDebugAndroidTestKotlin`. Then the brief's anchored greps (over `app/src/main` and `core/src/main` unless
@@ -904,7 +1025,7 @@ app/build.gradle.kts core/build.gradle.kts tools/*/pyproject.toml tools/*/uv.loc
 
 **Pin rule and the twin rule.** A shipped assertion moves only where §3's table names it for this brief, or as its
 twin. Confirm the set first with `git grep -nE 'FORMAT_VERSION|formatVersion\)|schemaVersion\)|SCHEMA_VERSION|1–19|19
-since|counts\.size|dropLast|assetId = |findByUri|observeForAsset'` and `git grep -nE 'TOOL_NAMES|\b89\b'` over
+since|counts\.size|dropLast|takeLast|columnsOf\(|snapshotOf|assetId = |findByUri|observeForAsset|forAsset\('` and `git grep -nE 'TOOL_NAMES|\b89\b'` over
 `app/src/test app/src/androidTest core/src/test tools/servicetag-mcp/tests`; report every hit the table does not name
 and how the twin rule treats it before editing.
 
@@ -939,13 +1060,15 @@ address (fixtures: `example.invalid`).
 **Read:** audit §0.1–0.2, §2(a), §3; `A/data/room/entities/{AttachmentEntity,AssetReferenceEntity}.kt`;
 `A/data/room/dao/{AttachmentDao,AssetReferenceDao}.kt`; `A/data/room/Migrations.kt:326-332` (the ALTER precedent),
 `:424-440` (the rebuild precedent), `:827-904` (`MIGRATION_18_19`); `A/data/room/Mappers.kt:160-210`;
-`T/data/room/{Migration18To19Test,ReferenceDaoConstraintTest,MigrationTestSupport}.kt`. **Rows:** 1–6. **Rulings:**
-R69-1, R69-5. **Interfaces produced:** the two entities' v20 shapes, the owner-keyed DAO reads, `MIGRATION_19_20`,
-`20.json`. **Greps:** §7's schema lines; `'CREATE TABLE'` inside `MIGRATION_19_20` → 1; `git diff <base> -- core` →
-empty. **Untouched:** `C/**`, `A/api`, `A/ui`, `A/share`, `19.json`. **Must NOT:** change a domain type; add a `CHECK`;
-add a single-column index on `asset_reference`'s new owner columns (the unique pairs' left prefixes serve; if Room's
-compiler demands one, stop and report). **Counted RED (4):** rows 1, 2, 4, 5. **Caps:** 7 runs; 1 h / 2 h; fix round 3
-runs, 45 min. **Size:** about 120 production lines plus `20.json`, 260 test lines. **Estimate:** 55 min.
+`T/data/room/{Migration9To10Test,Migration15To16Test,Migration16To17Test,Migration18To19Test,ReferenceDaoConstraintTest,AttachmentDaoTest,MigrationTestSupport}.kt`
+(#85's `dropLast` shape, C-1). **Rows:** 1–6 and C8's migration-test pins. **Rulings:** R69-1, R69-5. **Interfaces
+produced:** the two entities' v20 shapes, the owner-keyed DAO reads, `MIGRATION_19_20`, `20.json`. **Greps:** §7's
+schema lines; `'CREATE TABLE'` inside `MIGRATION_19_20` → 1; `git diff <base> -- core` → empty. **Untouched:** `C/**`,
+`A/api`, `A/ui`, `A/share`, `19.json`. **Must NOT:** change a domain type; add a `CHECK`; default the new entity fields;
+add a single-column index on `asset_reference`'s new owner columns (the unique pairs' left prefixes serve and Room's
+check is a warning only, N-11; if the build refuses, stop and report). **Counted RED (4):** rows 1, 2, 4, 5. **Caps:**
+7 runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 120 production lines plus `20.json`, 260 test lines, 7 pin
+edits. **Estimate:** 60 min.
 
 ## 10. B1b — the format-20 envelope (C9–C10; core JVM)
 
@@ -954,89 +1077,105 @@ runs, 45 min. **Size:** about 120 production lines plus `20.json`, 260 test line
 **Rulings:** R69-5. **Interfaces produced:** the DTO keys, `FIRST_RESOURCE_OWNER_FORMAT`, the gate, exactly-one.
 **Greps:** §7's format lines; `git diff <base> -- C/model C/merge C/transfer C/usecase app/src/main` → empty.
 **Untouched:** as §4. **Must NOT:** map a new owner key to a domain owner (B2a/B2b do); add a list, table or count
-key; give `AssetReferenceDto.assetId` a default. **Counted RED (3):** rows 7, 8, 9. **Caps:** 6 runs; 1 h / 2 h.
-**Size:** about 50 production lines; ~28 pin edits; 220 test lines. **Estimate:** 55 min. **Split clause:** past a
-1 h dispatch estimate, the pins (row 11) go to **B1b2** off B1b's tip with `FORMAT_VERSION` — never apart from it.
+key; make `AssetReferenceDto.assetId` nullable (B2b, C-2). **Counted RED (3):** rows 7, 8, 9. **Caps:** 6 runs;
+1 h / 2 h. **Size:** about 45 production lines; ~28 pin edits; 220 test lines. **Estimate:** 55 min.
 
-## 11. B2a — the attachment owners, the seam (C4, C5, C11; core and app JVM)
+## 11. B2a — the attachment owners, the seam (C4, C5; core and app JVM)
 
-**Read:** audit §0.1, §0.6–0.8, §0.10, §1.5, §2; this plan's C4, C5, C11 and correction 1; `C/model/Attachment.kt`;
-`C/usecase/AddAttachment.kt`; `C/backup/BackupCodec.kt:585-600`, `:950-1000`, `:1120-1160`;
+**Read:** audit §0.1, §0.6–0.8, §0.10, §1.5, §2; this plan's C4, C5 and correction 1; `C/model/Attachment.kt`;
+`C/usecase/{AddAttachment,UpdateAttachment}.kt`; `C/backup/BackupCodec.kt:585-600`, `:950-1000`, `:1120-1160`;
 `C/usecase/ApplyBackupMergePlan.kt:270-369`; `C/transfer/{TransferOwnership,HeldWriteGuard}.kt`;
 `C/merge/MergePlanner.kt:1365-1400`; `A/ui/maintenance/ScheduleDetailViewModel.kt:540-556`;
-`A/data/room/{Mappers,RoomRepositories}.kt`; `CT/testing/{InMemoryRepositories,InstalledComponentFixtures,BackupInstall}.kt`.
-**Rows:** 12–20. **Rulings:** R69-1, R69-6, R69-10, R69-11. **Interfaces produced:** the two `AttachmentOwner`
-members, widened `accepts`, `dirFor`'s two directories, `OwnerRef.OfInstalledComponent`,
-`OwnerLookup.installedComponent`, the guard's new reader, the doubles' component cascade. **Greps:** `'"supply-items/'`,
-`'"installed-components/'` → 1 each; `'fun installedComponent\(id: InstalledComponentId\)'` → 4; `HeldWriteGuard(`
-construction sites all updated (count before = after). **Untouched:** as §4. **Must NOT:** touch `AssetReference`; add
-the merge's attachment availability (B3a) or the pack's select/retain (B3b); add `OwnerLookup` a default; let the
-double cascade asset-owned rows. **Split by plan, taken by default:** the arms cannot move (the compiler forces
-every one into B2a's commit), so the split is of **rows**: B2a writes C4, C5 and C11 whole with rows 12–16 and 20 (the
-domain, the codec, Room, `AddAttachment`, the doubles); **B2a2**, off B2a's tip and touching only
-`CT/transfer/{TransferOwnershipTest,HeldWriteGuardTest}.kt` and the return's test class (`ImportTransferPackTest` or a
-new `CT/usecase/ReturnScopeTest.kt`), adds rows 17–19 with their counted REDs by mutation of the arms B2a wrote; its
-gate is the common one. **B2a — Counted RED (6):** rows 12, 13, 14, 15, 16, 20 (row 20 by mutation when not natural).
-**Caps:** 9 runs; 1 h / 2 h; fix round 4 runs, 45 min. **Size:** about 140 production lines, 240 test lines, ~30
-construction-site arguments. **Estimate:** 60 min. **B2a2 — Counted RED (3):** rows 17, 18, 19. **Caps:** 5 runs;
-1 h / 2 h. **Size:** about 120 test lines. **Estimate:** 35 min.
+`A/data/room/{Mappers,RoomRepositories}.kt`; `CT/usecase/BackupUseCasesTest.kt:640-660`;
+`CT/transfer/TransferImportTesting.kt:140-170`. **Rows:** 12–16. **Rulings:** R69-1, R69-6, R69-10, R69-11.
+**Interfaces produced:** the two `AttachmentOwner` members, widened `accepts`, `dirFor`'s two directories,
+`OwnerRef.OfInstalledComponent`, `OwnerLookup.installedComponent`, the guard's new reader — and every arm C5 names,
+including those rows 17–19 test in B2a2. **Greps:** `'"supply-items/'`, `'"installed-components/'` → 1 each; `'fun
+installedComponent\(id: InstalledComponentId\)'` → 4; `HeldWriteGuard(` (8) and `AddAttachment(` (21) construction
+sites all updated (count before = after). **Untouched:** as §4. **Must NOT:** touch `AssetReference` or the core
+doubles (B2a2); add the merge's attachment availability (B3a) or the pack's select/retain (B3b); give `OwnerLookup` a
+default. **Counted RED (5):** rows 12, 13, 14, 15, 16. **Caps:** 8 runs; 1 h / 2 h; fix round 4 runs, 45 min.
+**Size:** about 140 production lines, 200 test lines, ~30 construction-site arguments, two test `when` arms.
+**Estimate:** 55 min.
 
-## 12. B2b — the reference owner, the seam (C12, C13, C17; core and app JVM)
+## 12. B2a2 — the doubles, the guard and the return (C11; rows 17–20; core JVM tests)
 
-**Read:** audit §0.2, §0.9, §1.2, H3, H4; this plan's C12, C13, C17 and corrections 2–3; `C/model/AssetReference.kt`;
-`C/ports/Repositories.kt:323-345`; `C/usecase/{AddReference,MaterializeReference}.kt`;
-`C/backup/BackupCodec.kt:800-820`, `:950-1000`; `C/merge/MergePlanner.kt:300-370`, `:580-590`, `:648-664`,
-`:1036-1095`; `A/data/room/{ReferenceMappers,ReferenceRepositories}.kt`; `A/api/ReferenceHandlers.kt:60-90`;
-`A/api/AttachmentHandlers.kt:265-290`. **Rows:** 21–28 (row 26 is C17's: `prepare(owner: ReferenceOwner, …)`,
-`takeIf { it.owner == owner }`, the duplicate check over `attachments.forOwner(owner.asAttachmentOwner())`,
-`Prepared.Ready.owner`, `commit` to `ready.owner.asAttachmentOwner()` — one fetch, one `AddAttachment`).
-**Rulings:** R69-1, R69-10. **Interfaces produced:** `ReferenceOwner`, `asAttachmentOwner`, the owner-keyed port,
-`AddReference.run(owner, …)`, `MaterializeReference.prepare(owner, …)`. **Greps:** §7's `AssetReference` lines; the
-codec block's new position after `componentIds` (read it). **Untouched:** as §4. **Must NOT:** keep an asset-keyed
-port method; add an `assetId` property; change the step order of `AddReference`; generalise a composable (B6a).
-**Counted RED (7):** rows 21, 22, 23, 24, 25, 26, 27. **Caps:** 9 runs; 1 h / 2 h; fix round 4 runs, 45 min.
-**Size:** about 120 production lines; 17 construction sites and ~15 call sites, arguments only; 300 test lines.
-**Estimate:** 70 min — **split clause:** past a 1 h dispatch estimate, row 26 (materialize) goes to **B2b2** off B2b's
-tip; B2b then writes `prepare`'s owner parameter with the asset-only check intact (`takeIf { it.owner == owner }`
-already holds for an asset) and B2b2 adds the owner-scoped duplicate check and its rows.
+**Read:** this plan's C5 (the arms B2a wrote), C11, N-15; `CT/testing/{InMemoryRepositories,InstalledComponentFixtures,BackupInstall}.kt`;
+`CT/transfer/{TransferOwnershipTest,HeldWriteGuardTest,ImportTransferPackTest}.kt`. **Rows:** 17–20. **Rulings:**
+R69-7, R69-11. **Interfaces produced:** the component double's listener and the attachment double's
+`cascadeFromInstalledComponents` (C11), with the restated KDoc at `InMemoryRepositories.kt:151-156`. **Greps:**
+`git diff <base_of_B2a2> -- '*/src/main/*'` → empty. **Untouched:** every main file. **Must NOT:** put a
+component-owned row in a pack (N-15); cascade an asset-owned row in a double. **Counted RED (4):** rows 17, 18, 19 (by
+mutation of B2a's arms), 20 (the registration removed). **Caps:** 6 runs; 1 h / 2 h. **Size:** about 60 double
+lines, 200 test lines. **Estimate:** 45 min.
 
-## 13. B3a — the merge and the restore order (C14; core JVM, two app rows)
+## 13. B2b — the reference owner, the seam (C12–C13; core and app JVM)
+
+**Read:** audit §0.2, §1.2, H3; this plan's C12, C13 and correction 2; `C/model/AssetReference.kt`;
+`C/ports/Repositories.kt:323-345`; `C/usecase/AddReference.kt`; `C/usecase/MaterializeReference.kt:67-74` (the one
+line); `C/backup/BackupCodec.kt:800-820`, `:950-1000`; `C/merge/MergePlanner.kt:300-370`, `:460-470`, `:580-590`,
+`:648-664`, `:1036-1095`; `A/data/room/{ReferenceMappers,ReferenceRepositories}.kt`; `A/api/ReferenceHandlers.kt:60-90`;
+`A/api/AttachmentHandlers.kt:265-290`; C13's eight test files. **Rows:** 21–25, 27–28. **Rulings:** R69-1, R69-10.
+**Interfaces produced:** `ReferenceOwner`, `asAttachmentOwner`, the owner-keyed port, `AddReference.run(owner, …)`,
+the nullable `AssetReferenceDto.assetId`. **Greps:** §7's `AssetReference` lines; the codec block's new position after
+`componentIds` (read it); `AddReference(` (7) sites all updated. **Untouched:** as §4. **Must NOT:** keep an
+asset-keyed port method; add an `assetId` property; change the step order of `AddReference`; key `MaterializeReference`
+by owner (B2b2); generalise a composable (B6a). **Counted RED (6):** rows 21, 22, 23, 24, 25, 27. **Caps:** 8 runs;
+1 h / 2 h; fix round 4 runs, 45 min. **Size:** about 110 production lines; 16 construction sites and ~35 call and read
+sites, receivers and arguments only; 260 test lines. **Estimate:** 60 min.
+
+## 14. B2b2 — materialize keyed by the reference's owner (C17; core and app JVM)
+
+**Read:** audit §0.9, H4; this plan's C17 and C-5; `C/usecase/MaterializeReference.kt`;
+`CT/usecase/MaterializeReferenceTest.kt:650-690`, `:765-790`; `T/ui/references/MaterializeViewModelTest.kt:160-180`,
+`:475-490`; `A/api/AttachmentHandlers.kt:265-345`. **Rows:** 26. **Rulings:** R69-6. **Interfaces produced:**
+`MaterializeReference.prepare(owner, …)`, `Prepared.Ready.owner`. **Greps:** `'fun forAsset'` overridden in neither
+race double (read them); `'OfAsset(ready'` in `MaterializeReference.kt` → 0. **Untouched:** as §4. **Must NOT:** add a
+second fetch or provenance path; change the API's held check (C21, B4); weaken a race double's gate. **Counted RED
+(1):** row 26 (the duplicate check reading another owner); the race doubles' gates shown firing (`:662`'s
+`waiting == 1`). **Caps:** 5 runs; 1 h / 2 h. **Size:** about 40 production lines, 160 test lines. **Estimate:** 40 min.
+
+## 15. B3a — the merge and the restore order (C14; core JVM, two app rows)
 
 **Read:** audit §0.3, §0.5, H1; `C/merge/MergePlanner.kt:960-1036`, `:1395-1440`; `C/usecase/ImportBackupReplace.kt:160-262`;
 `C/usecase/ApplyBackupMergePlan.kt:193-232`. **Rows:** 29–34. **Rulings:** R69-7 (M2). **Greps:** `MergeReason` diff →
 empty; `'data.assetReferences.forEach'` in `ImportBackupReplace.kt` after `installedComponents.insert` (read it).
 **Untouched:** as §4. **Must NOT:** add an older-archive exception; reorder the apply. **Counted RED (5):** rows 29,
-30, 31, 32, 33. **Caps:** 7 runs; 1 h / 2 h. **Size:** about 30 production lines, 200 test lines. **Estimate:** 45 min.
+30, 31 (N-2's mutation), 32, 33. **Caps:** 7 runs; 1 h / 2 h. **Size:** about 30 production lines, 200 test lines.
+**Estimate:** 45 min.
 
-## 14. B3b — the pack, the return's limit and the delete (C15, C16a; core JVM)
+## 16. B3b — the pack, the return's limits and the delete (C15, C16a; core JVM)
 
 **Read:** audit §0.6–0.7, H2, H5; `C/transfer/TransferGraph.kt:30-70`, `:225-335`; `C/usecase/DeleteAsset.kt:40-80`;
-`CT/transfer/{TransferGraphTest,TransferGraphRetainTest,ImportTransferPackTest}.kt`. **Rows:** 35–38. **Rulings:**
-R69-7, R69-11. **Greps:** the two `CLASSES` lines unchanged; `DroppedRows` diff → empty; `DeleteAsset(` construction
-sites all updated. **Untouched:** as §4. **Must NOT:** drop a SupplyItem-owned row in `retain`; change `DroppedRows` or
-`entangledRefs`; sweep a SupplyItem's bytes. **Counted RED (4):** rows 35, 36, 38, and row 37's pin re-run. **Caps:** 6
-runs; 1 h / 2 h. **Size:** about 35 production lines, 220 test lines. **Estimate:** 50 min.
+`C/usecase/ImportTransferPack.kt` (around `:127`, C-9); `CT/transfer/{TransferGraphTest,TransferGraphRetainTest,ImportTransferPackTest}.kt`.
+**Rows:** 35–38, 37a. **Rulings:** R69-7, R69-11. **Greps:** the two `CLASSES` lines unchanged; `DroppedRows` diff →
+empty; `DeleteAsset(` (5) construction sites all updated. **Untouched:** as §4. **Must NOT:** drop a SupplyItem-owned
+row in `retain`; change `DroppedRows` or `entangledRefs`; sweep a SupplyItem's bytes. **Counted RED (3):** rows 35, 36,
+38; rows 37 and 37a are limit pins. **Caps:** 6 runs; 1 h / 2 h. **Size:** about 35 production lines, 260 test lines.
+**Estimate:** 55 min.
 
-## 15. B3c — the equipment scenario (C16b; core JVM)
+## 17. B3c — the equipment scenario (C16b; core JVM)
 
 **Read:** issue #69's examples and E1–E7; `CT/usecase/InstalledComponentFixtureTest.kt` (#47 row 37's shape);
 `CT/usecase/SupplyItemFixtureTest.kt`. **Rows:** 39, 40. **Greps:** `git diff <base> -- '*/src/main/*'` → empty.
 **Must NOT:** change production code (a failure is a finding: stop and report it against the brief that owns the
-contract); use a real product, maker or URL. **Counted RED (1):** row 39. **Caps:** 4 runs; 1 h / 2 h. **Size:**
-about 260 test lines. **Estimate:** 40 min.
+contract); use a real product, maker or URL. **Counted RED (1):** row 39 (quote whichever refusal fires, N-5).
+**Caps:** 4 runs; 1 h / 2 h. **Size:** about 260 test lines. **Estimate:** 40 min.
 
-## 16. B4 — the API and the wire document (C19–C22; app JVM, docs)
+## 18. B4 — the API, the wire and the document (C19–C22; app JVM, docs)
 
-**Read:** audit §7, H9; `A/api/ApiRouter.kt:95-100`, `:215-330`, `:370-385`, `:429-436`; `A/api/{ReferenceDtos,
-ReferenceHandlers,AttachmentHandlers,AttachmentOperationIds}.kt`; `docs/api/attachment-operation-ids.json`;
-`docs/api/v1.md` (the reference, attachment, SupplyItem and component sections). **Rows:** 41–45 and B4's pins.
-**Rulings:** R69-2 (C20's no-key rule), R69-12. **Greps:** §7's API lines; `command-shapes.json` diff → empty.
-**Untouched:** as §4. **Must NOT:** add an error code; add a `preferred`/`vendor` key; change the v2 derivation or its
-vectors; add a `DELETE`. **Counted RED (4):** rows 41, 42, 43, 44. **Caps:** 7 runs; 1 h / 2 h. **Size:** about 120
-production lines, 280 test lines, ~60 doc lines. **Estimate:** 60 min — **split clause:** past a 1 h dispatch estimate,
-C22 (the document) and row 45 go to **B4b** off B4's tip.
+**Read:** audit §7, H9; this plan's C-3, C-6; `A/api/ApiRouter.kt:55-62`, `:95-100`, `:215-330`, `:370-385`,
+`:429-436`; `A/api/HttpWire.kt:35-50`, `:135-150`; `A/api/{ReferenceDtos,ReferenceHandlers,AttachmentHandlers,AttachmentOperationIds}.kt`;
+`A/api/ApiJson.kt:420-432`, `:570-580`, `:715-735`, `:860-870`, `:935-950`; `docs/api/attachment-operation-ids.json`;
+`docs/api/v1.md` (the reference, attachment, SupplyItem and component sections). **Rows:** 41–45, 43a and B4's pins.
+**Rulings:** R69-2 (C20's no-key rule), R69-12. **Greps:** §7's API and wire lines; `command-shapes.json` diff → empty;
+`ReferenceRoutesTest.kt:450-470` diff → empty. **Untouched:** as §4. **Must NOT:** add an error code; change
+`referenceProblemCode`; add a `preferred`/`vendor` key; change the v2 derivation or its vectors; compute the v3
+vectors with the code they pin; widen `isAttachmentUpload` beyond the two canonical POST shapes; add a `DELETE`.
+**Counted RED (5):** rows 41, 42, 43, 43a, 44. **Caps:** 8 runs; 1 h / 2 h. **Size:** about 120 production lines, 300
+test lines, ~60 doc lines. **Estimate:** 60 min.
 
-## 17. B5 — the MCP (C23–C24; pytest)
+## 19. B5 — the MCP (C23–C24; pytest)
 
 **Read:** audit §7 (MCP); `M/src/servicetag_mcp/server.py:185-245`, `:2100-2200`, `:3036-3050`, `:3100-3420`;
 `M/tests/{test_reference_tools,test_attachment_tools,test_argument_guard,test_tools}.py`. **Rows:** 46–48.
@@ -1044,7 +1183,7 @@ C22 (the document) and row 45 go to **B4b** off B4's tip.
 schema 20; read the golden `vectors` array differently. **Counted RED (2):** rows 46, 47. **Caps:** 6 runs; 1 h / 2 h.
 **Size:** about 110 production lines, 260 test lines. **Estimate:** 55 min.
 
-## 18. B6a — the sections keyed by owner (C25, C28; app JVM)
+## 20. B6a — the sections keyed by owner (C25, C28; app JVM)
 
 **Read:** audit §5.1, H4; `A/ui/references/*`; `A/ui/attachments/AttachmentsSectionViewModel.kt:60-95`, `:175-190`;
 `T/ui/references/*`. **Rows:** 49 (and B6a's pins). **Rulings:** R69-6, R69-13. **Greps:** P69-11…16 each declared once
@@ -1052,41 +1191,59 @@ schema 20; read the golden `vectors` array differently. **Counted RED (2):** row
 change an asset's visible behaviour; reword an asset sentence. **Counted RED (2):** row 49's saved-mark and twin
 cases. **Caps:** 6 runs; 1 h / 2 h. **Size:** about 80 production lines, 200 test lines. **Estimate:** 50 min.
 
-## 19. B6b — the SupplyItem detail (C26; app JVM, Compose)
+## 21. B6b — the SupplyItem detail (C26; app JVM, Compose)
 
-**Read:** audit §5.2; `A/ui/supplies/{SupplyDetailScreen,SupplyDetailViewModel}.kt`; `AT/ui/supplies/SupplySurfacesTest.kt`;
-`A/ui/asset/AssetDetailScreen.kt:440-500` (how the asset passes the sections their arguments). **Rows:** 50.
-**Rulings:** R69-10. **Greps:** the KDoc's "#69's resources, which later sit below" replaced (read it).
-**Untouched:** as §4. **Must NOT:** add a section above "Used by"; make an archived item read-only. **Counted RED
-(1):** row 50's JVM case. **Caps:** 5 runs; 1 h / 2 h. **Size:** about 50 production lines, 120 test lines.
-**Estimate:** 40 min.
+**Read:** audit §5.2; `A/ui/supplies/{SupplyDetailScreen,SupplyDetailViewModel}.kt`; `A/ui/nav/ServiceTagRoot.kt:575-595`;
+`AT/ui/supplies/SupplySurfacesTest.kt`; `A/ui/asset/AssetDetailScreen.kt:440-500` (how the asset passes the sections
+their arguments). **Rows:** 50. **Rulings:** R69-10. **Greps:** the KDoc's "#69's resources, which later sit below"
+replaced (read it); `ServiceTagRoot.kt` diff → the `SupplyDetail` entry's arguments only. **Untouched:** as §4.
+**Must NOT:** add a section above "Used by"; make an archived item read-only. **Counted RED (1):** row 50's JVM case.
+**Caps:** 5 runs; 1 h / 2 h. **Size:** about 55 production lines, 120 test lines. **Estimate:** 45 min.
 
-## 20. B6c — the installed-component screen (C27; app JVM, Compose)
+## 22. B6c — the installed-component screen (C27; app JVM)
 
-**Read:** audit §5.3, H7; `A/ui/installed/*`; `A/ui/nav/{Route,ServiceTagRoot}.kt`; `A/ui/supplies/SupplyDetailScreen.kt`
-(the screen shape); `AT/ui/installed/InstalledComponentsSectionTest.kt`. **Rows:** 51, 52. **Rulings:** R69-8,
-R69-9. **Greps:** `'data class InstalledComponentDetail\('` in `Route.kt` → 1; P69-1…4 each declared once.
-**Untouched:** as §4. **Must NOT:** stack a sheet over the row sheet; draw an add or edit action in a SupplyItem group;
-copy a SupplyItem's row into the component's list. **Counted RED (1):** row 51's dedupe case. **Caps:** 7 runs; 1 h /
-2 h. **Size:** about 200 production lines, 360 test lines. **Estimate:** 65 min — **split clause:** past a 1 h
-dispatch estimate, the Compose class (row 52) goes to **B6c2** off B6c's tip.
+**Read:** audit §5.3, H7; this plan's C27 (N-8, N-9); `A/ui/installed/*`; `A/ui/nav/{Route,ServiceTagRoot}.kt`;
+`A/ui/supplies/SupplyDetailScreen.kt` (the screen shape); `A/ui/asset/AssetDetailScreen.kt:225-240`. **Rows:** 51.
+**Rulings:** R69-8, R69-9. **Greps:** `'data class InstalledComponentDetail\('` in `Route.kt` → 1; P69-1…4 each
+declared once; the `AT/` `AssetDetailScreen(` call sites' diff → empty (the defaulted parameter). **Untouched:** as §4,
+and `AT/**` (B6c2). **Must NOT:** stack a sheet over the row sheet (close, then navigate); draw an add or edit action in
+a SupplyItem group; copy a SupplyItem's row into the component's list; read the row once only. **Counted RED (1):** row
+51's dedupe case. **Caps:** 6 runs; 1 h / 2 h. **Size:** about 200 production lines, 220 test lines. **Estimate:**
+55 min.
 
-## 21. B7 — Share intake (C29–C30; app JVM, Compose)
+## 23. B6c2 — the component screen drawn (row 52; Compose sources)
 
-**Read:** audit §6, H8; `A/share/*`; `A/ui/supplies/SupplyItemPicker.kt`; `A/ui/installed/InstalledComponentsSectionViewModel.kt`
-(the current-tree derivation to reuse); `T/share/ShareIntakeViewModelTest.kt`; `AT/share/ShareIntakeScreenTest.kt`;
-#93's plan (`docs/superpowers/plans/2026-10-01-issue-93-share-intake-asset-picker.md`). **Rows:** 53–55 and B7's
-pins. **Rulings:** R69-3, R69-10, R69-13. **Greps:** the three boundary classes' diff → empty; `AndroidManifest.xml`
-diff → empty; P69-5…10 each declared once. **Untouched:** as §4. **Must NOT:** offer a prose share a SupplyItem or
-component; offer an archived SupplyItem, a removed component or a held asset's component; write before Save; change a
-security rule. **Counted RED (2):** row 53's removed-rows case and its archived-item case. **Caps:** 7 runs; 1 h / 2 h.
-**Size:** about 160 production lines, 320 test lines. **Estimate:** 65 min — **split clause:** past a 1 h dispatch
-estimate, the Compose cases (row 54) go to **B7b** off B7's tip.
+**Read:** this plan's C27; B6c's report; `AT/ui/installed/InstalledComponentsSectionTest.kt`; `AT/ui/supplies/SupplySurfacesTest.kt`
+(the graph-backed screen shape). **Rows:** 52. **Greps:** `git diff <base_of_B6c2> -- '*/src/main/*'` → empty.
+**Untouched:** every main file. **Must NOT:** run a device (the cases compile here and first run at the merged-tip
+gate); add a device-boundary class. **Counted RED (0):** device cases. **Caps:** 3 runs (`compileDebugAndroidTestKotlin`);
+1 h / 2 h. **Size:** ~12 cases, about 280 test lines. **Estimate:** 40 min.
 
-## 22. B8 — the documents and the release-proofs paragraph (C31–C32; docs)
+## 24. B7 — Share intake: the target, the steps and the saves (C29–C30; app JVM)
+
+**Read:** audit §6, H8; this plan's C29, C30 (N-10); `A/share/*`; `A/ui/supplies/SupplyItemPicker.kt`;
+`C/model/InstalledComponentTree.kt`; `A/ui/installed/InstalledComponentsSectionViewModel.kt:255-265`;
+`T/share/ShareIntakeViewModelTest.kt`; `AT/share/ShareIntakeScreenTest.kt` (compile only);
+#93's plan (`docs/superpowers/plans/2026-10-01-issue-93-share-intake-asset-picker.md`). **Rows:** 53, 55 (re-run) and
+B7's pins. **Rulings:** R69-3, R69-10, R69-13. **Greps:** the three boundary classes' diff → empty;
+`AndroidManifest.xml` diff → empty; P69-5…10 each declared once. **Untouched:** as §4. **Must NOT:** offer a prose share
+a SupplyItem or component; offer an archived SupplyItem, a removed component or a held asset's component; write before
+Save; change a security rule; move a behaviour assertion in `ShareIntakeScreenTest` (B7b). **Counted RED (2):** row
+53's removed-rows case and its archived-item case. **Caps:** 7 runs; 1 h / 2 h. **Size:** about 160 production lines,
+260 test lines. **Estimate:** 55 min.
+
+## 25. B7b — Share intake drawn (row 54; Compose sources)
+
+**Read:** this plan's C30; B7's report; `AT/share/ShareIntakeScreenTest.kt`. **Rows:** 54 and the pins `:166`, `:308`,
+`:368` (they must land before the merged-tip gate). **Greps:** `git diff <base_of_B7b> -- '*/src/main/*'` → empty.
+**Untouched:** every main file; the three boundary classes. **Must NOT:** run a device. **Counted RED (0):** device
+cases. **Caps:** 3 runs; 1 h / 2 h. **Size:** ~5 new cases, 3 moved, about 150 test lines. **Estimate:** 35 min.
+
+## 26. B8 — the documents and the release-proofs paragraph (C31–C32; docs)
 
 **Read:** `docs/release-proofs.md:120-140`; `docs/design/04-domain-data-model.md:438-460`; `docs/design/14-asset-model.md`;
 every report on the branch. **Rows:** 56. **Greps:** `'^\*\*The first signed release carrying Room schema 20'` in
-`release-proofs.md` → 1; `'vendor_url. is #69'` in D4 → 0 (read it); `ReleaseProofPolicyTest` green.
-**Untouched:** as §4. **Must NOT:** describe what was not built; name a purchasing, #95 or #96 word. **Counted RED
-(0):** a tripwire row. **Caps:** 3 runs; 1 h / 2 h. **Size:** about 80 doc lines. **Estimate:** 35 min.
+`release-proofs.md` → 1; `'vendor_url. is #69'` in D4 → 0 and the `:452` column row restated (read it);
+`ReleaseProofPolicyTest` green. **Untouched:** as §4. **Must NOT:** describe what was not built; name a purchasing,
+#95 or #96 word. **Counted RED (0):** a tripwire row. **Caps:** 3 runs; 1 h / 2 h. **Size:** about 80 doc lines.
+**Estimate:** 35 min.
