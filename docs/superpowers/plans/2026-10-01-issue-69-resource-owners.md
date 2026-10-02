@@ -1345,3 +1345,277 @@ every report on the branch. **Rows:** 56. **Greps:** `'^\*\*The first signed rel
 `ReleaseProofPolicyTest` green. **Untouched:** as §4. **Must NOT:** describe what was not built; name a purchasing,
 #95 or #96 word. **Counted RED (0):** a tripwire row. **Caps:** 3 runs; 1 h / 2 h. **Size:** about 80 doc lines.
 **Estimate:** 35 min.
+
+## 30. Errata (recorded after the merge, 2026-10-02)
+
+The plan executed as rev 1.5 plus the owner's withdrawal of P69-23 (27bffcce), on briefs B1a to B8 (§9–§29). What the
+briefs, their task reviews and the whole-branch review (master to 8df2a20d, then c187bcce) found different from the
+text is listed here; the contracts above are left as written so the reasoning stays legible. Entries E-1 to E-31 are
+the whole-branch review's list; E-32 onward come from the ledger's rulings and records that the review did not carry.
+The review's verdict was merge with fixes: no blocker, no major, no behavioural finding. The two fixes were the
+comment-only KDoc commit (E-51) and a test-only change to row 54 (E-49).
+
+**E-1. A cite error in §3 rows 12–13 (B2a ruling 1).**
+- The plan names `CT/usecase/AttachmentRulesTest`.
+- The class is `CT/model/AttachmentRulesTest.kt`.
+
+**E-2. G2's codec role refusal changed text, and the G-list does not carry it (B2a ruling 3).**
+- The refusal now ends "an entry's file takes none"; it said "only an asset's may".
+- R69-6 made the old tail false. No pin read it.
+
+**E-3. C5's `as?` chains would not force a fifth owner at compile time (B2a review n2).**
+- Chains: `Attachment.toDto` and `AssetReference.toDto` (`BackupFormat.kt:1138-1158`, `:1347-1357`), and the Room
+  `toEntity`s (`Mappers.kt:210-230`, `ReferenceMappers.kt:52-62`).
+- An exhaustive-`when` helper would. Left for later.
+
+**E-4. Row 25's borrowed-phone edit case moved from B2b to B3b (B2b ruling 1; C13).**
+- Until B3b's `select` carries a component's link, the edit case cannot run.
+- Its outcome is that the edit LANDS on the return, because the stale local link leaves with the asset's components.
+  The dispatch's CONFLICT wording was wrong. Row 25 in B2b asserts the scoped snapshot instead.
+
+**E-5. Row 22's counted RED is not a production RED (B2b review N1).** It mutated the core double's `findByUri`, not
+production code.
+
+**E-6. §4's "Between-brief gaps" table lacks one link (B2b review N4).**
+- `TransferGraph.select` and `retain` filtered links by `assetId` (B2b to B3b).
+- Rows 35–36 closed it.
+
+**E-7. Stale `(asset_id, uri)` KDocs outside every brief's list (B2b review N3).**
+- Sites: `C/merge/MergePlan.kt:102`, `:242`, `:259`, `:518`, and `CT/merge/MergePlannerReferenceTest.kt:26`, `:189`.
+- Two of the `MergePlan.kt` ones are `MergeReason` members' KDocs, and R6 expects that diff empty, so they stay.
+- `BackupCodec.kt:838` stays byte-identical for the tombstone check. B4 fixed `ReferenceHandlers.kt:25`.
+  `ReferenceCommands.kt:61` is E-51.
+
+**E-8. A 179-column KDoc line was never re-wrapped (B2b2 review MINOR-1).** `CT/usecase/MaterializeReferenceTest.kt:70`.
+The branch's other long lines (`MaterializeStrings.kt:9-10` at 169 columns, about 18 more at 121–137, mostly DAO
+`@Query` lines in the shipped shape) are cosmetic.
+
+**E-9. C17's class KDoc keeps an untrue sentence (B2b2 review NOTE-4).** `MaterializeReference` says "used only by the
+Save-as-document sheet". That has been untrue since #92. Fixed in E-51.
+
+**E-10. Row 39's counted RED never ran (B3c).**
+- The session's permission classifier denied the temporary `ImportBackupReplace.kt` mutation.
+- The reviewer's prediction stands in: a `BackupCorrupt` exactly-one refusal from `BackupFormat.kt:1375`, via
+  `ImportBackupReplace.kt:229`.
+
+**E-11. C19's shared API helpers live in `ReferenceHandlers.kt` (B4 ruling 5).**
+- `ResourceOwners`, `noSuchOwner`, `noSuchSupplyItem` and `noSuchInstalledComponent` are in that file because §4's
+  B4 row names no new file.
+- `AttachmentHandlers` uses them too. They belong in a shared file; moving them is later work.
+
+**E-12. R6's grep for the v2 prefix reads 2, not 1 (B4 ruling 1; §7).** `'servicetag:attachment-upload:v2'` in
+`AttachmentOperationIds.kt` matches the KDoc that spells the formula, at base and at tip. The golden `vectors` array is
+unchanged (0 removed lines).
+
+**E-13. C23's twin in the MCP tests is outside §4's B5 row (B5 ruling 1).**
+`M/tests/test_season_health_tools.py:82-104` (Inv. 129's ban on "installed" in any tool argument) now exempts
+`installed_component_id` on the five resource tools only. The reviewer confirmed it minimal.
+
+**E-14. R6's tool count needs the anchored grep (B5).** A loose `@mcp.tool()` grep reads 91 at base and at tip.
+`TOOL_NAMES` (89) and the anchored `'^@mcp\.tool\('` agree.
+
+**E-15. The file-backed-tree helper is copied twice more (B6b review NOTE-2; B6c2 NOTE-5).**
+- `useFileBackedTree()` in `SupplySurfacesTest` is the fifth private copy; `InstalledComponentDetailTest` has
+  `useAFileBackedTree()`.
+- §4 fences harness helpers, so one shared `AT/` helper is later work.
+
+**E-16. §3's pin line names one `AssetPickerModelTest` site; the active-only rule moved eight (B7 ruling 1).**
+- Eight of #93's thirteen cases are twins of the listed pin. Four were renamed, none deleted, and the 14 removed
+  assertions were each restated.
+- Planning miss. Row 53a's "+5" stands.
+
+**E-17. The SupplyItem dead-end count landed in B7, not B7c2 (B7 ruling 2; §4, §26).** B7c2's counted RED therefore
+mutates B7's code. The RED is still valid.
+
+**E-18. The Supplies order restates the shipped comparator (B7c1 review NOTE-5).** `ShareTargets.kt`'s
+`supplyNameOrder` repeats `SupplyListViewModel.listRowsOf`. A file fence blocked sharing it, and a test pins it.
+
+**E-19. B7c2 made two KDoc-only edits outside its §4 file list (B7c2).** `ShareTargets.kt`'s `productLineOf` KDoc and
+`AssetPicker.kt:17`. Both were carries the controller ordered.
+
+**E-20. C30's two sibling orders (B7c1 review; B7d; C-11).**
+- The direct Installed components list orders siblings by name, path by path (row 53b).
+- The component screen (C27) and a browsing level (row 53) order by `sortOrder` first.
+- Two orders for the same siblings. Owner item.
+
+**E-21. A pure function lives in a ViewModel file (B7d review NOTE-4).** `A/share/ShareTargets.kt` imports
+`suppliesNamedBy` from `A/ui/installed/InstalledComponentDetailViewModel.kt`.
+
+**E-22. C25's `rolesOffered` KDoc is untrue since R69-6 (B6a review N4).** `AttachmentsSectionViewModel.kt:179-180` says
+"an asset's files only". The chips follow `accepts`. Fixed in E-51.
+
+**E-23. A stale KDoc in the test support (B2a2 review NOTE-5).** `CT/transfer/TransferImportTesting.kt:136-140` ("14.json"
+and the cascade list).
+
+**E-24. C5's two `lateinit` doubles were never wired (B2a review n5; B2b ruling 6; B3a).** `supplyItems` and
+`installedComponents` in `BackupUseCasesTest.kt:648-649`'s `FkCheckingAttachmentRepository`: no case reaches them.
+
+**E-25. Row 54's host copies the activity's wiring (B7b report concern 1; review NOTE-1).**
+- `ShareIntakeScreenTest` copies all 22 callbacks and the `BackHandler`. The activity's own wiring
+  (`ShareIntakeActivity.kt:107-149`) runs in no device case.
+- Follow-up: hoist it into one internal composable that both call.
+
+**E-26. Two paths run in no case (B6c2 review NOTE-3; B3b review NOTE-6; rows 52 and 38).**
+- No device case draws the root's `InstalledComponentDetail` entry or its `onOpenSupply` to `SupplyDetail`.
+- No app-side case runs `DeleteAsset` over Room with component files; Room's cascade is proven by row 4.
+
+**E-27. C15's `retain` change reaches the export (B3b review NOTE-3).** `ExportBackupSet.kt:125`: an export taken while
+an asset is out omits its components' files and bytes. That is correct.
+
+**E-28. Three REDs differ from the plan's wording (B1b; B2b; rows 7, 9, 23).**
+- Row 7's RED went through `@Required` rather than deleting `= null`.
+- Row 9's counted RED is "a link naming two owners read as its asset's". The "AssetId(null) NPE" applies only after
+  B2b.
+- Row 23's mutation is an equivalent one, because the literal move-back does not compile.
+
+**E-29. Row 32's natural failure has an empty message (B3a).** The bundled JVM driver drops SQLite's text, so it is an
+`SQLException` with a blank message. The one moved line attributes it.
+
+**E-30. B8 amended two lines beyond C31's named ones (B8 fix round; coordinator ruling).**
+- D4 §11's `attachment` owner row and its `storage_locator` row, now naming four owners and four folder shapes.
+- D14's old "§6 Choosing the shape" is renumbered §7.
+
+**E-31. Owner items recorded, not plan errors.** They are listed in full in the last entry.
+
+**E-32. B2a's graph edit is one declaration beyond "arguments only" (B2a ruling 2; C5; §4 B2a).**
+- `AppGraph` and `FakeGraph` each declare `roomInstalledComponents` once. The guard's lookup reads that unwrapped port
+  and the guarded `installedComponents` wraps the same instance.
+- The reviewer confirmed one instance per graph and a safe init order.
+
+**E-33. Row 19 is built directly on `ReturnScope.of` (B2a2 ruling 2; C5, C15).**
+- The test calls the internal `ReturnScope.of(mergeSnapshotOf(...))` with no visibility change, and writes its files
+  after the pack is sealed, a setup real use cannot reach.
+- Under the row's mutation the snapshot assertion fails first, so the bytes-swept assertion is not exercised under
+  mutation.
+
+**E-34. The core reference double throws a different type (B2b ruling 4; C11, C12).** On a second `(owner, uri)` it
+throws `IllegalStateException`; it threw `RiggedFailure`. No pin read it.
+
+**E-35. A missing `assetId` key is the decoder's refusal, not G2's (B2b ruling 3; B1b N2; C10).**
+- An explicit `null` asserts G2's exactly-one sentence.
+- An absent key reads "'assetId' is required", because the field has no default.
+
+**E-36. Row 31's mutation hit sixteen other planner cases (B3a; C14).** Its own case failed on `CONTENT_DIFFERS`; the
+sixteen are collateral and do not mask it.
+
+**E-37. C15's `retain` and the merge's `after` snapshot (B3a heads-up; B3b ruling, mid-flight).**
+- M3's `after` is built without components or SupplyItems, and B3b may not touch `C/merge`.
+- So `retain` treats a component missing from the file as not dropped (no `getValue`, no `!!`), and one case pins it.
+
+**E-38. `DeleteAsset(` sites are 7, not 5 (B3b rulings 2 and 3; §4's construction-site count, C16a).**
+- One new `BackupInstall`-built construction in `RetireDeleteAssetTest`; the shipped sites stay five.
+- `HeldWriteGuardTest:640` and `DeleteCategoryTest:82` needed argument-only fixes outside §4's list.
+
+**E-39. A lone `null` owner key counts as absent (B4 NOTE-4; C20, C23).**
+- `{"assetId": null, ...}` with one other owner key is a 201: the rule is exactly one non-null key.
+- v1.md now says so, and the MCP applies the same non-None counting.
+
+**E-40. C21's check order and one extra refusal (B4 ruling 4, ruling 7, NOTE-3).**
+- Row 41's mutation surfaces as the asset's 404, because the owner check precedes the read.
+- Save-as-document reads the owner before the held check, which costs one extra read on an asset.
+- A new link on a held asset's component is refused by the core guard (409, nothing written), and a case proves it.
+
+**E-41. B4's fix round touched files outside §4's B4 row (B4 review MINOR-1, MINOR-2, NOTE-1; C19, C22).**
+- `docs/api/v1.md:1533` ("Supply items (#15)", "and no file") gains one clause pointing to Resource owners (#69).
+- `ApiRouterTest.kt:1128-1129` (`theUploadTierIsPostOnTheOneShapeAlone`) is renamed and gains two `bodyCapFor` asserts.
+- `HttpWire.kt:103-104` reads "On those shapes".
+
+**E-42. Row 49's case counts (B6a; C25).** `AttachmentsSectionViewModelTest` gained two cases, and a fifth
+`ReferencesSectionViewModelTest` case pins P69-13 and P69-14 on the JVM; the dialog itself runs only on a device.
+Three forced argument-only edits were also made (`AddLinkFormTest`, `MaterializeViewModelTest`, `ReferencesSectionTest`).
+
+**E-43. C26's `resourcesReadOnly` is always false (B6b ruling 2; row 50).** It is a field only so that row 50 can pin
+"an archived item's sections stay writable" on the JVM. The asset detail builds its link launcher in the screen body,
+so B6b did the same.
+
+**E-44. C27's surface names and one derivation caveat (B6c).**
+- The asset screen's callback is `onOpenInstalledComponent`; the section and row sheet use `onOpenDocuments`.
+- `suppliesNamedBy` returns archived SupplyItems too, and Share's step filters them out.
+- About ten KDoc lines say "the component's" after naming the installed component: prose, stricter than C1, left
+  with #47's sweep (deferred to #98).
+
+**E-45. C30's matcher cannot import the shipped normalisation (B7c1).** `Asset.matches` normalises inline beside a
+private field list, so `ShareTargets.kt` carries a private helper with the same rule and nothing is copied.
+
+**E-46. B7's interim states and notes path (B7 rulings 3, 4, 6; C29, C30).**
+- Until B7c2, a link or bytes share with no active asset but an unarchived supply opened the picker with an empty
+  Assets list (Cancel only). Branch-only.
+- P69-26 is declared in `IntakeStrings` by B7, so B7c2's "declared once" grep holds.
+- `choose()` on the note path ignores a component or supply destination, which keeps prose's error arms unreachable.
+
+**E-47. B7d's one `A/ui` change (B7c2 N3 ruling; §4 B7d fence).**
+- The shipped `SupplyRow` draws a chevron where Share's supply rows finish. A defaulted `showChevron` parameter, false
+  from Share's two supply sites, is the only `A/ui` edit in the Share chain.
+- B7d first drew a chevron on level component rows and removed it.
+
+**E-48. C30 step 1's level header (B7d).**
+- A level draws no title and no Received line: Attach to, a "Back" arrow beside the breadcrumb, then "Inside %s" (P47-5,
+  reused) on a component level, then rows. The "Back" literal count moves 21 to 22.
+- Supply rows on a level carry P69-18 as the quiet line; the product line stays the direct list's.
+
+**E-49. Row 54 and its test-only fix (B7b; review MINOR-1).**
+- The twelve cases cannot assert the absent chevron or TalkBack focus; case (6) asserts no title on a level; case (12)
+  seeds 61 assets.
+- Two negatives after an await were made `waitUntil` the row set is empty (c187bcce, test-only, controller-inspected).
+  The whole-branch review had read the file at 8df2a20d, so this is the one commit it did not see.
+
+**E-50. Two things C31 does not describe (B8).**
+- The schema-20 paragraph's "one Share to each new owner" is done by hand on the emulator and accepts a shared LINK,
+  because the shell cannot pass a file grant (§1 limit 9).
+- The merge report's tally names and the Assets list order in Share are left undescribed, unconfirmed in code.
+  D4's clause "every other column and table here is #95's" is kept verbatim on the changed line.
+
+**E-51. The comment-only KDoc fix and the crash that interrupted it (whole-branch review MINOR-1).**
+- Three KDocs #69 made false, in files no brief listed: `AttachmentsSectionViewModel.kt:179-180` (E-22),
+  `ReferenceCommands.kt:61` (now per owner, `(owner, uri)` unique) and `MaterializeReference.kt:33` (E-9).
+- A session crash on 2026-10-02 left the fix agent's commit as 23 zero-byte objects. `issue-69` was reset to
+  c187bcce, the three edits survived in the working tree and were inspected, and a worktree compile with
+  `--rerun-tasks` passed. Gradle's local cache entries truncated by the crash were quarantined. The owner deleted the
+  zero-byte objects, the fix was re-committed as a414a858 (every new object intact, fsck clean), and the branch was
+  merged at that tip.
+
+**E-52. Owner items at close (recorded, not plan errors).**
+- `REFERENCE_URI_TAKEN`'s shipped message ("this asset already holds that link") is used for every owner (B4). An
+  owner-neutral sentence needs ratification and moves `ReferenceRoutesTest`'s pins.
+- Text order puts "Position 10" before "Position 2" (B7c1); numeric order would need a ruling.
+- Same-name subtrees interleave, then order by id (C-11 taken literally; a fix needs ancestor ids on the target).
+- The direct list orders siblings by name while the component screen and a browsing level order by `sortOrder` first
+  (E-20).
+- A query spanning "›" (for example "UPS › Tray") finds nothing: an accepted limit.
+- The component, supply and asset-level sources are read once when the share opens (B7c2, B7d).
+- An archived SupplyItem's group on the component screen has no "Archived" badge (B6c).
+- Two fixtures name a real retail product, one since #43 and one since #93 (`ShareIntakeScreenTest.kt:95`,
+  `ShareIntakeViewModelTest.kt:85-92`): a one-line rename each, not #69's under the pin rule.
+- §5 flags: P69-22's trailing period; `NO_SUPPLY_ITEMS_YET`'s "yet" when every supply is archived; two chips of the
+  same shape with Assets chosen; attaching to the asset itself takes two taps.
+- The owner's eye on a device (B7b, B7c2, B7d): text size and padding differences between the lists, TalkBack focus
+  after a type switch, rows that open a level look like rows that choose (neither has a chevron), and two same-named
+  SupplyItems on one level are told apart only on the form.
+- The schema 19 to 20 in-place upgrade of a signed build is proven by the carrying release's gate, not by this plan
+  (§7, C31); the 14/15-minute lines (#90) are reporting only under F-1.
+- The 23 zero-byte git objects left by the crash (E-51) were deleted by the owner on 2026-10-02 before the fix commit
+  was rewritten, because the permission classifier denied the controller's delete; nothing remains open here.
+- The release-notes paragraph below carries "until you resolve it"; the reviewer offers cutting it to the bare
+  "refuses the return" if the owner prefers.
+
+**52 errata.**
+
+**Gate record.**
+Once, on the merged tip 950d632e (2026-10-02). JVM whole green: core 2030 / app 2019 tests, 0 failures, 0 skipped;
+MCP 642/0; loader 154/0 — all in run 1 (total elapsed 3 min 19 s for the JVM, device and tool stages before the
+device loop ended). Device: 59 classes, 345 tests, 0 failures, 0 skipped — every class reported, assembled from four
+recorded runs because the emulator kept dying under this host's NVIDIA GL: run 1 (headless, `-gpu host`) passed 5
+classes / 27 tests in 2 min 3 s before the emulator segfaulted; fill 1 (windowed, `-gpu auto`) and fill 3 (software
+rendering with guest Vulkan on) passed nothing, their emulators dying 95 s in and during boot; fill 2 (the owner's
+Android Studio emulator) passed 2 classes / 13 tests before dying; fill 4 (the same, restarted) passed none; fill 5
+(`-no-window -gpu swangle_indirect -feature -Vulkan`, software GL, no window) ran all 52 remaining classes with the
+device alive — 305 tests, one failure: `AssetDetailKeyDocumentsTest.aRenameThroughTheSheetLeavesTheRoleUnchanged`
+timed out after 5 s waiting for the sheet's Save callback (the sheet is byte-identical to the build that passed it on
+hardware in #47's gate; the JVM twin passed; the tap after the keyboard animation is this test's recorded flake) and
+was ruled an environment artifact; fill 6 re-ran that one class on the same emulator: 6 tests, 0 failures. The five
+emulator deaths are one host fault: the owner's monitoring session read the complete core — frames 0–4 in
+`libnvidia-glcore.so.580.178.04` under gfxstream's `ColorBufferGl::blitFromCurrentReadBuffer`, a userspace NVIDIA GL
+fault with no kernel error; every `-gpu host`/`auto` launch ends there on this host since its hard crash of
+2026-10-02 (the suite ran 50+ classes here the day before). F-1: there is no single-run device time; fill 5's loop
+took 16 min 56 s for 52 classes under software rendering, which is not comparable to the hardware baseline, so the
+14/15-minute lines (#90) are not judged by this gate and wait for the next clean hardware run.
