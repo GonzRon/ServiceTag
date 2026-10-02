@@ -276,7 +276,8 @@ class HeldWriteGuardTest {
         install.attachments.upsert(attachmentOf("at2", AttachmentOwner.OfEvent(EventId("e1"))))
         install.references.upsert(
             AssetReference(
-                id = ReferenceId("r1"), owner = ReferenceOwner.OfAsset(heater), kind = ReferenceKind.WEB_URL, uri = "https://example.com/heater",
+                id = ReferenceId("r1"), owner = ReferenceOwner.OfAsset(heater), kind = ReferenceKind.WEB_URL,
+                uri = "https://example.com/heater",
                 displayName = "Example heater page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
             ),
         )

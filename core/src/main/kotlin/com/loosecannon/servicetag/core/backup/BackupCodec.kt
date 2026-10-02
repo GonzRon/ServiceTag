@@ -834,12 +834,19 @@ object BackupCodec {
             }
         }
 
+        // --- references (format 7) ----------------------------------------------------------------
+        // The owner check only, exactly as `externalLinks` above: in-archive `(assetId, uri)`
+        // uniqueness is deliberately **not** checked here, because that is what keeps
+        // `REFERENCE_DUPLICATED_IN_ARCHIVE` reachable in the planner, as `CLOSURE_DUPLICATED_IN_ARCHIVE` is.
+        // #69 (C13): the pair is `(owner, uri)`, and the owner check itself runs after the installed components
+        // below, so every owner a link can name is a set by then (correction 2).
+
         // --- seasons, conditions and health (format 8) --------------------------------------------
         // Each row's asset must be in the file, and so must a subject's schedule: those are real
         // foreign keys. The soft links — `eventId` on both fact tables, `baselineProfileId` on a
         // subject, `healthPrimarySubjectId` on an asset — are deliberately **not** checked (inv. 109).
         // Nor is the subject's second identity: two non-archived subjects on one schedule are left
-        // for the planner to name, exactly as `assetReferences` leaves its pair below.
+        // for the planner to name, exactly as `assetReferences` leaves its pair above.
 
         uniqueIds("seasonActivations", data.seasonActivations.map { it.id })
         data.seasonActivations.forEach { activation ->
@@ -1071,11 +1078,9 @@ object BackupCodec {
             settled += path
         }
 
-        // --- references (format 7; #69) -------------------------------------------------------------
-        // The owner check only, exactly as `externalLinks` above: in-archive `(owner, uri)`
-        // uniqueness is deliberately **not** checked here, because that is what keeps
-        // `REFERENCE_DUPLICATED_IN_ARCHIVE` reachable in the planner, as `CLOSURE_DUPLICATED_IN_ARCHIVE` is.
-        // After the SupplyItems and the installed components (#69, C13), so every owner a link can name is a set.
+        // --- references: the owner check (#69, C13) ------------------------------------------------
+        // After the SupplyItems and the installed components, so every owner a link can name is a set; the pair is
+        // left to the planner, as the "references (format 7)" note above says.
 
         uniqueIds("assetReferences", data.assetReferences.map { it.id })
         data.assetReferences.forEach { reference ->
