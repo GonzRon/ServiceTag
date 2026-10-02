@@ -32,9 +32,11 @@ enum class TransferTableClass {
 
 object TransferTables {
     /**
-     * Keyed by the archive's list names (`BackupData`'s serial names). Two lists hold rows of two
-     * classes, and the row decides: an `nfcTags` row targeting a link is a TOMBSTONE, and a group
-     * schedule (with its closures) is CROSS_ASSET, travelling with its group.
+     * Keyed by the archive's list names (`BackupData`'s serial names). Four lists hold rows of two
+     * classes, and the row decides: an `nfcTags` row targeting a link is a TOMBSTONE; a group
+     * schedule (with its closures) is CROSS_ASSET, travelling with its group; and (#69, C15) an
+     * `attachments` or `assetReferences` row a SupplyItem owns travels as its item does, GLOBAL_IN_USE,
+     * while an installed component's travels with its component's asset.
      */
     val CLASSES: Map<String, TransferTableClass> = mapOf(
         "assets" to TransferTableClass.ASSET_OWNED,
@@ -151,8 +153,10 @@ object TransferGraph {
      * custom categories the selection uses, and (#15, C13) every supply item a carried row names — an applicability
      * row or a quick action's or an event's material line, archived or not, and (#47, C13) an installed component's
      * direct link or composition entry; soft links as they are. Every installed component of a carried asset travels,
-     * current and removed, with its composition: the history whole (R47-4). Loans, 2.6 links and the tags on them
-     * never travel.
+     * current and removed, with its composition: the history whole (R47-4). A file travels with its asset, its event,
+     * its installed component or its SupplyItem in use, and a link with its asset, component or SupplyItem in use
+     * (#69, C15; R69-7) — the pack's artifacts follow the files, so their bytes travel too. Loans, 2.6 links and the
+     * tags on them never travel.
      *
      * Refused, every reason collected: a group with a row naming a selected asset that is not wholly in
      * the selection ([TransferRefusal.MixedGroup], removed rows counted); a root whose parent is not
@@ -244,6 +248,8 @@ object TransferGraph {
             events.flatMap { e -> e.consumables.mapNotNull { it.supplyId } } +
             installedComponents.mapNotNull { it.supplyId } +
             installedComponents.flatMap { row -> row.composition.map { it.supplyId } }
+        // #69 (C15): a component's files and links go with it, and a SupplyItem's with the item, read before the pack.
+        val componentIds = installedComponents.map { it.id }.toSet()
         val pack = BackupData(
             assets = carry("assets", data.assets) { it.id in selected },
             // Only tags on a pack asset; a link's tag is a tombstone like the link (C1).
@@ -252,11 +258,16 @@ object TransferGraph {
             measurementDefinitions = definitions,
             eventProfiles = profiles,
             assetEvents = events,
-            attachments = carry("attachments", data.attachments) { it.assetId in selected || it.eventId in eventIds },
+            attachments = carry("attachments", data.attachments) {
+                it.assetId in selected || it.eventId in eventIds || it.installedComponentId in componentIds ||
+                    it.supplyItemId in supplyIdsInUse
+            },
             maintenanceGroups = if (TransferTables.travels("maintenanceGroups")) groups else emptyList(),
             maintenanceSchedules = schedules,
             occurrenceClosures = carry("occurrenceClosures", data.occurrenceClosures) { it.scheduleId in scheduleIds },
-            assetReferences = carry("assetReferences", data.assetReferences) { it.assetId in selected },
+            assetReferences = carry("assetReferences", data.assetReferences) {
+                it.assetId in selected || it.installedComponentId in componentIds || it.supplyItemId in supplyIdsInUse
+            },
             seasonActivations = carry("seasonActivations", data.seasonActivations) { it.assetId in selected },
             assetConditions = carry("assetConditions", data.assetConditions) { it.assetId in selected },
             healthSubjects = subjects,
@@ -282,8 +293,9 @@ object TransferGraph {
      * C3 — the archive without [held]: the held assets and their asset-owned rows (#15's applicability rows and
      * #47's installed components, current and removed, among them), each group wholly in [held] with its schedules
      * and closures, and every tag, loan, succession (#86, either end) and 2.6 link naming a held asset (with the tags
-     * on those links). The categories and (#15, C13) the supply items are global and stay whole, an item only a held
-     * row names included. Exactly the held set: no descendant or group member is added to it. A row that stays and
+     * on those links). The files and links of a held asset's installed components go with them (#69, C15). The
+     * categories and (#15, C13) the supply items are global and stay whole, an item only a held row names included, and
+     * so are a supply item's files and links. Exactly the held set: no descendant or group member is added to it. A row that stays and
      * names a dropped row makes the whole answer [TransferRetention.Entangled], naming every such reference — a later
      * archive of what stays must still decode.
      */
@@ -292,6 +304,9 @@ object TransferGraph {
         val (heldIds, droppedGroups, droppedSchedules, droppedEvents, droppedLinks, droppedCases) = dropped
         val droppedDefinitions = dropped.definitions
         val droppedProfiles = dropped.profiles
+        // #69 (C15): the components that leave, read from this archive's own rows — so a row whose component the data
+        // does not hold (M3's reduced `after`) stays, and [DroppedRows] and [entangledRefs] are untouched.
+        val droppedComponents = data.installedComponents.filter { it.assetId in heldIds }.mapTo(HashSet()) { it.id }
 
         // A copy, not a construction: a list this function does not name is kept whole (mn-2), so a table
         // added later can never vanish from every ordinary backup without a sound.
@@ -302,11 +317,17 @@ object TransferGraph {
             measurementDefinitions = data.measurementDefinitions.filterNot { it.id in droppedDefinitions },
             eventProfiles = data.eventProfiles.filterNot { it.id in droppedProfiles },
             assetEvents = data.assetEvents.filterNot { it.id in droppedEvents },
-            attachments = data.attachments.filterNot { it.assetId in heldIds || it.eventId in droppedEvents },
+            // #69 (C15): a component's files and links go with it; a SupplyItem's are never dropped (globals stay whole),
+            // and nothing a kept row names is among them, so they never entangle.
+            attachments = data.attachments.filterNot {
+                it.assetId in heldIds || it.eventId in droppedEvents || it.installedComponentId in droppedComponents
+            },
             maintenanceGroups = data.maintenanceGroups.filterNot { it.id in droppedGroups },
             maintenanceSchedules = data.maintenanceSchedules.filterNot { it.id in droppedSchedules },
             occurrenceClosures = data.occurrenceClosures.filterNot { it.scheduleId in droppedSchedules },
-            assetReferences = data.assetReferences.filterNot { it.assetId in heldIds },
+            assetReferences = data.assetReferences.filterNot {
+                it.assetId in heldIds || it.installedComponentId in droppedComponents
+            },
             seasonActivations = data.seasonActivations.filterNot { it.assetId in heldIds },
             assetConditions = data.assetConditions.filterNot { it.assetId in heldIds },
             healthSubjects = data.healthSubjects.filterNot { it.assetId in heldIds },

@@ -222,4 +222,18 @@ class TransferGraphRetainTest {
         assertEquals(data.attachments.filter { it.supplyItemId != null }, kept.attachments.filter { it.supplyItemId != null })
         assertEquals(data.assetReferences.filter { it.supplyItemId != null }, kept.assetReferences.filter { it.supplyItemId != null })
     }
+
+    /**
+     * The merge's M3 reads `retain` over a reduced archive that holds no installed components: a row whose component
+     * the data does not hold is never dropped — no lookup throws, and the answer is still Retained.
+     */
+    @Test
+    fun aComponentsRowWhoseComponentTheDataDoesNotHoldStays() {
+        val data = resourced().copy(installedComponents = emptyList())
+
+        val kept = assertIs<TransferRetention.Retained>(TransferGraph.retain(data, heaterAndAnode)).data
+
+        assertEquals(listOf("at3", "fc1", "fc2", "fc4", "fcx", "fs1"), kept.attachments.map { it.id })
+        assertEquals(listOf("rc1", "rc2", "rc4", "rcx", "rs1"), kept.assetReferences.map { it.id })
+    }
 }

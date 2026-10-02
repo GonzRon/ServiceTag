@@ -300,7 +300,8 @@ class ImportTransferPackTest {
     // ---- #69 (C5, H2; row 19): a return takes a returning asset's component files and sweeps their bytes -------------
 
     /**
-     * The heater comes back to [fittedSender]. Its component files are local only, never in either pack (N-15): they
+     * The heater comes back to [fittedSender]. Its component files are local only, laid down after `pack-q1` was sealed
+     * so neither pack carries them (a carried one is [outWithResources]'s, now that a pack may hold it — C15): they
      * leave the scoped snapshot with the heater's components, the removed one (c4) included, the asset delete's CASCADE
      * takes the rows, and their bytes are swept, while the staying compressor's component keeps its file.
      */
