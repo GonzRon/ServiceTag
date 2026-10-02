@@ -21,7 +21,7 @@ private const val BEARER_PREFIX = "Bearer "
  * [body] is empty when there was none. Not a `data class` deliberately — a `ByteArray` member makes
  * the generated `equals` identity-based and misleading, and nothing here needs `copy`.
  *
- * [stream] is set on one shape only, the attachment upload ([isAttachmentUpload], #92 C9): exactly
+ * [stream] is set on the attachment upload alone ([isAttachmentUpload], #92 C9; one shape per owner since #69): exactly
  * `Content-Length` bytes of the socket, **not yet read**, so the router can check the token before
  * a byte of it moves (C10). [body] is then empty. Every other request's body is read here, as ever.
  */
