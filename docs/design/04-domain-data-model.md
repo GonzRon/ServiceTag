@@ -199,10 +199,13 @@ spelling; `category` is still the one classification and still no equipment-type
 Hierarchy guidance: the UPS/battery question is answered without child assets in the common case
 (a completion-relative "replace batteries every 4 years" schedule gives the battery age as
 `last_completed_on`). Child assets are for users who want a component's own serial number,
-documents, and journal. Depth is unbounded and the UI shows one level at a time (2B-2: COMPONENTS
+documents, and journal. Depth is unbounded and the UI shows one level at a time (2B-2: CHILD ASSETS
 lists the direct children and "Part of" names the direct parent; deeper levels are reached by
 tapping through). Deleting a parent with children is refused (`RESTRICT`); archive instead, or
 reparent.
+
+> **Amended 2026-10-01 (#47, Room schema 19).** Installed components hold fitted structure without Asset identity: what is fitted where, its serial or lot, since when, and what it replaced ([14-asset-model.md](14-asset-model.md) §5).
+> Child Assets remain the escalation path, for fitted equipment that needs its own NFC tags, documents, journal or custody.
 
 ### `external_link`
 
