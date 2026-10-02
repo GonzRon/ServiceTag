@@ -60,7 +60,8 @@ import org.junit.runner.RunWith
  * #69 (C26, row 50) adds the SupplyItem detail's own Documents and References, below "Used by": those three cases draw
  * the whole detail over the app's own graph, so each wipes the install before and after itself (`clearInstall` takes
  * the catalog, and its CASCADE the item's files and links); the attachment seam points at a file-backed tree the way
- * `AttachmentsDeviceProofTest` points it. The section words are the sections' own, drawn as their headers draw them.
+ * `AttachmentsDeviceProofTest` points it. The section words are the sections' own, drawn as their headers draw them,
+ * and spelled here as literals: those words have no constants to import, so the one-home rule above does not reach them.
  *
  * Emulator only, never a phone. No other case reaches the store, so none of them needs a wipe.
  */
@@ -402,10 +403,12 @@ class SupplySurfacesTest {
 
     /**
      * An archived item (R69-10): its file is drawn, and the sections are not read-only — "Add file", "Take photo" and
-     * "Add link" are all still offered, because a SupplyItem is never held.
+     * "Add link" are all still offered, because a SupplyItem is never held. The file's bytes are deleted before the
+     * draw (the section checks presence when its rows arrive, not on a tap), so the row says "Not on this device" and
+     * its tap puts the same words in the screen's own snackbar: the detail's `SnackbarHost` (C26) is wired.
      */
     @Test fun anArchivedItemsSectionsDrawAndStayWritable() = onAFreshInstall {
-        useFileBackedTree()
+        val tree = useFileBackedTree()
         val item = battery()
         runBlocking {
             val added = app.graph.addAttachment.run(
@@ -421,6 +424,9 @@ class SupplySurfacesTest {
             check(added is AttachmentResult.Ok) { "the file is added: $added" }
             app.graph.archiveSupplyItem.run(item.id, true)
         }
+        // The item's bytes live under its own directory (`supply-items/<id>/`, C4); nothing else there is touched.
+        val bytes = File(tree, "supply-items/${item.id.value}").walkBottomUp().filter { it.isFile }.toList()
+        check(bytes.size == 1 && bytes.single().delete()) { "the file's bytes are deleted: $bytes" }
         drawDetail(item.id)
         rule.awaitText("Unarchive")
         rule.awaitText("DOCUMENTS · 1")
@@ -430,6 +436,10 @@ class SupplySurfacesTest {
         rule.onNodeWithText("Take photo").assertExists()
         rule.onNodeWithText("REFERENCES").assertExists()
         rule.onNodeWithText("Add link").assertExists()
+
+        rule.awaitText("Not on this device")
+        rule.onNodeWithText("Example battery manual.pdf").performScrollTo().performClick()
+        rule.awaitText("Not on this device", count = 2)
     }
 }
 

@@ -53,8 +53,9 @@ import com.loosecannon.servicetag.ui.references.ReferencesSection
  * (P15-10), one row per applicability row — the asset's name and the role, a tap opening that asset — or P15-11.
  *
  * **Nothing else is drawn.** No key (R15-11: the phone never shows one), no quantity (#95), nothing about what is
- * fitted where (#47). Below "Used by" sit the item's own files and links (#69, C26): the shipped Documents and
- * References sections, keyed by the SupplyItem, writable for an archived item too (R69-10: a SupplyItem is never held).
+ * fitted where (#47). The one addition, below "Used by", is the item's own files and links (#69, C26): the shipped
+ * Documents and References sections, keyed by the SupplyItem, writable for an archived item too (R69-10: a SupplyItem
+ * is never held).
  * Applicability is added, re-roled and removed on the asset's screen (C33, B8), not here.
  *
  * What it writes itself: `archived_at`, through `ArchiveSupplyItem`; the two sections write the item's own files and

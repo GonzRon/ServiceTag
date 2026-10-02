@@ -294,7 +294,10 @@ class InstalledComponentsSectionTest {
         assertEquals(1, insideTaps)
     }
 
-    /** C26, #77: a removed row's sheet says P47-16 and its removal day and offers "Edit" only; a held asset's offers nothing. */
+    /**
+     * C26, #77: a removed row's sheet says P47-16 and its removal day and offers "Edit" only; a held asset's offers no
+     * write (#69's "Documents and references" stays, since it only navigates).
+     */
     @Test fun aRemovedRowOffersEditOnlyAndAHeldOneNothing() {
         val offers = mutableStateOf(true)
         rule.setContent {

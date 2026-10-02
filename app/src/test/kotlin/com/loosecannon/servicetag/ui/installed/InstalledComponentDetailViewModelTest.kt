@@ -48,7 +48,10 @@ import org.junit.Test
  * Fixtures are fictional; every date is on or before the graph's today, 2026-02-10.
  *
  * `viewModelScope` dispatches on `Dispatchers.Main`, an unconfined test dispatcher sharing the scheduler the graph's
- * queries run on, so every assertion waits for a state rather than reading `value` after a write.
+ * queries run on, so an assertion waits for a state rather than reading `value` after a write. Three reads take the
+ * current value on purpose, because no later state exists to wait for: `missing.value` on the removed row and before
+ * the delete (each asserts nothing has changed), and the archived group's heading after `advanceUntilIdle()` (the
+ * archive changes nothing the group carries, so the state it asserts is the one already drawn).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class InstalledComponentDetailViewModelTest {
