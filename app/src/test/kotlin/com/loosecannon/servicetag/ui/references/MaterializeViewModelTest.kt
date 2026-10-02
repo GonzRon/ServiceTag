@@ -169,8 +169,8 @@ class MaterializeViewModelTest {
                 if (brokenRead) throw IllegalStateException("the read failed") else graph.references.get(id)
         }
         val attachments = object : AttachmentRepository by graph.attachments {
-            override suspend fun forAsset(assetId: AssetId): List<Attachment> =
-                graph.attachments.forAsset(assetId).also { afterDuplicateCheck?.invoke() }
+            override suspend fun forOwner(owner: AttachmentOwner): List<Attachment> =
+                graph.attachments.forOwner(owner).also { afterDuplicateCheck?.invoke() }
         }
         val storage: AttachmentStorage = gated ?: graph.attachmentStorage
         val add = gated?.let {

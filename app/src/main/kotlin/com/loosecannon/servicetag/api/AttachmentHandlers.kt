@@ -290,7 +290,9 @@ internal class AttachmentHandlers(
         downloads.register(download)
         try {
             return withContext(download) {
-                apiLongWrites.withLock { saveAsDocument(materializeReference, assetId, reference.id, given, namesRole) }
+                apiLongWrites.withLock {
+                    saveAsDocument(materializeReference, assetId, reference.owner, reference.id, given, namesRole)
+                }
             }
         } finally {
             downloads.clear(download)
@@ -316,11 +318,12 @@ internal class AttachmentHandlers(
     private suspend fun saveAsDocument(
         materializeReference: MaterializeReference,
         assetId: AssetId,
+        owner: ReferenceOwner,
         referenceId: ReferenceId,
         given: MaterializeRequest,
         namesRole: Boolean,
     ): ApiResponse {
-        val ready = when (val prepared = materializeReference.prepare(assetId, referenceId)) {
+        val ready = when (val prepared = materializeReference.prepare(owner, referenceId)) {
             is Prepared.Refused -> throw materializeRefusal(prepared.why)
             is Prepared.Ready -> prepared
         }

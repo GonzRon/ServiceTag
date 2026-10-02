@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.references.ReferenceUris
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
@@ -105,7 +106,7 @@ class MaterializeViewModel(
             var landed: Prepared.Ready? = null
             try {
                 val prepared = withContext(io) {
-                    materialize.prepare(assetId, referenceId) { done, total ->
+                    materialize.prepare(ReferenceOwner.OfAsset(assetId), referenceId) { done, total ->
                         _state.update { if (it is MaterializeState.Downloading) downloading(host, done, total) else it }
                     }.also { landed = it as? Prepared.Ready }
                 }
