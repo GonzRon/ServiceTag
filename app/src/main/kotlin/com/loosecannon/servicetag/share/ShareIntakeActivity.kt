@@ -75,6 +75,7 @@ class ShareIntakeActivity : ComponentActivity() {
                         zoneId = { ZoneId.systemDefault().id },
                         heldIds = { graph.transferRecords.heldIds() },
                         packInbox = graph.transferPackInbox,
+                        supplyItems = { graph.supplyItems.all() },
                     )
                 }
                 val state by model.state.collectAsStateWithLifecycle()

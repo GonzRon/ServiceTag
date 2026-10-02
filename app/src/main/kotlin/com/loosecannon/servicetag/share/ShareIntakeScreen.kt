@@ -35,9 +35,10 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 
 /**
- * Two steps (#93, C5): first the picker — what arrived, then the Assets tab's own search box, Type /
- * Components / Archived controls and rows, from [picker] — and, once an asset is chosen, one scrolling
- * column: what arrived, the chosen asset with "Change", Name, Description, and — on a byte share only —
+ * Two steps (#93, C5): first the picker — what arrived, then the Assets tab's own search box, Type and
+ * Components controls (no Archived: every row is maintained here, #69 C30) and rows, from [picker] — and,
+ * once a destination is chosen, one scrolling column: what arrived, the destination with "Change" (#69 C29:
+ * under a supply, its product line and P69-21), Name, Description, and — on a byte share only —
  * a Type control and a Role control (spec §7, and its #67 amendment). The step is decided above the
  * column, never inside it: the picker's lazy list cannot be measured in a scrolling one. It is a pure
  * function of [ShareIntakeState] and [AssetsState], so every state it can be in is one `setContent`
@@ -59,8 +60,8 @@ internal fun ShareIntakeScreen(
     onPickType: (String?) -> Unit,
     onToggleComponents: () -> Unit,
     onToggleArchived: () -> Unit,
-    /** The tapped row's id and name (C4). */
-    onChoose: (String, String) -> Unit,
+    /** The final selection (C4; #69 C29). */
+    onChoose: (ShareDestination) -> Unit,
     /** #93 (C6): the form's "Change", back to the picker. */
     onChangeAsset: () -> Unit,
     onName: (String) -> Unit,
@@ -158,7 +159,7 @@ private fun PickerStep(
     onPickType: (String?) -> Unit,
     onToggleComponents: () -> Unit,
     onToggleArchived: () -> Unit,
-    onChoose: (String, String) -> Unit,
+    onChoose: (ShareDestination) -> Unit,
     onCancel: () -> Unit,
 ) {
     Column(
@@ -174,7 +175,10 @@ private fun PickerStep(
             onPickType = onPickType,
             onToggleComponents = onToggleComponents,
             onToggleArchived = onToggleArchived,
-            onPick = { row -> onChoose(row.asset.id.value, row.asset.name) },
+            onPick = { row -> onChoose(ShareDestination.Asset(row.asset.id.value, row.asset.name)) },
+            // #69 (C30, C-1, C-4): every row here is maintained here, so no Archived control; none at all is P69-26.
+            archivedControl = false,
+            noAssetsLine = IntakeStrings.NO_ACTIVE_ASSETS,
             modifier = Modifier.weight(1f),
             header = {
                 item {
@@ -246,13 +250,15 @@ private fun IntakeForm(
 ) {
     ReceivedBlock(state)
 
-    // #93 (C8, R93-5): the chosen asset's name alone, and "Change" back to the picker.
+    // #93 (C8, R93-5), #69 (C29): the destination line and "Change" back to the picker, then — under a supply — its
+    // product line and P69-21. The form is the confirmation: no dialog.
     SectionHeader(title = IntakeStrings.ATTACH_TO)
-    state.chosen?.let { chosen ->
+    state.destination?.let { destination ->
         Row(verticalAlignment = Alignment.CenterVertically) {
-            QuietLine(text = chosen.name, modifier = Modifier.weight(1f))
+            QuietLine(text = destination.label, modifier = Modifier.weight(1f))
             TextButton(onClick = onChangeAsset) { Text(IntakeStrings.CHANGE) }
         }
+        destination.notes.forEach { QuietLine(it) }
     }
 
     OutlinedTextField(

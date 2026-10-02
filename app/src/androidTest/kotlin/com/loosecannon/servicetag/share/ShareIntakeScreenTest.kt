@@ -41,12 +41,12 @@ class ShareIntakeScreenTest {
 
     @get:Rule val rule = createComposeRule()
 
-    private val mower = AssetChoice("asset-1", "Cub Cadet XT1")
+    private val mower = ShareDestination.Asset("asset-1", "Cub Cadet XT1")
 
     /** #93: the picker step's list — the same asset as one of the tab's rows. */
     private val pickerRows = AssetsState(
         items = listOf(
-            AssetRow(asset = Asset(id = AssetId(mower.id), name = mower.name, createdAt = 1L, updatedAt = 1L)),
+            AssetRow(asset = Asset(id = AssetId(mower.assetId), name = mower.assetName, createdAt = 1L, updatedAt = 1L)),
         ),
     )
 
@@ -55,13 +55,13 @@ class ShareIntakeScreenTest {
     private var confirmed = 0
     private var changes = 0
     private val roles = mutableListOf<DocumentRole?>()
-    private val choices = mutableListOf<Pair<String, String>>()
+    private val choices = mutableListOf<ShareDestination>()
     private val queries = mutableListOf<String>()
 
     private fun form(
         path: IntakePath = IntakePath.LINK,
         received: String = "https://example-mower.invalid/xt1/manual.pdf",
-        chosen: AssetChoice? = mower,
+        destination: ShareDestination? = mower,
         name: String = "OEM parts lookup",
         storeReady: Boolean = true,
         message: String? = null,
@@ -71,7 +71,7 @@ class ShareIntakeScreenTest {
         path = path,
         received = received,
         assets = listOf(mower),
-        chosen = chosen,
+        destination = destination,
         name = name,
         kind = AttachmentKind.DOCUMENT,
         storeReady = storeReady,
@@ -100,7 +100,7 @@ class ShareIntakeScreenTest {
                     onPickType = {},
                     onToggleComponents = {},
                     onToggleArchived = {},
-                    onChoose = { id, name -> choices += id to name },
+                    onChoose = { choices += it },
                     onChangeAsset = { changes += 1 },
                     onName = {},
                     onDescribe = {},
@@ -122,7 +122,7 @@ class ShareIntakeScreenTest {
      * no Save and no Name — then, chosen, the form: the asset's name alone with "Change", which reaches its callback.
      */
     @Test fun theScreenDrawsTheRatifiedLabelsAndNothingElse() {
-        val state = mutableStateOf(form(chosen = null))
+        val state = mutableStateOf(form(destination = null))
         show(state)
 
         rule.onAllNodesWithText("Save to ServiceTag").assertCountEquals(1)
@@ -229,13 +229,13 @@ class ShareIntakeScreenTest {
      * Type control — the assertion relocated from `ShareBoundaryTest`'s byte case.
      */
     @Test fun theTypeControlIsDrawnOnBytesAndNeverOnALink() {
-        val state = mutableStateOf(form(path = IntakePath.BYTES, received = "manual.pdf", chosen = null))
+        val state = mutableStateOf(form(path = IntakePath.BYTES, received = "manual.pdf", destination = null))
         show(state)
 
         rule.onNodeWithText("Choose asset").assertIsDisplayed()
         rule.onAllNodesWithText("TYPE").assertCountEquals(0)
 
-        state.value = form(path = IntakePath.BYTES, received = "manual.pdf", chosen = null, storeReady = false)
+        state.value = form(path = IntakePath.BYTES, received = "manual.pdf", destination = null, storeReady = false)
         rule.waitForIdle()
         rule.onNodeWithText(
             "Choose an attachment folder in ServiceTag Settings, then share this again.",
@@ -307,11 +307,11 @@ class ShareIntakeScreenTest {
      */
     @Test fun noAssetChosenOffersThePickerAndNoSave() {
         val picker = mutableStateOf(pickerRows)
-        show(mutableStateOf(form(chosen = null)), picker)
+        show(mutableStateOf(form(destination = null)), picker)
 
         rule.onAllNodesWithText("Save").assertCountEquals(0)
         rule.onNodeWithText("Cub Cadet XT1").performClick()
-        assertEquals(listOf(mower.id to mower.name), choices)
+        assertEquals(listOf<ShareDestination>(mower), choices)
         rule.onNode(hasSetTextAction()).performTextInput("cub")
         assertEquals(listOf("cub"), queries)
 

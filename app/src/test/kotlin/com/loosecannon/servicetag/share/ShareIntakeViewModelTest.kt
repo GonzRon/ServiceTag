@@ -5,14 +5,18 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackAppFixtures
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -24,7 +28,11 @@ import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.InstallComponentCommand
+import com.loosecannon.servicetag.core.usecase.InstalledComponentResult
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -110,6 +118,9 @@ class ShareIntakeViewModelTest {
                     today = { "2026-09-23" },
                     zoneId = { "UTC" },
                     io = StandardTestDispatcher(scheduler),
+                    // #69 (C30, C-5): the held set and the supplies, as the activity passes them.
+                    heldIds = { graph.transferRecords.heldIds() },
+                    supplyItems = { graph.supplyItems.all() },
                 )
             }
         }
@@ -158,6 +169,9 @@ class ShareIntakeViewModelTest {
         confirmUnknownScheme()
         scheduler.advanceUntilIdle()
     }
+
+    /** #93's tapped asset row is #69's [ShareDestination.Asset] (C29): the shipped cases choose by id and name. */
+    private fun ShareIntakeViewModel.choose(id: String, name: String) = choose(ShareDestination.Asset(id, name))
 
     private suspend fun references() = graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).size
     private suspend fun attachments() =
@@ -670,7 +684,7 @@ class ShareIntakeViewModelTest {
         assertFalse("a dead end", live.copy(deadEnd = IntakeStrings.NO_ASSETS).picking)
         assertFalse("saved", live.copy(saved = IntakeStrings.savedTo(mowerName)).picking)
         assertFalse("a Transfer Pack", live.copy(path = IntakePath.TRANSFER_PACK).picking)
-        assertFalse("chosen", live.copy(chosen = AssetChoice(id, mowerName)).picking)
+        assertFalse("chosen", live.copy(destination = ShareDestination.Asset(id, mowerName)).picking)
     }
 
     /** C6: Change clears the choice and the refusal and keeps what came from the share — Name, Description, Type, Role. */
@@ -688,7 +702,7 @@ class ShareIntakeViewModelTest {
         vm.changeAsset()
 
         val after = vm.state.value
-        assertNull(after.chosen)
+        assertNull(after.destination)
         assertNull(after.message)
         assertTrue(after.picking)
         assertEquals("Typed a name", after.name)
@@ -719,7 +733,7 @@ class ShareIntakeViewModelTest {
         assertEquals("zotero", asked.state.value.confirming)
         assertFalse("the dialog takes Back", asked.state.value.backChangesAsset)
 
-        val form = ShareIntakeState(loading = false, chosen = AssetChoice(id, mowerName))
+        val form = ShareIntakeState(loading = false, destination = ShareDestination.Asset(id, mowerName))
         assertTrue(form.backChangesAsset)
         assertFalse("loading", form.copy(loading = true).backChangesAsset)
         assertFalse("saving", form.copy(saving = true).backChangesAsset)
@@ -728,17 +742,17 @@ class ShareIntakeViewModelTest {
 
     @Test fun changeAssetIsANoOpThen() = runTest(scheduler) {
         val id = mower()
-        val chosen = AssetChoice(id, mowerName)
+        val chosen = ShareDestination.Asset(id, mowerName)
 
         val vm = model(link(manualUrl))
         vm.choose(id, mowerName)
         vm.save()
         vm.changeAsset()
-        assertEquals("mid-save the choice stays", chosen, vm.state.value.chosen)
+        assertEquals("mid-save the choice stays", chosen, vm.state.value.destination)
         scheduler.advanceUntilIdle()
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
         vm.changeAsset()
-        assertEquals("saved, the choice stays", chosen, vm.state.value.chosen)
+        assertEquals("saved, the choice stays", chosen, vm.state.value.destination)
         assertEquals(1, references())
 
         val asked = model(link("zotero://select/items/0"))
@@ -746,7 +760,7 @@ class ShareIntakeViewModelTest {
         asked.saveAndSettle()
         asked.changeAsset()
         assertEquals("zotero", asked.state.value.confirming)
-        assertEquals("under the dialog the choice stays", chosen, asked.state.value.chosen)
+        assertEquals("under the dialog the choice stays", chosen, asked.state.value.destination)
 
         val refused = model(ShareContent.Refused(IntakeRefusal.SCHEME_BLOCKED))
         val before = refused.state.value
@@ -980,6 +994,244 @@ class ShareIntakeViewModelTest {
         assertEquals("Saved to Cub Cadet XT1", IntakeStrings.savedTo("Cub Cadet XT1"))
     }
 
+    // --- #69 (B7; C29, C30, row 53c): the destination, its saves, the save form's lines and the dead end ---------------
+
+    private val batteryName = "Example 12 V Battery"
+
+    /** A SupplyItem through the production save; "Example Power Co." makes it. */
+    private suspend fun battery(name: String = batteryName): SupplyItem = graph.saveSupplyItem.run(
+        null, SupplyItemCommand(name, "", "Example Power Co.", "EB-12", "EB-12", "", "", emptyList()),
+    ).item
+
+    /** "Example Battery Tray", installed on the mower through the production install. */
+    private suspend fun tray(): InstalledComponent = (
+        graph.installComponent.run(
+            InstallComponentCommand(assetId, null, "Example Battery Tray", null, emptyList(), "", "2026-01-05", "", null),
+        ) as InstalledComponentResult.Ok
+        ).row
+
+    private fun supplyOf(item: SupplyItem) =
+        ShareDestination.Supply(item.id.value, item.name, "Example Power Co. · EB-12")
+
+    private fun componentOf(row: InstalledComponent) =
+        ShareDestination.Component(row.assetId.value, row.id.value, listOf(mowerName, row.name))
+
+    private suspend fun linksOn(owner: ReferenceOwner) = graph.references.forOwner(owner).size
+    private suspend fun filesOn(owner: ReferenceOwner) = graph.attachments.forOwner(owner.asAttachmentOwner()).size
+
+    /** Each destination's link is saved once, on that destination's own owner, and said so by its saved line. */
+    @Test fun aLinkIsSavedOnEachDestinationsOwnOwner() = runTest(scheduler) {
+        val id = mower()
+        val item = battery()
+        val row = tray()
+
+        listOf(
+            ShareDestination.Asset(id, mowerName) to "Saved to Cub Cadet XT1",
+            componentOf(row) to "Saved to Cub Cadet XT1 › Example Battery Tray",
+            supplyOf(item) to "Saved to supply Example 12 V Battery.",
+        ).forEachIndexed { index, (destination, saved) ->
+            val uri = "https://example.invalid/manual-$index.pdf"
+            val vm = model(link(uri))
+            vm.choose(destination)
+            vm.saveAndSettle()
+
+            assertEquals(saved, vm.state.value.saved)
+            val written = graph.references.forOwner(destination.owner).single()
+            assertEquals(destination.owner, written.owner)
+            assertEquals(uri, written.uri)
+        }
+        assertEquals(1, references())
+    }
+
+    /** Row 53c: counted RED — the bytes arm maps a Component destination to its asset (`OfAsset`). */
+    @Test fun aFileIsSavedOnEachDestinationsOwnOwner() = runTest(scheduler) {
+        val id = mower()
+        val item = battery()
+        val row = tray()
+
+        listOf(ShareDestination.Asset(id, mowerName), componentOf(row), supplyOf(item)).forEach { destination ->
+            val vm = model(bytes(), source = { "pdf".byteInputStream() })
+            vm.choose(destination)
+            vm.saveAndSettle()
+            assertEquals(destination.savedLine, vm.state.value.saved)
+        }
+
+        assertEquals("the asset's own file, and no other", 1, attachments())
+        assertEquals(1, filesOn(componentOf(row).owner))
+        assertEquals("stored once, on the catalog item", 1, filesOn(supplyOf(item).owner))
+    }
+
+    /**
+     * Ownership is the final selection: a destination carries no route, so a supply picked from its list and the same
+     * supply picked while browsing are one value, and their saves write rows that differ only in id, bytes' place and time.
+     */
+    @Test fun aSupplyReachedDirectlyAndOneReachedWhileBrowsingWriteIdenticalRows() = runTest(scheduler) {
+        mower()
+        val item = battery()
+        val direct = ShareDestination.Supply(item.id.value, item.name, "Example Power Co. · EB-12")
+        val browsed = ShareDestination.Supply(item.id.value, item.name, "Example Power Co. · EB-12")
+        assertEquals(direct, browsed)
+
+        listOf(direct, browsed).forEach { destination ->
+            val vm = model(bytes(), source = { "pdf".byteInputStream() })
+            vm.choose(destination)
+            vm.saveAndSettle()
+        }
+
+        val rows = graph.attachments.forOwner(direct.owner.asAttachmentOwner())
+        assertEquals(2, rows.size)
+        assertEquals(1, rows.map { listOf(it.owner, it.kind, it.displayName, it.mimeType, it.sizeBytes, it.sha256, it.role) }.distinct().size)
+    }
+
+    /** The save form is the confirmation (no dialog): its destination line, and under a supply its product line and P69-21. */
+    @Test fun theFormsDestinationLinesPerKind() {
+        val asset = ShareDestination.Asset("a1", "Example Generator")
+        val component = ShareDestination.Component(
+            "a1", "c2", listOf("Example Generator", "Example Battery Tray", "Example 12 V Battery"),
+        )
+        val supply = ShareDestination.Supply("s1", "Example 12 V Battery", "Example Power Co. · EB-12")
+        val onSupply = "This will be saved on the supply Example 12 V Battery and available wherever that supply is used."
+
+        assertEquals("Example Generator", asset.label)
+        assertEquals(emptyList<String>(), asset.notes)
+        assertEquals("Example Generator › Example Battery Tray › Example 12 V Battery", component.label)
+        assertEquals(emptyList<String>(), component.notes)
+        assertEquals("Example 12 V Battery", supply.label)
+        assertEquals(listOf("Example Power Co. · EB-12", onSupply), supply.notes)
+        assertEquals("no product line, no empty line", listOf(onSupply), supply.copy(productLine = "").notes)
+
+        assertEquals("Saved to Example Generator", asset.savedLine)
+        assertEquals("Saved to Example Generator › Example Battery Tray › Example 12 V Battery", component.savedLine)
+        assertEquals("Saved to supply Example 12 V Battery.", supply.savedLine)
+    }
+
+    /** P69-20…22 and P69-26, each from its one home, in the owner's words. */
+    @Test fun theDestinationWordsAreTheRatifiedOnes() {
+        assertEquals("No active assets", IntakeStrings.NO_ACTIVE_ASSETS)
+        assertEquals("Example Generator › Example Battery Tray", IntakeStrings.pathOf(listOf("Example Generator", "Example Battery Tray")))
+        assertEquals("Example Generator", IntakeStrings.pathOf(listOf("Example Generator")))
+        assertEquals(
+            "This will be saved on the supply Example 12 V Battery and available wherever that supply is used.",
+            IntakeStrings.onSupply("Example 12 V Battery"),
+        )
+        assertEquals("Saved to supply Example 12 V Battery.", IntakeStrings.savedToSupply("Example 12 V Battery"))
+        assertEquals("Attach to", IntakeStrings.ATTACH_TO)
+    }
+
+    /** C28's twin per owner kind: the same link twice on a supply or a component says that owner's sentence. */
+    @Test fun aDuplicateLinkSaysTheOwnersOwnSentence() = runTest(scheduler) {
+        mower()
+        val item = battery()
+        val row = tray()
+
+        listOf(
+            supplyOf(item) to "That link is already on this supply",
+            componentOf(row) to "That link is already on this installed component",
+        ).forEach { (destination, sentence) ->
+            model(link(manualUrl)).also { it.choose(destination); it.saveAndSettle() }
+            val again = model(link(manualUrl, name = "Again"))
+            again.choose(destination)
+            again.saveAndSettle()
+
+            assertEquals(sentence, again.state.value.message)
+            assertNull(again.state.value.saved)
+            assertEquals(1, linksOn(destination.owner))
+        }
+        assertEquals("one URI on two other owners is not the asset's", 0, references())
+    }
+
+    /** Prose is a journal note, which belongs to an asset: a component or a supply is never taken on that path. */
+    @Test fun proseSavesANoteOnTheAssetOnly() = runTest(scheduler) {
+        val id = mower()
+        val item = battery()
+        val row = tray()
+        val vm = model(ShareContent.PlainText("Replaced the drive belt, took an hour"))
+
+        vm.choose(supplyOf(item))
+        assertNull(vm.state.value.destination)
+        vm.choose(componentOf(row))
+        assertNull(vm.state.value.destination)
+        assertTrue("still on the picker", vm.state.value.picking)
+        vm.saveAndSettle()
+        assertEquals(0, events())
+
+        vm.choose(id, mowerName)
+        vm.saveAndSettle()
+
+        assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
+        assertEquals(1, events())
+        assertEquals(0, linksOn(supplyOf(item).owner) + linksOn(componentOf(row).owner))
+        assertEquals(0, filesOn(supplyOf(item).owner) + filesOn(componentOf(row).owner))
+    }
+
+    /** I-8 for the new owners: choosing, typing, Change and Cancel write nothing on a component or a supply. */
+    @Test fun cancelOnAComponentOrSupplyDestinationWritesNothing() = runTest(scheduler) {
+        mower()
+        val item = battery()
+        val row = tray()
+
+        listOf(componentOf(row), supplyOf(item)).forEach { destination ->
+            model(link(manualUrl)).also { it.choose(destination); it.name("Typed a name"); it.cancel() }
+            model(bytes(), source = { error("cancelled intake must never open a stream") }).also {
+                it.choose(destination)
+                it.changeAsset()
+                assertTrue("Change goes back to the picker", it.state.value.picking)
+                assertNull(it.state.value.destination)
+                it.cancel()
+            }
+        }
+        store.clear()
+
+        listOf(componentOf(row).owner, supplyOf(item).owner).forEach { owner ->
+            assertEquals(0, linksOn(owner))
+            assertEquals(0, filesOn(owner))
+        }
+        assertTrue(graph.attachmentStorage.store.files.isEmpty())
+    }
+
+    /** Every save meets the guard: a component whose asset is transferred out once chosen is refused with P77-35. */
+    @Test fun aComponentOfAnAssetTransferredOutIsRefusedAndNothingIsWritten() = runTest(scheduler) {
+        mower()
+        val row = tray()
+        val vm = model(link(manualUrl))
+        vm.choose(componentOf(row))
+        graph.transferRecords.append(heldOut(assetId))
+
+        vm.saveAndSettle()
+
+        assertEquals("This asset was transferred out.", vm.state.value.message)
+        assertNull(vm.state.value.saved)
+        assertEquals(0, linksOn(componentOf(row).owner))
+    }
+
+    /**
+     * C-5: with no asset maintained here — archived, retired, held — prose dead-ends at NO_ASSETS; a link or a file does
+     * too unless an unarchived supply exists, which keeps it on the picker.
+     */
+    @Test fun proseAndLinkSharesWithNoActiveAssetDeadEndAtNoAssets() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("ladder", name = "Sample Ladder", status = AssetStatus.ARCHIVED))
+        graph.assets.upsert(assetRow("generator", name = "Example Generator", retiredOn = "2026-03-01"))
+        graph.assets.upsert(assetRow("heater", name = "Example Water Heater"))
+        graph.transferRecords.append(heldOut(AssetId("heater")))
+        graph.archiveSupplyItem.run(battery().id, archived = true)
+        val prose = ShareContent.PlainText("Checked the anode")
+
+        listOf(prose, link(manualUrl), bytes()).forEach { content ->
+            val state = model(content, source = { "pdf".byteInputStream() }).state.value
+            assertEquals("$content", IntakeStrings.NO_ASSETS, state.deadEnd)
+            assertTrue(state.assets.isEmpty())
+            assertFalse(state.picking)
+        }
+
+        battery(name = "Example Anode")
+        listOf(link(manualUrl), bytes()).forEach { content ->
+            val state = model(content, source = { "pdf".byteInputStream() }).state.value
+            assertNull("an unarchived supply: $content", state.deadEnd)
+            assertTrue(state.picking)
+        }
+        assertEquals("prose still needs an asset", IntakeStrings.NO_ASSETS, model(prose).state.value.deadEnd)
+    }
+
     // --- #77 (B3; C16, row 25): a shared Transfer Pack, and a held asset --------------------------------------
 
     /** A model with #77's two collaborators: the held set, and the inbox a shared pack is copied into. */
@@ -1100,7 +1352,7 @@ class ShareIntakeViewModelTest {
 
         val vm = packModel(link(manualUrl), null)
 
-        assertEquals(listOf(id), vm.state.value.assets.map { it.id })
+        assertEquals(listOf(id), vm.state.value.assets.map { it.assetId })
     }
 
     /** Listed, then transferred out before Save: the write is refused with P77-35 and nothing is written. */
