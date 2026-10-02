@@ -436,7 +436,7 @@ data class AttachmentDto(
  * or the installed component that owns the link, written as explicit nulls when unset, like [role]. They
  * default to null so a format ≤19 archive, which never had the keys, still decodes; `BackupCodec` refuses a
  * non-null one in such an archive, and [toDomain] refuses a row naming more than one owner. Interim (#69):
- * [assetId] stays required while the domain reference can name only an asset.
+ * [assetId] stays required while the domain reference can name only an asset; replaced by B2b (row 23).
  */
 @Serializable
 data class AssetReferenceDto(
@@ -1351,7 +1351,8 @@ fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
     createdAt = createdAt,
     updatedAt = updatedAt,
     role = role?.name,
-    // Interim (#69): the domain owner is still an asset, so format 20's two keys are written as nulls.
+    // Interim (#69): the domain owner is still an asset, so format 20's two keys are written as nulls;
+    // replaced by B2b (row 23).
     supplyItemId = null,
     installedComponentId = null,
 )

@@ -148,7 +148,7 @@ class Format7RestoreContractTest {
     }
 
     /**
-     * Exported again, the restored estate is **format 17** — no legacy season field anywhere in its
+     * Exported again, the restored estate is **format 20** — no legacy season field anywhere in its
      * `data.json`, and the category the restore promoted carried as a row — and it plans IDENTICAL,
      * row for row, against the store it came from; and so does the original format-7 archive (inv. 125
      * on the device's own schema). The re-export's plan is the golden's eleven decisions plus the

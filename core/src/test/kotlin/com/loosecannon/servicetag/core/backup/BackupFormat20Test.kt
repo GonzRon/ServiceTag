@@ -190,12 +190,13 @@ class BackupFormat20Test {
      * Hazard: a hand-built older archive carrying an owner the format could not have written. Each key on each list is
      * refused by the gate, naming the list, the format and the row: an attachment whose owner moved onto the key, a
      * reference carrying it beside its asset. Without the gate the row is still refused, by exactly-one, with another
-     * message (N-3) — so the message is what this asserts.
+     * message (N-3) — so the message is what this asserts. The format-17 archive carries no SupplyItem or installed
+     * component list, so no other gate of that format can refuse it first.
      */
     @Test
     fun aFormat19ArchiveWithANewOwnerKeyIsCorrupt() {
-        val tree = dataTreeOf(archiveOf(data()))
-        for (format in listOf(19, 17)) {
+        for ((format, data) in listOf(19 to data(), 17 to data(owners = false))) {
+            val tree = dataTreeOf(archiveOf(data))
             for (key in ownerKeys) {
                 val owner = JsonPrimitive(ownerIdOf.getValue(key))
                 val attachment = tree.editRow("attachments", "att-1") { it.with("assetId", JsonNull).with(key, owner) }
