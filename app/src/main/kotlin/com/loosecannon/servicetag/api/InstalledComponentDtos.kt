@@ -61,8 +61,8 @@ internal data class InstalledComponentReplacedResponse(
 /**
  * One composition entry of a request, in list order. [quantity] must be a JSON **number** — a quoted one, `true` or
  * `null` is the 400 a malformed body is — and is handed on as the decimal the caller wrote; whether it is finite and
- * above zero is the use case's rule (`COMPOSITION_QUANTITY_INVALID`). [id], on an edit, keeps an entry this row
- * already owns; an install mints every id, and a replace ignores any sent.
+ * above zero is the use case's rule, never checked here. [id], on an edit, keeps an entry this row already owns; an
+ * install mints every id, and a replace ignores any sent.
  */
 @Serializable
 internal data class CompositionEntryRequest(
@@ -137,8 +137,8 @@ internal data class ReplaceInstalledComponentRequest(
 internal const val MAX_INSTALLED_COMPONENT_SORT_ORDER: Int = 1_000_000
 
 /**
- * A sent `sortOrder`, bounded to `0..`[MAX_INSTALLED_COMPONENT_SORT_ORDER]; out of range is the fallback
- * `INSTALLED_COMPONENT_INVALID` with `field` `sortOrder`, since no use-case problem names it.
+ * A sent `sortOrder`, bounded to `0..`[MAX_INSTALLED_COMPONENT_SORT_ORDER]; out of range is the 422 fallback,
+ * [installedComponentInvalid] with `field` `sortOrder`, since no use-case problem names it.
  */
 internal fun boundedSortOrder(sent: Int): Int =
     if (sent in 0..MAX_INSTALLED_COMPONENT_SORT_ORDER) sent else throw installedComponentInvalid("sortOrder")
