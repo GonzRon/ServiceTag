@@ -109,7 +109,7 @@ fun SupplyListScreen(
  * SupplyItem picker draws its rows with this one too (C32).
  */
 @Composable
-internal fun SupplyRow(row: SupplyListRow, onClick: () -> Unit) {
+internal fun SupplyRow(row: SupplyListRow, onClick: () -> Unit, showChevron: Boolean = true) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -136,10 +136,12 @@ internal fun SupplyRow(row: SupplyListRow, onClick: () -> Unit) {
         if (row.archived) {
             StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (showChevron) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
