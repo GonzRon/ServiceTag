@@ -58,7 +58,7 @@ sealed interface ReferenceProblem {
     /** Saveable, once — and only once the person has been asked about this scheme by name. */
     data class UnknownSchemeNeedsConfirmation(val scheme: String) : ReferenceProblem
 
-    /** `UNIQUE(asset_id, uri)`; the same URI on a different asset is ordinary (I-7). */
+    /** `UNIQUE(owner, uri)` — one index per owner column; the same URI on a different owner is ordinary (I-7, #69). */
     data object DuplicateUri : ReferenceProblem
     data object OwnerMissing : ReferenceProblem
     data object NoSuchReference : ReferenceProblem

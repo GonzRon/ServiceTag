@@ -30,8 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * #85 (C12–C15; R85-1, R85-2, R85-3, R85-6, R85-8, R85-14): **Save as document** — a web reference's file
  * downloaded, reviewed by the owner, and stored as an ordinary managed attachment on the reference's own owner
  * (#69, C17: an asset, a SupplyItem or an installed component), carrying a write-once snapshot of where it came
- * from. Built once in `AppGraph`; used only by the Save-as-document sheet, whose view model owns the job, so
- * leaving or cancelling stops it (R85-8).
+ * from. Built once in `AppGraph`; used by the Save-as-document sheet (whose view model owns the job, so
+ * leaving or cancelling stops it — R85-8) and by the API's materialize route (#69 B4).
  *
  * - **A copy, never a move (R85-1).** Nothing here writes or deletes a reference: [references] is only read,
  *   once, at [prepare], and the snapshot is taken from that read. The attachment keeps no `reference_id`
