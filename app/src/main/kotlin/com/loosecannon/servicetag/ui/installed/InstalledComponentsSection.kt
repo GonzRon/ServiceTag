@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.supplies.SupplyItemPickerSheet
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /** One depth step of the tree (C25). */
@@ -46,9 +47,10 @@ private val INDENT_STEP = 16.dp
  * level (the maintenance sections' glyph rule). A row is the component's name and its quiet line; a nested row is
  * indented 16 dp per depth and says P47-5 to TalkBack. Below the tree, when any exist, P47-18 opens the removed rows.
  *
- * The wrapper owns the ViewModel; [InstalledComponentsList] draws, so a device test can render it with no store behind
- * it. [snackbars] and [onOpenSupply] are the row and write sheets' (a refused write's line, a tapped SupplyItem). A held
- * asset ([readOnly], #77) draws its rows and its toggle, and nothing that writes.
+ * The wrapper owns the ViewModel, the sheets (`InstalledComponentSheets.kt`) and the picker; [InstalledComponentsList]
+ * draws, so a device test can render it with no store behind it. A row's tap opens its sheet; [onOpenSupply] opens a
+ * SupplyItem from there; [snackbars] carries the shipped transferred-out line when the asset leaves mid-save. A held
+ * asset ([readOnly], #77) draws its rows, its toggle and a row's facts and history, and nothing that writes.
  */
 @Composable
 fun InstalledComponentsSection(
@@ -64,17 +66,57 @@ fun InstalledComponentsSection(
     val state by model.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(model, readOnly) { model.setReadOnly(readOnly) }
+    LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
 
+    val offersWrites = !readOnly && state.offersWrites
     InstalledComponentsList(
         rows = state.rows,
         removed = state.removed,
         showRemoved = state.showRemoved,
-        readOnly = readOnly || !state.offersWrites,
-        // The row sheet and the install sheet are the next step's (B6b); until then a tap opens nothing.
-        onOpen = {},
-        onInstall = {},
+        readOnly = !offersWrites,
+        onOpen = { model.open(it.id) },
+        onInstall = model::startInstall,
         onToggleRemoved = model::toggleRemoved,
     )
+    state.rowSheet?.let { sheet ->
+        InstalledComponentRowSheet(
+            sheet = sheet,
+            supplies = state.supplies,
+            offersWrites = offersWrites,
+            onOpenSupply = { model.closeRow(); onOpenSupply(it.value) },
+            onInstallInside = { model.startInstallInside(sheet.id) },
+            onReplace = { model.startReplace(sheet.id) },
+            onRemove = { model.startRemove(sheet.id) },
+            onEdit = { model.startEdit(sheet.id) },
+            onDismiss = model::closeRow,
+        )
+    }
+    state.form?.let { form ->
+        ComponentFormSheet(
+            form = form,
+            supplies = state.supplies,
+            onName = model::onName,
+            onLink = model::startLinkPick,
+            onUnlink = model::unlink,
+            onSerialOrLot = model::onSerialOrLot,
+            onDate = model::onDate,
+            onNotes = model::onNotes,
+            onSave = model::save,
+            onDismiss = model::dismissForm,
+        )
+        // The picker is handed the unarchived SupplyItems only (R47-3); the lines above get every one (C-1).
+        if (form.picking != null) {
+            SupplyItemPickerSheet(rows = state.choices, onPick = model::pick, onDismiss = model::dismissPicker)
+        }
+    }
+    state.removing?.let { sheet ->
+        RemoveComponentSheet(
+            sheet = sheet,
+            onRemovedOn = model::onRemovedOn,
+            onRemove = model::confirmRemove,
+            onDismiss = model::dismissRemove,
+        )
+    }
 }
 
 /**
