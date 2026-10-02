@@ -141,23 +141,24 @@ class ResourceOwnerDaoConstraintTest {
 
     /**
      * Each owner-keyed read is its asset twin's query on another column: the owner's rows only, files by
-     * `display_name COLLATE NOCASE` and links by that then `id`; the observed reads emit the same lists.
+     * `display_name COLLATE NOCASE` and links by that then `id`; the observed reads emit the same lists. The file
+     * names sort differently under BINARY (`B-`, `a-`, `c-`), so a read that dropped the collation shows here.
      */
     @Test
     fun rowsAndObservedRowsBySupplyItemAndByComponentInTheShippedOrder() = runTest {
         seed()
         for ((owner, supply, component) in listOf(Triple("s", "x1", null), Triple("c", null, "x1"))) {
-            attachments.upsert(attachment("$owner-att-b", supply = supply, component = component, name = "b-datasheet.pdf"))
-            attachments.upsert(attachment("$owner-att-a", supply = supply, component = component, name = "A-manual.pdf"))
+            attachments.upsert(attachment("$owner-att-b", supply = supply, component = component, name = "B-datasheet.pdf"))
+            attachments.upsert(attachment("$owner-att-a", supply = supply, component = component, name = "a-manual.pdf"))
             attachments.upsert(attachment("$owner-att-c", supply = supply, component = component, name = "c-photo.jpg"))
             references.upsert(reference("$owner-r2", supply = supply, component = component, uri = "$MANUAL/2", name = "manual"))
             references.upsert(reference("$owner-r1", supply = supply, component = component, uri = "$MANUAL/1", name = "Manual"))
             references.upsert(reference("$owner-r3", supply = supply, component = component, uri = "$MANUAL/3", name = "Parts"))
         }
         // rows on every other owner, under the same names, which no read below may return
-        attachments.upsert(attachment("a1-att", asset = "a1", name = "A-manual.pdf"))
-        attachments.upsert(attachment("s1-att", supply = "s1", name = "A-manual.pdf"))
-        attachments.upsert(attachment("c1-att", component = "c1", name = "A-manual.pdf"))
+        attachments.upsert(attachment("a1-att", asset = "a1", name = "a-manual.pdf"))
+        attachments.upsert(attachment("s1-att", supply = "s1", name = "a-manual.pdf"))
+        attachments.upsert(attachment("c1-att", component = "c1", name = "a-manual.pdf"))
         references.upsert(reference("a1-r", asset = "a1", name = "Manual"))
         references.upsert(reference("s1-r", supply = "s1", name = "Manual"))
         references.upsert(reference("c1-r", component = "c1", name = "Manual"))

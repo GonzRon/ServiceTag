@@ -27,8 +27,8 @@ fun AssetReferenceEntity.requireExactlyOneOwner(): AssetReferenceEntity = apply 
 
 fun AssetReferenceEntity.toDomain(): AssetReference = AssetReference(
     id = ReferenceId(id),
-    // Interim (#69 B1a): the domain still knows only an asset owner, so a row owned otherwise is
-    // refused here until the owner type replaces this read.
+    // Interim (#69 B1a), replaced by B2b (row 27): the domain still knows only an asset owner, so a
+    // row owned otherwise is refused here until the owner type replaces this read.
     assetId = AssetId(requireNotNull(assetId) { "reference '$id' has no asset owner" }),
     kind = ReferenceKind.valueOf(kind),
     uri = uri,
