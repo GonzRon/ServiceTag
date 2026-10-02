@@ -31,8 +31,8 @@ import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * #69 (B3c; C16b, rows 39–40; E1–E7, AC3, AC4, AC12, AC14) — the generic complex-equipment scenario, end to end over
- * the core doubles and the shipped use cases, fictional throughout.
+ * #69 (B3c; C16b, rows 39–40; E1–E4 and E7 (E5 is rows 53–54, E6 rows 26 and 44), AC3, AC4, AC12, AC14) — the
+ * generic complex-equipment scenario, end to end over the core doubles and the shipped use cases, fictional throughout.
  *
  * An "Example Generator" fits an "Example Alternator" whose direct link names one SupplyItem. An "Example UPS" fits an
  * "Example Battery Tray" whose four positions name one battery SupplyItem, and a pack made of `4 ×` that battery. Each
@@ -150,8 +150,8 @@ class ResourceOwnersFixtureTest {
                     Triple("${item.name} data sheet.pdf", AttachmentKind.DOCUMENT, null),
                     Triple("${item.name} package.jpg", AttachmentKind.PHOTO, null),
                     Triple("${item.name} receipt.pdf", AttachmentKind.RECEIPT, DocumentRole.PURCHASE_INVOICE_OR_RECEIPT),
-                ),
-                own.map { Triple(it.displayName, it.kind, it.role) },
+                ).sortedBy { it.first },
+                own.map { Triple(it.displayName, it.kind, it.role) }.sortedBy { it.first },
             )
             assertTrue(own.all { it.storageLocator.startsWith("supply-items/${item.id.value}/") }, "$own")
             assertEquals(listOf("https://example.invalid/products/${item.partNumber}"), supplyLinks(item.id).map { it.uri })
@@ -160,7 +160,10 @@ class ResourceOwnersFixtureTest {
         // E2: the alternator and the tray own their installation material, with no role, under their own directory.
         for (component in listOf(e.alternator, e.tray)) {
             val own = ownFiles(component)
-            assertEquals(COMPONENT_FILES.map { (suffix, kind) -> "${component.name} $suffix" to kind }, own.map { it.displayName to it.kind })
+            assertEquals(
+                COMPONENT_FILES.map { (suffix, kind) -> "${component.name} $suffix" to kind }.sortedBy { it.first },
+                own.map { it.displayName to it.kind }.sortedBy { it.first },
+            )
             assertTrue(own.all { it.role == null && it.storageLocator.startsWith("installed-components/${component.id.value}/") }, "$own")
             assertEquals(listOf("https://example.invalid/setup/${component.id.value}"), ownLinks(component).map { it.uri })
         }
@@ -224,10 +227,15 @@ class ResourceOwnersFixtureTest {
             (ownLinks(e.alternator) + e.alternator.named().flatMap { supplyLinks(it) }).map { it.owner },
         )
 
-        // I6: replacing a position creates, moves and deletes no resource; its successor reaches the same rows.
-        val successor = fitting.swap(e.positions[1].id, "2026-02-15", "Position 2", supplyId = e.battery.id).row
-        assertEquals(batteryFiles, successor.named().flatMap { supplyFiles(it) })
-        assertEquals(emptyList(), ownFiles(successor))
+        // I6 and limit 5: replacing the alternator creates, moves and deletes no resource. Its closed row keeps its own
+        // rows, and its successor starts with none and reaches the same SupplyItem's rows.
+        val ownLinksBefore = ownLinks(e.alternator)
+        val swapped = fitting.swap(e.alternator.id, "2026-02-15", "Example Alternator", supplyId = e.alternatorItem.id)
+        assertEquals("2026-02-15", swapped.replaced?.removedOn)
+        assertEquals(own to ownLinksBefore, ownFiles(e.alternator) to ownLinks(e.alternator), "the closed row keeps its own")
+        assertEquals(its, swapped.row.named().flatMap { supplyFiles(it) })
+        assertEquals(emptyList(), ownFiles(swapped.row))
+        assertEquals(emptyList(), ownLinks(swapped.row))
         assertEquals(before, counts())
         assertEquals(before.first, raw.attachments.all().map { it.storageLocator }.toSet().size)
     }
@@ -248,7 +256,7 @@ class ResourceOwnersFixtureTest {
         assertEquals(ownFiles(e.alternator) + supplyFiles(e.alternatorItem.id), generatorFiles)
         assertEquals(ownLinks(e.alternator) + supplyLinks(e.alternatorItem.id), generatorLinks)
         val (upsFiles, upsLinks) = reach(e.ups)
-        assertEquals(ownFiles(e.tray) + supplyFiles(e.battery.id), upsFiles, "the battery's rows once, though five rows name it")
+        assertEquals(ownFiles(e.tray) + supplyFiles(e.battery.id), upsFiles, "the tray's own rows, then the battery's")
         assertEquals(ownLinks(e.tray) + supplyLinks(e.battery.id), upsLinks)
 
         // Every resource but the child Asset's file is reached from exactly one asset, and is the stored row itself.

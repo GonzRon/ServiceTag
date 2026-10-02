@@ -295,9 +295,9 @@ object TransferGraph {
      * and closures, and every tag, loan, succession (#86, either end) and 2.6 link naming a held asset (with the tags
      * on those links). The files and links of a held asset's installed components go with them (#69, C15). The
      * categories and (#15, C13) the supply items are global and stay whole, an item only a held row names included, and
-     * so are a supply item's files and links. Exactly the held set: no descendant or group member is added to it. A row that stays and
-     * names a dropped row makes the whole answer [TransferRetention.Entangled], naming every such reference — a later
-     * archive of what stays must still decode.
+     * so are a supply item's files and links. Exactly the held set: no descendant or group member is added to it. A
+     * row that stays and names a dropped row makes the whole answer [TransferRetention.Entangled], naming every such
+     * reference — a later archive of what stays must still decode.
      */
     fun retain(data: BackupData, held: Set<AssetId>): TransferRetention {
         val dropped = droppedBy(data, held)
@@ -317,8 +317,8 @@ object TransferGraph {
             measurementDefinitions = data.measurementDefinitions.filterNot { it.id in droppedDefinitions },
             eventProfiles = data.eventProfiles.filterNot { it.id in droppedProfiles },
             assetEvents = data.assetEvents.filterNot { it.id in droppedEvents },
-            // #69 (C15): a component's files and links go with it; a SupplyItem's are never dropped (globals stay whole),
-            // and nothing a kept row names is among them, so they never entangle.
+            // #69 (C15): a component's files and links go with it; a SupplyItem's are never dropped (globals stay
+            // whole), and nothing a kept row names is among them, so they never entangle.
             attachments = data.attachments.filterNot {
                 it.assetId in heldIds || it.eventId in droppedEvents || it.installedComponentId in droppedComponents
             },
