@@ -11,9 +11,13 @@ import com.loosecannon.servicetag.core.fetch.TransportResponse
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -24,9 +28,12 @@ import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.core.usecase.AddReference
+import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
 import com.loosecannon.servicetag.core.usecase.MaterializeRefusal
 import com.loosecannon.servicetag.core.usecase.MaterializeReview
+import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.core.usecase.SourceSnapshot
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -639,6 +646,95 @@ class MaterializeRoutesTest {
         assertTrue("the unspent download kept its staging", stagingIsEmpty())
         assertTrue(rows(seeded.asset).isEmpty())
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
+    }
+
+    // --- #69 row 44: C21, the link of a SupplyItem or an installed component ----------------------------------------
+
+    /** An asset, a SupplyItem, and one installed component on the asset that names it. Fictional. */
+    private class Owners(val asset: String, val supply: String, val component: String)
+
+    private fun owners(): Owners {
+        val asset = client.asset("Example UPS")
+        val supply = client.ok(
+            SupplyItemResponse.serializer(), "POST", "/v1/supply-items",
+            """{"name":"Example 12 V Battery","manufacturer":"Example Power Co."}""", status = 201,
+        ).supplyItem.id
+        val component = client.ok(
+            InstalledComponentResponse.serializer(), "POST", "/v1/installed-components",
+            """{"assetId":"$asset","name":"Example Battery Tray","supplyId":"$supply"}""", status = 201,
+        ).installedComponent.id
+        return Owners(asset, supply, component)
+    }
+
+    /** [owner]'s one web reference, written by the use case as the phone writes it, its PDF served. */
+    private fun linkOn(owner: ReferenceOwner): String {
+        val add = AddReference(
+            graph.references, graph.assets, graph.supplyItems, graph.installedComponents, LinkLaunchPolicy(), graph.uow,
+            graph.ids, graph.clock,
+        )
+        val saved = runBlocking { add.run(owner, AddReferenceCommand(uri = URI, displayName = NAME, description = DESCRIPTION)) }
+        transport.serve(URI, PDF)
+        return when (saved) {
+            is ReferenceResult.Ok -> saved.value.id.value
+            is ReferenceResult.Refused -> error("the seed was refused: ${saved.problem}")
+        }
+    }
+
+    private fun filesOf(owner: AttachmentOwner) = runBlocking { graph.attachments.forOwner(owner) }
+
+    @Test fun aSupplyItemsLinkSavesOnTheSupplyItem() {
+        val o = owners()
+        val reference = linkOn(ReferenceOwner.OfSupplyItem(SupplyId(o.supply)))
+
+        val response = post(router(), reference)
+
+        assertEquals(response.bodyText(), 201, response.status)
+        val row = attachmentOf(response)
+        assertEquals(o.supply, row.supplyItemId)
+        assertEquals(null, row.assetId)
+        assertEquals(null, row.installedComponentId)
+        assertTrue(row.storageLocator, row.storageLocator.startsWith("supply-items/${o.supply}/"))
+        assertEquals(URI, row.sourceUri)
+        assertEquals(listOf(row.id), filesOf(AttachmentOwner.OfSupplyItem(SupplyId(o.supply))).map { it.id.value })
+        assertTrue(rows(o.asset).isEmpty())
+        assertTrue(PDF.contentEquals(graph.attachmentStorage.store.files.getValue(row.storageLocator)))
+        assertTrue(stagingIsEmpty())
+    }
+
+    @Test fun aComponentsLinkSavesOnTheComponent() {
+        val o = owners()
+        val reference = linkOn(ReferenceOwner.OfInstalledComponent(InstalledComponentId(o.component)))
+
+        val response = post(router(), reference)
+
+        assertEquals(response.bodyText(), 201, response.status)
+        val row = attachmentOf(response)
+        assertEquals(o.component, row.installedComponentId)
+        assertEquals(null, row.assetId)
+        assertTrue(row.storageLocator, row.storageLocator.startsWith("installed-components/${o.component}/"))
+        assertEquals(
+            listOf(row.id),
+            filesOf(AttachmentOwner.OfInstalledComponent(InstalledComponentId(o.component))).map { it.id.value },
+        )
+        assertTrue(rows(o.asset).isEmpty())
+        assertTrue(stagingIsEmpty())
+    }
+
+    @Test fun aHeldAssetsComponentLinkIs409() {
+        val o = owners()
+        val reference = linkOn(ReferenceOwner.OfInstalledComponent(InstalledComponentId(o.component)))
+        transferOut(o.asset)
+
+        val response = post(router(), reference)
+
+        assertRefused(response, 409, "asset_transferred_out")
+        assertEquals(listOf("AssetTransferredOut(assetId=${o.asset})"), response.errorDetail().problems)
+        assertEquals(emptyList<String>(), transport.requests)
+        assertTrue(runBlocking { graph.attachments.all() }.isEmpty())
+        assertTrue(stagingIsEmpty())
+        // A SupplyItem's link is never held, even while the asset whose component names the item is.
+        val onSupply = linkOn(ReferenceOwner.OfSupplyItem(SupplyId(o.supply)))
+        assertEquals(201, post(router(), onSupply).status)
     }
 }
 
