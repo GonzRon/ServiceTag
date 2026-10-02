@@ -233,7 +233,7 @@ class DashboardAttentionTest {
         // asserted at render level now that `DashboardSearchTest` is gone. The fixture's pump is a
         // component, so the hint shows in its shortened form (fix round 2, S1 — pending owner
         // ratification); the Dashboard carries content, so the no-match sentence never does.
-        rule.awaitText("Components are listed on the asset they belong to.")
+        rule.awaitText("Child assets are listed on the asset they belong to.")
         rule.onAllNodesWithText("Nothing matches that.").assertCountEquals(0)
     }
 

@@ -91,7 +91,7 @@ class AssetTransferDetailTest {
         rule.onNodeWithText("Backup").performScrollTo().assertIsDisplayed()
         listOf(
             "Write tag", "Edit", "Readings & actions", "Set up from template", "Change condition", "Log incident",
-            "Lend out", "+ Add component", "Add file", "Take photo", "Add link",
+            "Lend out", "+ Add child asset", "Add file", "Take photo", "Add link",
         ).forEach(::gone)
         rule.onAllNodesWithContentDescription("Schedules").assertCountEquals(0)
 
@@ -108,7 +108,7 @@ class AssetTransferDetailTest {
 
         gone("TRANSFERRED OUT")
         gone("TRANSFERRED")
-        listOf("Write tag", "Edit", "Readings & actions", "+ Add component").forEach {
+        listOf("Write tag", "Edit", "Readings & actions", "+ Add child asset").forEach {
             rule.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
 

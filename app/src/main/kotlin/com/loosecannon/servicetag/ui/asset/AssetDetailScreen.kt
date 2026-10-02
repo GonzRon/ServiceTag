@@ -736,7 +736,7 @@ private fun DetailPrompts(
         )
         is DetailPrompt.DeleteRefused -> AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Components first") },
+            title = { Text("Child assets first") },
             text = {
                 Text(
                     "$assetName still has ${prompt.children.joinToString(", ")}. Move or delete " +
@@ -994,8 +994,8 @@ private fun priceLine(asset: Asset): String? {
 }
 
 /**
- * The asset's children (spec §9). Always present, because "+ Add component" is how the first child
- * gets made and an action nobody can reach is no action at all; empty reads "No components" rather
+ * The asset's children (spec §9). Always present, because "+ Add child asset" is how the first child
+ * gets made and an action nobody can reach is no action at all; empty reads "No child assets" rather
  * than vanishing. Each row says how many of the child's *own* readings are out of range and never
  * what they read: 2B-2 rolls nothing up, so a parent that looks fine is not a claim about its
  * components, only an invitation to open one.
@@ -1006,9 +1006,9 @@ private fun ComponentsSection(
     onOpenAsset: (String) -> Unit,
     onAddComponent: (() -> Unit)?,
 ) {
-    SectionHeader(title = "Components")
+    SectionHeader(title = "Child assets")
     Column {
-        if (components.isEmpty()) QuietLine("No components")
+        if (components.isEmpty()) QuietLine("No child assets")
         components.forEach { child ->
             Column(
                 modifier = Modifier
@@ -1027,7 +1027,7 @@ private fun ComponentsSection(
                 ConditionBadge(child.condition, Modifier.padding(top = 4.dp))
             }
         }
-        onAddComponent?.let { add -> TextButton(onClick = add) { Text("+ Add component") } }
+        onAddComponent?.let { add -> TextButton(onClick = add) { Text("+ Add child asset") } }
     }
 }
 

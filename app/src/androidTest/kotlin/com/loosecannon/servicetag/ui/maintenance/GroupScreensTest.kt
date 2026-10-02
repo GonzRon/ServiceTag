@@ -159,7 +159,7 @@ class GroupScreensTest {
 
         // The member's own Asset screen, which only an Asset has.
         rule.awaitText("SERVICE RECORD")
-        rule.awaitText("COMPONENTS")
+        rule.awaitText("CHILD ASSETS")
     }
 
     /**

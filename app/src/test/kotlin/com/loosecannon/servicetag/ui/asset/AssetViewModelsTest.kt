@@ -151,7 +151,7 @@ class AssetViewModelsTest {
     )
 
     /**
-     * Create ([id] null) or edit one asset; [parentId] is the "+ Add component" preset. Suspends
+     * Create ([id] null) or edit one asset; [parentId] is the "+ Add child asset" preset. Suspends
      * until the form has read the picker, which is also when a stored row has been filled in —
      * a ViewModel left mid-load outlives the test that made it and then meets a closed database.
      */
@@ -601,7 +601,7 @@ class AssetViewModelsTest {
         )
     }
 
-    /** "+ Add component" is a new asset with its Part of already answered (spec §9). */
+    /** "+ Add child asset" is a new asset with its Part of already answered (spec §9). */
     @Test fun presetParentIsSelected() = runTest {
         val root = graph.createAsset.run("Generator")
         val vm = editModel(parentId = root.id.value)
@@ -1032,7 +1032,7 @@ class AssetViewModelsTest {
 
     /**
      * The COMPONENTS section is always there (spec §9), so a childless asset still offers
-     * "+ Add component" — the action that makes a first child cannot be behind already having one.
+     * "+ Add child asset" — the action that makes a first child cannot be behind already having one.
      * At this level that is a state with no children and a screen that does not branch on it.
      */
     @Test fun componentsSectionOffersAddOnAChildlessAsset() = runTest {

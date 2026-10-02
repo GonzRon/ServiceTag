@@ -134,7 +134,7 @@ class TransferSelectionViewModelTest {
         advanceUntilIdle()
         val orphan = vm.state.value.review!!
         assertEquals(
-            listOf("Example Anode Rod is a component of Example Water Heater. Select Example Water Heater too."),
+            listOf("Example Anode Rod is a child asset of Example Water Heater. Select Example Water Heater too."),
             orphan.refusals,
         )
         assertFalse(orphan.canCreate)

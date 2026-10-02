@@ -46,7 +46,7 @@ class TransferFlowScreenTest {
         rule.setContent { ServiceTagTheme { TransferSelectionContent(state, onToggle = {}, onReview = {}) } }
 
         rule.onNodeWithText("Select what is leaving this ServiceTag").assertIsDisplayed()
-        rule.onNodeWithText("Components go with the asset they belong to.").assertIsDisplayed()
+        rule.onNodeWithText("Child assets go with the asset they belong to.").assertIsDisplayed()
         rule.onNodeWithText("Example Anode Rod")
             .assertIsOn()
             .assertIsNotEnabled()

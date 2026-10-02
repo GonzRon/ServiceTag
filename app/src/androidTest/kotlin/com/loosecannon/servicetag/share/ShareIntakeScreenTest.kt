@@ -132,7 +132,7 @@ class ShareIntakeScreenTest {
         rule.onNodeWithText("Choose asset").assertIsDisplayed()
         rule.onNodeWithText("Search assets").assertIsDisplayed()
         rule.onNodeWithText("Type").assertIsDisplayed()
-        rule.onNodeWithText("Components").assertIsDisplayed()
+        rule.onNodeWithText("Child assets").assertIsDisplayed()
         rule.onNodeWithText("Archived").assertIsDisplayed()
         rule.onNodeWithText("Cub Cadet XT1").assertIsDisplayed()
         rule.onNodeWithText("Cancel").assertIsDisplayed()

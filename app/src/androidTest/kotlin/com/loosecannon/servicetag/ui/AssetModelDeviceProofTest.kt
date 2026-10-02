@@ -76,7 +76,7 @@ class AssetModelDeviceProofTest {
         val battery = newAsset("Battery bank", parentId = parent)
 
         openAsset(parent).use {
-            rule.awaitText("COMPONENTS")
+            rule.awaitText("CHILD ASSETS")
             rule.onNodeWithText("Inverter").performScrollTo().assertIsDisplayed()
             rule.onNodeWithText("Battery bank").performScrollTo().assertIsDisplayed()
             // The parent is nobody's component, so it has no "Part of" line of its own.
@@ -122,13 +122,13 @@ class AssetModelDeviceProofTest {
 
             // Up one level: the new parent lists it.
             rule.onNodeWithText("Part of Inverter").performScrollTo().performClick()
-            rule.awaitText("COMPONENTS")
+            rule.awaitText("CHILD ASSETS")
             rule.onNodeWithText("Battery bank").performScrollTo().assertIsDisplayed()
 
             // Up again, and open the root's own picker.
             rule.awaitText("Part of Solar system")
             rule.onNodeWithText("Part of Solar system").performScrollTo().performClick()
-            rule.awaitText("COMPONENTS")
+            rule.awaitText("CHILD ASSETS")
             rule.openEditor()
 
             rule.awaitText("PLACEMENT")
@@ -153,7 +153,7 @@ class AssetModelDeviceProofTest {
         newAsset("Battery bank", parentId = parent)
 
         openAsset(parent).use {
-            rule.awaitText("COMPONENTS")
+            rule.awaitText("CHILD ASSETS")
             rule.openOverflow()
             rule.onNodeWithText("Delete").performClick()
 
@@ -162,14 +162,14 @@ class AssetModelDeviceProofTest {
             rule.onNodeWithText("Delete").performClick()
 
             // Refused, with both components named in the one line the dialog shows.
-            rule.awaitText("Components first")
+            rule.awaitText("Child assets first")
             rule.onNode(
                 hasText("Inverter", substring = true) and hasText("Battery bank", substring = true),
             ).assertIsDisplayed()
             rule.onNodeWithText("OK").performClick()
 
             // Nothing was written: the parent and both components are still there.
-            rule.awaitText("COMPONENTS")
+            rule.awaitText("CHILD ASSETS")
             rule.onNodeWithText("Inverter").performScrollTo().assertIsDisplayed()
             rule.onNodeWithText("Battery bank").performScrollTo().assertIsDisplayed()
 
@@ -183,11 +183,11 @@ class AssetModelDeviceProofTest {
             rule.openAssetsTab()
             // The default list hides the archived parent and, Components being off, both children:
             // what is left says so rather than claiming there is nothing active.
-            rule.awaitText("Only components here. Turn on Components to see them.")
+            rule.awaitText("Only child assets here. Turn on Child assets to see them.")
             rule.onAllNodesWithText("Inverter").assertCountEquals(0)
 
             // Components on: both children, still active and unbadged, and still no parent.
-            rule.onNodeWithText("Components").performClick()
+            rule.onNodeWithText("Child assets").performClick()
             rule.awaitText("Inverter")
             rule.onNodeWithText("Inverter").assertIsDisplayed()
             rule.onNodeWithText("Battery bank").assertIsDisplayed()
@@ -227,7 +227,7 @@ class AssetModelDeviceProofTest {
         }
 
         openAsset(inSeason).use {
-            rule.awaitText("COMPONENTS")
+            rule.awaitText("CHILD ASSETS")
             rule.onAllNodesWithText("OUT OF SEASON").assertCountEquals(0)
         }
 
@@ -280,7 +280,7 @@ class AssetModelDeviceProofTest {
         val id = newAsset("Generator")
 
         openAsset(id).use {
-            rule.awaitText("COMPONENTS")
+            rule.awaitText("CHILD ASSETS")
             rule.openOverflow()
             rule.onNodeWithText("Retire").performClick()
 

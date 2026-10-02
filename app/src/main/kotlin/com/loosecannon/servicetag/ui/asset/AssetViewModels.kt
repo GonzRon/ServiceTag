@@ -1979,7 +1979,7 @@ sealed interface EditPrompt {
  * text into one [AssetCommand], hands it over, and turns whatever comes back into marks under
  * fields or a line for the snackbar.
  *
- * [presetParentId] is the "Part of" a new asset opens with, which is how "+ Add component" on a
+ * [presetParentId] is the "Part of" a new asset opens with, which is how "+ Add child asset" on a
  * parent's screen makes a child (spec §9). An existing asset's stored parent always wins over it.
  *
  * **1.4 (B10): one save.** The asset, its season mode, its break and its health policy go to
