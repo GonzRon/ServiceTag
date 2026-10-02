@@ -80,8 +80,9 @@ def test_no_tool_deletes_or_amends_a_fact_or_subject() -> None:
 
 
 def test_no_tool_names_an_installed_component_or_reads_stock() -> None:
-    """Inv. 129, the tool half, as #47 narrows it (C1, C23): only #47's five tools and their arguments speak of
-    installed components — the word is struck from their names alone before the check — and no tool or argument
+    """Inv. 129, the tool half, as #47 narrows it (C1, C23) and #69 extends it (its C1, C23): only #47's five tools
+    and their arguments, and the `installed_component_id` owner argument of #69's five resource tools, speak of
+    installed components — the word is struck from those names alone before the check — and no tool or argument
     name speaks of assemblies
     or stock."""
     pattern = re.compile(r"assembl|installed|stock", re.IGNORECASE)
@@ -89,6 +90,7 @@ def test_no_tool_names_an_installed_component_or_reads_stock() -> None:
         "list_installed_components", "add_installed_component", "update_installed_component",
         "remove_installed_component", "replace_installed_component",
     }
+    owned_by_69 = {"list_references", "add_reference", "list_attachments", "add_attachment", "materialize_reference"}
 
     def spoken(name: str, text: str) -> bool:
         return bool(pattern.search(text.replace("installed", "") if name in built_by_47 else text))
@@ -97,6 +99,8 @@ def test_no_tool_names_an_installed_component_or_reads_stock() -> None:
         assert not spoken(name, name), name
         tool = server_module.mcp._tool_manager.get_tool(name)
         for argument in tool.parameters.get("properties", {}):
+            if name in owned_by_69 and argument == "installed_component_id":
+                argument = argument.replace("installed", "")
             assert not spoken(name, argument), (name, argument)
 
 

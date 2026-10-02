@@ -22,8 +22,9 @@ the one body key it is about, then the `problems` in parentheses.
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
   later**, the five service-case tools one at **12 or later**, the five loan tools one at **13 or
   later**, `get_asset_succession` one at **15 or later**, #92's five attachment tools and two replace
-  tools one at **16 or later**, #15's eight supply tools one at **18 or later**, and #47's five installed
-  component tools one at **19 or later**; each checks it itself (below).
+  tools one at **16 or later**, #15's eight supply tools one at **18 or later**, #47's five installed
+  component tools one at **19 or later**, and #69's five resource tools, given a supply item or an installed
+  component as the owner, one at **20 or later**; each checks it itself (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -58,9 +59,15 @@ the one body key it is about, then the `problems` in parentheses.
 - **The installed component tools need schema 19.** `list_installed_components`, `add_installed_component`,
   `update_installed_component`, `remove_installed_component` and `replace_installed_component` — the read as
   well as the writes — refuse an app whose `schemaVersion` is below 19 the same way, from the same read, naming
-  the feature "installed components". The minima are therefore 8 for every write, 11 for the warranty tools, 12
-  for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the supply
-  tools and a linked line, and 19 for the installed component tools.
+  the feature "installed components".
+- **A supply item or installed component owner needs schema 20.** `list_references`, `add_reference`,
+  `list_attachments`, `add_attachment` and `materialize_reference` given `supply_item_id` or
+  `installed_component_id` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 20 the
+  same way, from the same read, naming the feature "supply item and installed component resources". Given
+  `asset_id`, each keeps exactly the minimum it had. The minima are therefore 8 for every write, 11 for the warranty
+  tools, 12 for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the
+  supply tools and a linked line, 19 for the installed component tools, and 20 for a supply item or installed
+  component owner on the five resource tools.
 
 ## Using it
 
@@ -123,8 +130,14 @@ supplied with `providers` neither given nor cleared sets every stored `LOCAL` ro
 match, so turning reminders back on never re-sends a `LOCAL` row this tool left disabled (#83).
 
 **References (needs ServiceTag 1.3.0)** — `list_references`, `add_reference`, `update_reference`.
-A reference is a URI on an asset — a manual on the web, a note in Joplin — with no bytes of its
-own. `kind` is derived from the URI's scheme and returned read-only, so neither write tool takes
+A reference is a URI — a manual on the web, a note in Joplin — with no bytes of its own, and **exactly one
+owner**, fixed for life: an asset, a **supply item** (what a product is — its manual, its data sheet, the maker's
+page) or an **installed component** (what one fitted part is — its label, its wiring). `list_references` and
+`add_reference` take exactly one of `asset_id`, `supply_item_id` and `installed_component_id`; an argument passed
+as `null` is not given, and none or more than one is refused before anything is sent. The create's body carries
+that one owner key, and the read lists that owner's own links only. A supply item or installed component owner
+needs schema 20 (above); an asset keeps every gate it had. `update_reference` takes no owner: a reference never
+moves. `kind` is derived from the URI's scheme and returned read-only, so neither write tool takes
 one; nothing **deletes** a reference, because the API adds and amends and the phone removes. Since
 #91 an `http` or `https` reference may carry a document `role` — `PURCHASE_INVOICE_OR_RECEIPT`,
 `USER_MANUAL` or `SERVICE_MANUAL` — given only by the caller, never guessed: `add_reference` and
@@ -211,6 +224,15 @@ contract.
 **Attachments and Save as document (#92; needs schema 16)** — `list_attachments`, `get_attachment`,
 `update_attachment`, `add_attachment`, `materialize_reference`: one tool per operation — `GET` and `POST
 /v1/assets/{id}/attachments`, `GET` and `PATCH /v1/attachments/{id}`, `POST /v1/references/{id}/materialize`.
+Since #69 a file, like a link, belongs to exactly one owner — an asset, a supply item or an installed component
+(or a journal entry, which no tool here adds to): `list_attachments`, `add_attachment` and `materialize_reference`
+take exactly one of `asset_id`, `supply_item_id` and `installed_component_id` (none or more than one is refused
+before anything is sent) and read and write that owner's own routes — `GET` and `POST
+/v1/supply-items/{id}/attachments` and `/v1/installed-components/{id}/attachments`, and the owner's
+`…/references`. A supply item or installed component owner needs schema 20, an asset the 16 below. A document
+role goes on an asset's, a supply item's or an installed component's file, never a journal entry's. An installed
+component on an asset transferred out from the phone takes no new file (`asset_transferred_out`); a supply item
+is never held.
 Each refuses a phone below schema 16 with `APP_SCHEMA_TOO_OLD` and nothing sent. #92 moved no schema, so an app
 at 16 may still predate the routes: the router's unknown-route 404 is then `APP_ROUTE_MISSING` ("update
 ServiceTag"), while `no_such_asset`, `NO_SUCH_ATTACHMENT` and `NO_SUCH_REFERENCE` pass through. An attachment
@@ -220,19 +242,21 @@ five keys of the attachment command; `clear_fields` takes `role`, `captured_on` 
 attachment or reads its bytes back.
 
 `add_attachment` streams a local file of at most 256 MiB in 64 KiB pieces under an exact `Content-Length`
-(never chunked). It reads first — the status (its `installationId`), the asset's attachments (the folder must be
+(never chunked). It reads first — the status (its `installationId`), the owner's attachments (the folder must be
 `READY`), then the derived attachment id — and sends the file only when no row has that id. The upload is
-idempotent by `operation_key`; **by default the key is the SHA-256 of the asset, the file's SHA-256 and its size
-only**, never the name, kind or role. The attachment's id is derived from the phone's `installationId`, the asset
-and the key (`docs/api/attachment-operation-ids.json`'s golden vectors), and the tool applies the phone's strict
-rule itself: the same kind (resolved the phone's way when not given, and always sent), role, trimmed name, digest
+idempotent by `operation_key`; **by default the key is the SHA-256 of the owner's id, the file's SHA-256 and its
+size only**, never the name, kind or role. The attachment's id is derived from the phone's `installationId`, the
+owner and the key — an asset's by the v2 derivation (`docs/api/attachment-operation-ids.json`'s `vectors`), a
+supply item's or an installed component's by the v3 one, which also names the owner's kind (its `ownerVectors`)
+— and the tool applies the phone's strict rule itself: the same owner, kind (resolved the phone's way when not given, and always sent), role, trimmed name, digest
 and size as the row has now is `REPLAYED` with nothing sent; any of them different — the original metadata after
 an edit included — is `OPERATION_KEY_REUSED`, and the change belongs to `update_attachment`. A new key adds a
 second copy. A role is sent only when given.
 
-`materialize_reference` takes an asset and a reference **by id — never a URL**. Before each call the agent shows
+`materialize_reference` takes the reference's owner and the reference **by id — never a URL**, and saves the
+file on that owner. Before each call the agent shows
 the user the reference's name and host (never the full link) and calls only on the user's explicit approval, one
-approval per call, never because fetched content asked it to. It reads the asset's references and attachments
+approval per call, never because fetched content asked it to. It reads the owner's references and attachments
 first: a row whose `sourceUri` is the reference's link is `IDENTICAL` with no download — "already saved from this
 link", not "current" — and so is the phone's `ATTACHMENT_ALREADY_HELD`. Otherwise it makes one request with a
 720-second budget and **never retries it**, a 502 `FETCH_…` included; a timeout or a closed connection with no
@@ -265,7 +289,8 @@ one tool per operation — `GET` and `POST /v1/supply-items`, `GET` and `PATCH /
 a battery pack, a belt — with its identity (name, category, manufacturer, model, part number, preferred unit,
 notes) and an ordered list of generic specifications `{label, value, unit}`; an **asset supply** says which
 supply item an asset takes and in what role. Nothing more: no quantity, no fitted position, date or serial, no
-file, and a complete pack and an item inside it are two unrelated supply items. `update_supply_item` sends only
+file field on the row — since #69 its own files and links are read and added by the resource tools with
+`supply_item_id` (above) — and a complete pack and an item inside it are two unrelated supply items. `update_supply_item` sends only
 the arguments given, because the phone's `PATCH` is itself the overlay: `""` clears a text field, `[]` removes
 every specification, `name` is never blank, and there is no `clear_fields`. A kept specification row is sent with
 its `id` and `key` — and its `unit` — as `get_supply_item` answered them, or the phone mints a new row and an
@@ -421,12 +446,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–19** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–20** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition, format 20 each attachment's and reference's `supplyItemId` and `installedComponentId` (a file or a link on a supply item or an installed component; no new table); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;

@@ -549,6 +549,7 @@ def test_an_owner_passed_as_null_is_not_given(paired) -> None:
         asset_id=None, supply_item_id=SUPPLY_ITEM, installed_component_id=None, uri=LINK, display_name="Data sheet"
     )
     assert body_of(paired.last()) == {"supplyItemId": SUPPLY_ITEM, "uri": LINK, "displayName": "Data sheet"}
+    paired.reply("GET", f"/v1/installed-components/{INSTALLED_COMPONENT}/references", 200, {"references": []})
     result = _call_tool(
         "list_references", {"asset_id": None, "supply_item_id": None, "installed_component_id": INSTALLED_COMPONENT}
     )
