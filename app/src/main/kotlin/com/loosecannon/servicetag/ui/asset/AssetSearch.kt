@@ -52,6 +52,7 @@ internal fun SearchBox(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
+    hint: String = SEARCH_ASSETS,
     modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
@@ -59,7 +60,7 @@ internal fun SearchBox(
         onValueChange = onQueryChange,
         singleLine = true,
         shape = ControlShape,
-        placeholder = { Text(SEARCH_ASSETS) },
+        placeholder = { Text(hint) },
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -73,7 +74,7 @@ internal fun SearchBox(
         // be a new string, so the ratified placeholder is reused rather than a fifth sentence added.
         modifier = modifier
             .fillMaxWidth()
-            .semantics { contentDescription = SEARCH_ASSETS },
+            .semantics { contentDescription = hint },
     )
 }
 
