@@ -887,7 +887,7 @@ class ShareIntakeScreenTest {
         hostTheIntake(aLink)
         rule.awaitText("Example UPS")
         typeQuery("gen")
-        rule.awaitText("Example Generator")
+        rule.waitUntil(SETTLE_MS) { rule.onAllNodesWithText("Example UPS").fetchSemanticsNodes().isEmpty() }
         rule.onAllNodesWithText("Example UPS").assertCountEquals(0)
 
         rule.onNodeWithText("Example Generator").performClick()
@@ -1052,7 +1052,7 @@ class ShareIntakeScreenTest {
         hostTheIntake(aLink)
         rule.awaitText("Example Air Compressor")
         typeQuery("asset")
-        rule.awaitText(names.first())
+        rule.waitUntil(SETTLE_MS) { rule.onAllNodesWithText("Example Air Compressor").fetchSemanticsNodes().isEmpty() }
         rule.onAllNodesWithText("Example Air Compressor").assertCountEquals(0)
 
         val far = "Example Asset 30"
