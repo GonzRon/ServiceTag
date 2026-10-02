@@ -943,7 +943,7 @@ one-line function for a format) at the home named, and imported, never copied.
 
 | id | wording | where (contract) |
 |---|---|---|
-| P69-23 | ~~"Share to"~~ — **WITHDRAWN (rev 1.5, C-3), pending the owner's word:** the type control is named by the shipped `ATTACH_TO`; no new string | — |
+| P69-23 | ~~"Share to"~~ — **WITHDRAWN (owner, 2026-10-02; rev 1.5 C-3):** the type control is named by the shipped `ATTACH_TO`; no new string | — |
 | — | "Assets" (hoisted from `A/ui/nav/BottomBar.kt:52`'s literal to an internal const there, C-10), "Installed components" (P47-1, `InstalledComponentStrings.kt:14`), "Supplies" (`SUPPLIES_SECTION`, `A/ui/supplies/SupplyStrings.kt:18`) — reused | the type control's three labels (C30 step 2) |
 | — | "Search assets" (`SEARCH_ASSETS`, `A/ui/asset/AssetSearch.kt:84`) — reused, the hint parameter's default | the search box's hint and accessible name, Assets chosen (C30 step 3) |
 | P69-24 | "Search installed components" | the search box's hint and accessible name, Installed components chosen (C30 step 3) |
