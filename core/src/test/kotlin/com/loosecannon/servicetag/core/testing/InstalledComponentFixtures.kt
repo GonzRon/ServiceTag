@@ -110,8 +110,8 @@ class InMemoryInstalledComponentRepository(
     override fun observeForAsset(assetId: AssetId): Flow<List<InstalledComponent>> = version.map { rowsOf(assetId) }
 
     /**
-     * The schema's `asset_id` CASCADE: the asset's rows go, and their entries with them. The ids it removed are then
-     * handed to every [cascadesTo] registration, the CASCADE's second level.
+     * The schema's `asset_id` CASCADE: the asset's rows go, and their entries with them. The ids of the rows it deleted
+     * are then handed to every [cascadesTo] registration, the CASCADE's second level.
      */
     fun cascadeFromAsset(assetId: AssetId) {
         val gone = rows.values.filter { it.assetId == assetId }.mapTo(HashSet()) { it.id }
@@ -123,9 +123,9 @@ class InMemoryInstalledComponentRepository(
     }
 
     /**
-     * #69 (C11): the schema's CASCADE from `installed_component` — the rows a removed component owns in another table
-     * go with it. [BackupInstall] registers [InMemoryAttachmentRepository.cascadeFromInstalledComponents] and its twin
-     * [InMemoryReferenceRepository.cascadeFromInstalledComponents]; a double that registers nothing removes the
+     * #69 (C11): the schema's CASCADE from `installed_component` — the rows a deleted component row owns in another
+     * table go with it. [BackupInstall] registers [InMemoryAttachmentRepository.cascadeFromInstalledComponents] and its twin
+     * [InMemoryReferenceRepository.cascadeFromInstalledComponents]; a double that registers nothing deletes the
      * component rows alone, as before.
      */
     private val cascades = mutableListOf<(Set<InstalledComponentId>) -> Unit>()

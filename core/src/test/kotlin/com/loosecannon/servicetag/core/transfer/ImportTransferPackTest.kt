@@ -63,7 +63,7 @@ import kotlinx.coroutines.test.runTest
 class ImportTransferPackTest {
 
     /** #69 (row 19): the ids of the files [returnWithLocalFiles] lays down. */
-    private val localFiles = setOf("fc1", "fc2", "fcx", "fs1")
+    private val localFiles = setOf("fc1", "fc2", "fc4", "fcx", "fs1")
 
     private suspend fun sender(): TransferInstall = TransferInstall("set-sender").also { TransferFixtures.seed(it.raw) }
 
@@ -300,8 +300,8 @@ class ImportTransferPackTest {
 
     /**
      * The heater comes back to [fittedSender]. Its component files are local only, never in either pack (N-15): they
-     * leave the scoped snapshot with the heater's components, the asset delete's CASCADE takes the rows, and their
-     * bytes are swept, while the staying compressor's component keeps its file.
+     * leave the scoped snapshot with the heater's components, the removed one (c4) included, the asset delete's CASCADE
+     * takes the rows, and their bytes are swept, while the staying compressor's component keeps its file.
      */
     @Test
     fun aReturningAssetsComponentFilesLeaveTheSnapshotAndTheirLocatorsAreSwept() = runTest {
@@ -311,8 +311,9 @@ class ImportTransferPackTest {
 
         val scope = returnScopeOf(s, HEATER, ANODE)
         assertEquals(setOf("fs1", "fcx"), scope.snapshot.attachments.map { it.id.value }.filter { it in localFiles }.toSet())
+        assertTrue(scope.snapshot.installedComponents.none { it.id.value == "c4" }, "the removed component's row leaves too")
         assertEquals(
-            setOf("installed-components/c1/fc1.pdf", "installed-components/c2/fc2.pdf"),
+            setOf("installed-components/c1/fc1.pdf", "installed-components/c2/fc2.pdf", "installed-components/c4/fc4.pdf"),
             scope.locators.filter { it.startsWith("installed-components/") || it.startsWith("supply-items/") }.toSet(),
         )
         assertIs<TransferImportResult.Imported>(s.importer.import(ready) { q2.bytes.inputStream() })
@@ -320,8 +321,10 @@ class ImportTransferPackTest {
         assertEquals(setOf("fs1", "fcx"), localFiles.filter { s.raw.attachments.get(AttachmentId(it)) != null }.toSet())
         assertTrue("installed-components/c1/fc1.pdf" !in s.raw.storage.store.files, "the tray's file's bytes were swept")
         assertTrue("installed-components/c2/fc2.pdf" !in s.raw.storage.store.files, "the position's file's bytes were swept")
+        assertTrue("installed-components/c4/fc4.pdf" !in s.raw.storage.store.files, "the removed tray's file's bytes were swept")
         assertTrue("installed-components/cx/fcx.pdf" in s.raw.storage.store.files, "the compressor's component keeps its bytes")
-        assertEquals(listOf("c1", "c2", "c3", "cx"), s.raw.installedComponents.all().map { it.id.value }, "the pack's rows landed")
+        assertEquals(listOf("c1", "c2", "c3", "c4", "cx"), s.raw.installedComponents.all().map { it.id.value }, "the pack's rows landed")
+        assertEquals("2026-01-10", s.raw.installedComponents.get(InstalledComponentId("c4"))!!.removedOn, "the removed row lands removed")
     }
 
     /** A SupplyItem is global and never returns with an asset: its file stays in the snapshot, its row and bytes here. */
@@ -377,17 +380,22 @@ class ImportTransferPackTest {
     }
 
     /**
-     * [fittedSender] with the heater out in `pack-q1` and back from the borrowing phone in `pack-q2`. Its files are
-     * laid down raw, with bytes, **after** `pack-q1` was sealed, so neither pack carries them: one on the heater's tray
-     * (c1), one on its position (c2), one on the compressor's housing (cx) and one on the battery SupplyItem (s1).
+     * [fittedSender], plus a removed tray on the heater (c4, travelling in both packs as #47's rows do), with the heater
+     * out in `pack-q1` and back from the borrowing phone in `pack-q2`. Its files are laid down raw, with bytes, **after**
+     * `pack-q1` was sealed, so neither pack carries them: one on the heater's tray (c1), one on its position (c2), one
+     * on the removed tray (c4), one on the compressor's housing (cx) and one on the battery SupplyItem (s1).
      */
     private suspend fun returnWithLocalFiles(): Pair<TransferInstall, SealedPack> {
         val s = fittedSender()
+        s.raw.installedComponents.insert(
+            installedComponentOf("c4", assetId = HEATER, name = "Example Old Tray", installedOn = "2025-01-10", removedOn = "2026-01-10"),
+        )
         val q1 = s.pack("pack-q1", HEATER)
         s.mark(q1)
         listOf(
             "fc1" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("c1")),
             "fc2" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("c2")),
+            "fc4" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("c4")),
             "fcx" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("cx")),
             "fs1" to AttachmentOwner.OfSupplyItem(SupplyId("s1")),
         ).forEach { (id, owner) ->

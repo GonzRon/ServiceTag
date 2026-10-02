@@ -21,8 +21,8 @@ import kotlin.test.assertFailsWith
 /**
  * #69 (C11, row 20; N-16) — the core doubles carry the schema's two-level CASCADE for a component's files: an asset
  * delete through [BackupInstall] takes the asset's installed components (#47's registration), and the component
- * double hands the ids it removed to the attachment double, which drops the rows those components own and nothing
- * else. An asset's own and an entry's files deliberately do not cascade in the double (the Room tests prove that
+ * double hands the ids of the rows it deleted to the attachment double, which drops the rows those components own and
+ * nothing else. An asset's own and an entry's files deliberately do not cascade in the double (the Room tests prove that
  * half), so no shipped assertion moves. Every name is fictional.
  */
 class ResourceOwnerDoubleTest {

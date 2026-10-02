@@ -155,7 +155,7 @@ open class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
      * ([InMemoryServiceCaseRepository.cascadeFromAsset]) and #72's loans
      * ([InMemoryAssetLoanRepository.cascadeFromAsset]), and #47's installed components
      * ([InMemoryInstalledComponentRepository.cascadeFromAsset]) among the rest [BackupInstall] registers. #69 (C11)
-     * carries one second level: the component double hands the ids it removed to
+     * carries one second level: the component double hands the ids of the component rows it deleted to
      * [InMemoryAttachmentRepository.cascadeFromInstalledComponents] and its twin
      * [InMemoryReferenceRepository.cascadeFromInstalledComponents], so a component's files and links go with the
      * asset's components. The asymmetry is deliberate (N-16): an asset's own files and links and an entry's files are
