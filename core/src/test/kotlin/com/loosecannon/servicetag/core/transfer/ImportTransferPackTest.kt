@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.merge.MergeReason
 import com.loosecannon.servicetag.core.merge.MergeTable
 import com.loosecannon.servicetag.core.merge.MergeVerdict
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
@@ -18,6 +19,8 @@ import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -332,6 +335,45 @@ class ImportTransferPackTest {
 
         assertEquals(file, s.raw.attachments.get(AttachmentId("fs1")))
         assertTrue("supply-items/s1/fs1.pdf" in s.raw.storage.store.files, "its bytes stay")
+    }
+
+    // ---- #69 (C13; row 25): a return takes a returning asset's component links ------------------------------------
+
+    /**
+     * The heater comes back to [fittedSender]. Its tray's link is local only, never in either pack (laid down after
+     * `pack-q1` was sealed): it leaves the scoped snapshot with the heater's components, the asset delete's CASCADE takes
+     * the row and the return lands, while the compressor's component's link and the battery SupplyItem's stay.
+     */
+    @Test
+    fun aReturningAssetsComponentLinkLeavesTheSnapshotAndTheReturnLands() = runTest {
+        val s = fittedSender()
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        val links = mapOf(
+            "rc1" to ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1")),
+            "rcx" to ReferenceOwner.OfInstalledComponent(InstalledComponentId("cx")),
+            "rs1" to ReferenceOwner.OfSupplyItem(SupplyId("s1")),
+        )
+        links.forEach { (id, owner) ->
+            s.raw.references.upsert(
+                AssetReference(
+                    id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/$id",
+                    displayName = "Example $id page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
+                ),
+            )
+        }
+        val r = TransferInstall("set-recipient")
+        assertIs<TransferImportResult.Imported>(r.import(q1.bytes))
+        val q2 = r.pack("pack-q2", HEATER)
+
+        val ready = s.ready(q2.bytes)
+        assertEquals(TransferImportOutcome.READY, ready.outcome, "${ready.plan.conflicts}")
+        val scoped = returnScopeOf(s, HEATER, ANODE).snapshot.references.map { it.id.value }
+        assertEquals(setOf("rcx", "rs1"), scoped.filter { it in links }.toSet())
+        assertIs<TransferImportResult.Imported>(s.importer.import(ready) { q2.bytes.inputStream() })
+
+        assertEquals(setOf("rcx", "rs1"), links.keys.filter { s.raw.references.get(ReferenceId(it)) != null }.toSet())
+        assertEquals(listOf("c1", "c2", "c3", "cx"), s.raw.installedComponents.all().map { it.id.value }, "the pack's rows landed")
     }
 
     /**

@@ -409,4 +409,91 @@ class AddReferenceTest {
             assertNull(references.rows.getValue(row.id.value).role)
         }
     }
+
+    // --- #69 (C13; row 22): the owner is a SupplyItem or an installed component too ---------------------------
+
+    private val battery = ReferenceOwner.OfSupplyItem(SupplyId("x1"))
+    private val tray = ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1"))
+
+    /** Asset `x1`, SupplyItem `x1` (the same id string, H3) and component `c1` on the asset. */
+    private suspend fun haveEveryOwner() {
+        haveAsset(AssetId("x1"))
+        supplyItems.upsert(supplyItemOf("x1", "Example 12 V Battery"))
+        installedComponents.insert(installedComponentOf("c1", assetId = "x1", installedOn = "2026-09-01"))
+    }
+
+    /** Hazard: an owner refused or written as another. Each owner takes a link, read back by its own owner only. */
+    @Test
+    fun addsToEachOwner() = runTest {
+        haveEveryOwner()
+        for ((i, owner) in listOf(ReferenceOwner.OfAsset(AssetId("x1")), battery, tray).withIndex()) {
+            val row = saved(add.run(owner, cmd("https://example.invalid/battery/$i", name = "Example data sheet")))
+            assertEquals(owner, row.owner)
+            assertEquals(listOf(row), references.forOwner(owner))
+        }
+        assertEquals(3, references.upserts)
+    }
+
+    /** H3: an asset and a SupplyItem sharing the id string `x1` are two owners, so one URI on each is two rows. */
+    @Test
+    fun theSameUriOnAnAssetAndASupplyItemSharingAnIdStringIsTwoRows() = runTest {
+        haveEveryOwner()
+        val uri = "https://example.invalid/battery/manual.pdf"
+
+        val onAsset = saved(add.run(ReferenceOwner.OfAsset(AssetId("x1")), cmd(uri)))
+        val onItem = saved(add.run(battery, cmd(uri)))
+
+        assertEquals(listOf(onAsset, onItem), references.rows.values.toList())
+        assertEquals(onItem, references.findByUri(battery, uri))
+    }
+
+    /** I3: the duplicate refusal is per owner — a second add on the SupplyItem or the component is refused. */
+    @Test
+    fun aDuplicateIsPerOwner() = runTest {
+        haveEveryOwner()
+        val uri = "https://example.invalid/battery/manual.pdf"
+        for (owner in listOf(battery, tray)) {
+            saved(add.run(owner, cmd(uri)))
+            assertEquals(ReferenceProblem.DuplicateUri, refusal(add.run(owner, cmd(uri))))
+        }
+        assertEquals(2, references.upserts)
+    }
+
+    /** R69-10: an archived SupplyItem and a removed component are owners like any other. */
+    @Test
+    fun anArchivedSupplyItemAndARemovedComponentAccept() = runTest {
+        haveAsset(AssetId("x1"))
+        supplyItems.upsert(supplyItemOf("s2", "Example Terminal Strap", archivedAt = 3_000L))
+        installedComponents.insert(installedComponentOf("c2", assetId = "x1", installedOn = "2026-09-01", removedOn = "2026-09-10"))
+
+        for (owner in listOf(ReferenceOwner.OfSupplyItem(SupplyId("s2")), ReferenceOwner.OfInstalledComponent(InstalledComponentId("c2")))) {
+            assertEquals(owner, saved(add.run(owner, cmd("https://example.invalid/strap"))).owner)
+        }
+    }
+
+    /**
+     * I-2 unchanged: for a SupplyItem or a component that is not here, the name is still refused before the owner, and
+     * the owner before the second identity; a refusal writes nothing.
+     */
+    @Test
+    fun theStepOrderIsUnchanged() = runTest {
+        val missing = listOf(ReferenceOwner.OfSupplyItem(SupplyId("s9")), ReferenceOwner.OfInstalledComponent(InstalledComponentId("c9")))
+        for (owner in missing) {
+            assertEquals(ReferenceProblem.RoleNotAllowed, refusal(add.run(owner, cmd("joplin://x-callback-url/openNote?id=example", role = DocumentRole.USER_MANUAL))))
+            assertEquals(ReferenceProblem.BlankName, refusal(add.run(owner, cmd("https://example.invalid/battery", name = " "))))
+            assertEquals(ReferenceProblem.OwnerMissing, refusal(add.run(owner, cmd("https://example.invalid/battery"))))
+        }
+        assertEquals(0, references.upserts)
+
+        // A row already holding the pair on an owner that is not here (laid down raw): the owner still answers first.
+        val stray = missing.first()
+        references.upsert(
+            AssetReference(
+                id = ReferenceId("stray"), owner = stray, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/battery",
+                displayName = "Example data sheet", description = "", scheme = "https", createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+        assertEquals(ReferenceProblem.OwnerMissing, refusal(add.run(stray, cmd("https://example.invalid/battery"))))
+        assertEquals(1, references.upserts)
+    }
 }

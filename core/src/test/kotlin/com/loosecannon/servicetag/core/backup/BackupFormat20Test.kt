@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
@@ -9,6 +10,9 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.dataTreeOf
@@ -230,17 +234,19 @@ class BackupFormat20Test {
 
     // --- row 9: exactly one owner ----------------------------------------------------------------
 
-    /** A link that names no owner — its asset key an explicit `null`, or left out — is refused before anything is written. */
+    /**
+     * A link that names no owner is refused before anything is written: its asset key an explicit `null` by exactly-one,
+     * in G2's sentence (#69, B2b); the key left out by the decoder itself, since `assetId` has no default (C-2).
+     */
     @Test
     fun aReferenceWithNoOwnerKeyIsCorrupt() {
         val tree = dataTreeOf(archiveOf(data()))
-        val shapes = mapOf<String, (JsonObject) -> JsonObject>(
-            "an explicit null" to { it.with("assetId", JsonNull) },
-            "no key at all" to { it.without("assetId") },
+        assertEquals(
+            "reference r1 must name exactly one owner, an asset, a supply item or an installed component",
+            refusalOf(sealed(tree.editRow("assetReferences", "r1") { it.with("assetId", JsonNull) }, 20)),
         )
-        for ((shape, edit) in shapes) {
-            assertFailsWith<BackupCorrupt>(shape) { BackupCodec.decode(sealed(tree.editRow("assetReferences", "r1", edit), 20)) }
-        }
+        val leftOut = refusalOf(sealed(tree.editRow("assetReferences", "r1") { it.without("assetId") }, 20))
+        assertTrue(leftOut.startsWith("data.json is not readable") && "'assetId' is required" in leftOut, leftOut)
     }
 
     /**
@@ -405,5 +411,92 @@ class BackupFormat20Test {
             "attachment att-2 is an entry's file and carries a document role; an entry's file takes none",
             refusalOf(archiveOf(data().copy(attachments = listOf(manual, photo.copy(role = "USER_MANUAL"))))),
         )
+    }
+
+    // --- B2b row 23: a SupplyItem's and an installed component's links (C13; R69-10) ---------------
+
+    private val linkOnBattery = ReferenceOwner.OfSupplyItem(SupplyId("s1"))
+    private val linkOnTray = ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1"))
+
+    /** A web link on [owner], with a role, as the phone writes it. */
+    private fun linkOn(owner: ReferenceOwner, id: String) = AssetReference(
+        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/battery/sheet.pdf",
+        displayName = "Example data sheet", description = "", scheme = "https", createdAt = 1_000L, updatedAt = 2_000L,
+        role = DocumentRole.USER_MANUAL,
+    )
+
+    /** [base] with [links] after the asset's. */
+    private fun dataWithLinks(vararg links: AssetReferenceDto, base: BackupData = data()): BackupData =
+        base.copy(assetReferences = base.assetReferences + links)
+
+    /**
+     * Hazard: a new owner's key dropped on the way out or misread on the way in. A SupplyItem's link and a component's
+     * write their own key and null the other two — `assetId` an explicit null — and read back equal.
+     */
+    @Test
+    fun aSupplyItemsAndAComponentsLinksRoundTrip() {
+        val sheet = linkOn(linkOnBattery, "r2")
+        val fitted = linkOn(linkOnTray, "r3")
+        val bytes = archiveOf(dataWithLinks(sheet.toDto(), fitted.toDto()))
+
+        val decoded = BackupCodec.decode(bytes)
+
+        assertEquals(listOf(sheet, fitted), decoded.data.assetReferences.drop(1).map { it.toDomain() })
+        val rows = dataTreeOf(bytes).getValue("assetReferences").jsonArray.map { it.jsonObject }.associateBy { it.id }
+        val written = mapOf(
+            "r1" to listOf(JsonPrimitive("x1"), JsonNull, JsonNull),
+            "r2" to listOf(JsonNull, JsonPrimitive("s1"), JsonNull),
+            "r3" to listOf(JsonNull, JsonNull, JsonPrimitive("c1")),
+        )
+        for ((id, values) in written) {
+            val keys = listOf("assetId") + ownerKeys
+            assertEquals(values, keys.map { rows.getValue(id)[it] }, "$id: $keys")
+        }
+    }
+
+    /**
+     * Hazard: an owner checked against the wrong list. A link must name an owner of its own kind in the file — an id
+     * string another list holds is not enough — in the shipped asset sentence and its two G2 twins.
+     */
+    @Test
+    fun aLinksOwnerNotInTheFileIsCorrupt() {
+        val cases = listOf(
+            ReferenceOwner.OfAsset(AssetId("s1")) to "points at asset s1, which is not in assets",
+            ReferenceOwner.OfSupplyItem(SupplyId("s9")) to "points at supply item s9, which is not in supplyItems",
+            ReferenceOwner.OfSupplyItem(SupplyId("x1")) to "points at supply item x1, which is not in supplyItems",
+            ReferenceOwner.OfInstalledComponent(InstalledComponentId("c9")) to
+                "points at installed component c9, which is not in installedComponents",
+            ReferenceOwner.OfInstalledComponent(InstalledComponentId("s1")) to
+                "points at installed component s1, which is not in installedComponents",
+        )
+        for ((owner, problem) in cases) {
+            val refusal = refusalOf(archiveOf(dataWithLinks(linkOn(owner, "r2").toDto())))
+            assertEquals("assetReferences: reference r2 $problem", refusal, "$owner")
+        }
+    }
+
+    /**
+     * Correction 2: the owner check runs after the SupplyItems and the installed components are read, so a file whose
+     * links name them — an archived item and a removed component included (R69-10) — decodes.
+     */
+    @Test
+    fun theOwnerCheckSeesSupplyItemsAndComponents() {
+        val retired = data().copy(
+            supplyItems = listOf(supplyItemOf("s1", "Example 12 V Battery", archivedAt = 3_000L).toDto()),
+            installedComponents = listOf(
+                installedComponentOf("c1", name = "Example Battery Tray", installedOn = "2026-09-01", removedOn = "2026-09-10")
+                    .toDto(),
+            ),
+        )
+        for (base in listOf(data(), retired)) {
+            val bytes = archiveOf(dataWithLinks(linkOn(linkOnBattery, "r2").toDto(), linkOn(linkOnTray, "r3").toDto(), base = base))
+
+            val decoded = BackupCodec.decode(bytes)
+
+            assertEquals(
+                listOf(ReferenceOwner.OfAsset(AssetId("x1")), linkOnBattery, linkOnTray),
+                decoded.data.assetReferences.map { it.toDomain().owner },
+            )
+        }
     }
 }

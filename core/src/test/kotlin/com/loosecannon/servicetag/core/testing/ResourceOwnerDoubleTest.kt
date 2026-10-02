@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.testing
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
@@ -8,10 +9,14 @@ import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SupplyId
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /**
  * #69 (C11, row 20; N-16) — the core doubles carry the schema's two-level CASCADE for a component's files: an asset
@@ -83,6 +88,50 @@ class ResourceOwnerDoubleTest {
         assertEquals(entry, install.attachments.forOwner(AttachmentOwner.OfEvent(EventId("e1"))), "the entry's file stays, as before")
         assertEquals(item, install.attachments.forOwner(AttachmentOwner.OfSupplyItem(SupplyId("s1"))), "a SupplyItem's file is no asset's")
     }
+
+    // --- B2b (C12): the reference twin ------------------------------------------------------------------------
+
+    /** The links' twin of the first case: a component's links go with it, removed one included; no other owner's do. */
+    @Test
+    fun anAssetDeleteThroughBackupInstallTakesItsComponentsLinks() = runTest {
+        seed()
+        listOf(
+            linkOf("l1", ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1"))),
+            linkOf("l2", ReferenceOwner.OfInstalledComponent(InstalledComponentId("c2"))),
+            linkOf("lx", ReferenceOwner.OfInstalledComponent(InstalledComponentId("cx"))),
+            linkOf("ls", ReferenceOwner.OfSupplyItem(SupplyId("s1"))),
+            linkOf("la", ReferenceOwner.OfAsset(heater)),
+        ).forEach { install.references.upsert(it) }
+
+        install.assets.delete(heater)
+
+        assertEquals(
+            setOf("lx", "ls", "la"),
+            install.references.rows.keys,
+            "the links of c1 and c2 went with them; the asset's own stays in the double, as its files do",
+        )
+    }
+
+    /** I3 in the double: one row per `(owner, uri)` — the same URI on three owners sharing an id string is three rows. */
+    @Test
+    fun aSecondOwnerUriPairThrows() = runTest {
+        val owners = listOf(
+            ReferenceOwner.OfAsset(AssetId("x1")),
+            ReferenceOwner.OfSupplyItem(SupplyId("x1")),
+            ReferenceOwner.OfInstalledComponent(InstalledComponentId("x1")),
+        )
+        owners.forEachIndexed { i, owner -> install.references.upsert(linkOf("l$i", owner)) }
+
+        for ((i, owner) in owners.withIndex()) {
+            assertFailsWith<IllegalStateException>("$owner") { install.references.upsert(linkOf("again$i", owner)) }
+        }
+        assertEquals(setOf("l0", "l1", "l2"), install.references.rows.keys)
+    }
+
+    private fun linkOf(id: String, owner: ReferenceOwner) = AssetReference(
+        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/sheet",
+        displayName = "$id link", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
+    )
 
     private fun fileOf(id: String, owner: AttachmentOwner) = Attachment(
         id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "$id file",

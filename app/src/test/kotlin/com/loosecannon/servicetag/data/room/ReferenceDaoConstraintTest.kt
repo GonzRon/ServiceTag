@@ -184,4 +184,71 @@ class ReferenceDaoConstraintTest {
             db.close()
         }
     }
+
+    /**
+     * #69 (C13, row 27): each owner travels in its own column and comes back as the same owner, through every read
+     * the port has. An asset, a SupplyItem and a component deliberately share the id string `x1` and the URI, so a
+     * mapper that wrote the wrong column would break a per-owner unique index or read back as another owner's link.
+     */
+    @Test
+    fun threeOwnersRoundTrip() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("x1"))
+            db.supplyItemDao().upsert(
+                SupplyItemEntity(
+                    id = "x1", name = "Example 12 V Battery", category = "Batteries", manufacturer = "Example Power Co.",
+                    model = "EB-12", partNumber = "EB-12-1", preferredUnit = "ea", notes = "", archivedAt = null,
+                    createdAt = 10L, updatedAt = 20L,
+                ),
+                emptyList(),
+            )
+            db.installedComponentDao().insert(
+                InstalledComponentEntity(
+                    id = "x1", assetId = "x1", parentId = null, name = "Example Battery Tray", supplyId = "x1",
+                    serialOrLot = "", installedOn = null, removedOn = null, replacesId = null, sortOrder = 0, notes = "",
+                    createdAt = 30L, updatedAt = 40L,
+                ),
+                emptyList(),
+            )
+            val repo = RoomReferenceRepository(db.assetReferenceDao())
+            val owners = listOf(
+                ReferenceOwner.OfAsset(AssetId("x1")),
+                ReferenceOwner.OfSupplyItem(SupplyId("x1")),
+                ReferenceOwner.OfInstalledComponent(InstalledComponentId("x1")),
+            )
+            val written = owners.mapIndexed { i, owner ->
+                AssetReference(
+                    id = ReferenceId("r$i"), owner = owner, kind = ReferenceKind.WEB_URL,
+                    uri = "https://example.invalid/battery/manual.pdf", displayName = "Example manual $i",
+                    description = "", scheme = "https", createdAt = 10L, updatedAt = 20L, role = DocumentRole.USER_MANUAL,
+                )
+            }
+            written.forEach { repo.upsert(it) }
+
+            for (row in written) {
+                assertEquals("${row.owner}", row, repo.get(row.id))
+                assertEquals("${row.owner}", listOf(row), repo.forOwner(row.owner))
+                assertEquals("${row.owner}", row, repo.findByUri(row.owner, row.uri))
+                assertEquals("${row.owner}", listOf(row), repo.observeForOwner(row.owner).first())
+            }
+            assertEquals(
+                listOf(Triple("x1", null, null), Triple(null, "x1", null), Triple(null, null, "x1")),
+                db.assetReferenceDao().all().sortedBy { it.id }.map { Triple(it.assetId, it.supplyItemId, it.installedComponentId) },
+            )
+        } finally {
+            db.close()
+        }
+    }
+
+    /** Exactly one owner on the way out of Room as well: a row naming none, or two, is refused by the mapper. */
+    @Test
+    fun theMapperRefusesNoOwner() {
+        val none = reference("r1", "a1").copy(assetId = null)
+        val two = reference("r2", "a1").copy(supplyItemId = "s1")
+        for (row in listOf(none, two)) {
+            val refused = assertThrows(IllegalArgumentException::class.java) { row.toDomain() }
+            assertTrue("${refused.message}", refused.message!!.startsWith("reference '${row.id}' must name exactly one owner"))
+        }
+    }
 }
