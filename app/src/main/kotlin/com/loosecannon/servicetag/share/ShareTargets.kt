@@ -2,17 +2,20 @@ package com.loosecannon.servicetag.share
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.InstalledComponentTree
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.maintainedHere
+import com.loosecannon.servicetag.ui.installed.suppliesNamedBy
 
 // #69 (C30 step 4): the pure pieces of Share's direct lists — which assets, installed components and SupplyItems
 // are destinations, how a query narrows the component and supply lists, the order and the lines a row draws, and
-// whether an empty list means "nothing of this type" or "nothing matches". Nothing here reads a store or holds state:
-// the view model hands in the rows it already reads, the held set and the one query, and draws what comes back.
+// whether an empty list means "nothing of this type" or "nothing matches"; and (C30 step 5) what one browsing level
+// under an asset or an installed component offers. Nothing here reads a store or holds state: the view model hands in
+// the rows it already reads, the held set and the one query, and draws what comes back.
 
 /**
  * One of Share's direct lists for a query (C30 step 4). [NoneEligible]: no destination of this type exists before any
@@ -171,12 +174,83 @@ internal fun componentList(
  * part: an item no asset names is offered, and one only a retired asset names is too.
  */
 internal fun supplyList(items: Collection<SupplyItem>, query: String): ShareTargetList<SupplyTarget> {
-    val eligible = items.filter { it.isShareable }.sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
+    val eligible = items.filter { it.isShareable }.sortedWith(supplyNameOrder)
     return when (val listed = listed(eligible, query) { item, q -> item.matches(q) }) {
         ShareTargetList.NoneEligible -> ShareTargetList.NoneEligible
         ShareTargetList.NothingMatches -> ShareTargetList.NothingMatches
         is ShareTargetList.Rows -> ShareTargetList.Rows(listed.rows.map(::supplyTargetOf))
     }
+}
+
+/** The Supplies screen's order: the name casefolded, then the id. */
+private val supplyNameOrder: Comparator<SupplyItem> = compareBy({ it.name.lowercase() }, { it.id.value })
+
+/**
+ * One browsing level's rows under its own destination (C30 step 5): the SupplyItems it offers, each the final
+ * selection, then the installed components one level down, each opening its own level. Never a removed or replaced instance
+ * ([InstalledComponentTree.current]'s walk) nor an archived SupplyItem ([isShareable]); a component's path is the one
+ * the Installed components list gives the same row, so either route names it alike.
+ */
+internal data class LevelRows(val supplies: List<SupplyTarget>, val components: List<ComponentTarget>)
+
+/**
+ * An asset's level: the SupplyItems its asset links name ([AssetSupply]) — unarchived, once each, in [supplyList]'s
+ * order — then its current installed components at the top of its tree, in [InstalledComponentTree.current]'s order
+ * (sort order, then name). Components only while [shareableAssets] offers the asset.
+ */
+internal fun assetLevelRows(
+    assetId: AssetId,
+    assets: Collection<Asset>,
+    held: Set<AssetId>,
+    components: Collection<InstalledComponent>,
+    supplyItems: Collection<SupplyItem>,
+    assetSupplies: Collection<AssetSupply>,
+): LevelRows {
+    val byId = supplyItems.associateBy { it.id }
+    val supplies = assetSupplies.filter { it.assetId == assetId }.map { it.supplyId }.distinct()
+        .mapNotNull(byId::get)
+        .filter { it.isShareable }
+        .sortedWith(supplyNameOrder)
+        .map(::supplyTargetOf)
+    return LevelRows(supplies, walkOf(assetId, assets, held, components).filter { it.path.size == 2 })
+}
+
+/**
+ * An installed component's level: the SupplyItems its direct link and its composition name, in the installed-component
+ * screen's order ([suppliesNamedBy], C27) with the archived ones left out, then its current children in
+ * [InstalledComponentTree.current]'s order.
+ */
+internal fun componentLevelRows(
+    assetId: AssetId,
+    componentId: InstalledComponentId,
+    assets: Collection<Asset>,
+    held: Set<AssetId>,
+    components: Collection<InstalledComponent>,
+    supplyItems: Collection<SupplyItem>,
+): LevelRows {
+    val byId = supplyItems.associateBy { it.id }
+    val supplies = components.firstOrNull { it.id == componentId }?.let(::suppliesNamedBy).orEmpty()
+        .mapNotNull(byId::get)
+        .filter { it.isShareable }
+        .map(::supplyTargetOf)
+    val walk = walkOf(assetId, assets, held, components)
+    val at = walk.indexOfFirst { it.componentId == componentId }
+    if (at < 0) return LevelRows(supplies, emptyList())
+    // The walk is pre-order: what follows the row while deeper than it is its subtree; one deeper, its children.
+    val depth = walk[at].path.size
+    val children = walk.drop(at + 1).takeWhile { it.path.size > depth }.filter { it.path.size == depth + 1 }
+    return LevelRows(supplies, children)
+}
+
+/** [assetId]'s current installed components as the list's targets, in [InstalledComponentTree.current]'s pre-order. */
+private fun walkOf(
+    assetId: AssetId,
+    assets: Collection<Asset>,
+    held: Set<AssetId>,
+    components: Collection<InstalledComponent>,
+): List<ComponentTarget> {
+    val asset = shareableAssets(assets, held).firstOrNull { it.id == assetId } ?: return emptyList()
+    return targetsOn(asset, components.filter { it.assetId == assetId })
 }
 
 /** The empty-versus-miss rule every direct list shares: [eligible] is the list before any query. */

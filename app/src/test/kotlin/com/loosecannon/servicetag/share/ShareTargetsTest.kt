@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.share
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.SupplyId
@@ -321,5 +322,57 @@ class ShareTargetsTest {
             SupplyTarget(SupplyId("s-battery"), "Example 12 V Battery", "Example Power Co. · EP-12-7"),
             supplyTargetOf(battery),
         )
+    }
+
+    // --- #69 (B7d; C30 step 5): a browsing level's rows ---
+
+    /**
+     * A level keeps the installed-component screen's order (sort order, then name) where the Installed components list
+     * keeps C-11's path order; both name the same rows with the same paths.
+     */
+    @Test fun aLevelKeepsTheTreesOrderWhereTheListSortsByPath() {
+        val rows = listOf(
+            component("c-zeta", ups, "Zeta Bay", sortOrder = 0),
+            component("c-alpha", ups, "Alpha Bay", sortOrder = 1),
+            component("c-slot-b", ups, "Slot B", parent = "c-zeta", sortOrder = 0),
+            component("c-slot-a", ups, "Slot A", parent = "c-zeta", sortOrder = 1),
+        )
+        val top = assetLevelRows(ups.id, listOf(ups), emptySet(), rows, emptyList(), emptyList()).components
+        val zeta = InstalledComponentId("c-zeta")
+        val inside = componentLevelRows(ups.id, zeta, listOf(ups), emptySet(), rows, emptyList()).components
+
+        assertEquals(listOf("c-zeta", "c-alpha"), top.map { it.componentId.value })
+        assertEquals(listOf("c-slot-b", "c-slot-a"), inside.map { it.componentId.value })
+        assertEquals(listOf("c-alpha", "c-zeta", "c-slot-a", "c-slot-b"), componentIds(listOf(ups), rows))
+        val listed = rowsOf(componentList(listOf(ups), emptySet(), rows, "")).associateBy { it.componentId }
+        (top + inside).forEach { assertEquals(listed.getValue(it.componentId), it) }
+    }
+
+    /**
+     * A current row under a removed parent sits at the top of its asset's level, as it roots the list (N-4); an asset
+     * not maintained here offers no component on its level, as on the list; an archived linked supply is never offered.
+     */
+    @Test fun aLevelOffersWhatTheListsOfferAndNoMore() {
+        val rows = listOf(
+            component("c-old", ups, "Example Battery Tray", removedOn = "2026-02-01"),
+            component("c-cell", ups, "Position 1", parent = "c-old"),
+            component("c-gen", generator, "Example Alternator"),
+        )
+        val links = listOf(
+            AssetSupply("l-1", ups.id, SupplyId("s-battery"), "Battery", 1L, 1L),
+            AssetSupply("l-2", ups.id, SupplyId("s-old"), "Battery", 1L, 1L),
+        )
+        val items = listOf(
+            supply("s-battery", "Example 12 V Battery"),
+            supply("s-old", "Example Old Cell", archivedAt = 1L),
+        )
+
+        val upsLevel = assetLevelRows(ups.id, listOf(ups, generator), setOf(generator.id), rows, items, links)
+        val heldLevel = assetLevelRows(generator.id, listOf(ups, generator), setOf(generator.id), rows, items, links)
+
+        assertEquals(listOf("c-cell"), upsLevel.components.map { it.componentId.value })
+        assertEquals(listOf("Example UPS", "Position 1"), upsLevel.components.single().path)
+        assertEquals(listOf("s-battery"), upsLevel.supplies.map { it.supplyId.value })
+        assertTrue(heldLevel.components.isEmpty())
     }
 }

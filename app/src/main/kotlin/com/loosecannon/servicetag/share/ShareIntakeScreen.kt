@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -29,6 +31,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -37,6 +41,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +64,8 @@ import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.installed.NO_INSTALLED_COMPONENTS
+import com.loosecannon.servicetag.ui.installed.THIS_INSTALLED_COMPONENT
+import com.loosecannon.servicetag.ui.installed.insideOf
 import com.loosecannon.servicetag.ui.supplies.NO_SUPPLY_ITEMS_YET
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.supplies.SupplyRow
@@ -66,8 +74,9 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 /**
  * Two steps (#93, C5): first the picker — what arrived, then the Assets tab's own search box, Type and
  * Components controls (no Archived: every row is maintained here, #69 C30) and rows, from [picker]; on a link or a
- * file, a type control above them switches to the installed components or the supplies (#69 C30 steps 1–4) — and,
- * once a destination is chosen, one scrolling column: what arrived, the destination with "Change" (#69 C29:
+ * file, a type control above them switches to the installed components or the supplies (#69 C30 steps 1–4), and an
+ * asset row opens its browsing level, one level at a time (#69 C30 step 5) — and, once a destination is chosen, one
+ * scrolling column: what arrived, the destination with "Change" (#69 C29:
  * under a supply, its product line and P69-21), Name, Description, and — on a byte share only —
  * a Type control and a Role control (spec §7, and its #67 amendment). The step is decided above the
  * column, never inside it: the picker's lazy list cannot be measured in a scrolling one. It is a pure
@@ -94,6 +103,15 @@ internal fun ShareIntakeScreen(
     onChooseType: (ShareTargetType) -> Unit = {},
     /** The final selection (C4; #69 C29). */
     onChoose: (ShareDestination) -> Unit,
+    /**
+     * #69 (C30 step 5): an asset row on the list — its level on a link or a file, the choice on prose (the view model's
+     * `pickAsset`). Unwired, the row is the choice, as before browsing.
+     */
+    onPickAsset: (ShareDestination.Asset) -> Unit = onChoose,
+    /** #69 (C30 step 5): a component row on a level, opening its level one down. */
+    onOpenComponent: (ComponentTarget) -> Unit = {},
+    /** #69 (C30 step 5): Back on a level — one level up, then the list. */
+    onLevelUp: () -> Unit = {},
     /** #93 (C6): the form's "Change", back to the picker. */
     onChangeAsset: () -> Unit,
     onName: (String) -> Unit,
@@ -105,9 +123,13 @@ internal fun ShareIntakeScreen(
     onDismissConfirmation: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    // #69 (C30 step 5, C-8): each list's and each level's saveable state — the lazy list's scroll among it — kept by
+    // key here, above both steps, so it survives a type switch, a level and back, and the form and "Change".
+    val lists = rememberSaveableStateHolder()
     if (state.picking) {
         PickerStep(
             state = state,
+            lists = lists,
             picker = picker,
             query = pickerQuery,
             onQueryChange = onQueryChange,
@@ -117,6 +139,9 @@ internal fun ShareIntakeScreen(
             onToggleArchived = onToggleArchived,
             onChooseType = onChooseType,
             onChoose = onChoose,
+            onPickAsset = onPickAsset,
+            onOpenComponent = onOpenComponent,
+            onLevelUp = onLevelUp,
             onCancel = onCancel,
         )
     } else {
@@ -182,10 +207,14 @@ internal fun ShareIntakeScreen(
  *
  * **The header's item count is fixed for the visit**, every conditional line inside one item, so the search box
  * keeps its place in the list (and its focus) while what is above it changes; no header item is keyed by an asset id.
+ *
+ * #69 (C30 step 5): with a level open, the level is drawn in the list's place; each list and each level is composed
+ * under its own key in [lists], so Back finds the list's type, query and scroll as they were left.
  */
 @Composable
 private fun PickerStep(
     state: ShareIntakeState,
+    lists: SaveableStateHolder,
     picker: AssetsState,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -195,6 +224,9 @@ private fun PickerStep(
     onToggleArchived: () -> Unit,
     onChooseType: (ShareTargetType) -> Unit,
     onChoose: (ShareDestination) -> Unit,
+    onPickAsset: (ShareDestination.Asset) -> Unit,
+    onOpenComponent: (ComponentTarget) -> Unit,
+    onLevelUp: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Column(
@@ -204,49 +236,66 @@ private fun PickerStep(
     ) {
         // #69 (C30 step 1): one header for every type: the type control sits in one place above each search box.
         val header: LazyListScope.() -> Unit = { pickerHeader(state, onChooseType) }
-        when (state.type) {
-            ShareTargetType.ASSETS -> AssetPicker(
-                state = picker,
-                query = query,
-                onQueryChange = onQueryChange,
-                onClearQuery = onClearQuery,
-                onPickType = onPickType,
-                onToggleComponents = onToggleComponents,
-                onToggleArchived = onToggleArchived,
-                onPick = { row -> onChoose(ShareDestination.Asset(row.asset.id.value, row.asset.name)) },
-                // #69 (C30, C-1, C-4): every row here is maintained here, so no Archived control; none at all is P69-26.
-                archivedControl = false,
-                noAssetsLine = IntakeStrings.NO_ACTIVE_ASSETS,
-                modifier = Modifier.weight(1f),
-                header = header,
-            )
-            // #69 (C30 steps 3–5): the other two lists under the same query; a row is the final selection, no dialog.
-            ShareTargetType.INSTALLED_COMPONENTS -> TargetList(
-                targets = state.componentRows(query),
-                hint = IntakeStrings.SEARCH_INSTALLED_COMPONENTS,
-                noneEligible = NO_INSTALLED_COMPONENTS,
-                query = query,
-                onQueryChange = onQueryChange,
-                onClearQuery = onClearQuery,
-                key = { it.componentId.value },
-                header = header,
-                modifier = Modifier.weight(1f),
-            ) { target -> ComponentRow(target, onClick = { onChoose(target.destination) }) }
-            ShareTargetType.SUPPLIES -> TargetList(
-                targets = state.supplyRows(query),
-                hint = IntakeStrings.SEARCH_SUPPLIES,
-                noneEligible = NO_SUPPLY_ITEMS_YET,
-                query = query,
-                onQueryChange = onQueryChange,
-                onClearQuery = onClearQuery,
-                key = { it.supplyId.value },
-                header = header,
-                modifier = Modifier.weight(1f),
-            ) { target ->
-                SupplyRow(
-                    row = SupplyListRow(target.supplyId, target.name, detail = target.productLine, archived = false),
-                    onClick = { onChoose(target.destination) },
-                )
+        val fill = Modifier.weight(1f)
+        val level = state.level
+        if (level != null) {
+            lists.SaveableStateProvider(level.key) {
+                LevelList(state, level, onChoose, onOpenComponent, onLevelUp, fill)
+            }
+        } else {
+            lists.SaveableStateProvider(state.type.key) {
+                when (state.type) {
+                    ShareTargetType.ASSETS -> AssetPicker(
+                        state = picker,
+                        query = query,
+                        onQueryChange = onQueryChange,
+                        onClearQuery = onClearQuery,
+                        onPickType = onPickType,
+                        onToggleComponents = onToggleComponents,
+                        onToggleArchived = onToggleArchived,
+                        // #69 (C30 step 5): an asset row opens its level (prose: the row is the choice).
+                        onPick = { row -> onPickAsset(ShareDestination.Asset(row.asset.id.value, row.asset.name)) },
+                        // #69 (C30, C-1, C-4): every row here is maintained here, so no Archived control; none at all
+                        // is P69-26.
+                        archivedControl = false,
+                        noAssetsLine = IntakeStrings.NO_ACTIVE_ASSETS,
+                        modifier = fill,
+                        header = header,
+                    )
+                    // #69 (C30 steps 3–5): the other two lists under the same query; a row is the final selection, no
+                    // dialog.
+                    ShareTargetType.INSTALLED_COMPONENTS -> TargetList(
+                        targets = state.componentRows(query),
+                        hint = IntakeStrings.SEARCH_INSTALLED_COMPONENTS,
+                        noneEligible = NO_INSTALLED_COMPONENTS,
+                        query = query,
+                        onQueryChange = onQueryChange,
+                        onClearQuery = onClearQuery,
+                        key = { it.componentId.value },
+                        header = header,
+                        modifier = fill,
+                    ) { target -> ComponentRow(target, onClick = { onChoose(target.destination) }) }
+                    ShareTargetType.SUPPLIES -> TargetList(
+                        targets = state.supplyRows(query),
+                        hint = IntakeStrings.SEARCH_SUPPLIES,
+                        noneEligible = NO_SUPPLY_ITEMS_YET,
+                        query = query,
+                        onQueryChange = onQueryChange,
+                        onClearQuery = onClearQuery,
+                        key = { it.supplyId.value },
+                        header = header,
+                        modifier = fill,
+                    ) { target ->
+                        SupplyRow(
+                            row = SupplyListRow(
+                                target.supplyId, target.name, detail = target.productLine, archived = false,
+                            ),
+                            onClick = { onChoose(target.destination) },
+                            // The tap is the final selection, not a page to open: no chevron (B7c2 review).
+                            showChevron = false,
+                        )
+                    }
+                }
             }
         }
         Row(
@@ -258,6 +307,97 @@ private fun PickerStep(
             }
         }
     }
+}
+
+/** #69 (C30 step 5, C-8): the key each list's saveable state is kept under in the picker's holder. */
+private val ShareTargetType.key: String get() = "list:$name"
+
+/** #69 (C30 step 5): the key a level's saveable state is kept under — the asset or the component it is inside. */
+private val ShareLevel.key: String get() = when (this) {
+    is ShareLevel.OfAsset -> "asset:${self.assetId}"
+    is ShareLevel.OfComponent -> "component:${self.componentId}"
+}
+
+/**
+ * #69 (C30 steps 1, 5): one browsing level — ATTACH TO; the breadcrumb (P69-20) beside the shipped Back, one level
+ * up; on a component's level, P47-5; then the level's own destination (P69-17 for an asset, P69-2 for an installed
+ * component), its SupplyItems over P69-18, each the final selection, and its installed components, each opening its own
+ * level (click label P69-19). A tap here chooses or opens; nothing on a level writes.
+ */
+@Composable
+private fun LevelList(
+    state: ShareIntakeState,
+    level: ShareLevel,
+    onChoose: (ShareDestination) -> Unit,
+    onOpenComponent: (ComponentTarget) -> Unit,
+    onLevelUp: () -> Unit,
+    modifier: Modifier,
+) {
+    val rows = state.levelRows(level)
+    LazyColumn(modifier = modifier) {
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(horizontal = 16.dp).padding(top = 16.dp),
+            ) {
+                SectionHeader(title = IntakeStrings.ATTACH_TO)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onLevelUp) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                    QuietLine(text = IntakeStrings.pathOf(level.path), modifier = Modifier.weight(1f))
+                }
+                if (level is ShareLevel.OfComponent) {
+                    Text(text = insideOf(level.self.path.last()), style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+        item {
+            LevelRow(
+                title = when (level) {
+                    is ShareLevel.OfAsset -> IntakeStrings.THIS_ASSET
+                    is ShareLevel.OfComponent -> THIS_INSTALLED_COMPONENT
+                },
+                onClick = { onChoose(level.self) },
+            )
+        }
+        itemsIndexed(rows.supplies, key = { _, target -> "supply:${target.supplyId.value}" }) { _, target ->
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            SupplyRow(
+                row = SupplyListRow(
+                    target.supplyId, target.name, detail = IntakeStrings.SUPPLY_SHARED, archived = false,
+                ),
+                onClick = { onChoose(target.destination) },
+                showChevron = false,
+            )
+        }
+        itemsIndexed(rows.components, key = { _, target -> "component:${target.componentId.value}" }) { _, target ->
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            LevelRow(
+                title = target.name,
+                onClickLabel = IntakeStrings.showInside(target.name),
+                onClick = { onOpenComponent(target) },
+            )
+        }
+    }
+}
+
+/**
+ * A level's own destination, or one installed component on it, in the list rows' shape: the title alone; a row that
+ * opens a level says so in its click label (P69-19).
+ */
+@Composable
+private fun LevelRow(title: String, onClick: () -> Unit, onClickLabel: String? = null) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = onClickLabel, onClick = onClick)
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+    )
 }
 
 /**

@@ -29,8 +29,10 @@ import com.loosecannon.servicetag.core.usecase.AddAssetSupplyCommand
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.CompositionInput
 import com.loosecannon.servicetag.core.usecase.InstallComponentCommand
 import com.loosecannon.servicetag.core.usecase.InstalledComponentResult
+import com.loosecannon.servicetag.core.usecase.ReplaceComponentCommand
 import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.ui.asset.AssetsViewModel
@@ -127,6 +129,8 @@ class ShareIntakeViewModelTest {
                     heldIds = { graph.transferRecords.heldIds() },
                     supplyItems = { graph.supplyItems.all() },
                     installedComponents = { graph.installedComponents.all() },
+                    // #69 (C30 step 5): the asset links an asset's level reads, as the activity passes them.
+                    assetSupplies = { graph.assetSupplies.all() },
                 )
             }
         }
@@ -1068,20 +1072,28 @@ class ShareIntakeViewModelTest {
     }
 
     /**
-     * Ownership is the final selection: a destination carries no route, so a supply picked from its list and the same
-     * supply picked while browsing are one value, and their saves write rows that differ only in id, bytes' place and time.
+     * Ownership is the final selection: a destination carries no route, so a supply picked from the Supplies list and
+     * the same supply picked on its asset's level (B7d) are one value, and their saves write rows that differ only in
+     * id, bytes' place and time.
      */
     @Test fun aSupplyReachedDirectlyAndOneReachedWhileBrowsingWriteIdenticalRows() = runTest(scheduler) {
-        mower()
+        val id = mower()
         val item = battery()
-        val direct = ShareDestination.Supply(item.id.value, item.name, "Example Power Co. · EB-12")
-        val browsed = ShareDestination.Supply(item.id.value, item.name, "Example Power Co. · EB-12")
+        graph.addAssetSupply.run(AddAssetSupplyCommand(assetId, item.id, "Battery"))
+
+        val directly = model(bytes(), source = { "pdf".byteInputStream() })
+        directly.chooseType(ShareTargetType.SUPPLIES)
+        val direct = directly.state.value.supplyRows("").rows().single().destination
+        val browsing = model(bytes(), source = { "pdf".byteInputStream() })
+        browsing.pickAsset(ShareDestination.Asset(id, mowerName))
+        val browsed = browsing.state.value.levelRows(browsing.state.value.level!!).supplies.single().destination
+        assertEquals(supplyOf(item), direct)
         assertEquals(direct, browsed)
 
-        listOf(direct, browsed).forEach { destination ->
-            val vm = model(bytes(), source = { "pdf".byteInputStream() })
+        listOf(directly to direct, browsing to browsed).forEach { (vm, destination) ->
             vm.choose(destination)
             vm.saveAndSettle()
+            assertEquals("Saved to supply Example 12 V Battery.", vm.state.value.saved)
         }
 
         val rows = graph.attachments.forOwner(direct.owner.asAttachmentOwner())
@@ -1364,6 +1376,274 @@ class ShareIntakeViewModelTest {
 
         assertEquals(listOf(tray.id), state.componentRows("").rows().map { it.componentId })
         assertEquals(listOf(taken.id, loose.id), state.supplyRows("").rows().map { it.supplyId })
+    }
+
+    /**
+     * Supplies are reached directly, whatever names them: one named only by a retired asset's installed component is
+     * offered on the Supplies list, while that component is not offered (B7c2 review).
+     */
+    @Test fun aSupplyNamedOnlyByARetiredAssetsComponentIsStillOffered() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("generator", name = "Example Generator", retiredOn = "2026-03-01"))
+        val item = battery()
+        graph.installComponent.run(
+            InstallComponentCommand(
+                AssetId("generator"), null, "Example Alternator", item.id, emptyList(), "", "2026-01-05", "", null,
+            ),
+        ) as InstalledComponentResult.Ok
+
+        val state = model(link(manualUrl)).state.value
+
+        assertNull(state.deadEnd)
+        assertEquals(listOf(item.id), state.supplyRows("").rows().map { it.supplyId })
+        assertEquals(ShareTargetList.NoneEligible, state.componentRows(""))
+    }
+
+    // --- #69 (B7d; C30 step 5, row 53): browsing from an asset or an installed component ----------------------------
+
+    /** An installed component on the mower, by the production install: inside [parent], naming [supply], [entries]. */
+    private suspend fun install(
+        name: String,
+        parent: InstalledComponent? = null,
+        supply: SupplyItem? = null,
+        entries: List<SupplyItem> = emptyList(),
+    ): InstalledComponent = (
+        graph.installComponent.run(
+            InstallComponentCommand(
+                assetId, parent?.id, name, supply?.id, entries.map { CompositionInput(null, it.id, "1", "") }, "",
+                "2026-01-05", "", null,
+            ),
+        ) as InstalledComponentResult.Ok
+        ).row
+
+    private val ShareIntakeViewModel.levelRows: LevelRows get() = state.value.levelRows(state.value.level!!)
+
+    /** The mower's own level, opened from its row on the Assets list. */
+    private fun ShareIntakeViewModel.openMower(id: String) = pickAsset(ShareDestination.Asset(id, mowerName))
+
+    /** [name]'s row on the level drawn now, opened as its tap opens it. */
+    private fun ShareIntakeViewModel.open(name: String) = openComponent(levelRows.components.single { it.name == name })
+
+    /**
+     * An asset row opens its level: "This asset" is the asset itself; its linked supplies follow, unarchived, once
+     * each, by name; then its top-level current components. Nothing is chosen.
+     */
+    @Test fun anAssetRowOpensItsLevel() = runTest(scheduler) {
+        val id = mower()
+        val item = battery()
+        val fuse = battery(name = "Example 10 A Fuse")
+        val old = battery(name = "Example Old Belt")
+        battery(name = "Example Loose Fuse")
+        listOf(item to "Battery", item to "Spare", fuse to "Fuse", old to "Belt").forEach { (supply, role) ->
+            graph.addAssetSupply.run(AddAssetSupplyCommand(assetId, supply.id, role))
+        }
+        graph.archiveSupplyItem.run(old.id, archived = true)
+        val tray = tray()
+        val fan = install("Example Fan")
+        install("Position 1", parent = tray)
+        val vm = model(link(manualUrl))
+
+        vm.openMower(id)
+
+        val state = vm.state.value
+        assertTrue(state.picking)
+        assertTrue(state.browsing)
+        assertNull("opening a level chooses nothing", state.destination)
+        assertEquals(ShareDestination.Asset(id, mowerName), state.level?.self)
+        assertEquals("by name, once each", listOf(fuse.id, item.id), vm.levelRows.supplies.map { it.supplyId })
+        assertEquals(listOf(tray.id, fan.id), vm.levelRows.components.map { it.componentId })
+        assertEquals("This asset", IntakeStrings.THIS_ASSET)
+        assertEquals("Supply — shared across uses", IntakeStrings.SUPPLY_SHARED)
+        assertEquals("Show what is inside Example Fan", IntakeStrings.showInside("Example Fan"))
+    }
+
+    /**
+     * A component's level: "This installed component" is that component, with the path the direct list gives it; the
+     * supplies its link and composition name follow (C27's order, archived left out); then its current children, in
+     * the component screen's order (sort order, then name), where the direct list orders by name.
+     */
+    @Test fun aComponentLevelOffersItselfItsSuppliesAndItsCurrentChildren() = runTest(scheduler) {
+        val id = mower()
+        val item = battery()
+        val strap = battery(name = "Example Strap")
+        val cover = battery(name = "Example Cover")
+        val tray = install("Example Battery Tray", supply = item, entries = listOf(strap, item, cover))
+        graph.archiveSupplyItem.run(cover.id, archived = true)
+        val second = install("Position 2", parent = tray)
+        val first = install("Position 1", parent = tray)
+        install("Example Cell", parent = second)
+        val vm = model(bytes(), source = { "pdf".byteInputStream() })
+
+        vm.openMower(id)
+        vm.open("Example Battery Tray")
+
+        assertEquals(ShareLevel.OfComponent(componentOf(tray)), vm.state.value.level)
+        assertEquals(listOf(item.id, strap.id), vm.levelRows.supplies.map { it.supplyId })
+        assertEquals("sort order first", listOf(second.id, first.id), vm.levelRows.components.map { it.componentId })
+        vm.chooseType(ShareTargetType.INSTALLED_COMPONENTS)
+        assertEquals(
+            "the direct list orders by path",
+            listOf(tray.id, first.id, second.id),
+            vm.state.value.componentRows("").rows().filter { it.path.size <= 3 }.map { it.componentId },
+        )
+    }
+
+    /** Row 53: counted RED — a level lists a removed child (`current` bypassed). */
+    @Test fun removedAndReplacedInstancesNeverAppearOnALevel() = runTest(scheduler) {
+        val id = mower()
+        val tray = tray()
+        val gone = install("Example Old Fan")
+        val cell = install("Example Old Cell", parent = tray)
+        val first = install("Example Cell A", parent = tray)
+        graph.removeInstalledComponent.run(gone.id, "2026-02-01")
+        graph.removeInstalledComponent.run(cell.id, "2026-02-01")
+        val successor = (
+            graph.replaceInstalledComponent.run(
+                first.id, ReplaceComponentCommand("2026-02-01", "Example Cell B", null, emptyList(), "", ""),
+            ) as InstalledComponentResult.Ok
+            ).row
+        val vm = model(link(manualUrl))
+
+        vm.openMower(id)
+        assertEquals(listOf(tray.id), vm.levelRows.components.map { it.componentId })
+        vm.open("Example Battery Tray")
+        assertEquals(listOf(successor.id), vm.levelRows.components.map { it.componentId })
+    }
+
+    /** The breadcrumb is the path down to the level (P69-20): the asset's name, then each component's. */
+    @Test fun theBreadcrumbIsThePathDownToTheLevel() = runTest(scheduler) {
+        val id = mower()
+        val tray = tray()
+        install("Position 1", parent = tray)
+        val vm = model(link(manualUrl))
+
+        vm.openMower(id)
+        assertEquals("Cub Cadet XT1", IntakeStrings.pathOf(vm.state.value.level!!.path))
+        vm.open("Example Battery Tray")
+        vm.open("Position 1")
+        assertEquals(
+            "Cub Cadet XT1 › Example Battery Tray › Position 1",
+            IntakeStrings.pathOf(vm.state.value.level!!.path),
+        )
+        assertEquals(3, vm.state.value.levels.size)
+    }
+
+    /**
+     * Row 53: counted RED — a navigation tap writes. Each tap that opens a level or goes back up, on a link share and on
+     * a file share whose stream must never be opened, leaves every owner without a link, a file, a note or a byte.
+     */
+    @Test fun browsingWritesNothing() = runTest(scheduler) {
+        val id = mower()
+        val item = battery()
+        graph.addAssetSupply.run(AddAssetSupplyCommand(assetId, item.id, "Battery"))
+        val tray = install("Example Battery Tray", supply = item)
+        install("Position 1", parent = tray)
+        val owners = listOf(ShareDestination.Asset(id, mowerName).owner, componentOf(tray).owner, supplyOf(item).owner)
+        suspend fun nothingWrittenAfter(tap: String) {
+            scheduler.advanceUntilIdle()
+            assertEquals("$tap: no link", 0, owners.sumOf { linksOn(it) })
+            assertEquals("$tap: no file", 0, owners.sumOf { filesOn(it) })
+            assertEquals("$tap: no note", 0, events())
+            assertTrue("$tap: no bytes", graph.attachmentStorage.store.files.isEmpty())
+        }
+        val shares = listOf(
+            model(link(manualUrl)),
+            model(bytes(), source = { error("browsing must never open the shared stream") }),
+        )
+
+        shares.forEach { vm ->
+            vm.openMower(id)
+            nothingWrittenAfter("the asset row")
+            vm.open("Example Battery Tray")
+            nothingWrittenAfter("a component row")
+            vm.open("Position 1")
+            nothingWrittenAfter("a child row")
+            repeat(3) { vm.levelUp() }
+            nothingWrittenAfter("Back to the list")
+            vm.openMower(id)
+            nothingWrittenAfter("the asset row again")
+            assertTrue(vm.state.value.browsing)
+            assertNull(vm.state.value.destination)
+            assertNull(vm.state.value.saved)
+        }
+    }
+
+    /** Back goes up one level, then to the list, with the type and the one query as they were left. */
+    @Test fun backGoesUpALevelThenToTheListWithTypeAndQueryKept() = runTest(scheduler) {
+        val id = mower()
+        val tray = tray()
+        install("Position 1", parent = tray)
+        val picker = hostedPicker()
+        val vm = model(link(manualUrl))
+        picker.onQueryChange("cub")
+
+        vm.openMower(id)
+        vm.open("Example Battery Tray")
+        vm.open("Position 1")
+        vm.levelUp()
+        assertEquals(ShareLevel.OfComponent(componentOf(tray)), vm.state.value.level)
+        vm.levelUp()
+        assertEquals(ShareLevel.OfAsset(ShareDestination.Asset(id, mowerName)), vm.state.value.level)
+        vm.levelUp()
+
+        val state = vm.state.value
+        assertFalse(state.browsing)
+        assertTrue("back on the list", state.picking)
+        assertEquals(ShareTargetType.ASSETS, state.type)
+        assertEquals("cub", picker.query.value)
+        vm.levelUp()
+        assertFalse("on the list, Back is the activity's (cancel)", vm.state.value.cancelled)
+        assertEquals(state, vm.state.value)
+    }
+
+    /**
+     * Choosing on a level opens the same save form as the direct route, with the same destination; "Change" returns to
+     * the level it was chosen on.
+     */
+    @Test fun aChoiceOnALevelIsTheDirectRoutesAndChangeReturnsToThatLevel() = runTest(scheduler) {
+        val id = mower()
+        val tray = tray()
+        install("Position 1", parent = tray)
+        val vm = model(link(manualUrl))
+        vm.chooseType(ShareTargetType.INSTALLED_COMPONENTS)
+        val direct = vm.state.value.componentRows("position").rows().single().destination
+        vm.chooseType(ShareTargetType.ASSETS)
+
+        vm.openMower(id)
+        vm.open("Example Battery Tray")
+        vm.open("Position 1")
+        val level = vm.state.value.level!!
+        vm.choose(level.self)
+
+        assertEquals(direct, vm.state.value.destination)
+        assertFalse(vm.state.value.picking)
+        assertFalse(vm.state.value.browsing)
+        assertEquals("Cub Cadet XT1 › Example Battery Tray › Position 1", vm.state.value.destination?.label)
+        vm.changeAsset()
+        assertTrue(vm.state.value.picking)
+        assertEquals(level, vm.state.value.level)
+
+        vm.levelUp()
+        vm.levelUp()
+        vm.choose(ShareDestination.Asset(id, mowerName))
+        vm.changeAsset()
+        assertEquals(ShareLevel.OfAsset(ShareDestination.Asset(id, mowerName)), vm.state.value.level)
+        assertEquals(0, references() + linksOn(componentOf(tray).owner))
+    }
+
+    /** Prose is an asset's note: its asset row is the choice, and nothing browses. */
+    @Test fun aProseShareChoosesTheAssetFromItsRowAndNeverBrowses() = runTest(scheduler) {
+        val id = mower()
+        tray()
+        val vm = model(ShareContent.PlainText("Checked the anode"))
+
+        vm.openMower(id)
+
+        assertEquals(ShareDestination.Asset(id, mowerName), vm.state.value.destination)
+        assertTrue(vm.state.value.levels.isEmpty())
+        vm.changeAsset()
+        vm.levelUp()
+        assertTrue(vm.state.value.picking)
+        assertFalse(vm.state.value.browsing)
     }
 
     // --- #77 (B3; C16, row 25): a shared Transfer Pack, and a held asset --------------------------------------

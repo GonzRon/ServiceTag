@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentKinds
 import com.loosecannon.servicetag.core.model.AttachmentProblem
@@ -119,6 +120,15 @@ internal object IntakeStrings {
     /** #69 (C29; P69-20): a path — the asset's name, then each installed component's — joined a pair at a time. */
     fun pathOf(names: List<String>): String = names.reduceOrNull { outer, inner -> "$outer › $inner" }.orEmpty()
 
+    /** #69 (C30 step 5; P69-17): an asset level's first row, the asset itself as the destination. */
+    const val THIS_ASSET = "This asset"
+
+    /** #69 (C30 step 5; P69-18): the quiet line under each SupplyItem row on a browsing level. */
+    const val SUPPLY_SHARED = "Supply — shared across uses"
+
+    /** #69 (C30 step 5; P69-19): a component row's click label on a browsing level; the tap opens its level. */
+    fun showInside(componentName: String): String = "Show what is inside $componentName"
+
     /** #69 (C29; P69-21): under a supply destination on the save form, which is the confirmation (no dialog). */
     fun onSupply(supplyName: String): String =
         "This will be saved on the supply $supplyName and available wherever that supply is used."
@@ -193,13 +203,36 @@ internal enum class ShareTargetType(val label: String) {
 /**
  * #69 (C30 step 4): what the installed-component and supply lists are built from, read once with the share — every
  * asset, the held set, every installed component and every SupplyItem. Who is offered is `ShareTargets`' to decide.
+ * Read once, while the Assets list beside them stays live: nothing inside the share activity can add, archive or
+ * remove a component or a supply, so the read cannot go stale under the person's own hand.
  */
 internal data class ShareSources(
     val assets: List<Asset> = emptyList(),
     val held: Set<AssetId> = emptySet(),
     val components: List<InstalledComponent> = emptyList(),
     val supplyItems: List<SupplyItem> = emptyList(),
+    /** #69 (C30 step 5): every asset link to a SupplyItem — what an asset's level offers besides its components. */
+    val assetSupplies: List<AssetSupply> = emptyList(),
 )
+
+/**
+ * #69 (C30 step 5): one browsing level, opened from an asset row or, on a level, from a component row. [self] is the
+ * level's own destination — P69-17 for an asset, P69-2 for an installed component — exactly the value the direct
+ * route gives the same row; [path] is its breadcrumb's segments (P69-20). A level writes nothing: only a chosen
+ * destination and Save do.
+ */
+internal sealed interface ShareLevel {
+    val self: ShareDestination
+    val path: List<String>
+
+    data class OfAsset(override val self: ShareDestination.Asset) : ShareLevel {
+        override val path: List<String> get() = listOf(self.assetName)
+    }
+
+    data class OfComponent(override val self: ShareDestination.Component) : ShareLevel {
+        override val path: List<String> get() = self.path
+    }
+}
 
 /** #69 (C29, C30 step 5): a tapped installed-component row is the final selection, carried whole. */
 internal val ComponentTarget.destination: ShareDestination.Component
@@ -230,6 +263,11 @@ internal data class ShareIntakeState(
     val type: ShareTargetType = ShareTargetType.ASSETS,
     /** #69 (C30 step 4): the component and supply lists' rows, read with the share; not drawn as they are. */
     val sources: ShareSources = ShareSources(),
+    /**
+     * #69 (C30 step 5): the browsing levels open, outermost first — an asset's, then each component's below it; empty
+     * on the list. Back takes one off; a chosen destination keeps them, so "Change" returns to the level chosen from.
+     */
+    val levels: List<ShareLevel> = emptyList(),
     val name: String = "",
     val description: String = "",
     val kind: AttachmentKind = AttachmentKind.OTHER,
@@ -275,6 +313,24 @@ internal data class ShareIntakeState(
 
     /** #69 (C30 steps 3–4): the supply list under the same [query]. */
     fun supplyRows(query: String): ShareTargetList<SupplyTarget> = supplyList(sources.supplyItems, query)
+
+    /** #69 (C30 step 5): the level the picker draws, or null for the list. */
+    val level: ShareLevel? get() = levels.lastOrNull()
+
+    /** #69 (C30 step 5): a browsing level is drawn — Back goes up one level, then to the list. */
+    val browsing: Boolean get() = picking && levels.isNotEmpty()
+
+    /** #69 (C30 step 5): what [level] offers under its own destination, from the rows read with the share. */
+    fun levelRows(level: ShareLevel): LevelRows = when (level) {
+        is ShareLevel.OfAsset -> assetLevelRows(
+            AssetId(level.self.assetId), sources.assets, sources.held, sources.components, sources.supplyItems,
+            sources.assetSupplies,
+        )
+        is ShareLevel.OfComponent -> componentLevelRows(
+            AssetId(level.self.assetId), InstalledComponentId(level.self.componentId), sources.assets, sources.held,
+            sources.components, sources.supplyItems,
+        )
+    }
 
     /**
      * **Disabling Save is the intake behaviour** (spec §7), which is why no blank-name sentence is
@@ -347,6 +403,8 @@ internal class ShareIntakeViewModel(
     private val supplyItems: suspend () -> List<SupplyItem> = { emptyList() },
     /** #69 (C30 step 4): every installed component, read once with the share; the list keeps the current ones. */
     private val installedComponents: suspend () -> List<InstalledComponent> = { emptyList() },
+    /** #69 (C30 step 5): every asset link to a SupplyItem, read once with the share, for an asset's level. */
+    private val assetSupplies: suspend () -> List<AssetSupply> = { emptyList() },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ShareIntakeState())
@@ -402,7 +460,7 @@ internal class ShareIntakeViewModel(
                         choices = shareableAssets(everyAsset, held)
                             .map { ShareDestination.Asset(it.id.value, it.name) }
                             .sortedBy { it.assetName.lowercase() },
-                        sources = ShareSources(everyAsset, held, installedComponents(), supplyItems()),
+                        sources = ShareSources(everyAsset, held, installedComponents(), supplyItems(), assetSupplies()),
                         store = storage.state(),
                     )
                 }
@@ -430,12 +488,31 @@ internal class ShareIntakeViewModel(
         else it.copy(destination = destination, message = null)
     }
 
+    /**
+     * #69 (C30 step 5): an asset row on the list. On a link or a file it opens the asset's level, where the asset
+     * itself is one destination among its supplies and components; prose is an asset's note, so there the row is the
+     * choice. Opening a level chooses nothing and writes nothing.
+     */
+    fun pickAsset(asset: ShareDestination.Asset) {
+        if (!_state.value.typeOffered) return choose(asset)
+        _state.update { if (it.picking) it.copy(levels = listOf(ShareLevel.OfAsset(asset))) else it }
+    }
+
+    /** #69 (C30 step 5): a component row on a level opens its own level, one down. Nothing is chosen or written. */
+    fun openComponent(target: ComponentTarget) = _state.update {
+        if (it.browsing) it.copy(levels = it.levels + ShareLevel.OfComponent(target.destination)) else it
+    }
+
+    /** #69 (C30 step 5): Back on a level — one level up, and from the outermost to the list, as it was left. */
+    fun levelUp() = _state.update { if (it.browsing) it.copy(levels = it.levels.dropLast(1)) else it }
+
     /** #69 (C30 step 2): the type control, on a link or a file only; the query and any choice are left as they are. */
     fun chooseType(type: ShareTargetType) = _state.update { if (it.typeOffered) it.copy(type = type) else it }
 
     /**
      * #93 (C6): back to the picker — the choice and any refusal cleared, Name, Description, Type and Role kept (each
-     * came from the share, not the asset). "That is not a link." is not restored. A no-op unless
+     * came from the share, not the asset), and #69 (C29) the list type and the levels kept, so the person is back where
+     * the destination was chosen. "That is not a link." is not restored. A no-op unless
      * [ShareIntakeState.backChangesAsset].
      */
     fun changeAsset() = _state.update {

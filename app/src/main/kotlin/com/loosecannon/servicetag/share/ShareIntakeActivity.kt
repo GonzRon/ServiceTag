@@ -77,6 +77,7 @@ class ShareIntakeActivity : ComponentActivity() {
                         packInbox = graph.transferPackInbox,
                         supplyItems = { graph.supplyItems.all() },
                         installedComponents = { graph.installedComponents.all() },
+                        assetSupplies = { graph.assetSupplies.all() },
                     )
                 }
                 val state by model.state.collectAsStateWithLifecycle()
@@ -117,8 +118,11 @@ class ShareIntakeActivity : ComponentActivity() {
                         onPauseOrDispose { }
                     }
                     // R93-4: back on the form returns to the picker; off while saving or confirming, so back
-                    // mid-save finishes as it always has, and on the picker back cancels as today.
-                    BackHandler(enabled = state.backChangesAsset) { model.changeAsset() }
+                    // mid-save finishes as it always has, and on the picker back cancels as today. #69 (C30 step 5,
+                    // C-9): back on a browsing level goes up one level, and from the outermost to the list.
+                    BackHandler(enabled = state.backChangesAsset || state.browsing) {
+                        if (state.browsing) model.levelUp() else model.changeAsset()
+                    }
                     ShareIntakeScreen(
                         state = state,
                         picker = pickerState,
@@ -130,6 +134,9 @@ class ShareIntakeActivity : ComponentActivity() {
                         onToggleArchived = picker::toggleArchived,
                         onChooseType = model::chooseType,
                         onChoose = model::choose,
+                        onPickAsset = model::pickAsset,
+                        onOpenComponent = model::openComponent,
+                        onLevelUp = model::levelUp,
                         onChangeAsset = model::changeAsset,
                         onName = model::name,
                         onDescribe = model::describe,
