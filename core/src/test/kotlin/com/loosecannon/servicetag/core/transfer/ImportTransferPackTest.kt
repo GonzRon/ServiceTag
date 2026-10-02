@@ -1,11 +1,16 @@
 package com.loosecannon.servicetag.core.transfer
 
 import com.loosecannon.servicetag.core.backup.toDto
+import com.loosecannon.servicetag.core.merge.mergeSnapshotOf
 import com.loosecannon.servicetag.core.merge.MergeReason
 import com.loosecannon.servicetag.core.merge.MergeTable
 import com.loosecannon.servicetag.core.merge.MergeVerdict
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
@@ -18,6 +23,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.testing.activationOf
 import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.completionOf
@@ -32,6 +38,7 @@ import com.loosecannon.servicetag.core.transfer.TransferPackTesting.Raw
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.entriesOf
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.zipOf
 import com.loosecannon.servicetag.core.usecase.PackDuplicate
+import com.loosecannon.servicetag.core.usecase.ReturnScope
 import com.loosecannon.servicetag.core.usecase.TransferImportOutcome
 import com.loosecannon.servicetag.core.usecase.TransferImportPreview
 import com.loosecannon.servicetag.core.usecase.TransferImportResult
@@ -51,6 +58,9 @@ import kotlinx.coroutines.test.runTest
  * its whole group) is the pack. Names and tag keys are fictional.
  */
 class ImportTransferPackTest {
+
+    /** #69 (row 19): the ids of the files [returnWithLocalFiles] lays down. */
+    private val localFiles = setOf("fc1", "fc2", "fcx", "fs1")
 
     private suspend fun sender(): TransferInstall = TransferInstall("set-sender").also { TransferFixtures.seed(it.raw) }
 
@@ -281,6 +291,92 @@ class ImportTransferPackTest {
         assertEquals("2026-09-20", s.raw.installedComponents.get(InstalledComponentId("c2"))!!.removedOn, "the closed row lands closed")
         assertEquals(setOf("k1", "kx"), s.raw.installedComponents.entries.keys, "the dropped entry went with the delete")
         assertEquals(items, s.raw.supplyItems.all(), "every item here stays")
+    }
+
+    // ---- #69 (C5, H2; row 19): a return takes a returning asset's component files and sweeps their bytes -------------
+
+    /**
+     * The heater comes back to [fittedSender]. Its component files are local only, never in either pack (N-15): they
+     * leave the scoped snapshot with the heater's components, the asset delete's CASCADE takes the rows, and their
+     * bytes are swept, while the staying compressor's component keeps its file.
+     */
+    @Test
+    fun aReturningAssetsComponentFilesLeaveTheSnapshotAndTheirLocatorsAreSwept() = runTest {
+        val (s, q2) = returnWithLocalFiles()
+        val ready = s.ready(q2.bytes)
+        assertEquals(TransferImportOutcome.READY, ready.outcome, "${ready.plan.conflicts}")
+
+        val scope = returnScopeOf(s, HEATER, ANODE)
+        assertEquals(setOf("fs1", "fcx"), scope.snapshot.attachments.map { it.id.value }.filter { it in localFiles }.toSet())
+        assertEquals(
+            setOf("installed-components/c1/fc1.pdf", "installed-components/c2/fc2.pdf"),
+            scope.locators.filter { it.startsWith("installed-components/") || it.startsWith("supply-items/") }.toSet(),
+        )
+        assertIs<TransferImportResult.Imported>(s.importer.import(ready) { q2.bytes.inputStream() })
+
+        assertEquals(setOf("fs1", "fcx"), localFiles.filter { s.raw.attachments.get(AttachmentId(it)) != null }.toSet())
+        assertTrue("installed-components/c1/fc1.pdf" !in s.raw.storage.store.files, "the tray's file's bytes were swept")
+        assertTrue("installed-components/c2/fc2.pdf" !in s.raw.storage.store.files, "the position's file's bytes were swept")
+        assertTrue("installed-components/cx/fcx.pdf" in s.raw.storage.store.files, "the compressor's component keeps its bytes")
+        assertEquals(listOf("c1", "c2", "c3", "cx"), s.raw.installedComponents.all().map { it.id.value }, "the pack's rows landed")
+    }
+
+    /** A SupplyItem is global and never returns with an asset: its file stays in the snapshot, its row and bytes here. */
+    @Test
+    fun aSupplyItemsFileStays() = runTest {
+        val (s, q2) = returnWithLocalFiles()
+        val file = s.raw.attachments.get(AttachmentId("fs1"))!!
+
+        assertTrue(file in returnScopeOf(s, HEATER, ANODE).snapshot.attachments, "the scoped snapshot keeps it")
+        assertIs<TransferImportResult.Imported>(s.import(q2.bytes))
+
+        assertEquals(file, s.raw.attachments.get(AttachmentId("fs1")))
+        assertTrue("supply-items/s1/fs1.pdf" in s.raw.storage.store.files, "its bytes stay")
+    }
+
+    /**
+     * [fittedSender] with the heater out in `pack-q1` and back from the borrowing phone in `pack-q2`. Its files are
+     * laid down raw, with bytes, **after** `pack-q1` was sealed, so neither pack carries them: one on the heater's tray
+     * (c1), one on its position (c2), one on the compressor's housing (cx) and one on the battery SupplyItem (s1).
+     */
+    private suspend fun returnWithLocalFiles(): Pair<TransferInstall, SealedPack> {
+        val s = fittedSender()
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        listOf(
+            "fc1" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("c1")),
+            "fc2" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("c2")),
+            "fcx" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("cx")),
+            "fs1" to AttachmentOwner.OfSupplyItem(SupplyId("s1")),
+        ).forEach { (id, owner) ->
+            val bytes = "Example $id sheet".toByteArray()
+            val locator = "${AttachmentLocator.dirFor(owner)}/$id.pdf"
+            s.raw.storage.store.files[locator] = bytes
+            s.raw.attachments.upsert(
+                Attachment(
+                    id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "$id file",
+                    mimeType = "application/pdf", sizeBytes = bytes.size.toLong(), sha256 = InMemoryAttachmentStore.sha256Hex(bytes),
+                    storageLocator = locator, capturedOn = null, createdAt = 100L, updatedAt = 100L,
+                ),
+            )
+        }
+        val r = TransferInstall("set-recipient")
+        assertIs<TransferImportResult.Imported>(r.import(q1.bytes))
+        return s to r.pack("pack-q2", HEATER)
+    }
+
+    /** The return's scope over [s]'s stores now, read as the apply reads it. */
+    private suspend fun returnScopeOf(s: TransferInstall, vararg returning: String): ReturnScope = with(s.raw) {
+        uow.read {
+            ReturnScope.of(
+                mergeSnapshotOf(
+                    assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
+                    references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+                    successions, supplyItems, assetSupplies, installedComponents, emptyMap(), true,
+                ),
+                returning.mapTo(HashSet(), ::AssetId),
+            )
+        }
     }
 
     /**
