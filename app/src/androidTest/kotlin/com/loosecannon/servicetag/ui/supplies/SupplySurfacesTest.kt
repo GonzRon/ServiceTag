@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.supplies
 
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -17,10 +19,28 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.documentfile.provider.DocumentFile
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.attachments.DocumentTreeRoot
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.ports.ByteSource
+import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
+import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
+import com.loosecannon.servicetag.core.usecase.AttachmentResult
+import com.loosecannon.servicetag.core.usecase.ReferenceResult
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
+import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
+import com.loosecannon.servicetag.ui.awaitText
+import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import java.io.File
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -37,8 +57,12 @@ import org.junit.runner.RunWith
  * Every sentence comes from its one home (`SupplyStrings.kt`, `ROLE_HEADER`), so a re-worded constant moves this test
  * with it. A section header and a badge draw their words upper-case, so that is what the tree carries.
  *
- * Emulator only, never a phone. No case reaches the store, so none needs a wipe (`clearInstall` wipes the catalog for
- * the classes that do).
+ * #69 (C26, row 50) adds the SupplyItem detail's own Documents and References, below "Used by": those three cases draw
+ * the whole detail over the app's own graph, so each wipes the install before and after itself (`clearInstall` takes
+ * the catalog, and its CASCADE the item's files and links); the attachment seam points at a file-backed tree the way
+ * `AttachmentsDeviceProofTest` points it. The section words are the sections' own, drawn as their headers draw them.
+ *
+ * Emulator only, never a phone. No other case reaches the store, so none of them needs a wipe.
  */
 @RunWith(AndroidJUnit4::class)
 class SupplySurfacesTest {
@@ -290,4 +314,137 @@ class SupplySurfacesTest {
         rule.onNodeWithText("ARCHIVED").assertIsDisplayed()
         rule.onNodeWithText(REMOVE_LINK).assertIsDisplayed()
     }
+
+    // --- #69 B6b (C26, row 50): the SupplyItem detail's own files and links, below "Used by" ------------------------
+
+    private var settingsTaps = 0
+
+    /** A fresh install around [block], and none left behind for a later class. */
+    private fun onAFreshInstall(block: () -> Unit) {
+        clearInstall()
+        try {
+            block()
+        } finally {
+            clearInstall()
+        }
+    }
+
+    private fun battery(): SupplyItem = runBlocking {
+        app.graph.saveSupplyItem.run(
+            null,
+            SupplyItemCommand(
+                name = "Example 12 V Battery", category = "", manufacturer = "Example Power Co.", model = "",
+                partNumber = "", preferredUnit = "", notes = "", specifications = emptyList(),
+            ),
+        ).item
+    }
+
+    /** The detail as the root draws it, over the app's own graph; its Settings taps are counted. */
+    private fun drawDetail(id: SupplyId) {
+        rule.setContent {
+            ServiceTagTheme {
+                SupplyDetailScreen(
+                    graph = app.graph,
+                    supplyId = id.value,
+                    onBack = {},
+                    onEdit = {},
+                    onOpenAsset = {},
+                    onOpenSettings = { settingsTaps += 1 },
+                )
+            }
+        }
+    }
+
+    private fun top(text: String) = rule.onNodeWithText(text).getUnclippedBoundsInRoot().top
+
+    /**
+     * Below "Used by": DOCUMENTS first, then REFERENCES with the item's own link. With no folder chosen, the
+     * Documents section's card is there, and its "Open settings" reaches the screen's new `onOpenSettings`.
+     */
+    @Test fun bothSectionsDrawBelowUsedByAndTheFolderCardOpensSettings() = onAFreshInstall {
+        val item = battery()
+        runBlocking {
+            val added = app.graph.addReference.run(
+                ReferenceOwner.OfSupplyItem(item.id),
+                AddReferenceCommand(uri = "https://example.invalid/battery-12v", displayName = "Example battery data sheet"),
+            )
+            check(added is ReferenceResult.Ok) { "the link is added: $added" }
+        }
+        drawDetail(item.id)
+        rule.awaitText("REFERENCES · 1")
+        rule.awaitText("Open settings")
+
+        rule.onNodeWithText("Example battery data sheet").assertExists()
+        val usedBy = top(USED_BY_SECTION)
+        val documents = top("DOCUMENTS")
+        val references = top("REFERENCES · 1")
+        check(usedBy < documents && documents < references) {
+            "Used by ($usedBy), then Documents ($documents), then References ($references)"
+        }
+
+        rule.onNodeWithText("Open settings").performScrollTo().performClick()
+        assertEquals(1, settingsTaps)
+    }
+
+    /** With a folder, the Documents section offers "Add file" and "Take photo" and References "Add link"; no card. */
+    @Test fun withAFolderTheAddActionsArePresent() = onAFreshInstall {
+        useFileBackedTree()
+        val item = battery()
+        drawDetail(item.id)
+        rule.awaitText("Add file")
+
+        rule.onNodeWithText("No documents yet").assertExists()
+        rule.onNodeWithText("Take photo").assertExists()
+        rule.onNodeWithText("No references yet").assertExists()
+        rule.onNodeWithText("Add link").assertExists()
+        rule.onAllNodesWithText("Open settings").assertCountEquals(0)
+    }
+
+    /**
+     * An archived item (R69-10): its file is drawn, and the sections are not read-only — "Add file", "Take photo" and
+     * "Add link" are all still offered, because a SupplyItem is never held.
+     */
+    @Test fun anArchivedItemsSectionsDrawAndStayWritable() = onAFreshInstall {
+        useFileBackedTree()
+        val item = battery()
+        runBlocking {
+            val added = app.graph.addAttachment.run(
+                AttachmentOwner.OfSupplyItem(item.id),
+                AddAttachmentCommand(
+                    displayName = "Example battery manual.pdf",
+                    mimeType = "application/pdf",
+                    sizeBytes = 4L,
+                    capturedOn = "2026-05-01",
+                ),
+                ByteSource { "%PDF".byteInputStream() },
+            )
+            check(added is AttachmentResult.Ok) { "the file is added: $added" }
+            app.graph.archiveSupplyItem.run(item.id, true)
+        }
+        drawDetail(item.id)
+        rule.awaitText("Unarchive")
+        rule.awaitText("DOCUMENTS · 1")
+
+        rule.onNodeWithText("Example battery manual.pdf").assertExists()
+        rule.onNodeWithText("Add file").assertExists()
+        rule.onNodeWithText("Take photo").assertExists()
+        rule.onNodeWithText("REFERENCES").assertExists()
+        rule.onNodeWithText("Add link").assertExists()
+    }
+}
+
+/** Points the graph's attachment seams at an ordinary directory, as `AttachmentsDeviceProofTest` does. */
+private fun useFileBackedTree(): File {
+    val context: Context = ApplicationProvider.getApplicationContext()
+    val root = File(context.getExternalFilesDir(null), "supply-detail-proof").also {
+        it.deleteRecursively()
+        it.mkdirs()
+    }
+    val graph = app.graph
+    graph.attachmentRootResolver = { _ ->
+        DocumentTreeRoot(DocumentFile.fromFile(root), context.contentResolver)
+    }
+    graph.attachmentGrantCheck = { true }
+    graph.prefs.attachmentTreeUri = "file://" + root.absolutePath
+    return root
 }

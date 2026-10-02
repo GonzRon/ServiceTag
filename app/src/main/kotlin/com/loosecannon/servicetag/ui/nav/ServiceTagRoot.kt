@@ -585,6 +585,7 @@ fun ServiceTagRoot(
                         onEdit = { backStack.add(Route.SupplyEdit(it)) },
                         // A "Used by" row opens the real equipment's own screen, where its Supplies are edited (C33).
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                        onOpenSettings = { backStack.add(Route.Settings) },
                     )
                 }
                 // #15 (C31): the editor. A new item opens on its own detail and the form leaves the stack, exactly as

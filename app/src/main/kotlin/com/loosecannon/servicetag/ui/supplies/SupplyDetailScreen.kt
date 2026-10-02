@@ -1,10 +1,13 @@
 package com.loosecannon.servicetag.ui.supplies
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -19,21 +22,29 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.links.LinkLauncher
+import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceSectionTitle
+import com.loosecannon.servicetag.ui.references.ReferencesSection
 
 /**
  * One SupplyItem (#15, C30), on `GroupDetailScreen`'s shape: the top bar is the item's name with the group
@@ -42,10 +53,13 @@ import com.loosecannon.servicetag.ui.maintenance.MaintenanceSectionTitle
  * (P15-10), one row per applicability row — the asset's name and the role, a tap opening that asset — or P15-11.
  *
  * **Nothing else is drawn.** No key (R15-11: the phone never shows one), no quantity (#95), nothing about what is
- * fitted where (#47), and no placeholder for #69's resources, which later sit below "Used by" (§8). Applicability is added, re-roled and removed on the asset's screen (C33, B8), not here.
+ * fitted where (#47). Below "Used by" sit the item's own files and links (#69, C26): the shipped Documents and
+ * References sections, keyed by the SupplyItem, writable for an archived item too (R69-10: a SupplyItem is never held).
+ * Applicability is added, re-roled and removed on the asset's screen (C33, B8), not here.
  *
- * What it writes: `archived_at`, through `ArchiveSupplyItem`, and nothing else. An archived item keeps every
- * applicability row and line link (R15-6); nothing anywhere deletes a SupplyItem (R15-5).
+ * What it writes itself: `archived_at`, through `ArchiveSupplyItem`; the two sections write the item's own files and
+ * links through their own view models. An archived item keeps every applicability row and line link (R15-6); nothing
+ * anywhere deletes a SupplyItem (R15-5).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,10 +69,14 @@ fun SupplyDetailScreen(
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
     onOpenAsset: (String) -> Unit,
+    /** #69 (C26): the Documents section's no-folder card opens Settings, as the asset detail's does. */
+    onOpenSettings: () -> Unit,
 ) {
     val model: SupplyDetailViewModel = viewModel(key = supplyId) { SupplyDetailViewModel(graph, supplyId) }
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
+    // #69 (C26): the sections' one-line answers; a section inside a scrolling column has no host of its own.
+    val snackbars = remember { SnackbarHostState() }
 
     // A restored back stack or a replacing import can name an item that is not there any more. Leaving is the
     // honest answer; an empty screen would pretend it still exists.
@@ -93,6 +111,7 @@ fun SupplyDetailScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbars) },
     ) { padding ->
         // Nothing to draw until the store has answered once; the way back is enough.
         if (current == null) return@Scaffold
@@ -126,6 +145,32 @@ fun SupplyDetailScreen(
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
                 UseRow(use = use, onClick = { onOpenAsset(use.assetId.value) })
+            }
+
+            // #69 (C26): the item's own files, then its links, below "Used by" and nowhere else. One launcher for
+            // both, as on the asset detail; `notify = false` because this screen's snackbar draws the missing-handler
+            // line itself.
+            val activity = LocalActivity.current
+            val openLink: (String) -> Boolean = { uri ->
+                activity?.let { LinkLauncher.open(it, uri, notify = false) } == true
+            }
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                AttachmentsSection(
+                    graph = graph,
+                    owner = AttachmentOwner.OfSupplyItem(current.id),
+                    snackbars = snackbars,
+                    onOpenSettings = onOpenSettings,
+                    readOnly = current.resourcesReadOnly,
+                    onOpenLink = openLink,
+                )
+                ReferencesSection(
+                    owner = ReferenceOwner.OfSupplyItem(current.id),
+                    graph = graph,
+                    snackbars = snackbars,
+                    onOpen = openLink,
+                    readOnly = current.resourcesReadOnly,
+                )
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
