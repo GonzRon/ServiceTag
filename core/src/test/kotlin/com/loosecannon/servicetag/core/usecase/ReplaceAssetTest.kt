@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -930,6 +931,7 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
 
     private val guard = HeldWriteGuard(
         raw.transfers, raw.events, raw.definitions, raw.profiles, raw.groups, raw.schedules, raw.serviceCases, raw.links,
+        raw.installedComponents,
     )
     val assets = guard.assets(raw.assets)
     val tags = guard.tags(raw.tags)
@@ -1155,7 +1157,7 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
             role = DocumentRole.USER_MANUAL,
         )
         raw.references.rows["ref-1"] = AssetReference(
-            id = ReferenceId("ref-1"), assetId = AssetId(PRED), kind = ReferenceKind.WEB_URL,
+            id = ReferenceId("ref-1"), owner = ReferenceOwner.OfAsset(AssetId(PRED)), kind = ReferenceKind.WEB_URL,
             uri = "https://example.com/heater", displayName = "Example heater page", description = "",
             scheme = "https", createdAt = 1_000L, updatedAt = 1_000L,
         )

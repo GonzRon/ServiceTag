@@ -1,12 +1,13 @@
 package com.loosecannon.servicetag.ui.references
 
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.ui.attachments.asFileSize
 import com.loosecannon.servicetag.ui.condition.displayDate
 import java.time.LocalDate
 
 /**
- * #85 §6 (RATIFIED 2026-09-29): **the one home of every Save-as-document literal**, P85-1 to P85-19, verbatim, one
- * constant or template per line. The reused lines (Cancel, Save, Close, the attachment sentences…) stay in their own
+ * #85 §6 (RATIFIED 2026-09-29): **the one home of every Save-as-document literal**, P85-1 to P85-19 and #69's
+ * already-have twins P69-15 and P69-16, verbatim, one constant or template per line. The reused lines (Cancel, Save, Close, the attachment sentences…) stay in their own
  * homes and are never quoted here. A sentence this object does not carry is a string-gate question, never a
  * screen's to invent.
  */
@@ -33,6 +34,16 @@ internal object MaterializeStrings {
     fun serverError(code: Int): String = "The server did not send the file (error $code)." // P85-15
     const val REDIRECT_REFUSED = "That link redirects somewhere ServiceTag will not follow. It stays a link." // P85-16
     fun alreadyHave(name: String): String = "This asset already has this file: $name." // P85-17
+    fun alreadyHaveOnSupply(name: String): String = "This supply already has this file: $name." // P69-15
+    fun alreadyHaveOnInstalledComponent(name: String): String =
+        "This installed component already has this file: $name." // P69-16
+
+    /** #69 (C28, R69-13): P85-17 by the owner's kind; an asset keeps its shipped wording. */
+    fun alreadyHave(owner: ReferenceOwner, name: String): String = when (owner) {
+        is ReferenceOwner.OfAsset -> alreadyHave(name)
+        is ReferenceOwner.OfSupplyItem -> alreadyHaveOnSupply(name)
+        is ReferenceOwner.OfInstalledComponent -> alreadyHaveOnInstalledComponent(name)
+    }
     const val INTERRUPTED = "The download could not be completed. Try again." // P85-18
     const val LOCAL_ADDRESS = "That link resolves to a local-network address, so ServiceTag will not download it. It stays a link." // P85-19
 

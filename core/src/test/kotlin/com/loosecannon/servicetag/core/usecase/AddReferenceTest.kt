@@ -4,7 +4,11 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.references.LinkDecision
@@ -14,8 +18,12 @@ import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_URI_CHARS
 import com.loosecannon.servicetag.core.references.ShareTextParser
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.RecordingReferenceRepository
 import com.loosecannon.servicetag.core.testing.RecordingUnitOfWork
+import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,16 +40,20 @@ class AddReferenceTest {
 
     private val references = RecordingReferenceRepository()
     private val assets = InMemoryAssetRepository()
+    private val supplyItems = InMemorySupplyItemRepository()
+    private val installedComponents = InMemoryInstalledComponentRepository(supplyItems)
     private val uow = RecordingUnitOfWork(assets, references)
     private var now = 5_000L
     private var seq = 0
     private val ids = IdGenerator { "ref-${++seq}" }
     private val add = AddReference(
-        references, assets, LinkLaunchPolicy(), uow, ids, Clock { now },
+        references, assets, supplyItems, installedComponents, LinkLaunchPolicy(), uow, ids, Clock { now },
     )
 
     private val asset = AssetId("a1")
     private val other = AssetId("a2")
+    private val owner = ReferenceOwner.OfAsset(asset)
+    private val otherOwner = ReferenceOwner.OfAsset(other)
 
     private suspend fun haveAsset(id: AssetId = asset) {
         assets.upsert(Asset(id = id, name = "Cub Cadet XT1", createdAt = 1L, updatedAt = 1L))
@@ -89,7 +101,7 @@ class AddReferenceTest {
         for (broken in listOf("https://", "http:///path", "notaurl", "", "   ", "joplin:")) {
             assertEquals(
                 ReferenceProblem.NotALink,
-                refusal(add.run(asset, cmd(broken))),
+                refusal(add.run(owner, cmd(broken))),
                 "$broken should not be a link",
             )
         }
@@ -97,7 +109,7 @@ class AddReferenceTest {
         assertEquals(0, uow.writesEntered)
 
         val opaque = "joplin:x-callback-url/openNote?id=0f1e2d3c4b5a6978"
-        assertEquals(opaque, saved(add.run(asset, cmd(opaque))).uri)
+        assertEquals(opaque, saved(add.run(owner, cmd(opaque))).uri)
     }
 
     /**
@@ -121,7 +133,7 @@ class AddReferenceTest {
         for (uri in unparseable) {
             assertEquals(
                 ReferenceProblem.NotALink,
-                refusal(add.run(asset, cmd(uri))),
+                refusal(add.run(owner, cmd(uri))),
                 "$uri does not parse",
             )
         }
@@ -135,11 +147,11 @@ class AddReferenceTest {
         val prefix = "https://example-mower.invalid/"
         val tooLong = prefix + "a".repeat(MAX_REFERENCE_URI_CHARS + 1 - prefix.length)
         assertEquals(MAX_REFERENCE_URI_CHARS + 1, tooLong.length)
-        assertEquals(ReferenceProblem.UriTooLong, refusal(add.run(asset, cmd(tooLong))))
+        assertEquals(ReferenceProblem.UriTooLong, refusal(add.run(owner, cmd(tooLong))))
         assertEquals(0, references.upserts)
 
         val longest = tooLong.dropLast(1)
-        assertEquals(MAX_REFERENCE_URI_CHARS, saved(add.run(asset, cmd(longest))).uri.length)
+        assertEquals(MAX_REFERENCE_URI_CHARS, saved(add.run(owner, cmd(longest))).uri.length)
     }
 
     @Test
@@ -148,7 +160,7 @@ class AddReferenceTest {
         for (uri in blocked) {
             assertEquals(
                 ReferenceProblem.SchemeBlocked,
-                refusal(add.run(asset, cmd(uri))),
+                refusal(add.run(owner, cmd(uri))),
                 "$uri should be blocked",
             )
         }
@@ -167,7 +179,7 @@ class AddReferenceTest {
         assertEquals(LinkDecision.Blocked, LinkLaunchPolicy().classify("example-mower.invalid/xt1"))
         assertEquals(
             ReferenceProblem.NotALink,
-            refusal(add.run(asset, cmd("example-mower.invalid/xt1"))),
+            refusal(add.run(owner, cmd("example-mower.invalid/xt1"))),
         )
         assertEquals(0, references.upserts)
     }
@@ -183,7 +195,7 @@ class AddReferenceTest {
             "logseq://graph/shed?page=Mower" to ReferenceKind.NOTE_LINK,
         )
         for ((uri, kind) in expected) {
-            val row = saved(add.run(asset, cmd(uri)))
+            val row = saved(add.run(owner, cmd(uri)))
             assertEquals(kind, row.kind, uri)
             assertEquals(uri, row.uri)
         }
@@ -196,12 +208,12 @@ class AddReferenceTest {
         val uri = "zotero://select/items/0"
         assertEquals(
             ReferenceProblem.UnknownSchemeNeedsConfirmation("zotero"),
-            refusal(add.run(asset, cmd(uri))),
+            refusal(add.run(owner, cmd(uri))),
         )
         assertEquals(0, references.upserts)
         assertEquals(0, uow.writesEntered)
 
-        val row = saved(add.run(asset, cmd(uri, confirmed = true)))
+        val row = saved(add.run(owner, cmd(uri, confirmed = true)))
         assertEquals(ReferenceKind.OTHER, row.kind)
         assertEquals("zotero", row.scheme)
     }
@@ -210,7 +222,7 @@ class AddReferenceTest {
     fun theSchemeIsDerivedLowercasedAndTheUriIsStoredVerbatim() = runTest {
         haveAsset()
         val uri = "HTTPS://Example-Mower.invalid/XT1?a=1&b=2#frag"
-        val row = saved(add.run(asset, cmd("  $uri  ")))
+        val row = saved(add.run(owner, cmd("  $uri  ")))
         assertEquals(uri, row.uri)
         assertEquals("https", row.scheme)
         assertEquals(ReferenceKind.WEB_URL, row.kind)
@@ -224,7 +236,7 @@ class AddReferenceTest {
         val uri = "https://example-mower.invalid/xt1?a=1&b=2#frag"
         val parsed = ShareTextParser.firstUri("Deck belt: $uri")
         assertEquals(uri, parsed?.uri)
-        assertEquals(uri, saved(add.run(asset, cmd(parsed!!.uri))).uri)
+        assertEquals(uri, saved(add.run(owner, cmd(parsed!!.uri))).uri)
     }
 
     @Test
@@ -232,7 +244,7 @@ class AddReferenceTest {
         haveAsset()
         val uri = "https://example-mower.invalid/xt1"
         for (name in listOf("", "   ", "\u0000", "\n\t ")) {
-            assertEquals(ReferenceProblem.BlankName, refusal(add.run(asset, cmd(uri, name = name))))
+            assertEquals(ReferenceProblem.BlankName, refusal(add.run(owner, cmd(uri, name = name))))
         }
         assertEquals(0, references.upserts)
         assertEquals(0, uow.writesEntered)
@@ -243,7 +255,7 @@ class AddReferenceTest {
         haveAsset()
         val row = saved(
             add.run(
-                asset,
+                owner,
                 cmd(
                     uri = "https://example-mower.invalid/xt1",
                     name = "a".repeat(MAX_REFERENCE_NAME_CHARS + 1),
@@ -260,11 +272,11 @@ class AddReferenceTest {
         haveAsset(asset)
         haveAsset(other)
         val uri = "https://example-mower.invalid/xt1"
-        saved(add.run(asset, cmd(uri)))
-        assertEquals(ReferenceProblem.DuplicateUri, refusal(add.run(asset, cmd(uri))))
+        saved(add.run(owner, cmd(uri)))
+        assertEquals(ReferenceProblem.DuplicateUri, refusal(add.run(owner, cmd(uri))))
         assertEquals(1, references.upserts)
 
-        assertEquals(other, saved(add.run(other, cmd(uri))).assetId)
+        assertEquals(otherOwner, saved(add.run(otherOwner, cmd(uri))).owner)
         assertEquals(2, references.upserts)
     }
 
@@ -272,7 +284,7 @@ class AddReferenceTest {
     fun anAssetThatIsNotThereIsRefusedRatherThanLeftToTheForeignKey() = runTest {
         assertEquals(
             ReferenceProblem.OwnerMissing,
-            refusal(add.run(asset, cmd("https://example-mower.invalid/xt1"))),
+            refusal(add.run(owner, cmd("https://example-mower.invalid/xt1"))),
         )
         assertEquals(0, references.upserts)
         assertEquals(0, uow.writesEntered)
@@ -296,7 +308,7 @@ class AddReferenceTest {
         for (role in DocumentRole.entries) {
             for (scheme in listOf("http", "https")) {
                 val uri = "$scheme://manuals.example.invalid/water-heater/${role.name.lowercase()}"
-                val row = saved(add.run(asset, cmd(uri, name = "Example Water Heater", role = role)))
+                val row = saved(add.run(owner, cmd(uri, name = "Example Water Heater", role = role)))
                 assertEquals(role, row.role, uri)
                 assertEquals(ReferenceKind.WEB_URL, row.kind, uri)
                 assertEquals(role, references.rows.getValue(row.id.value).role, uri)
@@ -309,7 +321,7 @@ class AddReferenceTest {
     @Test
     fun noRoleByDefault() = runTest {
         haveAsset()
-        val row = saved(add.run(asset, AddReferenceCommand("https://manuals.example.invalid/a", "Example Water Heater")))
+        val row = saved(add.run(owner, AddReferenceCommand("https://manuals.example.invalid/a", "Example Water Heater")))
         assertNull(row.role)
         assertNull(references.rows.getValue(row.id.value).role)
     }
@@ -321,7 +333,7 @@ class AddReferenceTest {
         for (role in DocumentRole.entries) {
             assertEquals(
                 ReferenceProblem.RoleNotAllowed,
-                refusal(add.run(asset, cmd("joplin://x-callback-url/openNote?id=example", role = role))),
+                refusal(add.run(owner, cmd("joplin://x-callback-url/openNote?id=example", role = role))),
             )
         }
         assertEquals(0, references.upserts)
@@ -337,11 +349,11 @@ class AddReferenceTest {
         val uri = "zotero://select/items/0"
         assertEquals(
             ReferenceProblem.UnknownSchemeNeedsConfirmation("zotero"),
-            refusal(add.run(asset, cmd(uri, role = DocumentRole.USER_MANUAL))),
+            refusal(add.run(owner, cmd(uri, role = DocumentRole.USER_MANUAL))),
         )
         assertEquals(
             ReferenceProblem.RoleNotAllowed,
-            refusal(add.run(asset, cmd(uri, confirmed = true, role = DocumentRole.USER_MANUAL))),
+            refusal(add.run(owner, cmd(uri, confirmed = true, role = DocumentRole.USER_MANUAL))),
         )
         assertEquals(0, references.upserts)
         assertEquals(0, uow.writesEntered)
@@ -354,7 +366,7 @@ class AddReferenceTest {
         for (uri in blocked) {
             assertEquals(
                 ReferenceProblem.SchemeBlocked,
-                refusal(add.run(asset, cmd(uri, role = DocumentRole.SERVICE_MANUAL))),
+                refusal(add.run(owner, cmd(uri, role = DocumentRole.SERVICE_MANUAL))),
                 uri,
             )
         }
@@ -369,7 +381,7 @@ class AddReferenceTest {
             ReferenceProblem.RoleNotAllowed,
             refusal(
                 add.run(
-                    asset,
+                    owner,
                     cmd("joplin://x-callback-url/openNote?id=example", name = "   ", role = DocumentRole.USER_MANUAL),
                 ),
             ),
@@ -392,9 +404,96 @@ class AddReferenceTest {
         } + cmd("https://manuals.example.invalid/water-heater/user-manual.pdf", name = "Example Water Heater")
         for (command in commands) {
             assertNull(command.role)
-            val row = saved(add.run(asset, command))
+            val row = saved(add.run(owner, command))
             assertNull(row.role, "${row.displayName} / ${row.description} / ${row.uri}")
             assertNull(references.rows.getValue(row.id.value).role)
         }
+    }
+
+    // --- #69 (C13; row 22): the owner is a SupplyItem or an installed component too ---------------------------
+
+    private val battery = ReferenceOwner.OfSupplyItem(SupplyId("x1"))
+    private val tray = ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1"))
+
+    /** Asset `x1`, SupplyItem `x1` (the same id string, H3) and component `c1` on the asset. */
+    private suspend fun haveEveryOwner() {
+        haveAsset(AssetId("x1"))
+        supplyItems.upsert(supplyItemOf("x1", "Example 12 V Battery"))
+        installedComponents.insert(installedComponentOf("c1", assetId = "x1", installedOn = "2026-09-01"))
+    }
+
+    /** Hazard: an owner refused or written as another. Each owner takes a link, read back by its own owner only. */
+    @Test
+    fun addsToEachOwner() = runTest {
+        haveEveryOwner()
+        for ((i, owner) in listOf(ReferenceOwner.OfAsset(AssetId("x1")), battery, tray).withIndex()) {
+            val row = saved(add.run(owner, cmd("https://example.invalid/battery/$i", name = "Example data sheet")))
+            assertEquals(owner, row.owner)
+            assertEquals(listOf(row), references.forOwner(owner))
+        }
+        assertEquals(3, references.upserts)
+    }
+
+    /** H3: an asset and a SupplyItem sharing the id string `x1` are two owners, so one URI on each is two rows. */
+    @Test
+    fun theSameUriOnAnAssetAndASupplyItemSharingAnIdStringIsTwoRows() = runTest {
+        haveEveryOwner()
+        val uri = "https://example.invalid/battery/manual.pdf"
+
+        val onAsset = saved(add.run(ReferenceOwner.OfAsset(AssetId("x1")), cmd(uri)))
+        val onItem = saved(add.run(battery, cmd(uri)))
+
+        assertEquals(listOf(onAsset, onItem), references.rows.values.toList())
+        assertEquals(onItem, references.findByUri(battery, uri))
+    }
+
+    /** I3: the duplicate refusal is per owner — a second add on the SupplyItem or the component is refused. */
+    @Test
+    fun aDuplicateIsPerOwner() = runTest {
+        haveEveryOwner()
+        val uri = "https://example.invalid/battery/manual.pdf"
+        for (owner in listOf(battery, tray)) {
+            saved(add.run(owner, cmd(uri)))
+            assertEquals(ReferenceProblem.DuplicateUri, refusal(add.run(owner, cmd(uri))))
+        }
+        assertEquals(2, references.upserts)
+    }
+
+    /** R69-10: an archived SupplyItem and a removed component are owners like any other. */
+    @Test
+    fun anArchivedSupplyItemAndARemovedComponentAccept() = runTest {
+        haveAsset(AssetId("x1"))
+        supplyItems.upsert(supplyItemOf("s2", "Example Terminal Strap", archivedAt = 3_000L))
+        installedComponents.insert(installedComponentOf("c2", assetId = "x1", installedOn = "2026-09-01", removedOn = "2026-09-10"))
+
+        for (owner in listOf(ReferenceOwner.OfSupplyItem(SupplyId("s2")), ReferenceOwner.OfInstalledComponent(InstalledComponentId("c2")))) {
+            assertEquals(owner, saved(add.run(owner, cmd("https://example.invalid/strap"))).owner)
+        }
+    }
+
+    /**
+     * I-2 unchanged: for a SupplyItem or a component that is not here, the name is still refused before the owner, and
+     * the owner before the second identity; a refusal writes nothing.
+     */
+    @Test
+    fun theStepOrderIsUnchanged() = runTest {
+        val missing = listOf(ReferenceOwner.OfSupplyItem(SupplyId("s9")), ReferenceOwner.OfInstalledComponent(InstalledComponentId("c9")))
+        for (owner in missing) {
+            assertEquals(ReferenceProblem.RoleNotAllowed, refusal(add.run(owner, cmd("joplin://x-callback-url/openNote?id=example", role = DocumentRole.USER_MANUAL))))
+            assertEquals(ReferenceProblem.BlankName, refusal(add.run(owner, cmd("https://example.invalid/battery", name = " "))))
+            assertEquals(ReferenceProblem.OwnerMissing, refusal(add.run(owner, cmd("https://example.invalid/battery"))))
+        }
+        assertEquals(0, references.upserts)
+
+        // A row already holding the pair on an owner that is not here (laid down raw): the owner still answers first.
+        val stray = missing.first()
+        references.upsert(
+            AssetReference(
+                id = ReferenceId("stray"), owner = stray, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/battery",
+                displayName = "Example data sheet", description = "", scheme = "https", createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+        assertEquals(ReferenceProblem.OwnerMissing, refusal(add.run(stray, cmd("https://example.invalid/battery"))))
+        assertEquals(1, references.upserts)
     }
 }

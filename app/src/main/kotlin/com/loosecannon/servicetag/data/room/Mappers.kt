@@ -15,11 +15,13 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.StorageProvider
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -160,11 +162,13 @@ fun ExternalLink.toEntity(): ExternalLinkEntity = ExternalLinkEntity(
 /**
  * D4 §11's exactly-one-owner rule, enforced where the row enters the table. The domain's
  * `AttachmentOwner` already makes both-at-once unrepresentable; this guards rows built any other
- * way, and it is the reason the schema carries no `CHECK` (spec §11.5).
+ * way, and it is the reason the schema carries no `CHECK` (spec §11.5). Since schema v20 (#69) it
+ * counts four owner columns.
  */
 fun AttachmentEntity.requireExactlyOneOwner(): AttachmentEntity = apply {
-    require((assetId == null) != (eventId == null)) {
-        "attachment '$id' must name exactly one owner, found asset_id=$assetId event_id=$eventId"
+    require(listOfNotNull(assetId, eventId, supplyItemId, installedComponentId).size == 1) {
+        "attachment '$id' must name exactly one owner, found asset_id=$assetId event_id=$eventId " +
+            "supply_item_id=$supplyItemId installed_component_id=$installedComponentId"
     }
 }
 
@@ -173,6 +177,8 @@ fun AttachmentEntity.toDomain(): Attachment = Attachment(
     owner = when {
         assetId != null -> AttachmentOwner.OfAsset(AssetId(assetId))
         eventId != null -> AttachmentOwner.OfEvent(EventId(eventId))
+        supplyItemId != null -> AttachmentOwner.OfSupplyItem(SupplyId(supplyItemId))
+        installedComponentId != null -> AttachmentOwner.OfInstalledComponent(InstalledComponentId(installedComponentId))
         else -> error("attachment '$id' has no owner")
     },
     kind = AttachmentKind.valueOf(kind),
@@ -220,6 +226,8 @@ fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
     sourceResolvedUri = source?.resolvedUri,
     sourceRetrievedAt = source?.retrievedAt,
     sourceName = source?.name,
+    supplyItemId = (owner as? AttachmentOwner.OfSupplyItem)?.supplyId?.value,
+    installedComponentId = (owner as? AttachmentOwner.OfInstalledComponent)?.componentId?.value,
 )
 
 // #74: a catalog row passes through unchanged in both directions; its key rule lives in core.

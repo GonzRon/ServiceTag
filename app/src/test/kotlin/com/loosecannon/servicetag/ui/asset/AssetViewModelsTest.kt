@@ -2711,7 +2711,10 @@ class AssetViewModelsTest {
         storage: AttachmentStorage = FakeAttachmentStorage(),
         saveSettings: SaveAssetSettings = graph.saveAssetSettings,
     ): IntakeEditor {
-        val add = AddAttachment(graph.attachments, graph.assets, graph.events, storage, graph.uow, graph.ids, graph.clock)
+        val add = AddAttachment(
+            graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, storage,
+            graph.uow, graph.ids, graph.clock,
+        )
         val model = AssetEditViewModel(
             graph.assets, graph.healthSubjects, saveSettings, graph.schedules, graph.categories,
             graph.attachments, storage, add, graph.todayPort, id,

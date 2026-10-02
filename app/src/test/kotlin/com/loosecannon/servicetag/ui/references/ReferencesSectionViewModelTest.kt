@@ -10,10 +10,16 @@ import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.takesRole
@@ -27,6 +33,7 @@ import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.reminders.sourceFile
+import com.loosecannon.servicetag.share.IntakeStrings
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlin.coroutines.CoroutineContext
 import kotlin.properties.Delegates
@@ -69,6 +76,10 @@ class ReferencesSectionViewModelTest {
 
     private companion object {
         const val MANUAL = "https://manuals.example.invalid/pool-pump/manual.pdf"
+
+        /** #69 row 49: one id string an asset, a SupplyItem and an installed component all carry. */
+        const val SAME = "example-ups-1"
+        const val DATA_SHEET = "https://example.invalid/battery/datasheet"
     }
 
     private val scheduler = TestCoroutineScheduler()
@@ -89,7 +100,10 @@ class ReferencesSectionViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
         addReference =
-            AddReference(graph.references, graph.assets, policy, graph.uow, graph.ids, graph.clock)
+            AddReference(
+                graph.references, graph.assets, graph.supplyItems, graph.installedComponents, policy, graph.uow, graph.ids,
+                graph.clock,
+            )
         updateReference = UpdateReference(graph.references, graph.uow, graph.clock)
         removeReference = RemoveReference(graph.references, graph.uow)
     }
@@ -128,7 +142,7 @@ class ReferencesSectionViewModelTest {
     }
 
     private fun model(
-        owner: AssetId = assetId,
+        owner: ReferenceOwner = ReferenceOwner.OfAsset(assetId),
         io: CoroutineContext = StandardTestDispatcher(scheduler),
     ): ReferencesSectionViewModel {
         val factory = viewModelFactory {
@@ -140,19 +154,23 @@ class ReferencesSectionViewModelTest {
                 )
             }
         }
-        return ViewModelProvider.create(store, factory)[
-            "references-${owner.value}",
-            ReferencesSectionViewModel::class,
-        ]
+        return ViewModelProvider.create(store, factory)[referencesModelKey(owner), ReferencesSectionViewModel::class]
     }
 
     /** A row written straight to the table, the way a restore or a merge puts one there. */
-    private suspend fun stored(id: String, uri: String, kind: ReferenceKind, name: String, role: DocumentRole? = null) {
+    private suspend fun stored(
+        id: String,
+        uri: String,
+        kind: ReferenceKind,
+        name: String,
+        role: DocumentRole? = null,
+        owner: ReferenceOwner = ReferenceOwner.OfAsset(assetId),
+    ) {
         graph.uow.write {
             graph.references.upsert(
                 AssetReference(
                     id = ReferenceId(id),
-                    assetId = assetId,
+                    owner = owner,
                     kind = kind,
                     uri = uri,
                     displayName = name,
@@ -167,9 +185,12 @@ class ReferencesSectionViewModelTest {
     }
 
     /** #85 (C20): a document saved from [uri] onto [owner], as `MaterializeReference.commit` writes one. */
-    private suspend fun sourced(owner: AssetId, uri: String) = (
+    private suspend fun sourced(owner: AssetId, uri: String) = sourced(AttachmentOwner.OfAsset(owner), uri)
+
+    /** #69: the same, onto any owner's files. */
+    private suspend fun sourced(owner: AttachmentOwner, uri: String) = (
         graph.addAttachment.run(
-            AttachmentOwner.OfAsset(owner),
+            owner,
             AddAttachmentCommand(
                 displayName = "Example Pool Pump manual", mimeType = "application/pdf", sizeBytes = 3L,
                 source = AttachmentSource(uri, null, 5_000L, "Example Pool Pump manual"),
@@ -332,7 +353,7 @@ class ReferencesSectionViewModelTest {
         expected.forEach { (text, offered) ->
             assertEquals("roleOffered('$text')", offered, vm.roleOffered(text))
             val saved = addReference.run(
-                assetId,
+                ReferenceOwner.OfAsset(assetId),
                 AddReferenceCommand(uri = text, displayName = "Example link", confirmedUnknownScheme = true),
             )
             assertEquals(
@@ -397,7 +418,7 @@ class ReferencesSectionViewModelTest {
 
         // The share path, called directly: the same command object, the same use case.
         val shared = addReference.run(
-            other.id,
+            ReferenceOwner.OfAsset(other.id),
             AddReferenceCommand(
                 uri = "https://example-mower.invalid/manual",
                 displayName = "Deck manual",
@@ -416,7 +437,7 @@ class ReferencesSectionViewModelTest {
             "only the id, the owner and the timestamps may differ",
             sharedRow.copy(
                 id = addedRow.id,
-                assetId = addedRow.assetId,
+                owner = addedRow.owner,
                 createdAt = addedRow.createdAt,
                 updatedAt = addedRow.updatedAt,
             ),
@@ -438,7 +459,7 @@ class ReferencesSectionViewModelTest {
 
         vm.addLink("zotero://select/items/0", "Pump teardown", "", role = null)
         assertEquals("zotero", vm.state.first { it.pendingConfirmation != null }.pendingConfirmation)
-        assertTrue(graph.references.forAsset(assetId).isEmpty())
+        assertTrue(graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).isEmpty())
 
         vm.confirmUnknownScheme()
         val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
@@ -459,7 +480,7 @@ class ReferencesSectionViewModelTest {
         vm.addLink("javascript:alert(1)", "Not happening", "", role = null)
 
         assertEquals("ServiceTag will not save that kind of link.", said.await())
-        assertTrue(graph.references.forAsset(assetId).isEmpty())
+        assertTrue(graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).isEmpty())
         assertNull(vm.state.value.pendingConfirmation)
 
         clearModels()
@@ -477,7 +498,7 @@ class ReferencesSectionViewModelTest {
         vm.addLink("https://example-mower.invalid/manual", "Deck manual again", "", role = null)
 
         assertEquals("That link is already on this asset", said.await())
-        assertEquals(1, graph.references.forAsset(assetId).size)
+        assertEquals(1, graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).size)
 
         clearModels()
     }
@@ -592,6 +613,169 @@ class ReferencesSectionViewModelTest {
         assertTrue("a remove dispatches on io", io.count > beforeRemove)
 
         clearModels()
+    }
+
+    // --- #69 (C25, C28; row 49): the section keyed by its owner ---------------------------------------------------
+
+    /**
+     * Row 49's fixture: an asset, a SupplyItem and an installed component carrying one id string, so a read keyed
+     * by the id alone, or by the asset, would show another owner's row.
+     */
+    private suspend fun threeOwners(): List<ReferenceOwner> {
+        val asset = AssetId(SAME)
+        graph.uow.write {
+            graph.assets.upsert(Asset(id = asset, name = "Example UPS", createdAt = 1_000L, updatedAt = 1_000L))
+            graph.supplyItems.upsert(
+                SupplyItem(
+                    id = SupplyId(SAME), name = "Example 12 V Battery", category = "Battery",
+                    manufacturer = "Example Power Co.", model = "EP-12", partNumber = "EP-12-7", preferredUnit = "ea",
+                    notes = "", archivedAt = null, createdAt = 1_000L, updatedAt = 1_000L, specifications = emptyList(),
+                ),
+            )
+            graph.installedComponents.insert(
+                InstalledComponent(
+                    id = InstalledComponentId(SAME), assetId = asset, parentId = null, name = "Example Battery Tray",
+                    supplyId = null, composition = emptyList(), serialOrLot = "", installedOn = "2026-01-10",
+                    removedOn = null, replacesId = null, sortOrder = 0, notes = "", createdAt = 1_000L,
+                    updatedAt = 1_000L,
+                ),
+            )
+        }
+        assetId = asset
+        return listOf(
+            ReferenceOwner.OfAsset(asset),
+            ReferenceOwner.OfSupplyItem(SupplyId(SAME)),
+            ReferenceOwner.OfInstalledComponent(InstalledComponentId(SAME)),
+        )
+    }
+
+    @Test fun stateIsTheOwnersRows() = runTest {
+        val (asset, supply, component) = threeOwners()
+        stored("r-asset", "https://example.invalid/ups/manual", ReferenceKind.WEB_URL, "UPS manual", owner = asset)
+        stored("r-supply", DATA_SHEET, ReferenceKind.WEB_URL, "Battery data sheet", owner = supply)
+        stored(
+            "r-component", "https://example.invalid/tray/guide", ReferenceKind.WEB_URL, "Tray guide", owner = component,
+        )
+
+        val listed = listOf(asset, supply, component).associateWith { owner ->
+            val vm = model(owner)
+            backgroundScope.launch { vm.state.collect() }
+            vm.state.first { it.rows.isNotEmpty() }.rows.map { it.id }
+        }
+
+        assertEquals(
+            mapOf(asset to listOf("r-asset"), supply to listOf("r-supply"), component to listOf("r-component")),
+            listed,
+        )
+        assertEquals(
+            "the production key is one per owner, never the id string alone",
+            3,
+            setOf(
+                referencesModelKey(ReferenceOwner.OfAsset(AssetId("x"))),
+                referencesModelKey(ReferenceOwner.OfSupplyItem(SupplyId("x"))),
+                referencesModelKey(ReferenceOwner.OfInstalledComponent(InstalledComponentId("x"))),
+            ).size,
+        )
+        clearModels()
+    }
+
+    /**
+     * H4: the saved mark reads the owner's own files. An asset's file from the same source never marks a
+     * SupplyItem's or a component's link, though all three share one id string; the SupplyItem's own file does,
+     * and marks only its own link.
+     */
+    @Test fun theSavedMarkReadsTheOwnersOwnFiles() = runTest {
+        val (asset, supply, component) = threeOwners()
+        stored("r-supply", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual", owner = supply)
+        stored("r-component", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual", owner = component)
+        sourced(asset.asAttachmentOwner(), MANUAL)
+        val onSupply = model(supply)
+        val onComponent = model(component)
+        backgroundScope.launch { onSupply.state.collect() }
+        backgroundScope.launch { onComponent.state.collect() }
+
+        assertFalse(
+            "an asset's file never marks a SupplyItem's link",
+            onSupply.state.first { it.rows.isNotEmpty() }.rows.single().savedAsDocument,
+        )
+        assertFalse(
+            "an asset's file never marks a component's link",
+            onComponent.state.first { it.rows.isNotEmpty() }.rows.single().savedAsDocument,
+        )
+
+        sourced(supply.asAttachmentOwner(), MANUAL)
+
+        onSupply.state.first { it.rows.single().savedAsDocument }
+        // Drain the component's flow too, so a read of every owner's files would have reached it by now.
+        advanceUntilIdle()
+        assertFalse(
+            "the SupplyItem's file never marks the component's link",
+            onComponent.state.value.rows.single().savedAsDocument,
+        )
+        clearModels()
+    }
+
+    @Test fun addPassesTheOwner() = runTest {
+        val (asset, supply, component) = threeOwners()
+        listOf(supply, component).forEach { owner ->
+            val vm = model(owner)
+            backgroundScope.launch { vm.state.collect() }
+            vm.addLink(DATA_SHEET, "Battery data sheet", "", role = null)
+            vm.state.first { it.rows.size == 1 }
+        }
+
+        assertEquals(
+            mapOf(asset to 0, supply to 1, component to 1),
+            listOf(asset, supply, component).associateWith { graph.references.forOwner(it).size },
+        )
+        assertEquals(setOf(supply, component), graph.references.all().map { it.owner }.toSet())
+        clearModels()
+    }
+
+    /**
+     * C28 (R69-13): the duplicate is said in the owner's own words; an asset's stays the shipped sentence, and
+     * Share's declaration answers each owner the same way from the same home.
+     */
+    @Test fun theDuplicateSentenceIsTheOwnersTwin() = runTest {
+        val (asset, supply, component) = threeOwners()
+        val said = listOf(supply, component).associateWith { owner ->
+            val vm = model(owner)
+            backgroundScope.launch { vm.state.collect() }
+            vm.addLink(DATA_SHEET, "Battery data sheet", "", role = null)
+            vm.state.first { it.rows.size == 1 }
+            val line = async(Dispatchers.Main) { vm.messages.first() }
+            vm.addLink(DATA_SHEET, "Battery data sheet again", "", role = null)
+            line.await()
+        }
+
+        assertEquals(
+            mapOf(
+                supply to "That link is already on this supply",
+                component to "That link is already on this installed component",
+            ),
+            said,
+        )
+        assertEquals("That link is already on this asset", duplicateUriOn(asset))
+        listOf(asset, supply, component).forEach { owner ->
+            assertEquals(duplicateUriOn(owner), IntakeStrings.duplicateUri(owner))
+        }
+        clearModels()
+    }
+
+    /** C28: the remove confirmation's body, one twin per owner kind; an asset's is the shipped sentence. */
+    @Test fun theRemoveConfirmationIsTheOwnersTwin() {
+        assertEquals(
+            listOf(
+                "The link is removed from this asset. Nothing in the other app is changed.",
+                "The link is removed from this supply. Nothing in the other app is changed.",
+                "The link is removed from this installed component. Nothing in the other app is changed.",
+            ),
+            listOf(
+                ReferenceOwner.OfAsset(AssetId(SAME)),
+                ReferenceOwner.OfSupplyItem(SupplyId(SAME)),
+                ReferenceOwner.OfInstalledComponent(InstalledComponentId(SAME)),
+            ).map(::removedFrom),
+        )
     }
 
     /**

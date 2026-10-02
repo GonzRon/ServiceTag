@@ -3,6 +3,8 @@
 A **supply item** is one canonical product — a cartridge, a battery pack, a belt — with its identity fields and
 an ordered list of generic specifications; an **applicability row** says which supply item an asset takes and in
 what role. Nothing else: the tools carry no quantity, no fitted position or date and no file (the HARD SCOPE).
+Since #69 a supply item's own files and links are the five resource tools' rows, given `supply_item_id`, never these
+eight's.
 
 `list_supply_items`, `get_supply_item` and `list_asset_supplies` read `GET /v1/supply-items`, `GET
 /v1/supply-items/{id}` and `GET /v1/assets/{id}/supply-items`; `create_supply_item` sends `POST

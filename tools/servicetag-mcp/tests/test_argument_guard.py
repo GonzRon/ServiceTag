@@ -360,3 +360,54 @@ def test_the_real_call_site_pins_the_tool_count_against_tool_names() -> None:
     a `@mcp.tool()` without updating `TOOL_NAMES` (or the reverse) is caught the next time this
     suite runs, not only the next time the module is freshly imported."""
     assert len(server_module.mcp._tool_manager.list_tools()) == len(server_module.TOOL_NAMES)
+
+
+# --- #69 (C23): the five resource tools take exactly one of three owners ----------------------------
+
+RESOURCE_OWNER_TOOLS = (
+    "list_references", "add_reference", "list_attachments", "add_attachment", "materialize_reference",
+)
+"""The five tools #69 widened, written out so one dropped from the parametrisations below fails by name."""
+
+RESOURCE_OWNERS = ("asset_id", "supply_item_id", "installed_component_id")
+
+
+@pytest.mark.parametrize("tool_name", RESOURCE_OWNER_TOOLS)
+def test_each_resource_tool_publishes_the_three_owners_none_required(tool_name) -> None:
+    """The published schema lists all three owner keys and requires none of them — exactly one is the tool's own
+    check, below — and no key is a bare `component`, which still means a child asset (#47)."""
+    assert tool_name in server_module.TOOL_NAMES, tool_name
+    tool = server_module.mcp._tool_manager.get_tool(tool_name)
+    properties = tool.parameters["properties"]
+    assert set(RESOURCE_OWNERS) <= set(properties), tool_name
+    assert not set(RESOURCE_OWNERS) & set(tool.parameters.get("required", [])), tool_name
+    assert not [name for name in properties if name.startswith("component")], tool_name
+    assert tool.parameters.get("additionalProperties") is False, tool_name
+
+
+@pytest.mark.parametrize("near_miss", ["supply_id", "component_id", "installed_component"])
+@pytest.mark.parametrize("tool_name", RESOURCE_OWNER_TOOLS)
+def test_each_resource_tool_refuses_a_near_miss_owner_key_with_zero_requests(tool_name, near_miss, paired) -> None:
+    """A misspelt owner must never be read as "no owner" and fall through to another: the guard names the key, never
+    its value, before any request."""
+    tool = server_module.mcp._tool_manager.get_tool(tool_name)
+    arguments = {name: "x" for name in tool.parameters.get("required", [])}
+    arguments[near_miss] = _DISTINCTIVE_VALUE
+    with pytest.raises(ToolError, match="does not accept") as raised:
+        _call_tool(tool_name, arguments)
+    assert near_miss in str(raised.value)
+    _assert_value_absent(raised.value, _DISTINCTIVE_VALUE)
+    assert paired.requests == []
+
+
+@pytest.mark.parametrize("tool_name", RESOURCE_OWNER_TOOLS)
+def test_each_resource_tool_named_with_no_owner_is_refused_with_zero_requests(tool_name, paired) -> None:
+    """Through the real request path: every key is known, so the guard passes it, and the tool's own exactly-one
+    check refuses it before any request — and, for `add_attachment`, before the file is looked at."""
+    tool = server_module.mcp._tool_manager.get_tool(tool_name)
+    arguments = {name: "x" for name in tool.parameters.get("required", [])}
+    with pytest.raises(ToolError, match="exactly one owner"):
+        _call_tool(tool_name, arguments)
+    with pytest.raises(ToolError, match="exactly one owner"):
+        _call_tool(tool_name, {**arguments, "asset_id": "a1", "installed_component_id": "c1"})
+    assert paired.requests == []

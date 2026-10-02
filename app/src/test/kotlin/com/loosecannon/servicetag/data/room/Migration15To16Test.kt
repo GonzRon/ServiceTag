@@ -25,7 +25,8 @@ class Migration15To16Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    val after = c.rowOf(row.table, row.id, row.key)
+                    // the chain runs on to v20, whose two owner columns `Migration19To20Test` owns
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V20_ATTACHMENT_COLUMNS }
                     val expected = if (row.table == "attachment") {
                         before.getValue(row) + V16_ATTACHMENT_COLUMNS.map { "$it=NULL" }
                     } else {
@@ -77,9 +78,9 @@ class Migration15To16Test {
                                 "source_retrieved_at INTEGER notnull=0 default=- pk=0",
                                 "source_name TEXT notnull=0 default=- pk=0",
                             ),
-                            m.columnsOf("attachment").takeLast(V16_ATTACHMENT_COLUMNS.size),
+                            m.columnsOf("attachment").dropLast(V20_ATTACHMENT_COLUMNS.size).takeLast(V16_ATTACHMENT_COLUMNS.size),
                         )
-                        assertEquals(20, m.columnsOf("attachment").size)
+                        assertEquals(22, m.columnsOf("attachment").size)
                         assertEquals(
                             "no index on the source columns",
                             emptyList<String>(),

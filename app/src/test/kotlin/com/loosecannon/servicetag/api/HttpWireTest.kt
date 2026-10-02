@@ -91,6 +91,50 @@ class HttpWireTest {
         assertTrue(parse("POST /v1/assets HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}").stream == null)
     }
 
+    /**
+     * #69 (C19, C-3, row 43a): an upload to a SupplyItem's or an installed component's files takes the upload tier and
+     * stays on the socket, exactly as an asset's does — so a file over 64 KiB streams, and is never a 413 before the
+     * token is checked.
+     */
+    @Test fun aPostOverSixtyFourKibToASupplyItemsAttachmentsStreams() = assertStreams("/v1/supply-items/s1/attachments")
+
+    @Test fun aPostOverSixtyFourKibToAComponentsAttachmentsStreams() =
+        assertStreams("/v1/installed-components/c1/attachments")
+
+    private fun assertStreams(shape: String) {
+        val large = parse("POST $shape HTTP/1.1\r\nContent-Length: ${MAX_BODY_BYTES + 1}\r\n\r\n")
+        assertTrue("over 64 KiB is a stream", large.stream != null)
+        assertEquals(0, large.body.size)
+        assertTrue(parse("POST $shape HTTP/1.1\r\nContent-Length: $MAX_UPLOAD_BYTES\r\n\r\n").stream != null)
+        assertTrue(parse("POST $shape/ HTTP/1.1\r\nContent-Length: ${MAX_BODY_BYTES + 1}\r\n\r\n").stream != null)
+        assertEquals(413, refusal("POST $shape HTTP/1.1\r\nContent-Length: ${MAX_UPLOAD_BYTES + 1}\r\n\r\n").status)
+        val payload = "0123456789".repeat(10)
+        val input = ByteArrayInputStream("POST $shape HTTP/1.1\r\nContent-Length: 100\r\n\r\n$payload-after".toByteArray())
+        val request = parseRequest(input, caps)
+        assertEquals("the parser read a body byte", payload.length + "-after".length, input.available())
+        assertEquals(payload, request.stream!!.readBytes().decodeToString())
+    }
+
+    /** #69 (C-3, row 43a): every other method on those two shapes is framed, and no other shape is widened. */
+    @Test fun otherMethodsOnThoseShapesAreFramed() {
+        for (shape in listOf("/v1/supply-items/s1/attachments", "/v1/installed-components/c1/attachments")) {
+            assertEquals(413, refusal("PATCH $shape HTTP/1.1\r\nContent-Length: ${MAX_BODY_BYTES + 1}\r\n\r\n").status)
+            val patch = parse("PATCH $shape HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}")
+            assertTrue(patch.stream == null)
+            assertEquals("{}", patch.body.decodeToString())
+            assertTrue(parse("GET $shape HTTP/1.1\r\n\r\n").stream == null)
+            assertTrue(parse("DELETE $shape HTTP/1.1\r\n\r\n").stream == null)
+        }
+        for (other in listOf(
+            "/v1/supply-items/s1/references", "/v1/installed-components/c1/references", "/v1/supply-items/s1",
+            "/v1/supply-items/s1/attachments/x", "/v1/supply-items/s1/x/attachments", "/v1/supply-items//attachments",
+            "/v1/installed-components/c1/attachmentsx", "/v1/supply-item/s1/attachments", "/v1/components/c1/attachments",
+            "/v2/supply-items/s1/attachments", "/v1/installed-components/c1/remove",
+        )) {
+            assertEquals(other, 413, refusal("POST $other HTTP/1.1\r\nContent-Length: ${MAX_BODY_BYTES + 1}\r\n\r\n").status)
+        }
+    }
+
     @Test fun anUnknownMethodIs405() {
         assertEquals(405, refusal("PUT /v1/assets HTTP/1.1\r\n\r\n").status)
         assertEquals(405, refusal("OPTIONS /v1/assets HTTP/1.1\r\n\r\n").status)

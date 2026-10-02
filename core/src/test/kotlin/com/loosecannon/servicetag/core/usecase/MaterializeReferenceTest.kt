@@ -12,13 +12,17 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentKinds
+import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -35,8 +39,12 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.RecordingReferenceRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
+import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
@@ -58,8 +66,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Rows 19–23 (#85 C13–C15; R85-1, R85-2, R85-3, R85-6, R85-8, R85-14): saving a reference's document through the
- * real fetch over the core fakes. Nothing here touches a network: the transport, the resolver and the staging are
+ * Rows 19–23 (#85 C13–C15; R85-1, R85-2, R85-3, R85-6, R85-8, R85-14) and #69 row 26 (C17, H4): saving a
+ * reference's document through the real fetch over the core fakes, onto the reference's own owner. Nothing here touches a network: the transport, the resolver and the staging are
  * in memory, and the fetch runs on the test's own dispatcher. Fixtures are fictional (`example.invalid`, the
  * documentation address `203.0.113.0/24`).
  */
@@ -77,6 +85,14 @@ class MaterializeReferenceTest {
 
     private val pump = AssetId("a1")
     private val heater = AssetId("a2")
+    private val ofPump = ReferenceOwner.OfAsset(pump)
+    private val ofHeater = ReferenceOwner.OfAsset(heater)
+
+    /** #69 (row 26): the two other owners a link can have — a SupplyItem, and an installed component on the pump. */
+    private val cartridge = SupplyId("s1")
+    private val tray = InstalledComponentId("c1")
+    private val ofCartridge = ReferenceOwner.OfSupplyItem(cartridge)
+    private val ofTray = ReferenceOwner.OfInstalledComponent(tray)
     private val manualUri = "https://manuals.example.invalid/pool-pump/manual.pdf?lang=en"
 
     private fun reference(
@@ -86,8 +102,9 @@ class MaterializeReferenceTest {
         kind: ReferenceKind = ReferenceKind.WEB_URL,
         name: String = "Example Pool Pump manual",
         role: DocumentRole? = null,
+        owner: ReferenceOwner = ReferenceOwner.OfAsset(assetId),
     ) = AssetReference(
-        id = ReferenceId(id), assetId = assetId, kind = kind, uri = uri, displayName = name,
+        id = ReferenceId(id), owner = owner, kind = kind, uri = uri, displayName = name,
         description = "Installation and care", scheme = uri.substringBefore(':').lowercase(),
         createdAt = 1L, updatedAt = 1L, role = role,
     )
@@ -103,6 +120,10 @@ class MaterializeReferenceTest {
 
     private val assets = InMemoryAssetRepository()
     private val events = InMemoryEventRepository()
+
+    /** One SupplyItem double, shared by the component double that checks its links, both seeded by [seed]. */
+    private val supplyItems = InMemorySupplyItemRepository()
+    private val components = InMemoryInstalledComponentRepository(supplyItems)
     private val rows = InMemoryAttachmentRepository()
     private val reads = WatchedAttachments(rows)
     private val references = RecordingReferenceRepository()
@@ -130,7 +151,9 @@ class MaterializeReferenceTest {
         policy = LinkLaunchPolicy(),
         hops = HopPolicy(resolver),
         fetch = FetchDocument(transport, HopPolicy(resolver), staging, FetchLimits(), EmptyCoroutineContext),
-        addAttachment = AddAttachment(writes, assets, events, storage, uow, ids, clock),
+        addAttachment = AddAttachment(
+            writes, assets, events, supplyItems, components, storage, uow, ids, clock,
+        ),
         networkPermissionGranted = { permission },
         clock = clock,
     )
@@ -140,6 +163,8 @@ class MaterializeReferenceTest {
     private suspend fun seed(vararg refs: AssetReference = arrayOf(reference())): List<AssetReference> {
         assets.upsert(Asset(id = pump, name = "Example Pool Pump", createdAt = 1L, updatedAt = 1L))
         assets.upsert(Asset(id = heater, name = "Sample Water Heater", createdAt = 1L, updatedAt = 1L))
+        supplyItems.upsert(supplyItemOf(cartridge.value))
+        components.insert(installedComponentOf(tray.value, assetId = pump.value))
         refs.forEach { references.upsert(it) }
         return refs.toList()
     }
@@ -159,8 +184,12 @@ class MaterializeReferenceTest {
         updatedAt = createdAt,
     )
 
-    private suspend fun ready(assetId: AssetId = pump, referenceId: String = "ref-1"): Prepared.Ready =
-        assertIs<Prepared.Ready>(materialize.prepare(assetId, ReferenceId(referenceId)))
+    /** #69 (row 26): [handAdded]'s file on another owner, in that owner's directory. */
+    private fun handAddedOn(owner: AttachmentOwner, id: String, name: String) =
+        handAdded(id, pump, name).copy(owner = owner, storageLocator = "${AttachmentLocator.dirFor(owner)}/$id.pdf")
+
+    private suspend fun ready(owner: ReferenceOwner = ofPump, referenceId: String = "ref-1"): Prepared.Ready =
+        assertIs<Prepared.Ready>(materialize.prepare(owner, ReferenceId(referenceId)))
 
     /** The network was never asked: no GET, no lookup, no staging file. */
     private fun assertNoNetwork() {
@@ -188,9 +217,9 @@ class MaterializeReferenceTest {
 
         assertEquals(
             Prepared.Refused(MaterializeRefusal.NoSuchReference),
-            materialize.prepare(pump, ReferenceId("ref-missing")),
+            materialize.prepare(ofPump, ReferenceId("ref-missing")),
         )
-        assertEquals(Prepared.Refused(MaterializeRefusal.NoSuchReference), materialize.prepare(heater, ReferenceId("ref-1")))
+        assertEquals(Prepared.Refused(MaterializeRefusal.NoSuchReference), materialize.prepare(ofHeater, ReferenceId("ref-1")))
         assertNoNetwork()
         assertNothingWritten(seeded)
     }
@@ -208,7 +237,7 @@ class MaterializeReferenceTest {
         listOf("ref-note", "ref-http", "ref-user", "ref-local", "ref-odd").forEach { id ->
             assertEquals(
                 Prepared.Refused(MaterializeRefusal.NotEligible),
-                materialize.prepare(pump, ReferenceId(id)),
+                materialize.prepare(ofPump, ReferenceId(id)),
                 id,
             )
         }
@@ -234,7 +263,7 @@ class MaterializeReferenceTest {
         val cases = listOf("ref-blank", "ref-long-name", "ref-long-uri")
 
         // All three answered before any is judged, so a failure names every case that slipped through.
-        val answers = cases.associateWith { materialize.prepare(pump, ReferenceId(it)) }
+        val answers = cases.associateWith { materialize.prepare(ofPump, ReferenceId(it)) }
 
         assertEquals(cases.associateWith { Prepared.Refused(MaterializeRefusal.NotEligible) }, answers)
         assertNoNetwork()
@@ -248,12 +277,12 @@ class MaterializeReferenceTest {
         storage.state = StoreState.NotConfigured
         assertEquals(
             Prepared.Refused(MaterializeRefusal.Store(AttachmentProblem.NoStore)),
-            materialize.prepare(pump, ReferenceId("ref-1")),
+            materialize.prepare(ofPump, ReferenceId("ref-1")),
         )
         storage.state = StoreState.AccessLost("Attachments")
         assertEquals(
             Prepared.Refused(MaterializeRefusal.Store(AttachmentProblem.StoreUnavailable)),
-            materialize.prepare(pump, ReferenceId("ref-1")),
+            materialize.prepare(ofPump, ReferenceId("ref-1")),
         )
         assertNoNetwork()
         assertNothingWritten(seeded)
@@ -265,7 +294,7 @@ class MaterializeReferenceTest {
         transport.serve(manualUri, pdf, "application/pdf")
         permission = false
 
-        assertEquals(Prepared.Refused(MaterializeRefusal.NetworkDenied), materialize.prepare(pump, ReferenceId("ref-1")))
+        assertEquals(Prepared.Refused(MaterializeRefusal.NetworkDenied), materialize.prepare(ofPump, ReferenceId("ref-1")))
         assertNoNetwork()
         assertNothingWritten(seeded)
     }
@@ -280,14 +309,14 @@ class MaterializeReferenceTest {
         storage.state = StoreState.NotConfigured
         permission = false
 
-        assertEquals(Prepared.Refused(MaterializeRefusal.NoSuchReference), materialize.prepare(heater, ReferenceId("ref-note")))
-        assertEquals(Prepared.Refused(MaterializeRefusal.NotEligible), materialize.prepare(pump, ReferenceId("ref-note")))
+        assertEquals(Prepared.Refused(MaterializeRefusal.NoSuchReference), materialize.prepare(ofHeater, ReferenceId("ref-note")))
+        assertEquals(Prepared.Refused(MaterializeRefusal.NotEligible), materialize.prepare(ofPump, ReferenceId("ref-note")))
         assertEquals(
             Prepared.Refused(MaterializeRefusal.Store(AttachmentProblem.NoStore)),
-            materialize.prepare(pump, ReferenceId("ref-1")),
+            materialize.prepare(ofPump, ReferenceId("ref-1")),
         )
         storage.state = StoreState.Ready("Attachments", "com.example.provider")
-        assertEquals(Prepared.Refused(MaterializeRefusal.NetworkDenied), materialize.prepare(pump, ReferenceId("ref-1")))
+        assertEquals(Prepared.Refused(MaterializeRefusal.NetworkDenied), materialize.prepare(ofPump, ReferenceId("ref-1")))
         assertNoNetwork()
         assertNothingWritten(seeded)
     }
@@ -303,14 +332,14 @@ class MaterializeReferenceTest {
         transport.fail(manualUri, TransportFailure.Kind.DENIED)
         transport.status("https://manuals.example.invalid/pool-pump/gone.pdf", 404)
 
-        assertEquals(Prepared.Refused(MaterializeRefusal.NetworkDenied), materialize.prepare(pump, ReferenceId("ref-1")))
+        assertEquals(Prepared.Refused(MaterializeRefusal.NetworkDenied), materialize.prepare(ofPump, ReferenceId("ref-1")))
         assertEquals(
             Prepared.Refused(MaterializeRefusal.Fetch(FetchProblem.LocalAddress)),
-            materialize.prepare(pump, ReferenceId("ref-lan")),
+            materialize.prepare(ofPump, ReferenceId("ref-lan")),
         )
         assertEquals(
             Prepared.Refused(MaterializeRefusal.Fetch(FetchProblem.ServerError(404))),
-            materialize.prepare(pump, ReferenceId("ref-gone")),
+            materialize.prepare(ofPump, ReferenceId("ref-gone")),
         )
         assertNothingWritten(seeded)
     }
@@ -327,7 +356,7 @@ class MaterializeReferenceTest {
         }
 
         val ready = ready()
-        assertEquals(pump, ready.assetId)
+        assertEquals(ofPump, ready.owner)
         assertEquals(
             SourceSnapshot(
                 manualUri, "Example Pool Pump manual", "Installation and care", "manuals.example.invalid", role = null,
@@ -433,7 +462,7 @@ class MaterializeReferenceTest {
 
         transport.redirect(manualUri, "https://manuals.example.invalid/pool-pump/manual.pdf;jsessionid=AB12")
         transport.serve("https://manuals.example.invalid/pool-pump/manual.pdf;jsessionid=AB12", pdf, "application/pdf")
-        val second = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(heater, "ref-h"), review())).value
+        val second = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(ofHeater, "ref-h"), review())).value
         assertNull(second.source?.resolvedUri)
     }
 
@@ -454,7 +483,7 @@ class MaterializeReferenceTest {
 
         transport.redirect(manualUri, over)
         transport.serve(over, pdf, "application/pdf")
-        val dropped = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(heater, "ref-h"), review())).value
+        val dropped = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(ofHeater, "ref-h"), review())).value
         assertNull(dropped.source?.resolvedUri)
         assertEquals(manualUri, dropped.source?.uri)
     }
@@ -542,7 +571,7 @@ class MaterializeReferenceTest {
         assertEquals(mapOf(row.id.value to row), rows.rows.toMap())
         assertEquals(1, uow.commits)
 
-        val dropped = ready(heater, "ref-h")
+        val dropped = ready(ofHeater, "ref-h")
         materialize.discard(dropped)
         assertFailsWith<IllegalStateException> { materialize.commit(dropped, review()) }
         assertEquals(mapOf(row.id.value to row), rows.rows.toMap(), "nothing was added to the heater")
@@ -583,7 +612,7 @@ class MaterializeReferenceTest {
         // The earliest by createdAt, then id, in any mode; a digest match of another size is not the same bytes.
         assertEquals(
             Prepared.Refused(MaterializeRefusal.AlreadyHave("Linked copy.pdf", AttachmentId("att-h1"))),
-            materialize.prepare(pump, ReferenceId("ref-1")),
+            materialize.prepare(ofPump, ReferenceId("ref-1")),
         )
         assertTrue(staging.files.single().discarded)
         assertTrue(store.files.isEmpty())
@@ -606,7 +635,7 @@ class MaterializeReferenceTest {
         ).forEach { rows.upsert(it) }
         transport.serve(manualUri, pdf, "application/pdf")
 
-        val refused = assertIs<Prepared.Refused>(materialize.prepare(pump, ReferenceId("ref-1")))
+        val refused = assertIs<Prepared.Refused>(materialize.prepare(ofPump, ReferenceId("ref-1")))
         val why = assertIs<MaterializeRefusal.AlreadyHave>(refused.why)
         assertEquals(AttachmentId("att-early"), why.attachmentId)
         assertEquals("Earlier copy.pdf", why.name)
@@ -628,7 +657,7 @@ class MaterializeReferenceTest {
         assertEquals(2, uow.commits)
         assertEquals(
             Prepared.Refused(MaterializeRefusal.AlreadyHave("Revised manual", second.id)),
-            materialize.prepare(pump, ReferenceId("ref-1")),
+            materialize.prepare(ofPump, ReferenceId("ref-1")),
         )
         assertTrue(staging.files.all { it.discarded })
     }
@@ -639,8 +668,8 @@ class MaterializeReferenceTest {
         seed(reference(), reference("ref-h", assetId = heater))
         transport.serve(manualUri, pdf, "application/pdf")
 
-        val onPump = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(pump, "ref-1"), review())).value
-        val onHeater = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(heater, "ref-h"), review())).value
+        val onPump = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(ofPump, "ref-1"), review())).value
+        val onHeater = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready(ofHeater, "ref-h"), review())).value
 
         assertEquals(AttachmentOwner.OfAsset(pump), onPump.owner)
         assertEquals(AttachmentOwner.OfAsset(heater), onHeater.owner)
@@ -657,7 +686,7 @@ class MaterializeReferenceTest {
         transport.serve(manualUri, pdf, "application/pdf")
         reads.gate = CompletableDeferred()
 
-        val job = launch { materialize.prepare(pump, ReferenceId("ref-1")) }
+        val job = launch { materialize.prepare(ofPump, ReferenceId("ref-1")) }
         runCurrent()
         assertEquals(1, reads.waiting, "prepare never reached the duplicate check")
         assertFalse(staging.files.single().discarded)
@@ -674,9 +703,9 @@ class MaterializeReferenceTest {
     fun aFailingDuplicateCheckDiscardsAndRethrows() = runTest {
         val seeded = seed()
         transport.serve(manualUri, pdf, "application/pdf")
-        reads.failure = RiggedFailure("rigged forAsset failure")
+        reads.failure = RiggedFailure("rigged forOwner failure")
 
-        assertFailsWith<RiggedFailure> { materialize.prepare(pump, ReferenceId("ref-1")) }
+        assertFailsWith<RiggedFailure> { materialize.prepare(ofPump, ReferenceId("ref-1")) }
 
         assertTrue(staging.files.single().discarded)
         assertNothingWritten(seeded)
@@ -718,11 +747,11 @@ class MaterializeReferenceTest {
         val install = BackupInstall()
         val guard = HeldWriteGuard(
             install.transfers, install.events, install.definitions, install.profiles, install.groups,
-            install.schedules, install.serviceCases, install.links,
+            install.schedules, install.serviceCases, install.links, install.installedComponents,
         )
         val guarded = materializer(writes = guard.attachments(rows))
         transport.serve(manualUri, pdf, "application/pdf")
-        val ready = assertIs<Prepared.Ready>(guarded.prepare(pump, ReferenceId("ref-1")))
+        val ready = assertIs<Prepared.Ready>(guarded.prepare(ofPump, ReferenceId("ref-1")))
         install.transfers.append(transferOf("out-1", assetId = pump.value, nameSnapshot = "Example Pool Pump"))
 
         val refused = assertFailsWith<AssetTransferredOut> { guarded.commit(ready, review()) }
@@ -762,11 +791,145 @@ class MaterializeReferenceTest {
         assertEquals(1, references.upserts)
         assertEquals(0, references.deletes)
     }
+
+    // ---- #69 row 26 (C17, H4, AC13): the save lands on the reference's own owner ----
+
+    @Test
+    fun prepareOnASupplyItemsLinkAndCommitLandsOnTheSupplyItem() = runTest {
+        seed(reference("ref-s", owner = ofCartridge))
+        transport.serve(manualUri, pdf, "application/pdf")
+
+        val ready = ready(ofCartridge, "ref-s")
+        assertEquals(ofCartridge, ready.owner)
+        val row = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready, review())).value
+
+        assertEquals(AttachmentOwner.OfSupplyItem(cartridge), row.owner)
+        assertEquals("supply-items/s1/att-1.pdf", row.storageLocator)
+        assertContentEquals(pdf, store.files.getValue("supply-items/s1/att-1.pdf"))
+        assertEquals(listOf(row), rows.forOwner(AttachmentOwner.OfSupplyItem(cartridge)))
+        assertEquals(emptyList(), rows.forAsset(pump), "nothing lands on an asset")
+        assertEquals(1, uow.commits)
+        assertEquals(1, transport.requests.size, "one fetch")
+    }
+
+    @Test
+    fun prepareOnAComponentsLinkAndCommitLandsOnTheComponent() = runTest {
+        seed(reference("ref-c", owner = ofTray))
+        transport.serve(manualUri, pdf, "application/pdf")
+
+        val ready = ready(ofTray, "ref-c")
+        assertEquals(ofTray, ready.owner)
+        val row = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready, review())).value
+
+        assertEquals(AttachmentOwner.OfInstalledComponent(tray), row.owner)
+        assertEquals("installed-components/c1/att-1.pdf", row.storageLocator)
+        assertContentEquals(pdf, store.files.getValue("installed-components/c1/att-1.pdf"))
+        assertEquals(listOf(row), rows.forOwner(AttachmentOwner.OfInstalledComponent(tray)))
+        assertEquals(emptyList(), rows.forAsset(pump), "nothing lands on the component's asset")
+        assertEquals(1, uow.commits)
+        assertEquals(1, transport.requests.size, "one fetch")
+    }
+
+    /** H4: the same bytes already on the asset never refuse the SupplyItem's save; its own copy then does. */
+    @Test
+    fun theDuplicateCheckIsTheOwnersOwnFiles() = runTest {
+        seed(reference(), reference("ref-s", owner = ofCartridge))
+        rows.upsert(handAdded("att-h1", pump, "Pump manual scan.pdf"))
+        transport.serve(manualUri, pdf, "application/pdf")
+
+        val first = materialize.prepare(ofCartridge, ReferenceId("ref-s"))
+        val ready = assertIs<Prepared.Ready>(first, "the asset's same bytes refused the SupplyItem's save: $first")
+        val onItem = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready, review())).value
+
+        assertEquals(AttachmentOwner.OfSupplyItem(cartridge), onItem.owner)
+        assertEquals(
+            Prepared.Refused(MaterializeRefusal.AlreadyHave("Pool pump manual", onItem.id)),
+            materialize.prepare(ofCartridge, ReferenceId("ref-s")),
+        )
+        assertEquals(
+            Prepared.Refused(MaterializeRefusal.AlreadyHave("Pump manual scan.pdf", AttachmentId("att-h1"))),
+            materialize.prepare(ofPump, ReferenceId("ref-1")),
+        )
+        assertTrue(staging.files.all { it.discarded })
+    }
+
+    /** H4, the reverse: the same bytes on a SupplyItem and on a component never refuse the asset's save. */
+    @Test
+    fun theSameBytesOnOtherOwnersDoNotRefuseTheAssetsSave() = runTest {
+        seed()
+        rows.upsert(handAddedOn(AttachmentOwner.OfSupplyItem(cartridge), "att-s1", "Cartridge data sheet.pdf"))
+        rows.upsert(handAddedOn(AttachmentOwner.OfInstalledComponent(tray), "att-c1", "Tray install record.pdf"))
+        transport.serve(manualUri, pdf, "application/pdf")
+
+        val first = materialize.prepare(ofPump, ReferenceId("ref-1"))
+        val ready = assertIs<Prepared.Ready>(first, "another owner's same bytes refused the asset's save: $first")
+        val onAsset = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready, review())).value
+
+        assertEquals(AttachmentOwner.OfAsset(pump), onAsset.owner)
+        assertEquals(sha256(pdf), onAsset.sha256)
+        assertEquals(listOf(onAsset), rows.forAsset(pump))
+        assertEquals(3, rows.rows.size)
+    }
+
+    /** R69-6: a reference's role travels to the saved file on either new owner, with the shipped source. */
+    @Test
+    fun theRoleAndSourceTravel() = runTest {
+        val trayUri = "https://manuals.example.invalid/battery-tray/install.pdf"
+        seed(
+            reference("ref-s", owner = ofCartridge, role = DocumentRole.USER_MANUAL),
+            reference(
+                "ref-c", owner = ofTray, uri = trayUri, name = "Example Battery Tray guide",
+                role = DocumentRole.SERVICE_MANUAL,
+            ),
+        )
+        transport.serve(manualUri, pdf, "application/pdf")
+        transport.serve(trayUri, revisedPdf, "application/pdf")
+
+        val saved = listOf(ready(ofCartridge, "ref-s"), ready(ofTray, "ref-c")).map { ready ->
+            assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(ready, review(role = ready.snapshot.role)))
+                .value
+        }
+
+        assertEquals(listOf(DocumentRole.USER_MANUAL, DocumentRole.SERVICE_MANUAL), saved.map { it.role })
+        assertEquals(
+            listOf(
+                AttachmentSource(manualUri, null, retrievedAt = 7_000L, name = "Example Pool Pump manual"),
+                AttachmentSource(trayUri, null, retrievedAt = 7_000L, name = "Example Battery Tray guide"),
+            ),
+            saved.map { it.source },
+        )
+        assertEquals(
+            listOf(AttachmentOwner.OfSupplyItem(cartridge), AttachmentOwner.OfInstalledComponent(tray)),
+            saved.map { it.owner },
+        )
+    }
+
+    /**
+     * C17: a link answers only under its own owner — never an asset's for a SupplyItem's or a component's, nor the
+     * reverse, nor under another kind of owner sharing its id string (H3: the owner is a typed value).
+     */
+    @Test
+    fun aReferenceOfAnotherOwnerIsNoSuchReference() = runTest {
+        val seeded = seed(reference(), reference("ref-s", owner = ofCartridge), reference("ref-c", owner = ofTray))
+        val asked = listOf(
+            ofPump to "ref-s", ofPump to "ref-c", ofCartridge to "ref-1", ofCartridge to "ref-c", ofTray to "ref-1",
+            ofTray to "ref-s", ReferenceOwner.OfSupplyItem(SupplyId(pump.value)) to "ref-1",
+            ReferenceOwner.OfInstalledComponent(InstalledComponentId(pump.value)) to "ref-1",
+            ReferenceOwner.OfAsset(AssetId(cartridge.value)) to "ref-s",
+        )
+
+        val answers = asked.map { (owner, id) -> materialize.prepare(owner, ReferenceId(id)) }
+
+        assertEquals(asked.map { Prepared.Refused(MaterializeRefusal.NoSuchReference) }, answers)
+        assertNoNetwork()
+        assertNothingWritten(seeded)
+    }
 }
 
 /**
- * The read port the duplicate check uses. [gate] parks `forAsset` until completed, so a test can cancel
+ * The read port the duplicate check uses. [gate] parks `forOwner` until completed, so a test can cancel
  * `prepare` exactly there (review m2); [failure] makes it throw instead. Everything else is the plain repository.
+ * #69 (C17, C-5): the check reads the owner's own files through `forOwner`, so the gate sits there.
  */
 private class WatchedAttachments(private val inner: InMemoryAttachmentRepository) : AttachmentRepository by inner {
     var gate: CompletableDeferred<Unit>? = null
@@ -774,12 +937,12 @@ private class WatchedAttachments(private val inner: InMemoryAttachmentRepository
     var waiting = 0
         private set
 
-    override suspend fun forAsset(assetId: AssetId): List<Attachment> {
+    override suspend fun forOwner(owner: AttachmentOwner): List<Attachment> {
         failure?.let { throw it }
         gate?.let {
             waiting += 1
             it.await()
         }
-        return inner.forAsset(assetId)
+        return inner.forOwner(owner)
     }
 }

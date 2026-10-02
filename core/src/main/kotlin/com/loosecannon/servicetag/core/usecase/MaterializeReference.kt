@@ -4,16 +4,16 @@ import com.loosecannon.servicetag.core.fetch.FetchDocument
 import com.loosecannon.servicetag.core.fetch.FetchOutcome
 import com.loosecannon.servicetag.core.fetch.FetchProblem
 import com.loosecannon.servicetag.core.fetch.HopPolicy
-import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
-import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.core.model.attachmentSourceProblem
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -28,9 +28,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * #85 (C12–C15; R85-1, R85-2, R85-3, R85-6, R85-8, R85-14): **Save as document** — a web reference's file
- * downloaded, reviewed by the owner, and stored as an ordinary managed attachment on the same asset, carrying a
- * write-once snapshot of where it came from. Built once in `AppGraph`; used only by the Save-as-document sheet,
- * whose view model owns the job, so leaving or cancelling stops it (R85-8).
+ * downloaded, reviewed by the owner, and stored as an ordinary managed attachment on the reference's own owner
+ * (#69, C17: an asset, a SupplyItem or an installed component), carrying a write-once snapshot of where it came
+ * from. Built once in `AppGraph`; used by the Save-as-document sheet (whose view model owns the job, so
+ * leaving or cancelling stops it — R85-8) and by the API's materialize route (#69 B4).
  *
  * - **A copy, never a move (R85-1).** Nothing here writes or deletes a reference: [references] is only read,
  *   once, at [prepare], and the snapshot is taken from that read. The attachment keeps no `reference_id`
@@ -44,7 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - **The network comes last.** The transport and the resolver are reached only through [fetch], after the
  *   reference, its eligibility, the store and the permission have all been checked.
  *
- * Two saves on one asset at once cannot come from the phone (the sheet is modal and holds one job), so the
+ * Two saves on one owner at once cannot come from the phone (the sheet is modal and holds one job), so the
  * duplicate check is not repeated inside the write: a stated limit, not a lock.
  */
 class MaterializeReference(
@@ -59,18 +60,19 @@ class MaterializeReference(
     private val clock: Clock,
 ) {
     /**
-     * C13, in order: the reference exists on [assetId]; it is an https web link the static hop rule accepts; the
-     * store is there; the network permission is granted; then the fetch, with [onProgress] as the fetch calls it
-     * (on its `io` thread). A [Prepared.Ready] carries the kept staging file; the caller must [commit] or
-     * [discard] it. A cancellation propagates, never a refusal.
+     * C13, in order: the reference exists and [owner] is its owner (#69, C17); it is an https web link the static
+     * hop rule accepts; the store is there; the network permission is granted; then the fetch, with [onProgress] as
+     * the fetch calls it (on its `io` thread); then the duplicate check over [owner]'s own files. A [Prepared.Ready]
+     * carries the kept staging file; the caller must [commit] or [discard] it. A cancellation propagates, never a
+     * refusal.
      */
     suspend fun prepare(
-        assetId: AssetId,
+        owner: ReferenceOwner,
         referenceId: ReferenceId,
         onProgress: (done: Long, total: Long?) -> Unit = { _, _ -> },
     ): Prepared {
         val reference = references.get(referenceId)
-            ?.takeIf { it.assetId == assetId }
+            ?.takeIf { it.owner == owner }
             ?: return refused(MaterializeRefusal.NoSuchReference)
         val uri = reference.uri
         // The last clause asks the source shape rule now, before any byte is fetched: a restored or merged
@@ -101,25 +103,26 @@ class MaterializeReference(
         }
 
         // Review m2: from here until `Ready` is returned the staging file is ours, and the duplicate check
-        // suspends — so any refusal, throw or cancellation discards it before it leaves.
+        // suspends — so any refusal, throw or cancellation discards it before it leaves. #69 (C17, H4): the owner's
+        // own files only, so the same bytes on another owner never refuse this save.
         var handedOver = false
         try {
             val retrievedAt = clock.nowMillis()
-            val same = attachments.forAsset(assetId)
+            val same = attachments.forOwner(owner.asAttachmentOwner())
                 .filter { it.sha256 == fetched.sha256 && it.sizeBytes == fetched.sizeBytes }
                 .minWithOrNull(compareBy<Attachment>({ it.createdAt }, { it.id.value }))
             if (same != null) return refused(MaterializeRefusal.AlreadyHave(same.displayName, same.id))
             val snapshot = SourceSnapshot(uri, reference.displayName, reference.description, host, reference.role)
-            return Prepared.Ready(assetId, snapshot, fetched, retrievedAt).also { handedOver = true }
+            return Prepared.Ready(owner, snapshot, fetched, retrievedAt).also { handedOver = true }
         } finally {
             if (!handedOver) fetched.staged.discard()
         }
     }
 
     /**
-     * C14: exactly one [AddAttachment] call on the same asset, the review's name, kind, role and notes, the
-     * sniffed type, and the snapshot as the source. A blank name answers [AttachmentProblem.BlankName] and keeps
-     * the staging for the next Save; every other outcome — stored, refused or thrown (the guard's
+     * C14: exactly one [AddAttachment] call on the reference's owner (#69, C17), the review's name, kind, role and
+     * notes, the sniffed type, and the snapshot as the source. A blank name answers [AttachmentProblem.BlankName]
+     * and keeps the staging for the next Save; every other outcome — stored, refused or thrown (the guard's
      * `AssetTransferredOut`, a store failure) — discards it first.
      */
     suspend fun commit(ready: Prepared.Ready, review: MaterializeReview): AttachmentResult<Attachment> {
@@ -144,7 +147,7 @@ class MaterializeReference(
                 role = review.role,
                 source = source,
             )
-            return addAttachment.run(AttachmentOwner.OfAsset(ready.assetId), command, ready.fetched.staged.source())
+            return addAttachment.run(ready.owner.asAttachmentOwner(), command, ready.fetched.staged.source())
         } finally {
             ready.fetched.staged.discard()   // the bytes are in the store now, or nowhere
         }
@@ -173,14 +176,15 @@ class MaterializeReference(
 /** What [MaterializeReference.prepare] answers. */
 sealed interface Prepared {
     /**
-     * The download is in staging, proven a document, and not already on the asset. [retrievedAt] is when the
-     * fetch finished. [toString] names no URI, host or title (review NOTE 1): a stray log line carries none.
+     * The download is in staging, proven a document, and not already among [owner]'s own files; [owner] is the
+     * reference's, and the saved file's owner follows from it (#69, C17). [retrievedAt] is when the fetch finished.
+     * [toString] names no URI, host or title (review NOTE 1): a stray log line carries none.
      *
      * Single use: the first `commit` that gets past a blank name, or the first `discard`, spends it, and any
      * later `commit` throws `IllegalStateException`. The flag is atomic, so two commits at once cannot both pass.
      */
     data class Ready(
-        val assetId: AssetId,
+        val owner: ReferenceOwner,
         val snapshot: SourceSnapshot,
         val fetched: FetchOutcome.Fetched,
         val retrievedAt: Long,
@@ -191,7 +195,7 @@ sealed interface Prepared {
         /** True for the one caller that spends it; false for every later one. */
         internal fun spend(): Boolean = spent.compareAndSet(false, true)
 
-        override fun toString() = "Ready(assetId=${assetId.value}, fetched=$fetched, retrievedAt=$retrievedAt)"
+        override fun toString() = "Ready(owner=$owner, fetched=$fetched, retrievedAt=$retrievedAt)"
     }
 
     data class Refused(val why: MaterializeRefusal) : Prepared
@@ -222,7 +226,7 @@ data class MaterializeReview(
 
 /** Why [MaterializeReference.prepare] stopped short of a download in hand. */
 sealed interface MaterializeRefusal {
-    /** No such reference, or it belongs to another asset. */
+    /** No such reference, or it belongs to another owner. */
     data object NoSuchReference : MaterializeRefusal
 
     /**
@@ -241,8 +245,8 @@ sealed interface MaterializeRefusal {
     data class Fetch(val problem: FetchProblem) : MaterializeRefusal
 
     /**
-     * R85-6: the same bytes (digest and size) are already on this asset, as the earliest such row [name]s. #92 (C17):
-     * [attachmentId] is that row's id, so the API can name the row without its name.
+     * R85-6: the same bytes (digest and size) are already among the owner's own files, as the earliest such row
+     * [name]s. #92 (C17): [attachmentId] is that row's id, so the API can name the row without its name.
      */
     data class AlreadyHave(val name: String, val attachmentId: AttachmentId) : MaterializeRefusal
 }

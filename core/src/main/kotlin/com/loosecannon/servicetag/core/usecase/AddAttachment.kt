@@ -17,7 +17,9 @@ import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -33,6 +35,8 @@ class AddAttachment(
     private val attachments: AttachmentRepository,
     private val assets: AssetRepository,
     private val events: EventRepository,
+    private val supplyItems: SupplyItemRepository,
+    private val installedComponents: InstalledComponentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
@@ -51,7 +55,9 @@ class AddAttachment(
     ): AttachmentResult<Attachment> {
         // #67, C1: first, so a role on an event can never reach `put`. Not a refusal the section
         // draws — no screen offers a role on an event's file — but a caller's mistake.
-        require(owner.accepts(cmd.role)) { "a document role belongs on an asset's attachment, not an event's" }
+        require(owner.accepts(cmd.role)) {
+            "a document role belongs on an asset's, a supply item's or an installed component's file, not an entry's"
+        }
         // #85, C12: provenance never enters malformed. A caller's mistake too, and just as early.
         val sourceProblem = cmd.source?.let { attachmentSourceProblem(it.uri, it.resolvedUri, it.retrievedAt, it.name) }
         require(sourceProblem == null) { "a malformed attachment source: $sourceProblem" }
@@ -119,8 +125,11 @@ class AddAttachment(
         return AttachmentResult.Ok(row)
     }
 
+    /** #69 (R69-10): an archived SupplyItem and a removed component are owners like any other. */
     private suspend fun ownerExists(owner: AttachmentOwner): Boolean = when (owner) {
         is AttachmentOwner.OfAsset -> assets.get(owner.assetId) != null
         is AttachmentOwner.OfEvent -> events.get(owner.eventId) != null
+        is AttachmentOwner.OfSupplyItem -> supplyItems.get(owner.supplyId) != null
+        is AttachmentOwner.OfInstalledComponent -> installedComponents.get(owner.componentId) != null
     }
 }

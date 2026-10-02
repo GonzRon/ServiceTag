@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.CaseCoverage
 import com.loosecannon.servicetag.core.model.CaseType
@@ -39,6 +40,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -96,6 +98,7 @@ import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
 import com.loosecannon.servicetag.core.usecase.AssetSupplyProblem
 import com.loosecannon.servicetag.core.usecase.AssetSupplyResult
+import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.CaseEntryCommand
@@ -197,7 +200,7 @@ class HeldWriteGuardTest {
     private val install = BackupInstall()
     private val guard = HeldWriteGuard(
         install.transfers, install.events, install.definitions, install.profiles, install.groups, install.schedules,
-        install.serviceCases, install.links,
+        install.serviceCases, install.links, install.installedComponents,
     )
 
     // The eighteen guarded ports, as AppGraph hands them to every use case (#15's applicability the seventeenth, #47's
@@ -273,7 +276,8 @@ class HeldWriteGuardTest {
         install.attachments.upsert(attachmentOf("at2", AttachmentOwner.OfEvent(EventId("e1"))))
         install.references.upsert(
             AssetReference(
-                id = ReferenceId("r1"), assetId = heater, kind = ReferenceKind.WEB_URL, uri = "https://example.com/heater",
+                id = ReferenceId("r1"), owner = ReferenceOwner.OfAsset(heater), kind = ReferenceKind.WEB_URL,
+                uri = "https://example.com/heater",
                 displayName = "Example heater page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
             ),
         )
@@ -412,7 +416,9 @@ class HeldWriteGuardTest {
         refused(
             heater,
             "AddAttachment" to {
-                AddAttachment(attachments, assets, events, install.storage, uow, ids, clock).run(
+                AddAttachment(
+                    attachments, assets, events, install.supplyItems, installedComponents, install.storage, uow, ids, clock,
+                ).run(
                     AttachmentOwner.OfAsset(heater),
                     AddAttachmentCommand(displayName = "Example receipt.pdf", mimeType = "application/pdf"),
                     ByteSource { ByteArrayInputStream("Example receipt".toByteArray()) },
@@ -425,8 +431,8 @@ class HeldWriteGuardTest {
             },
             "DeleteAttachment" to { DeleteAttachment(attachments, install.storage, uow).run(AttachmentId("at2")) },
             "AddReference" to {
-                AddReference(references, assets, LinkLaunchPolicy(), uow, ids, clock)
-                    .run(heater, AddReferenceCommand("https://example.com/parts", "Example parts page"))
+                AddReference(references, assets, install.supplyItems, installedComponents, LinkLaunchPolicy(), uow, ids, clock)
+                    .run(ReferenceOwner.OfAsset(heater), AddReferenceCommand("https://example.com/parts", "Example parts page"))
             },
             "UpdateReference" to {
                 UpdateReference(references, uow, clock).run(ReferenceId("r1"), UpdateReferenceCommand("Example page", "", role = null))
@@ -631,7 +637,7 @@ class HeldWriteGuardTest {
     @Test
     fun deleteAssetPassesAndKeepsRecords() = runTest {
         seed()
-        DeleteAsset(assets, events, attachments, install.storage, uow, groups, schedules, closures).run(anode)
+        DeleteAsset(assets, events, attachments, install.storage, uow, groups, schedules, closures, installedComponents).run(anode)
         assertNull(install.assets.get(anode))
         assertEquals(listOf("out-h2"), install.transfers.forAsset(anode).map { it.id })
         assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held: the records are the custody facts")
@@ -1031,4 +1037,107 @@ class HeldWriteGuardTest {
         uow.write { installedComponents.update(staying.copy(notes = "Example note", updatedAt = 3_000L)) }
         assertEquals("Example note", install.installedComponents.get(InstalledComponentId("cx"))!!.notes, "a staying asset's row updates as before")
     }
+
+    // ---- #69 (C5 I5, row 18): a component's file is its asset's; a SupplyItem's file is no asset's ------------------
+
+    /**
+     * [seedComponents]' rows, a removed sleeve on the held anode (c9), and one file each on the heater's tray, the
+     * sleeve and the compressor's housing, laid down raw.
+     */
+    private suspend fun seedComponentFiles() {
+        seedComponents()
+        install.installedComponents.insert(installedComponentOf("c9", assetId = "h2", name = "Example Sleeve", removedOn = "2026-09-20"))
+        listOf("fc1" to "c1", "fc9" to "c9", "fcx" to "cx").forEach { (id, component) ->
+            install.attachments.upsert(resourceOf(id, AttachmentOwner.OfInstalledComponent(InstalledComponentId(component))))
+        }
+    }
+
+    private fun addAttachment() =
+        AddAttachment(attachments, assets, events, install.supplyItems, installedComponents, install.storage, uow, ids, clock)
+
+    private suspend fun AddAttachment.added(owner: AttachmentOwner): Attachment {
+        val result = this.run(
+            owner,
+            AddAttachmentCommand(displayName = "Example manual.pdf", mimeType = "application/pdf"),
+            ByteSource { ByteArrayInputStream("Example manual".toByteArray()) },
+        )
+        check(result is AttachmentResult.Ok) { "not added: $result" }
+        return result.value
+    }
+
+    /** A new file on a held asset's component, current or removed, and an edit of one, each through the guarded port. */
+    @Test
+    fun aComponentsFileOnAHeldAssetThrows() = runTest {
+        seed()
+        seedComponentFiles()
+        val tray = AttachmentOwner.OfInstalledComponent(InstalledComponentId("c1"))
+        val before = install.attachments.rows.toMap()
+
+        refused(
+            heater,
+            "a new file on h1's tray" to { uow.write { attachments.upsert(resourceOf("fc2", tray)) } },
+            "an edit of the tray's file" to {
+                uow.write { attachments.upsert(before.getValue("fc1").copy(displayName = "Example tray manual.pdf", updatedAt = 3_000L)) }
+            },
+            "AddAttachment on h1's tray" to { addAttachment().added(tray) },
+        )
+        refused(
+            anode,
+            "a new file on h2's removed sleeve" to {
+                uow.write { attachments.upsert(resourceOf("fc3", AttachmentOwner.OfInstalledComponent(InstalledComponentId("c9")))) }
+            },
+        )
+        assertEquals(before, install.attachments.rows.toMap(), "nothing was written")
+
+        uow.write { attachments.upsert(resourceOf("fc4", AttachmentOwner.OfInstalledComponent(InstalledComponentId("cx")))) }
+        assertNotNull(install.attachments.get(AttachmentId("fc4")), "a staying asset's component takes a file as before")
+    }
+
+    /** Removing a held asset's component's file, raw or through the use case, is a write on that asset. */
+    @Test
+    fun deletingAComponentsFileOnAHeldAssetThrows() = runTest {
+        seed()
+        seedComponentFiles()
+        val before = install.attachments.rows.toMap()
+
+        refused(
+            heater,
+            "delete the tray's file" to { uow.write { attachments.delete(AttachmentId("fc1")) } },
+            "DeleteAttachment on it" to { DeleteAttachment(attachments, install.storage, uow).run(AttachmentId("fc1")) },
+        )
+        refused(anode, "delete the removed sleeve's file" to { uow.write { attachments.delete(AttachmentId("fc9")) } })
+        assertEquals(before, install.attachments.rows.toMap(), "nothing was removed")
+
+        uow.write { attachments.delete(AttachmentId("fcx")) }
+        assertNull(install.attachments.get(AttachmentId("fcx")), "a staying asset's component's file deletes as before")
+    }
+
+    /**
+     * A SupplyItem (s2) that only held assets name — the heater's and the anode's applicability and the anode's removed
+     * sleeve — is still global: a file on it is added, edited and removed while both assets are out.
+     */
+    @Test
+    fun aSupplyItemsFilePassesWhileEveryAssetNamingItIsHeld() = runTest {
+        seed()
+        seedComponentFiles()
+        install.supplyItems.upsert(supplyItemOf("s2", "Example Magnesium Anode"))
+        install.assetSupplies.insert(assetSupplyOf("as1", "h1", "s2", "Sacrificial anode"))
+        install.assetSupplies.insert(assetSupplyOf("as2", "h2", "s2", "Replacement"))
+        install.installedComponents.update(install.installedComponents.get(InstalledComponentId("c9"))!!.copy(supplyId = SupplyId("s2")))
+        val anodeItem = AttachmentOwner.OfSupplyItem(SupplyId("s2"))
+
+        uow.write { attachments.upsert(resourceOf("fs1", anodeItem)) }
+        uow.write { attachments.upsert(install.attachments.get(AttachmentId("fs1"))!!.copy(displayName = "Example anode sheet.pdf", updatedAt = 3_000L)) }
+        val added = addAttachment().added(anodeItem)
+        uow.write { attachments.delete(AttachmentId("fs1")) }
+
+        assertEquals(listOf(added.id), install.attachments.forOwner(anodeItem).map { it.id }, "every write on the SupplyItem's files passed")
+        assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held")
+    }
+
+    private fun resourceOf(id: String, owner: AttachmentOwner) = Attachment(
+        id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "$id file",
+        mimeType = "application/pdf", sizeBytes = 4L, sha256 = "ab".repeat(32),
+        storageLocator = "${AttachmentLocator.dirFor(owner)}/$id.pdf", capturedOn = null, createdAt = 100L, updatedAt = 100L,
+    )
 }

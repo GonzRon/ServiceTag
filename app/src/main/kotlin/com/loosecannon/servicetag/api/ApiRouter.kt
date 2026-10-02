@@ -1,6 +1,10 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +26,8 @@ internal const val MAX_IMPORT_BYTES: Int = 4 * 1024 * 1024
 
 /**
  * #92 (C9): the attachment upload's ceiling, the attachment cap itself (256 MiB, which fits the parser's `Int`), for
- * `POST /v1/assets/{id}/attachments` alone. That body is never held in memory: it streams into staging.
+ * `POST /v1/assets/{id}/attachments` and, since #69, the same upload to a SupplyItem and an installed component
+ * ([isAttachmentUpload]) alone. That body is never held in memory: it streams into staging.
  */
 internal const val MAX_UPLOAD_BYTES: Int = MAX_ATTACHMENT_BYTES.toInt()
 
@@ -95,7 +100,7 @@ internal class ApiRouter(
     internal fun downloadInFlight(): Job? = download.current()
 
     /**
-     * The whole surface. Seventy-seven path shapes over ninety-five method-and-path rows; anything
+     * The whole surface. Eighty-one path shapes over one hundred and one method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -177,6 +182,11 @@ internal class ApiRouter(
      * `…/replace`, each one write through its use case. **Nothing deletes an installed component**: a row is removed
      * or replaced and stays as history, so no verb on its shapes deletes one. An asset's child Assets keep
      * `/v1/assets/{id}/components` (R47-1).
+     *
+     * #69 added six rows over four shapes (C19): a SupplyItem's and an installed component's own links (`GET
+     * …/references`) and own files (`GET` and `POST …/attachments`), each the asset sub-resource's handler with
+     * another owner, and each a 405 for a verb it does not take. **Nothing destructive came with them:** no verb
+     * deletes a link or a file, and none moves one to another owner — a move is the phone's remove and a new add.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -218,7 +228,7 @@ internal class ApiRouter(
                 // 1.3 — the ninth of these sub-resources, so a verb it does not take falls to the
                 // `else` below and answers 404, not 405. That asymmetry with `/v1/references` is
                 // the shipped convention and `docs/api/v1.md`'s 405 row records it.
-                "references" to "GET" -> handlers.references.listForAsset(rest[1])
+                "references" to "GET" -> handlers.references.listForOwner(ReferenceOwner.OfAsset(AssetId(rest[1])))
                 // 1.4 — seven more sub-resources, on the same 404 convention. A condition and an
                 // activation are appended, read and never amended; health is read, never written.
                 "season" to "GET" -> handlers.seasonHealth.getSeason(rest[1])
@@ -240,9 +250,10 @@ internal class ApiRouter(
                 // #86 — the twenty-first: which asset this one replaces and which replaced it, read only.
                 "succession" to "GET" -> handlers.getSuccession(rest[1])
                 // #92 — the twenty-second: the asset's own attachments and the folder's state, read only.
-                "attachments" to "GET" -> handlers.attachmentRoutes.listForAsset(rest[1])
-                // #92 (B1b) — the one row that accepts a file: streamed, authenticated before a byte is read.
-                "attachments" to "POST" -> handlers.attachmentRoutes.upload(rest[1], request)
+                "attachments" to "GET" -> handlers.attachmentRoutes.listForOwner(ReferenceOwner.OfAsset(AssetId(rest[1])))
+                // #92 (B1b) — the first row that accepts a file: streamed, authenticated before a byte is read.
+                "attachments" to "POST" ->
+                    handlers.attachmentRoutes.upload(ReferenceOwner.OfAsset(AssetId(rest[1])), request)
                 // #92 (B3) — the twenty-third to twenty-fifth, the replace triad (R92-1 supersedes R86-18): the offer
                 // and the plan write nothing; the apply is #86's one atomic write, behind the plan's digest.
                 "replace-offer" to "GET" -> handlers.replace.offer(rest[1])
@@ -290,6 +301,20 @@ internal class ApiRouter(
             rest.size == 3 && rest[0] == "supply-items" && rest[2] == "archive" ->
                 if (method == "POST") handlers.supplies.archive(rest[1], request) else notAllowed(request)
 
+            // #69 (C19) — a SupplyItem's own links and files, archived or not, on the asset sub-resources' handlers.
+            rest.size == 3 && rest[0] == "supply-items" && rest[2] == "references" ->
+                if (method == "GET") {
+                    handlers.references.listForOwner(ReferenceOwner.OfSupplyItem(SupplyId(rest[1])))
+                } else {
+                    notAllowed(request)
+                }
+
+            rest.size == 3 && rest[0] == "supply-items" && rest[2] == "attachments" -> when (method) {
+                "GET" -> handlers.attachmentRoutes.listForOwner(ReferenceOwner.OfSupplyItem(SupplyId(rest[1])))
+                "POST" -> handlers.attachmentRoutes.upload(ReferenceOwner.OfSupplyItem(SupplyId(rest[1])), request)
+                else -> notAllowed(request)
+            }
+
             // #15 — an applicability row is created, re-roled and removed (R15-5); an asset's rows are read through
             // its sub-resource above, so neither shape answers a `GET`.
             rest == listOf("asset-supplies") ->
@@ -317,6 +342,25 @@ internal class ApiRouter(
 
             rest.size == 3 && rest[0] == "installed-components" && rest[2] == "replace" ->
                 if (method == "POST") handlers.installedComponents.replace(rest[1], request) else notAllowed(request)
+
+            // #69 (C19) — an installed component's own links and files, current or removed; a held asset's component
+            // reads as any other and its writes are refused 409.
+            rest.size == 3 && rest[0] == "installed-components" && rest[2] == "references" ->
+                if (method == "GET") {
+                    handlers.references.listForOwner(ReferenceOwner.OfInstalledComponent(InstalledComponentId(rest[1])))
+                } else {
+                    notAllowed(request)
+                }
+
+            rest.size == 3 && rest[0] == "installed-components" && rest[2] == "attachments" -> when (method) {
+                "GET" -> handlers.attachmentRoutes.listForOwner(
+                    ReferenceOwner.OfInstalledComponent(InstalledComponentId(rest[1])),
+                )
+                "POST" -> handlers.attachmentRoutes.upload(
+                    ReferenceOwner.OfInstalledComponent(InstalledComponentId(rest[1])), request,
+                )
+                else -> notAllowed(request)
+            }
 
             rest == listOf("schedules") -> when (method) {
                 "GET" -> handlers.maintenance.listSchedules()

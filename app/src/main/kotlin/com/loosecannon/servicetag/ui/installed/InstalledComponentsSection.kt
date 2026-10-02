@@ -51,8 +51,10 @@ private val INDENT_STEP = 16.dp
  *
  * The wrapper owns the ViewModel, the sheets (`InstalledComponentSheets.kt`) and the picker; [InstalledComponentsList]
  * draws, so a device test can render it with no store behind it. A row's tap opens its sheet; [onOpenSupply] opens a
- * SupplyItem from there; [snackbars] carries the shipped transferred-out line when the asset leaves mid-save. A held
- * asset ([readOnly], #77) draws its rows, its toggle and a row's facts and history, and nothing that writes.
+ * SupplyItem from there, and [onOpenDocuments] the row's own screen (#69, C27, P69-1), each after the sheet closes, so
+ * Back returns to the asset with no sheet stacked; [snackbars] carries the shipped transferred-out line when the asset
+ * leaves mid-save. A held asset ([readOnly], #77) draws its rows, its toggle and a row's facts and history, and nothing
+ * that writes.
  */
 @Composable
 fun InstalledComponentsSection(
@@ -60,6 +62,7 @@ fun InstalledComponentsSection(
     graph: AppGraph,
     snackbars: SnackbarHostState,
     onOpenSupply: (supplyId: String) -> Unit,
+    onOpenDocuments: (componentId: String) -> Unit,
     readOnly: Boolean = false,
 ) {
     val model: InstalledComponentsSectionViewModel = viewModel(key = "asset-installed-${assetId.value}") {
@@ -91,6 +94,7 @@ fun InstalledComponentsSection(
             onRemove = { model.startRemove(sheet.id) },
             onEdit = { model.startEdit(sheet.id) },
             onDismiss = model::closeRow,
+            onOpenDocuments = { model.closeRow(); onOpenDocuments(sheet.id.value) },
             composition = {
                 CompositionLines(
                     entries = sheet.composition,

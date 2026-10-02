@@ -30,6 +30,7 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.SeasonActivation
@@ -324,24 +325,24 @@ interface AttachmentRepository {
  * 1.3. The `asset_reference` table (spec §3.2), and nothing about the tombstoned `external_link`
  * beside it — a new table with a new name, id type and shape (I-5).
  *
- * [upsert] is the **only** write, and there is no query anywhere that sets `uri` or `asset_id`: a
+ * [upsert] is the **only** write, and there is no query anywhere that sets `uri` or an owner column: a
  * stored URI is never edited (I-1) and a reference cannot change owner (I-6), so re-parenting is
  * [delete] plus a fresh add.
  *
- * [findByUri] exists so a duplicate refusal is a keyed read against `UNIQUE(asset_id, uri)` (I-7)
- * and not a scan of [forAsset].
+ * [findByUri] exists so a duplicate refusal is a keyed read against the owner's `UNIQUE(owner, uri)`
+ * index (I-7; one per owner column, #69) and not a scan of [forOwner].
  */
 interface ReferenceRepository {
     suspend fun upsert(reference: AssetReference)
     suspend fun get(id: ReferenceId): AssetReference?
-    /** Ordered by `displayName`, then `id` — the order the section and the API both read. */
-    suspend fun forAsset(assetId: AssetId): List<AssetReference>
-    /** The row holding `(assetId, uri)`, which is unique — the second identity. */
-    suspend fun findByUri(assetId: AssetId, uri: String): AssetReference?
+    /** [owner]'s own rows, ordered by `displayName`, then `id` — the order the section and the API both read. */
+    suspend fun forOwner(owner: ReferenceOwner): List<AssetReference>
+    /** The row holding `(owner, uri)`, which is unique — the second identity. */
+    suspend fun findByUri(owner: ReferenceOwner, uri: String): AssetReference?
     suspend fun all(): List<AssetReference>
     suspend fun delete(id: ReferenceId)
     suspend fun deleteAll()
-    fun observeForAsset(assetId: AssetId): Flow<List<AssetReference>>
+    fun observeForOwner(owner: ReferenceOwner): Flow<List<AssetReference>>
 }
 
 /**

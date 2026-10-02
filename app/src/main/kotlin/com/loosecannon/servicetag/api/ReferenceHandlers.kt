@@ -2,12 +2,19 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
+import com.loosecannon.servicetag.core.usecase.InstalledComponentProblem
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
+import com.loosecannon.servicetag.core.usecase.NoSuchSupplyItem
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.core.usecase.UpdateReference
@@ -21,7 +28,7 @@ import kotlinx.serialization.json.jsonObject
  *
  * That is this file's whole design rule, and it is what makes the rules unreachable rather than
  * merely unwritten: the scheme tiers, the structural URI check, the length caps, the blank name,
- * the owner and the `(assetId, uri)` identity are all `AddReference`'s and `UpdateReference`'s,
+ * the owner and the `(owner, uri)` identity are all `AddReference`'s and `UpdateReference`'s,
  * and **nothing here re-checks one of them** (I-2). A refusal this file finds missing is a finding
  * for the controller and a fix in `:core`, never a check added in the API layer, because a check
  * added here would be one the share screen and the "Add link" sheet do not have.
@@ -50,37 +57,46 @@ import kotlinx.serialization.json.jsonObject
  */
 internal class ReferenceHandlers(
     private val references: ReferenceRepository,
-    private val assets: AssetRepository,
+    assets: AssetRepository,
+    supplyItems: SupplyItemRepository,
+    installedComponents: InstalledComponentRepository,
     private val addReference: AddReference,
     private val updateReference: UpdateReference,
 ) {
     constructor(graph: AppGraph) : this(
-        graph.references, graph.assets, graph.addReference, graph.updateReference,
+        graph.references, graph.assets, graph.supplyItems, graph.installedComponents, graph.addReference,
+        graph.updateReference,
     )
 
+    private val owners = ResourceOwners(assets, supplyItems, installedComponents)
+
     /**
-     * The ninth `/v1/assets/{id}/…` sub-resource. Ordered by `displayName` then `id`, which is
-     * `ReferenceRepository.forAsset`'s own documented order and the order the References section
-     * draws — one order, so a client's diff and the phone's screen cannot disagree.
+     * One owner's own links: the ninth `/v1/assets/{id}/…` sub-resource, and #69's
+     * `/v1/supply-items/{id}/references` and `/v1/installed-components/{id}/references` (C19) — an
+     * archived SupplyItem's, a removed component's and a held asset's component's read like any
+     * other. Ordered by `displayName` then `id`, which is `ReferenceRepository.forOwner`'s own
+     * documented order and the order the References section draws — one order, so a client's diff
+     * and the phone's screen cannot disagree. An owner that is not there is its own shipped 404.
      */
-    suspend fun listForAsset(assetId: String): ApiResponse {
-        asset(assetId)
-        return ok(
-            ReferenceListResponse.serializer(),
-            ReferenceListResponse(references.forAsset(AssetId(assetId)).map { it.toDto() }),
-        )
+    suspend fun listForOwner(owner: ReferenceOwner): ApiResponse {
+        owners.require(owner)
+        val rows = references.forOwner(owner).map { it.toDto() }
+        return ok(ReferenceListResponse.serializer(), ReferenceListResponse(rows))
     }
 
     /**
-     * 201 with the full row. The owner check is `AddReference`'s, deliberately: it runs after the
-     * URI and the name are validated, so a body that is wrong in two ways names the field before
-     * the row, and `OwnerMissing` answers the shipped `no_such_asset` (§18.10) rather than a
-     * second code for the fact 1.1.0 already names.
+     * 201 with the full row. The body names exactly one owner (#69, C20) — none or several is G1's
+     * 400, before anything is read. The owner check itself is `AddReference`'s, deliberately: it
+     * runs after the URI and the name are validated, so a body that is wrong in two ways names the
+     * field before the row. Its `OwnerMissing` is answered here, by the owner the body named (C-6):
+     * an asset's is the shipped `no_such_asset` (§18.10), with no `field` as ever; a SupplyItem's
+     * and an installed component's are their shipped 404s, naming the body key.
      */
     suspend fun create(request: ApiRequest): ApiResponse {
         val body = request.decode(CreateReferenceRequest.serializer())
-        val saved = addReference.run(
-            AssetId(body.assetId),
+        val owner = body.owner() ?: throw ApiFailure.badRequest(EXACTLY_ONE_OWNER)
+        val result = addReference.run(
+            owner,
             AddReferenceCommand(
                 uri = body.uri,
                 displayName = body.displayName,
@@ -89,7 +105,14 @@ internal class ReferenceHandlers(
                 // `confirmedUnknownScheme` is never set here, and the default is only half the
                 // reason: see this class's KDoc.
             ),
-        ).orRefuse()
+        )
+        val saved = when (result) {
+            is ReferenceResult.Ok -> result.value
+            is ReferenceResult.Refused -> {
+                if (result.problem == ReferenceProblem.OwnerMissing) throw ownerMissing(owner)
+                throw ReferenceRefused(result.problem)
+            }
+        }
         return createdResponse(ReferenceResponse.serializer(), ReferenceResponse(saved.toDto()))
     }
 
@@ -137,11 +160,66 @@ internal class ReferenceHandlers(
 
     // --- plumbing ---------------------------------------------------------------------------
 
-    private suspend fun asset(id: String) = assets.get(AssetId(id)) ?: throw NoSuchAsset(AssetId(id))
+    /** C20: exactly one non-null owner key, as its owner; null for none or several. */
+    private fun CreateReferenceRequest.owner(): ReferenceOwner? {
+        val named = listOfNotNull(
+            assetId?.let { ReferenceOwner.OfAsset(AssetId(it)) },
+            supplyItemId?.let { ReferenceOwner.OfSupplyItem(SupplyId(it)) },
+            installedComponentId?.let { ReferenceOwner.OfInstalledComponent(InstalledComponentId(it)) },
+        )
+        return named.singleOrNull()
+    }
 
-    /** The value, or the refusal on its way to [mapDomainFailure], which owns every status. */
-    private fun <T> ReferenceResult<T>.orRefuse(): T = when (this) {
-        is ReferenceResult.Ok -> value
-        is ReferenceResult.Refused -> throw ReferenceRefused(problem)
+    /** C20, C-6: the create's absent owner, by the body key that named it; `assetId`'s keeps no `field`. */
+    private fun ownerMissing(owner: ReferenceOwner): Exception = when (owner) {
+        is ReferenceOwner.OfAsset -> NoSuchAsset(owner.assetId)
+        is ReferenceOwner.OfSupplyItem -> noSuchSupplyItem(field = "supplyItemId")
+        is ReferenceOwner.OfInstalledComponent -> noSuchInstalledComponent(field = "installedComponentId")
     }
 }
+
+/** G1 (#69, C20): the create's 400 when its body names no owner, or more than one. */
+internal const val EXACTLY_ONE_OWNER: String =
+    "a reference names exactly one owner: assetId, supplyItemId or installedComponentId"
+
+/**
+ * #69 (C19, C21): the three owners a route can name — an asset, a SupplyItem, an installed component — read once,
+ * for the reference and attachment rows alike. [require] answers each owner's shipped 404 when it is not there, and
+ * otherwise the asset whose transfer governs writes to it: the asset itself, a component's own asset, and none for a
+ * SupplyItem, which is never held (H5). An archived SupplyItem and a removed component are there like any other.
+ */
+internal class ResourceOwners(
+    private val assets: AssetRepository,
+    private val supplyItems: SupplyItemRepository,
+    private val installedComponents: InstalledComponentRepository,
+) {
+    suspend fun require(owner: ReferenceOwner): AssetId? = when (owner) {
+        is ReferenceOwner.OfAsset -> owner.assetId.also { assets.get(it) ?: throw noSuchOwner(owner) }
+        is ReferenceOwner.OfSupplyItem -> {
+            supplyItems.get(owner.supplyId) ?: throw noSuchOwner(owner)
+            null
+        }
+        is ReferenceOwner.OfInstalledComponent ->
+            (installedComponents.get(owner.componentId) ?: throw noSuchOwner(owner)).assetId
+    }
+}
+
+/**
+ * C2, C-6: [owner]'s shipped 404 where a path names it — `no_such_asset`, `NO_SUCH_SUPPLY_ITEM` or
+ * `NO_SUCH_INSTALLED_COMPONENT`, each byte for byte as its own routes answer it, and never with a `field`.
+ */
+internal fun noSuchOwner(owner: ReferenceOwner): Exception = when (owner) {
+    is ReferenceOwner.OfAsset -> NoSuchAsset(owner.assetId)
+    is ReferenceOwner.OfSupplyItem -> NoSuchSupplyItem(owner.supplyId)
+    is ReferenceOwner.OfInstalledComponent -> noSuchInstalledComponent(field = null)
+}
+
+/** C2: the shipped SupplyItem 404, naming [field] when a body key is at fault; byte-identical to its path form. */
+internal fun noSuchSupplyItem(field: String?): ApiFailure =
+    ApiFailure(404, "Not Found", NO_SUCH_SUPPLY_ITEM, "no such supply item", field = field)
+
+/** C2: the shipped installed-component 404 (`installedComponentRefusal`'s own), naming [field] when one is at fault. */
+internal fun noSuchInstalledComponent(field: String?): ApiFailure =
+    installedComponentRefusal(listOf(InstalledComponentProblem.NoSuchInstalledComponent)).let {
+        ApiFailure(it.status, it.reason, it.code, it.message ?: it.code, it.problems, field)
+    }

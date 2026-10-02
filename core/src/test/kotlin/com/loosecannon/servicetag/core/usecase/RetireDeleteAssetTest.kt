@@ -7,16 +7,20 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
@@ -24,17 +28,21 @@ import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.closureOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.groupOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -57,7 +65,9 @@ class RetireDeleteAssetTest {
     private val clock = Clock { now }
     // Explicitly nothing: see AssetUseCasesTest. The seam has no default.
     private val retire = RetireAsset(assets, uow, clock) { }
-    private val delete = DeleteAsset(assets, events, attachments, storage, uow, groups, schedules, closures)
+    private val delete = DeleteAsset(
+        assets, events, attachments, storage, uow, groups, schedules, closures, InMemoryInstalledComponentRepository { false },
+    )
     private val archive = ArchiveAsset(assets, uow, clock) { }
 
     private suspend fun store(id: String, name: String, parent: AssetId? = null): Asset {
@@ -236,6 +246,71 @@ class RetireDeleteAssetTest {
         assertTrue(assets.rows.isEmpty())
         assertEquals(0, storage.store.deletes)
         assertTrue(storage.store.exists(orphaned.storageLocator))   // an orphan for 4B to sweep
+    }
+
+    // --- #69 (C16a; R69-11, row 38): an asset's components' files go with it, bytes swept; a SupplyItem's stay ------
+
+    /**
+     * Through [BackupInstall], whose asset double takes an asset's installed components and their files as the
+     * schema's two CASCADE levels do (C11). The generator (a1) holds a battery tray (c1, its direct link the battery
+     * SupplyItem s1) and an old tray removed on 2026-01-10 (c2); the UPS (a2) holds a tray of its own (cx). Each tray,
+     * and s1, owns one file with its bytes. Fictional.
+     */
+    private suspend fun fitted(): BackupInstall = BackupInstall().also { install ->
+        install.assets.upsert(Asset(id = AssetId("a1"), name = "Example Generator", createdAt = 500L, updatedAt = 500L))
+        install.assets.upsert(Asset(id = AssetId("a2"), name = "Example UPS", createdAt = 500L, updatedAt = 500L))
+        install.supplyItems.upsert(supplyItemOf("s1", "Example 12 V Battery"))
+        listOf(
+            installedComponentOf("c1", assetId = "a1", name = "Example Battery Tray", supplyId = "s1"),
+            installedComponentOf("c2", assetId = "a1", name = "Example Old Tray", installedOn = "2025-01-10", removedOn = "2026-01-10"),
+            installedComponentOf("cx", assetId = "a2", name = "Example Battery Tray"),
+        ).forEach { install.installedComponents.insert(it) }
+        listOf(
+            "f1" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("c1")),
+            "f2" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("c2")),
+            "fx" to AttachmentOwner.OfInstalledComponent(InstalledComponentId("cx")),
+            "fs" to AttachmentOwner.OfSupplyItem(SupplyId("s1")),
+        ).forEach { (id, owner) ->
+            val locator = "${AttachmentLocator.dirFor(owner)}/$id.pdf"
+            install.attachments.upsert(
+                Attachment(
+                    id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT,
+                    displayName = "$id.pdf", mimeType = "application/pdf", sizeBytes = 3L,
+                    sha256 = "0".repeat(64), storageLocator = locator, capturedOn = null,
+                    createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            install.storage.store.put(locator, ByteSource { "abc".toByteArray().inputStream() })
+        }
+    }
+
+    private fun deleteOver(install: BackupInstall) = DeleteAsset(
+        install.assets, install.events, install.attachments, install.storage, install.uow, install.groups,
+        install.schedules, install.closures, install.installedComponents,
+    )
+
+    @Test fun deletingAnAssetSweepsItsComponentsBytesCurrentAndRemoved() = runTest {
+        val install = fitted()
+
+        deleteOver(install).run(AssetId("a1"))
+
+        assertFalse(install.storage.store.exists("installed-components/c1/f1.pdf"), "the current tray's bytes")
+        assertFalse(install.storage.store.exists("installed-components/c2/f2.pdf"), "the removed tray's bytes")
+        assertEquals(setOf("fs", "fx"), install.attachments.all().map { it.id.value }.toSet(), "the rows went by CASCADE")
+        assertTrue(install.storage.store.exists("installed-components/cx/fx.pdf"), "the UPS's tray keeps its bytes")
+        assertEquals(2, install.storage.store.deletes)   // nothing else was asked about
+        assertEquals(1, install.uow.commits)             // locators read and rows deleted in one write
+    }
+
+    @Test fun aSupplyItemsBytesAreNotSwept() = runTest {
+        val install = fitted()
+        val file = install.attachments.get(AttachmentId("fs"))!!
+
+        deleteOver(install).run(AssetId("a1"))
+
+        assertEquals(file, install.attachments.get(AttachmentId("fs")), "the battery's file is no asset's")
+        assertTrue(install.storage.store.exists(file.storageLocator), "and its bytes stay")
+        assertNotNull(install.supplyItems.get(SupplyId("s1")), "the item the deleted tray named stays")
     }
 
     /** Seeds a row and its bytes: the fake repository has no cascade, so the row goes too. */

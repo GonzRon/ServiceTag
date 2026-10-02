@@ -8,8 +8,15 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -45,7 +52,7 @@ class MergePlannerReferenceTest {
         updatedAt: Long = 2_000L,
         role: DocumentRole? = null,
     ) = AssetReference(
-        id = ReferenceId(id), assetId = AssetId(assetId), kind = kind, uri = uri,
+        id = ReferenceId(id), owner = ReferenceOwner.OfAsset(AssetId(assetId)), kind = kind, uri = uri,
         displayName = displayName, description = description, scheme = scheme,
         createdAt = createdAt, updatedAt = updatedAt, role = role,
     )
@@ -620,5 +627,105 @@ class MergePlannerReferenceTest {
         assertEquals(MergeDecision(MergeTable.REFERENCES, "r1", MergeVerdict.INSERT), plan.decision("r1"))
         assertEquals(listOf(manual), plan.writes.references)
         assertEquals(DocumentRole.USER_MANUAL, plan.writes.references.single().role)
+    }
+
+    // --- #69 (C13, H3; row 24): the second identity is `(owner, uri)`, the owner value-typed ---------------
+
+    private val onItemX1 = ReferenceOwner.OfSupplyItem(SupplyId("x1"))
+    private val onComponentX1 = ReferenceOwner.OfInstalledComponent(InstalledComponentId("x1"))
+
+    /** A format-20 archive of [assets], [supplyItems], [components] and [references]. */
+    private fun ownersBackupOf(
+        assets: List<Asset> = emptyList(),
+        supplyItems: List<SupplyItem> = emptyList(),
+        components: List<InstalledComponent> = emptyList(),
+        references: List<AssetReference> = emptyList(),
+    ) = backupOf(assets = assets, references = references, formatVersion = 20).let { backup ->
+        backup.copy(
+            data = backup.data.copy(
+                supplyItems = supplyItems.map { it.toDto() },
+                installedComponents = components.map { it.toDto() },
+            ),
+        )
+    }
+
+    /**
+     * Hazard (H3): an untyped owner key. A SupplyItem's link and an asset's link sharing the id string `x1` and the URI
+     * are two links: the incoming one is an `INSERT`, never the asset's row's `REFERENCE_HELD_BY_A_LOCAL_ROW`.
+     */
+    @Test
+    fun aSupplyItemsLinkDoesNotMatchAnAssetsLinkSharingIdAndUri() {
+        val plan = mergePlanOf(
+            ownersBackupOf(
+                supplyItems = listOf(supplyItemOf("x1", "Example 12 V Battery")),
+                references = listOf(reference("r-in").copy(owner = onItemX1)),
+            ),
+            MergeSnapshot(
+                assets = listOf(asset("x1")),
+                references = listOf(reference("r-here", assetId = "x1")),
+                attachmentStoreConfigured = true,
+            ),
+        )
+
+        assertEquals(MergeDecision(MergeTable.REFERENCES, "r-in", MergeVerdict.INSERT), plan.decision("r-in"))
+        assertTrue(plan.applicable, "unexpected conflicts: ${plan.conflicts}")
+        assertEquals(listOf(onItemX1), plan.writes.references.map { it.owner })
+    }
+
+    /** The archive's own pairs are per owner too: one URI on an asset, a SupplyItem and a component, all `x1`, is three inserts. */
+    @Test
+    fun theSecondIdentityIsPerOwnerInTheArchive() {
+        val owners = listOf(ReferenceOwner.OfAsset(AssetId("x1")), onItemX1, onComponentX1)
+        val plan = mergePlanOf(
+            ownersBackupOf(
+                assets = listOf(asset("x1")),
+                supplyItems = listOf(supplyItemOf("x1", "Example 12 V Battery")),
+                components = listOf(installedComponentOf("x1", assetId = "x1")),
+                references = owners.mapIndexed { i, owner -> reference("r$i").copy(owner = owner) },
+            ),
+            snapshotOf(),
+        )
+
+        assertTrue(plan.applicable, "unexpected conflicts: ${plan.conflicts}")
+        for (i in owners.indices) {
+            assertEquals(MergeDecision(MergeTable.REFERENCES, "r$i", MergeVerdict.INSERT), plan.decision("r$i"))
+        }
+        assertEquals(owners, plan.writes.references.map { it.owner })
+    }
+
+    /**
+     * Each owner resolves "here or in this plan": a SupplyItem or a component here inserts; one neither here nor
+     * inserted — absent, or a component this plan refuses — is `OWNER_NOT_AVAILABLE` naming that owner's id.
+     */
+    @Test
+    fun anAbsentSupplyItemOrComponentIsOwnerNotAvailable() {
+        val plan = mergePlanOf(
+            ownersBackupOf(
+                // c3's asset is in neither place, so the plan refuses c3 and, with it, c3's link.
+                components = listOf(installedComponentOf("c3", assetId = "a9")),
+                references = listOf(
+                    reference("r-s1").copy(owner = ReferenceOwner.OfSupplyItem(SupplyId("s1"))),
+                    reference("r-c1").copy(owner = ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1"))),
+                    reference("r-s9").copy(owner = ReferenceOwner.OfSupplyItem(SupplyId("s9"))),
+                    reference("r-c9").copy(owner = ReferenceOwner.OfInstalledComponent(InstalledComponentId("c9"))),
+                    reference("r-c3").copy(owner = ReferenceOwner.OfInstalledComponent(InstalledComponentId("c3"))),
+                ),
+            ),
+            MergeSnapshot(
+                assets = listOf(asset("a1")),
+                supplyItems = listOf(supplyItemOf("s1", "Example 12 V Battery")),
+                installedComponents = listOf(installedComponentOf("c1", assetId = "a1")),
+                attachmentStoreConfigured = true,
+            ),
+        )
+
+        assertEquals(MergeDecision(MergeTable.REFERENCES, "r-s1", MergeVerdict.INSERT), plan.decision("r-s1"))
+        assertEquals(MergeDecision(MergeTable.REFERENCES, "r-c1", MergeVerdict.INSERT), plan.decision("r-c1"))
+        for ((id, owner) in listOf("r-s9" to "s9", "r-c9" to "c9", "r-c3" to "c3")) {
+            assertEquals(
+                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, owner),
+                plan.decision(id),
+            )
+        }
     }
 }

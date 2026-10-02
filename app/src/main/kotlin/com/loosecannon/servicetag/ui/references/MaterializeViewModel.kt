@@ -3,7 +3,6 @@ package com.loosecannon.servicetag.ui.references
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.fetch.FetchProblem
-import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentKinds
@@ -11,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.references.ReferenceUris
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
@@ -74,15 +74,16 @@ sealed interface MaterializeState {
  * download landing and its review; only the progress callback updates from the fetch's thread.
  */
 class MaterializeViewModel(
-    private val assetId: AssetId,
+    /** #69 (C25): the reference's owner — `prepare` refuses a reference of any other owner. */
+    private val owner: ReferenceOwner,
     private val referenceId: ReferenceId,
     uri: String,
     private val materialize: MaterializeReference,
     private val io: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, assetId: AssetId, referenceId: ReferenceId, uri: String) :
-        this(assetId, referenceId, uri, graph.materializeReference)
+    constructor(graph: AppGraph, owner: ReferenceOwner, referenceId: ReferenceId, uri: String) :
+        this(owner, referenceId, uri, graph.materializeReference)
 
     /** The reference's own host, never a redirect's (§6). */
     private val host: String? = ReferenceUris.hostOf(uri)
@@ -105,13 +106,13 @@ class MaterializeViewModel(
             var landed: Prepared.Ready? = null
             try {
                 val prepared = withContext(io) {
-                    materialize.prepare(assetId, referenceId) { done, total ->
+                    materialize.prepare(owner, referenceId) { done, total ->
                         _state.update { if (it is MaterializeState.Downloading) downloading(host, done, total) else it }
                     }.also { landed = it as? Prepared.Ready }
                 }
                 _state.value = when (prepared) {
                     is Prepared.Ready -> review(prepared).also { ready = prepared }
-                    is Prepared.Refused -> refusalState(prepared.why, host)
+                    is Prepared.Refused -> refusalState(prepared.why, host, owner)
                 }
             } catch (e: CancellationException) {
                 if (ready !== landed) landed?.let(materialize::discard)
@@ -220,13 +221,16 @@ internal fun downloading(host: String, done: Long, total: Long?) =
 
 private fun refused(line: String) = MaterializeState.Refused(line, offersAppSettings = false)
 
-/** C21's refusal lines. `NoSuchReference`, `NotEligible` and the two static hop problems close without one. */
-internal fun refusalState(why: MaterializeRefusal, host: String): MaterializeState = when (why) {
+/**
+ * C21's refusal lines. `NoSuchReference`, `NotEligible` and the two static hop problems close without one. #69 (C28):
+ * the already-have line names [owner]'s kind.
+ */
+internal fun refusalState(why: MaterializeRefusal, host: String, owner: ReferenceOwner): MaterializeState = when (why) {
     MaterializeRefusal.NoSuchReference, MaterializeRefusal.NotEligible -> MaterializeState.Closed
     is MaterializeRefusal.Store -> AttachmentFailure.Refused(why.problem).sentence()?.let(::refused)
         ?: MaterializeState.Closed
     MaterializeRefusal.NetworkDenied -> MaterializeState.Refused(MaterializeStrings.NETWORK_DENIED, true)
-    is MaterializeRefusal.AlreadyHave -> refused(MaterializeStrings.alreadyHave(why.name))
+    is MaterializeRefusal.AlreadyHave -> refused(MaterializeStrings.alreadyHave(owner, why.name))
     is MaterializeRefusal.Fetch -> when (val problem = why.problem) {
         FetchProblem.NotHttps, FetchProblem.HasCredentials -> MaterializeState.Closed
         FetchProblem.NetworkDenied -> MaterializeState.Refused(MaterializeStrings.NETWORK_DENIED, true)

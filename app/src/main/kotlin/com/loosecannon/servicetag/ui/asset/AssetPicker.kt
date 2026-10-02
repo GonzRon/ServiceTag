@@ -10,18 +10,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.ui.components.QuietLine
 
 /**
  * #93 (C3): one asset chosen from the Assets tab's own list — its search box, its Type / Components / Archived
  * controls, its rows and its empty sentences, all drawn by the tab's composables from an [AssetsState] the tab's
- * [AssetsViewModel] built (the Share intake's switched to drop held rows, C2). It decides nothing and holds nothing:
- * no filter, sort, sentence or selection of its own; a tap reports the row and the host does the rest
- * (single-select is the host's). Stateless and view-model-free, so a later owner-picking flow can host it too.
+ * [AssetsViewModel] built (the Share intake's switched to offer active, unheld assets only, C2; #69 C30). It decides
+ * nothing and holds nothing: no filter, sort, sentence or selection of its own; a tap reports the row and the host does
+ * the rest (single-select is the host's). Stateless and view-model-free, so a later owner-picking flow can host it too.
  *
  * One `LazyColumn`: the host's [header] items, then the search box and the controls as items with the tab's
  * paddings, then the rows with the tab's dividers — or, when the list is empty, the tab's [EmptyList] with no
  * add-asset button (nothing is created from here, SPEC:80-81). [query] is the model's own `query` flow (F3), never
  * [AssetsState.query].
+ *
+ * #69 (C30, C-1, C-4): a host whose list holds no archived row passes [archivedControl] false to omit the Archived
+ * control, and [noAssetsLine] to say its own line for [EmptyReason.NO_ASSETS]; the tab passes neither.
  */
 @Composable
 internal fun AssetPicker(
@@ -33,6 +37,8 @@ internal fun AssetPicker(
     onToggleComponents: () -> Unit,
     onToggleArchived: () -> Unit,
     onPick: (AssetRow) -> Unit,
+    archivedControl: Boolean = true,
+    noAssetsLine: String? = null,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     header: LazyListScope.() -> Unit = {},
@@ -56,6 +62,7 @@ internal fun AssetPicker(
                 onToggleComponents = onToggleComponents,
                 onToggleArchived = onToggleArchived,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                archivedControl = archivedControl,
             )
         }
         if (state.emptyReason == EmptyReason.NONE) {
@@ -70,12 +77,17 @@ internal fun AssetPicker(
             }
         } else {
             item {
-                EmptyList(
-                    reason = state.emptyReason,
-                    archivedCount = state.archivedCount,
-                    onNewAsset = null,
-                    onShowArchived = onToggleArchived,
-                )
+                val line = noAssetsLine?.takeIf { state.emptyReason == EmptyReason.NO_ASSETS }
+                if (line != null) {
+                    QuietLine(text = line, modifier = Modifier.padding(16.dp))
+                } else {
+                    EmptyList(
+                        reason = state.emptyReason,
+                        archivedCount = state.archivedCount,
+                        onNewAsset = null,
+                        onShowArchived = onToggleArchived,
+                    )
+                }
             }
         }
     }

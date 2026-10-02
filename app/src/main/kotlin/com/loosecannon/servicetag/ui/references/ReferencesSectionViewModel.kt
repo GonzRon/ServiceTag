@@ -3,13 +3,13 @@ package com.loosecannon.servicetag.ui.references
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.model.AssetReference
-import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.references.LinkDecision
@@ -55,7 +55,10 @@ data class ReferenceRowState(
     val launchable: Boolean,
     /** #85 (C20, R85-4, R85-15): an https web link the hop rule accepts, so Save as document is offered. */
     val materializable: Boolean = false,
-    /** #85 (C20, R85-1, R85-3): derived, never stored — an attachment on this asset has this URI as its source. */
+    /**
+     * #85 (C20, R85-1, R85-3): derived, never stored — a file of this row's own owner has this URI as its
+     * source (#69, H4).
+     */
     val savedAsDocument: Boolean = false,
     /** #91 (C15, C22, C24): the stored role — the edit sheet's chips start from it, and the row draws its label. */
     val role: DocumentRole? = null,
@@ -77,7 +80,8 @@ data class ReferencesSectionState(
  * again at read time (spec §4.2).
  */
 class ReferencesSectionViewModel(
-    private val assetId: AssetId,
+    /** #69 (C25): whose references these are — an asset, a SupplyItem or an installed component. */
+    private val owner: ReferenceOwner,
     references: ReferenceRepository,
     private val addReference: AddReference,
     private val updateReference: UpdateReference,
@@ -92,8 +96,8 @@ class ReferencesSectionViewModel(
     private val io: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, assetId: AssetId) : this(
-        assetId,
+    constructor(graph: AppGraph, owner: ReferenceOwner) : this(
+        owner,
         graph.references,
         graph.addReference,
         graph.updateReference,
@@ -111,11 +115,12 @@ class ReferencesSectionViewModel(
     /** Already ordered by display name, then id, by the query itself. */
     val state: StateFlow<ReferencesSectionState> =
         combine(
-            references.observeForAsset(assetId),
-            attachments.observeForOwner(AttachmentOwner.OfAsset(assetId)),
+            references.observeForOwner(owner),
+            attachments.observeForOwner(owner.asAttachmentOwner()),
             pending,
         ) { rows, files, awaiting ->
-            // The (assetId, uri) second identity (R85-3): this asset's files, by their source's URI alone.
+            // The (owner, uri) second identity (R85-3, #69 H4): this owner's own files, by their source's URI
+            // alone — another owner's file with the same source never marks this owner's link.
             val sourced = files.mapNotNullTo(HashSet()) { it.source?.uri }
             ReferencesSectionState(
                 rows = rows.map { row(it, sourced) },
@@ -222,7 +227,7 @@ class ReferencesSectionViewModel(
     private fun submit(cmd: AddReferenceCommand) {
         viewModelScope.launch(io) {
             val outcome = try {
-                addReference.run(assetId, cmd)
+                addReference.run(owner, cmd)
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
@@ -280,7 +285,7 @@ class ReferencesSectionViewModel(
             ReferenceProblem.NotALink -> "That is not a link."
             ReferenceProblem.UriTooLong -> "That link is too long to save."
             ReferenceProblem.SchemeBlocked -> "ServiceTag will not save that kind of link."
-            ReferenceProblem.DuplicateUri -> "That link is already on this asset"
+            ReferenceProblem.DuplicateUri -> duplicateUriOn(owner)
             is ReferenceProblem.UnknownSchemeNeedsConfirmation -> return
             ReferenceProblem.Unchanged -> return
             ReferenceProblem.OwnerMissing -> return
@@ -289,4 +294,17 @@ class ReferencesSectionViewModel(
         }
         _messages.tryEmit(line)
     }
+}
+
+/** #69 P69-11 (C28): the in-app and the Share duplicate, for a SupplyItem's link. */
+internal const val DUPLICATE_URI_ON_SUPPLY = "That link is already on this supply"
+
+/** #69 P69-12 (C28): the in-app and the Share duplicate, for an installed component's link. */
+internal const val DUPLICATE_URI_ON_INSTALLED_COMPONENT = "That link is already on this installed component"
+
+/** #69 (C28, R69-13): the duplicate sentence by the owner's kind; an asset keeps its shipped wording. */
+internal fun duplicateUriOn(owner: ReferenceOwner): String = when (owner) {
+    is ReferenceOwner.OfAsset -> "That link is already on this asset"
+    is ReferenceOwner.OfSupplyItem -> DUPLICATE_URI_ON_SUPPLY
+    is ReferenceOwner.OfInstalledComponent -> DUPLICATE_URI_ON_INSTALLED_COMPONENT
 }

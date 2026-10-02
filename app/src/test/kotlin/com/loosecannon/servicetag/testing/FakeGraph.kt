@@ -231,8 +231,10 @@ class FakeGraph(
     private val roomGroups = RoomGroupRepository(db.maintenanceGroupDao())
     private val roomSchedules = RoomScheduleRepository(db.maintenanceScheduleDao())
     private val roomServiceCases = RoomServiceCaseRepository(db.serviceCaseDao())
+    private val roomInstalledComponents = RoomInstalledComponentRepository(db.installedComponentDao())
     private val heldWriteGuard = HeldWriteGuard(
         transferRecords, roomEvents, roomDefinitions, roomProfiles, roomGroups, roomSchedules, roomServiceCases, links,
+        roomInstalledComponents,
     )
 
     private val roomAssets = RoomAssetRepository(db.assetDao())
@@ -269,7 +271,7 @@ class FakeGraph(
         heldWriteGuard.assetSupplies(RoomAssetSupplyRepository(db.assetSupplyDao()))
     /** #47 — installed components behind the guard (C14), the merge apply's included, as `AppGraph`'s. */
     val installedComponents: InstalledComponentRepository =
-        heldWriteGuard.installedComponents(RoomInstalledComponentRepository(db.installedComponentDao()))
+        heldWriteGuard.installedComponents(roomInstalledComponents)
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -401,7 +403,7 @@ class FakeGraph(
     val retireAsset: RetireAsset =
         RetireAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val deleteAsset: DeleteAsset =
-        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures)
+        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures, installedComponents)
 
     /** The same identity the app builds, read from the same BuildConfig fields (C9). */
     val tagIdentity: TagIdentity = TagIdentity(
@@ -444,7 +446,7 @@ class FakeGraph(
 
     // Phase 4A — attachments.
     val addAttachment: AddAttachment =
-        AddAttachment(attachments, assets, events, attachmentStorage, uow, ids, clock)
+        AddAttachment(attachments, assets, events, supplyItems, installedComponents, attachmentStorage, uow, ids, clock)
     val updateAttachment: UpdateAttachment = UpdateAttachment(attachments, uow, clock)
     val deleteAttachment: DeleteAttachment = DeleteAttachment(attachments, attachmentStorage, uow)
     val restoreArtifacts: RestoreArtifacts = RestoreArtifacts(attachments, attachmentStorage)

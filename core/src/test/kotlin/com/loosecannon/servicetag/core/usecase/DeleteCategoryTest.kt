@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import kotlin.test.assertEquals
@@ -80,7 +81,7 @@ class DeleteCategoryTest {
         }
         val deleteAsset = DeleteAsset(
             assets, events, attachments, storage, FakeUnitOfWork(assets, events, attachments, schedules, groups, closures),
-            groups, schedules, closures,
+            groups, schedules, closures, InMemoryInstalledComponentRepository { false },
         )
         categories.rows["appliance"] = appliance
         asset("f1", "Appliance")

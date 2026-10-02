@@ -82,9 +82,9 @@ class VersionAgreementTest {
      * `versionName`/`versionCode` cases own — otherwise bumping the schema in one file only would
      * still pass here, which is the whole failure this class exists to catch.
      */
-    @Test fun theSchemaIsNineteenAndTheFormatIsNineteen() {
-        assertEquals(19, AppGraph.SCHEMA_VERSION)
-        assertEquals(19, BackupCodec.FORMAT_VERSION)
+    @Test fun theSchemaIsTwentyAndTheFormatIsTwenty() {
+        assertEquals(20, AppGraph.SCHEMA_VERSION)
+        assertEquals(20, BackupCodec.FORMAT_VERSION)
     }
 
     /**
@@ -154,8 +154,8 @@ class VersionAgreementTest {
             StatusResponse.serializer(), response.body.decodeToString(),
         )
         assertEquals("1.6.0", status.appVersion)
-        assertEquals(19, status.schemaVersion)
-        assertEquals(19, status.backupFormatVersion)
+        assertEquals(20, status.schemaVersion)
+        assertEquals(20, status.backupFormatVersion)
     }
 
     /**

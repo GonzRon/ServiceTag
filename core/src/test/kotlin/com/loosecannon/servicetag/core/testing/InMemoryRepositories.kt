@@ -21,6 +21,7 @@ import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -29,6 +30,7 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -151,8 +153,15 @@ open class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
     /**
      * #79 (C17): the schema's CASCADE from `asset`, for the stores that ask for it — the service cases
      * ([InMemoryServiceCaseRepository.cascadeFromAsset]) and #72's loans
-     * ([InMemoryAssetLoanRepository.cascadeFromAsset]). Every other table's cascade is still the
-     * Room tests' to prove; a double that registers nothing deletes the asset row alone, as before.
+     * ([InMemoryAssetLoanRepository.cascadeFromAsset]), and #47's installed components
+     * ([InMemoryInstalledComponentRepository.cascadeFromAsset]) among the rest [BackupInstall] registers. #69 (C11)
+     * carries one second level: the component double hands the ids of the component rows it deleted to
+     * [InMemoryAttachmentRepository.cascadeFromInstalledComponents] and its twin
+     * [InMemoryReferenceRepository.cascadeFromInstalledComponents], so a component's files and links go with the
+     * asset's components. The asymmetry is deliberate (N-16): an asset's own files and links and an entry's files are
+     * **not** cascaded from here, because the shipped core tests were written against a double that leaves them, so
+     * that half stays the Room tests' to prove. Every other table's cascade is still the Room tests' to prove; a
+     * double that registers nothing deletes the asset row alone, as before.
      */
     private val cascades = mutableListOf<(AssetId) -> Unit>()
 
@@ -415,6 +424,16 @@ open class InMemoryAttachmentRepository : AttachmentRepository, Rollbackable, Wi
 
     override fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>> = version.map {
         rows.values.filter { it.owner == owner }.sortedBy { it.displayName.lowercase() }
+    }
+
+    /**
+     * #69 (C11): the schema's CASCADE from `installed_component` — the files the components [ids] own go, and only
+     * those. [BackupInstall] registers it on the component double; why nothing cascades here from the asset double is
+     * [InMemoryAssetRepository.cascadesTo]'s.
+     */
+    fun cascadeFromInstalledComponents(ids: Set<InstalledComponentId>) {
+        val removed = rows.values.removeAll { (it.owner as? AttachmentOwner.OfInstalledComponent)?.componentId in ids }
+        if (removed) version.value += 1
     }
 }
 
@@ -685,12 +704,12 @@ open class InMemoryReferenceRepository : ReferenceRepository, Rollbackable, Witn
     }
 
     override suspend fun upsert(reference: AssetReference) {
-        // The unique index, as a fake: one row per `(asset_id, uri)`.
+        // The three unique indices, as a fake (#69, I3): one row per `(owner, uri)`, the owner value-typed.
         val holder = rows.values.firstOrNull {
-            it.assetId == reference.assetId && it.uri == reference.uri
+            it.owner == reference.owner && it.uri == reference.uri
         }
-        if (holder != null && holder.id != reference.id) {
-            throw RiggedFailure("asset_reference already holds ${reference.uri} on ${reference.assetId.value}")
+        check(holder == null || holder.id == reference.id) {
+            "asset_reference already holds ${reference.uri} on ${reference.owner}"
         }
         rows[reference.id.value] = reference
         version.value += 1
@@ -698,12 +717,12 @@ open class InMemoryReferenceRepository : ReferenceRepository, Rollbackable, Witn
 
     override suspend fun get(id: ReferenceId): AssetReference? = rows[id.value]
 
-    override suspend fun forAsset(assetId: AssetId): List<AssetReference> = rows.values
-        .filter { it.assetId == assetId }
+    override suspend fun forOwner(owner: ReferenceOwner): List<AssetReference> = rows.values
+        .filter { it.owner == owner }
         .sortedWith(compareBy({ it.displayName.lowercase() }, { it.id.value }))
 
-    override suspend fun findByUri(assetId: AssetId, uri: String): AssetReference? =
-        rows.values.firstOrNull { it.assetId == assetId && it.uri == uri }
+    override suspend fun findByUri(owner: ReferenceOwner, uri: String): AssetReference? =
+        rows.values.firstOrNull { it.owner == owner && it.uri == uri }
 
     override suspend fun all(): List<AssetReference> {
         witness?.observeAll()
@@ -714,10 +733,21 @@ open class InMemoryReferenceRepository : ReferenceRepository, Rollbackable, Witn
 
     override suspend fun deleteAll() { rows.clear(); version.value += 1 }
 
-    override fun observeForAsset(assetId: AssetId): Flow<List<AssetReference>> = version.map {
+    override fun observeForOwner(owner: ReferenceOwner): Flow<List<AssetReference>> = version.map {
         rows.values
-            .filter { it.assetId == assetId }
+            .filter { it.owner == owner }
             .sortedWith(compareBy({ it.displayName.lowercase() }, { it.id.value }))
+    }
+
+    /**
+     * #69 (C11, C12): the schema's CASCADE from `installed_component` — the links the components [ids] own go, and
+     * only those; the twin of [InMemoryAttachmentRepository.cascadeFromInstalledComponents]. [BackupInstall] registers
+     * it on the component double; why nothing cascades here from the asset double is
+     * [InMemoryAssetRepository.cascadesTo]'s.
+     */
+    fun cascadeFromInstalledComponents(ids: Set<InstalledComponentId>) {
+        val removed = rows.values.removeAll { (it.owner as? ReferenceOwner.OfInstalledComponent)?.componentId in ids }
+        if (removed) version.value += 1
     }
 }
 

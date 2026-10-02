@@ -49,7 +49,9 @@ private fun iconFor(route: Route): ImageVector = when (route) {
 
 /** The labels, all three RATIFIED — "Maintenance" is spec §9.1's, quoted verbatim (D-24). */
 private fun labelFor(route: Route): String = when (route) {
-    Route.Assets -> "Assets"
+    Route.Assets -> ASSETS_LABEL
     Route.Maintenance -> "Maintenance"
     else -> "Dashboard"
 }
+
+internal const val ASSETS_LABEL = "Assets"

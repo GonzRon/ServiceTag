@@ -42,8 +42,15 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val assetSupplies = InMemoryAssetSupplyRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
     /** #15's catalog; its wipe is refused while applicability remains, as the schema's RESTRICT is. */
     val supplyItems = InMemorySupplyItemRepository(assetSupplies)
-    /** #47's installed components; the asset double's delete takes them and their entries, as the schema's CASCADE does. */
-    val installedComponents = InMemoryInstalledComponentRepository(supplyItems).also { assets.cascadesTo(it::cascadeFromAsset) }
+    /**
+     * #47's installed components; the asset double's delete takes them and their entries, as the schema's CASCADE does,
+     * and (#69, C11) the files and links they own with them.
+     */
+    val installedComponents = InMemoryInstalledComponentRepository(supplyItems).also {
+        assets.cascadesTo(it::cascadeFromAsset)
+        it.cascadesTo(attachments::cascadeFromInstalledComponents)
+        it.cascadesTo(references::cascadeFromInstalledComponents)
+    }
     val storage = FakeAttachmentStorage()
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,

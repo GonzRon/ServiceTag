@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -120,7 +121,7 @@ class MergePlannerSeasonHealthTest {
         decisions.single { it.table == table && it.id == id }
 
     private fun reference(id: String) = AssetReference(
-        id = ReferenceId(id), assetId = AssetId("a1"), kind = ReferenceKind.WEB_URL,
+        id = ReferenceId(id), owner = ReferenceOwner.OfAsset(AssetId("a1")), kind = ReferenceKind.WEB_URL,
         uri = "https://example-snowblower.invalid/$id", displayName = "Manual $id", description = "",
         scheme = "https", createdAt = 1L, updatedAt = 2L,
     )

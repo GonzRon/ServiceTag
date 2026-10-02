@@ -31,6 +31,7 @@ internal class FittingInstall(prefix: String = "id", today: String = "2026-03-01
     private val todayPort = Today { LocalDate.parse(today) }
     private val guarded = HeldWriteGuard(
         raw.transfers, raw.events, raw.definitions, raw.profiles, raw.groups, raw.schedules, raw.serviceCases, raw.links,
+        raw.installedComponents,
     ).installedComponents(raw.installedComponents)
     val install = InstallComponent(raw.assets, raw.supplyItems, guarded, raw.uow, home.ids, home.clock, todayPort)
     val remove = RemoveInstalledComponent(guarded, raw.uow, home.clock, todayPort)

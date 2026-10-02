@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.GroupOccurrences
@@ -36,7 +37,9 @@ class AssetMembershipReferenced(val assetId: AssetId, val groups: List<GroupId>)
  * a parent that still has children is refused with them named, so nobody loses a sub-assembly to
  * a cascade they did not picture. Everything that hangs off the asset itself — its tags, links,
  * definitions, profiles, events and attachment rows — goes with it, by the schema's own cascades;
- * the attachment *bytes* are nothing the schema can cascade, so they are swept here.
+ * the attachment *bytes* are nothing the schema can cascade, so they are swept here. That includes
+ * (#69, C16a; R69-11) the files of its installed components, current and removed, whose rows go by
+ * the second cascade level; a SupplyItem's files are no asset's and are never swept here.
  *
  * **Membership second** (1.2, invariant 8). Its group membership rows would go by that same
  * cascade, and a past occurrence's required set is derived from them and from nothing else — so an
@@ -53,6 +56,7 @@ class DeleteAsset(
     private val groups: GroupRepository,
     private val schedules: ScheduleRepository,
     private val closures: ClosureRepository,
+    private val installedComponents: InstalledComponentRepository,
 ) {
     suspend fun run(id: AssetId) {
         val all = assets.all()
@@ -68,7 +72,9 @@ class DeleteAsset(
             val own = attachments.forAsset(id)
             val theirs = events.forAsset(id)
                 .flatMap { event -> attachments.forOwner(AttachmentOwner.OfEvent(event.id)) }
-            val locators = (own + theirs).map { it.storageLocator }
+            val components = installedComponents.forAsset(id)
+                .flatMap { row -> attachments.forOwner(AttachmentOwner.OfInstalledComponent(row.id)) }
+            val locators = (own + theirs + components).map { it.storageLocator }
             assets.delete(id)
             locators
         }

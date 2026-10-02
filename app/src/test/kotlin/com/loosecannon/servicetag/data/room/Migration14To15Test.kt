@@ -24,7 +24,7 @@ class Migration14To15Test {
     fun everyRowSurvives() = runTest {
         migrating { file, before ->
             withConnection(file) { c ->
-                for (row in SEEDED) assertEquals("$row", before.getValue(row), c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS })
+                for (row in SEEDED) assertEquals("$row", before.getValue(row), c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS })
             }
         }
     }

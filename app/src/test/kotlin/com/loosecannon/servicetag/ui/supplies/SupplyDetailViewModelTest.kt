@@ -216,6 +216,23 @@ class SupplyDetailViewModelTest {
         assertEquals(listOf("Stage 1"), vm.state.first { it != null && it.usedBy.isNotEmpty() }!!.usedBy.map { it.role })
     }
 
+    /**
+     * #69 row 50 (C26, R69-10): the Documents and References sections below "Used by" stay writable when the item is
+     * archived. A SupplyItem is never held, so archiving it never turns its own files and links open-only.
+     */
+    @Test fun anArchivedItemIsWritable() = runTest {
+        val item = save("Example 12 V Battery", manufacturer = "Example Power Co.")
+        val vm = viewModel(item.id)
+        backgroundScope.launch { vm.state.collect() }
+        assertFalse(vm.state.first { it != null }!!.resourcesReadOnly)
+
+        graph.archiveSupplyItem.run(item.id, true)
+
+        val archived = vm.state.first { it?.archived == true }!!
+        assertEquals(item.id, archived.id)
+        assertFalse("an archived item's sections stay writable", archived.resourcesReadOnly)
+    }
+
     /** A back stack naming an item no longer there (a replacing import) is `missing`, which sends the owner back. */
     @Test fun anItemThatIsNotThereIsMissing() = runTest {
         save("Example Prefilter Cartridge")

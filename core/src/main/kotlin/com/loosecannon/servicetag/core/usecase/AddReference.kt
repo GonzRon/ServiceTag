@@ -1,12 +1,14 @@
 package com.loosecannon.servicetag.core.usecase
 
-import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
@@ -24,7 +26,7 @@ import com.loosecannon.servicetag.core.references.accepts
  *
  * The step order is the contract, because each refusal has to stay reachable: structural validity
  * (I-10), the length cap, the tier, the role, the name, the owner, then the second identity
- * `(assetId, uri)`. Nothing is generated or written before the last of them answers, so a refusal
+ * `(owner, uri)`. Nothing is generated or written before the last of them answers, so a refusal
  * leaves no row, no id and no transaction behind (I-8).
  *
  * The role step (#91, R91-1) asks the kind the scheme implies whether it takes the command's role
@@ -39,12 +41,14 @@ import com.loosecannon.servicetag.core.references.accepts
 class AddReference(
     private val references: ReferenceRepository,
     private val assets: AssetRepository,
+    private val supplyItems: SupplyItemRepository,
+    private val installedComponents: InstalledComponentRepository,
     private val policy: LinkLaunchPolicy,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
 ) {
-    suspend fun run(assetId: AssetId, cmd: AddReferenceCommand): ReferenceResult<AssetReference> {
+    suspend fun run(owner: ReferenceOwner, cmd: AddReferenceCommand): ReferenceResult<AssetReference> {
         val uri = cmd.uri.trim()
         val scheme = policy.schemeOf(uri)
         if (scheme == null || !isStructurallyValid(uri, scheme)) {
@@ -66,17 +70,17 @@ class AddReference(
         if (!kind.accepts(cmd.role)) return ReferenceResult.Refused(ReferenceProblem.RoleNotAllowed)
         val displayName = ReferenceText.sanitiseName(cmd.displayName)
         if (displayName.isEmpty()) return ReferenceResult.Refused(ReferenceProblem.BlankName)
-        if (assets.get(assetId) == null) {
+        if (!ownerExists(owner)) {
             return ReferenceResult.Refused(ReferenceProblem.OwnerMissing)
         }
-        if (references.findByUri(assetId, uri) != null) {
+        if (references.findByUri(owner, uri) != null) {
             return ReferenceResult.Refused(ReferenceProblem.DuplicateUri)
         }
 
         val now = clock.nowMillis()
         val row = AssetReference(
             id = ReferenceId(ids.newId()),
-            assetId = assetId,
+            owner = owner,
             kind = kind,
             // Trimmed and nothing else: never re-encoded, never lowercased, never given a scheme
             // it did not arrive with (I-1). A query and a fragment survive byte for byte.
@@ -114,5 +118,12 @@ class AddReference(
         if (rest.isEmpty()) return false
         val hierarchical = rest.startsWith("//") || scheme == "http" || scheme == "https"
         return !hierarchical || ReferenceUris.hostOf(uri) != null
+    }
+
+    /** #69 (R69-10): an archived SupplyItem and a removed component are owners like any other. */
+    private suspend fun ownerExists(owner: ReferenceOwner): Boolean = when (owner) {
+        is ReferenceOwner.OfAsset -> assets.get(owner.assetId) != null
+        is ReferenceOwner.OfSupplyItem -> supplyItems.get(owner.supplyId) != null
+        is ReferenceOwner.OfInstalledComponent -> installedComponents.get(owner.componentId) != null
     }
 }

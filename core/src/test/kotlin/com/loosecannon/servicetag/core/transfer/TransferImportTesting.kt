@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.lineageFor
@@ -47,6 +48,7 @@ internal class TransferInstall(
     val storage: AttachmentStorage = storageOf(raw.storage)
     private val guard = HeldWriteGuard(
         raw.transfers, raw.events, raw.definitions, raw.profiles, raw.groups, raw.schedules, raw.serviceCases, raw.links,
+        raw.installedComponents,
     )
     val assets = guard.assets(raw.assets)
     val tags = guard.tags(raw.tags)
@@ -153,13 +155,16 @@ private fun reproduceRoomCascades(raw: BackupInstall) {
             when (val owner = a.owner) {
                 is AttachmentOwner.OfAsset -> owner.assetId == id
                 is AttachmentOwner.OfEvent -> owner.eventId in events
+                // #69: a SupplyItem's file never goes with an asset; a component's goes by its own cascade registration.
+                is AttachmentOwner.OfSupplyItem -> false
+                is AttachmentOwner.OfInstalledComponent -> false
             }
         }
         dropSchedules(
             raw.schedules.rows.values.filter { (it.target as? ScheduleTarget.AssetTarget)?.assetId == id }
                 .map { it.id.value }.toSet(),
         )
-        raw.references.rows.values.removeIf { it.assetId == id }
+        raw.references.rows.values.removeIf { it.owner == ReferenceOwner.OfAsset(id) }
         raw.activations.rows.values.removeIf { it.assetId == id }
         raw.conditions.rows.values.removeIf { it.assetId == id }
         raw.subjects.rows.values.removeIf { it.assetId == id }

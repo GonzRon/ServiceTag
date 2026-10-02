@@ -98,7 +98,7 @@ class RoomLinkRepository(private val dao: ExternalLinkDao) : LinkRepository {
 /**
  * The `attachment` table's side of [AttachmentRepository]. Metadata only: the bytes are the
  * store's, never Room's, and `storage_locator` is the only thing here that knows where they are.
- * Every write goes through [requireExactlyOneOwner], so a row with both owners or neither is
+ * Every write goes through [requireExactlyOneOwner], so a row naming no owner or more than one is
  * refused before SQLite ever sees it (spec §11.5).
  */
 class RoomAttachmentRepository(private val dao: AttachmentDao) : AttachmentRepository {
@@ -108,6 +108,8 @@ class RoomAttachmentRepository(private val dao: AttachmentDao) : AttachmentRepos
     override suspend fun forOwner(owner: AttachmentOwner): List<Attachment> = when (owner) {
         is AttachmentOwner.OfAsset -> dao.forAsset(owner.assetId.value)
         is AttachmentOwner.OfEvent -> dao.forEvent(owner.eventId.value)
+        is AttachmentOwner.OfSupplyItem -> dao.forSupplyItem(owner.supplyId.value)
+        is AttachmentOwner.OfInstalledComponent -> dao.forInstalledComponent(owner.componentId.value)
     }.map { it.toDomain() }
 
     override suspend fun forAsset(assetId: AssetId): List<Attachment> =
@@ -121,6 +123,8 @@ class RoomAttachmentRepository(private val dao: AttachmentDao) : AttachmentRepos
     override fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>> = when (owner) {
         is AttachmentOwner.OfAsset -> dao.observeForAsset(owner.assetId.value)
         is AttachmentOwner.OfEvent -> dao.observeForEvent(owner.eventId.value)
+        is AttachmentOwner.OfSupplyItem -> dao.observeForSupplyItem(owner.supplyId.value)
+        is AttachmentOwner.OfInstalledComponent -> dao.observeForInstalledComponent(owner.componentId.value)
     }.map { list -> list.map { it.toDomain() } }
 }
 

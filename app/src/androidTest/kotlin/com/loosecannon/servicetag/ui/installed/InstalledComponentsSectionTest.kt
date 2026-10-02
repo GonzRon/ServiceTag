@@ -55,6 +55,9 @@ import org.junit.runner.RunWith
  * Every sentence comes from its one home (`InstalledComponentStrings.kt`), so a re-worded constant moves this test with
  * it. A section header and a badge draw their words upper-case, so that is what the tree carries.
  *
+ * #69 (C27, row 52) adds P69-1 on the row sheet: offered on a current, a removed and a held asset's row, its tap
+ * reported. Closing the sheet first is the section wrapper's, drawn over the graph in `InstalledComponentDetailTest`.
+ *
  * Emulator only, never a phone. No case reaches the store, so none needs a wipe.
  */
 @RunWith(AndroidJUnit4::class)
@@ -291,7 +294,10 @@ class InstalledComponentsSectionTest {
         assertEquals(1, insideTaps)
     }
 
-    /** C26, #77: a removed row's sheet says P47-16 and its removal day and offers "Edit" only; a held asset's offers nothing. */
+    /**
+     * C26, #77: a removed row's sheet says P47-16 and its removal day and offers "Edit" only; a held asset's offers no
+     * write (#69's "Documents and references" stays, since it only navigates).
+     */
     @Test fun aRemovedRowOffersEditOnlyAndAHeldOneNothing() {
         val offers = mutableStateOf(true)
         rule.setContent {
@@ -316,6 +322,62 @@ class InstalledComponentsSectionTest {
         rule.waitForIdle()
         rule.onAllNodesWithText("Edit").assertCountEquals(0)
         rule.onNodeWithText(COMPONENT_HISTORY.uppercase()).assertExists()
+    }
+
+    /**
+     * #69 (C27, P69-1): a current row's sheet offers "Documents and references" beside its writes, and its tap is
+     * reported once. The section closes the sheet before it navigates; `InstalledComponentDetailTest` draws that.
+     */
+    @Test fun aCurrentRowOffersDocumentsAndReferencesAndReportsItsTap() {
+        var documentsTaps = 0
+        rule.setContent {
+            ServiceTagTheme {
+                InstalledComponentRowSheet(
+                    sheet = rowSheet(current = true), supplies = catalog, offersWrites = true,
+                    onOpenSupply = {}, onInstallInside = {}, onReplace = {}, onRemove = {}, onEdit = {}, onDismiss = {},
+                    onOpenDocuments = { documentsTaps += 1 },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(REPLACE_COMPONENT).assertExists()
+        rule.onAllNodesWithText(DOCUMENTS_AND_REFERENCES).assertCountEquals(1)
+        rule.onNodeWithText(DOCUMENTS_AND_REFERENCES).performScrollTo().performClick()
+        assertEquals(1, documentsTaps)
+    }
+
+    /**
+     * #69 (C27, P69-1): it opens a screen and writes nothing, so a removed row's sheet offers it beside "Edit", and a
+     * held asset's current row, which offers no write at all, still offers it and reports its tap.
+     */
+    @Test fun aRemovedRowAndAHeldRowStillOfferDocumentsAndReferences() {
+        var documentsTaps = 0
+        val sheet = mutableStateOf(rowSheet(current = false))
+        val offers = mutableStateOf(true)
+        rule.setContent {
+            ServiceTagTheme {
+                InstalledComponentRowSheet(
+                    sheet = sheet.value, supplies = catalog, offersWrites = offers.value,
+                    onOpenSupply = {}, onInstallInside = {}, onReplace = {}, onRemove = {}, onEdit = {}, onDismiss = {},
+                    onOpenDocuments = { documentsTaps += 1 },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(REMOVED_ON).assertExists()
+        rule.onNodeWithText("Edit").assertExists()
+        rule.onAllNodesWithText(DOCUMENTS_AND_REFERENCES).assertCountEquals(1)
+
+        sheet.value = rowSheet(current = true)
+        offers.value = false
+        rule.waitForIdle()
+        rule.onAllNodesWithText(REMOVED_ON).assertCountEquals(0)
+        rule.onAllNodesWithText("Edit").assertCountEquals(0)
+        rule.onAllNodesWithText(REPLACE_COMPONENT).assertCountEquals(0)
+        rule.onNodeWithText(DOCUMENTS_AND_REFERENCES).performScrollTo().performClick()
+        assertEquals(1, documentsTaps)
     }
 
     /**

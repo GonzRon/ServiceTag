@@ -60,8 +60,11 @@ internal fun referenceHandlersFor(graph: FakeGraph): ReferenceHandlers {
     return ReferenceHandlers(
         references = graph.references,
         assets = graph.assets,
+        supplyItems = graph.supplyItems,
+        installedComponents = graph.installedComponents,
         addReference = AddReference(
-            graph.references, graph.assets, policy, graph.uow, graph.ids, graph.clock,
+            graph.references, graph.assets, graph.supplyItems, graph.installedComponents, policy, graph.uow, graph.ids,
+            graph.clock,
         ),
         updateReference = UpdateReference(graph.references, graph.uow, graph.clock),
     )
@@ -132,6 +135,8 @@ internal fun loanHandlersFor(graph: FakeGraph): LoanHandlers = LoanHandlers(
 internal fun attachmentHandlersFor(graph: FakeGraph): AttachmentHandlers = AttachmentHandlers(
     attachments = graph.attachments,
     assets = graph.assets,
+    supplyItems = graph.supplyItems,
+    installedComponents = graph.installedComponents,
     storage = graph.attachmentStorage,
     updateAttachment = graph.updateAttachment,
     installation = graph.installationIdentity,

@@ -14,21 +14,37 @@ package com.loosecannon.servicetag.core.model
  */
 enum class ReferenceKind { WEB_URL, NOTE_LINK, OTHER }
 
+/** Who a link belongs to. The owner model is stated once, in D14 (#69). */
+sealed interface ReferenceOwner {
+    data class OfAsset(val assetId: AssetId) : ReferenceOwner
+    /** #69: a SupplyItem's own link, archived or not. */
+    data class OfSupplyItem(val supplyId: SupplyId) : ReferenceOwner
+    /** #69: an installed component's own link, current or removed. */
+    data class OfInstalledComponent(val componentId: InstalledComponentId) : ReferenceOwner
+}
+
+/** The one map from a reference's owner to the owner its saved document gets (#85 reused, C17). Total. */
+fun ReferenceOwner.asAttachmentOwner(): AttachmentOwner = when (this) {
+    is ReferenceOwner.OfAsset -> AttachmentOwner.OfAsset(assetId)
+    is ReferenceOwner.OfSupplyItem -> AttachmentOwner.OfSupplyItem(supplyId)
+    is ReferenceOwner.OfInstalledComponent -> AttachmentOwner.OfInstalledComponent(componentId)
+}
+
 /**
- * A URI on an asset: a pointer to something that lives somewhere else, with no bytes of its own
+ * A URI on its owner: a pointer to something that lives somewhere else, with no bytes of its own
  * (I-3). It is never a tag target (I-4) and it can never change owner (I-6).
  *
  * [uri] is stored exactly as it was validated and is never rewritten (I-1); only [displayName],
  * [description], [role] and [updatedAt] are mutable. [scheme] is derived from [uri] on every write, so
  * the two cannot disagree — it is the provider hint, never a provider account or a remote id.
  *
- * `(assetId, uri)` is unique (I-7); the same URI on two different assets is ordinary. There is
+ * `(owner, uri)` is unique (I-7); the same URI on two different owners is ordinary. There is
  * deliberately no `provenance` field: an in-app "Add link" and a share write identical rows,
  * because nothing in the product distinguishes them (D-21 C).
  */
 data class AssetReference(
     val id: ReferenceId,
-    val assetId: AssetId,
+    val owner: ReferenceOwner,
     val kind: ReferenceKind,
     val uri: String,
     val displayName: String,

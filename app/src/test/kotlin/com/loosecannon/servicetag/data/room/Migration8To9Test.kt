@@ -33,12 +33,12 @@ class Migration8To9Test {
                 } else {
                     was
                 }
-                // The chain runs on to v11, whose one asset column `Migration10To11Test` owns, and to v17,
-                // whose one reference column `Migration16To17Test` owns.
+                // The chain runs on to v11, whose one asset column `Migration10To11Test` owns, to v17,
+                // whose one reference column `Migration16To17Test` owns, and to v20, whose two `Migration19To20Test` owns.
                 assertEquals(
                     "$row",
                     expected,
-                    after.getValue(row).filterNot { it.column() in V11_ASSET_COLUMNS + V17_REFERENCE_COLUMNS },
+                    after.getValue(row).filterNot { it.column() in V11_ASSET_COLUMNS + V17_REFERENCE_COLUMNS + V20_REFERENCE_COLUMNS },
                 )
             }
         }

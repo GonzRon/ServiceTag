@@ -44,7 +44,7 @@ class InstalledComponentUseCasesTest {
     private val install = BackupInstall()
     private val guard = HeldWriteGuard(
         install.transfers, install.events, install.definitions, install.profiles, install.groups, install.schedules,
-        install.serviceCases, install.links,
+        install.serviceCases, install.links, install.installedComponents,
     )
     private val guarded = guard.installedComponents(install.installedComponents)
     private val stored = install.installedComponents

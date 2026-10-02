@@ -713,9 +713,13 @@ class LoopbackApiServerTest {
             override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
             override fun store(): AttachmentStore = gated
         }
-        val add = AddAttachment(graph.attachments, graph.assets, graph.events, folder, graph.uow, graph.ids, graph.clock)
+        val add = AddAttachment(
+            graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, folder,
+            graph.uow, graph.ids, graph.clock,
+        )
         val routes = AttachmentHandlers(
-            attachments = graph.attachments, assets = graph.assets, storage = folder,
+            attachments = graph.attachments, assets = graph.assets, supplyItems = graph.supplyItems,
+            installedComponents = graph.installedComponents, storage = folder,
             updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
             transfers = graph.transferRecords, addAttachment = add, staging = graph.materializeStaging,
             apiLongWrites = graph.apiLongWrites,
@@ -772,10 +776,14 @@ class LoopbackApiServerTest {
             override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
             override fun store(): AttachmentStore = gated
         }
-        private val add = AddAttachment(graph.attachments, graph.assets, graph.events, folder, graph.uow, graph.ids, graph.clock)
+        private val add = AddAttachment(
+            graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, folder,
+            graph.uow, graph.ids, graph.clock,
+        )
         private val hops = HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) })
         val routes = AttachmentHandlers(
-            attachments = graph.attachments, assets = graph.assets, storage = folder,
+            attachments = graph.attachments, assets = graph.assets, supplyItems = graph.supplyItems,
+            installedComponents = graph.installedComponents, storage = folder,
             updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
             transfers = graph.transferRecords, addAttachment = add, staging = graph.materializeStaging,
             apiLongWrites = graph.apiLongWrites, references = references ?: graph.references,

@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -44,11 +45,13 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.InstalledComponentTree
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -107,7 +110,7 @@ import java.security.MessageDigest
  * 2. **Its second identity**, where the table has one, and *independently of the row id* — #44's
  *    second identity rule. A local tag holding the same `(payloadFormat, payloadKey)` is the same
  *    logical tag, a local closure holding the same `(scheduleId, occurrenceOn)` is the same closed
- *    round, and a local reference holding the same `(assetId, uri)` is the same link: equivalent
+ *    round, and a local reference holding the same `(owner, uri)` is the same link: equivalent
  *    field for field → `IDENTICAL`; bound elsewhere or diverged → `CONFLICT`, **except for a
  *    reference, which is `SKIPPED` instead** (D-18 C — see
  *    [MergeReason.REFERENCE_HELD_BY_A_LOCAL_ROW] for why a conflict there could only refuse the
@@ -165,7 +168,7 @@ import java.security.MessageDigest
  * And the fifth (#91, R91-7: the third's rule, mirrored for references): an archive older than
  * format 17 has its references compared **without the document role**, and — when the row here
  * carries one — **without the last-modified stamp**, on **both** arms that compare a row: the row's
- * own id and the second identity `(asset_id, uri)`. So a role given on this phone since that export
+ * own id and the second identity `(owner, uri)`. So a role given on this phone since that export
  * keeps the row `IDENTICAL`, and an equivalent row under another id `IDENTICAL`
  * `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`. Every other field still counts — a rename here is still
  * a `CONFLICT`, or the diverged `SKIPPED` on the pair — and a row here with no role compares its stamp
@@ -274,8 +277,8 @@ import java.security.MessageDigest
  *
  * This propagates `IllegalStateException` from [AssetTree.parentsFirst] on a cyclic asset set (and from
  * [InstalledComponentTree.parentsFirst] on a cyclic installed-component set),
- * `BackupCorrupt` from a `toDomain()` that cannot name a value, and an NPE from the attachment
- * pass's `eventId!!` if a row names neither owner. `BackupCodec.decode` refuses all three before a
+ * and `BackupCorrupt` from a `toDomain()` that cannot name a value — an attachment or a reference naming no owner, or
+ * more than one, included (#69). `BackupCodec.decode` refuses each before a
  * plan exists, so no caller of `BuildBackupMergePlan` can reach them — only a test constructing a
  * `Backup` directly can. See Task 1 decision 10 for what the API maps them to.
  */
@@ -306,9 +309,10 @@ internal fun mergePlanOf(
     val localEvents = snapshot.events.associateBy { it.id.value }
     val localAttachments = snapshot.attachments.associateBy { it.id.value }
     val localReferences = snapshot.references.associateBy { it.id.value }
-    // The reference's **second identity**, id-independent exactly as the closure's pair map is.
+    // The reference's **second identity**, id-independent exactly as the closure's pair map is. The owner is
+    // value-typed (#69, H3): an asset and a SupplyItem sharing an id string never share a pair.
     val localReferencesByPair = snapshot.references
-        .associateBy { it.assetId.value to it.uri }
+        .associateBy { it.owner to it.uri }
     val localActivations = snapshot.seasonActivations.associateBy { it.id }
     val localConditions = snapshot.conditions.associateBy { it.id }
     val localSubjects = snapshot.healthSubjects.associateBy { it.id.value }
@@ -362,7 +366,7 @@ internal fun mergePlanOf(
     // Reachable from the destination for the same reason the closure pair is: a reference's second
     // identity is independent of its row id, and two phones reach the same URL by construction.
     val claimedReferencePairs = snapshot.references
-        .associateTo(mutableMapOf()) { (it.assetId.value to it.uri) to it.id.value }
+        .associateTo(mutableMapOf()) { (it.owner to it.uri) to it.id.value }
     // A schedule drives at most one non-archived subject (inv. 120). Seeded from the destination's
     // non-archived subjects; an archived subject, local or incoming, claims nothing.
     val localSubjectsBySchedule = snapshot.healthSubjects
@@ -659,6 +663,9 @@ internal fun mergePlanOf(
     val installedComponentDtos = data.installedComponents.associateBy { it.id }
     val installedComponentWrites = mutableListOf<InstalledComponent>()
     val acceptedInstalledComponents = mutableSetOf<String>()
+    // #69 (C14): the one reading of "here or accepted" for a component — its children's parent arm below, and the
+    // files and links it owns, decided after this pass.
+    fun installedComponentAvailable(id: String) = id in localInstalledComponents || id in acceptedInstalledComponents
     for (row in InstalledComponentTree.parentsFirst(data.installedComponents.map { it.toDomain() })) {
         val id = row.id.value
         val dto = installedComponentDtos.getValue(id)
@@ -678,7 +685,7 @@ internal fun mergePlanOf(
                 MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
             missingSupply != null ->
                 MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingSupply)
-            parent != null && parent !in localInstalledComponents && parent !in acceptedInstalledComponents ->
+            parent != null && !installedComponentAvailable(parent) ->
                 MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, parent)
             replacementHolder != null ->
                 MergeDecision(
@@ -995,11 +1002,13 @@ internal fun mergePlanOf(
         val local = localAttachments[id]
         val locatorKey = dto.storageProvider to dto.storageLocator
         val locatorHolder = claimedLocators[locatorKey]
-        val owner = dto.assetId ?: dto.eventId!!
-        val ownerAvailable = if (dto.assetId != null) {
-            assetAvailable(dto.assetId)
-        } else {
-            dto.eventId in localEvents || dto.eventId in acceptedEvents
+        // #69 (C14): each of the four owners resolves here or in this plan — an event and a component by "here or
+        // accepted", both passes preceding this one — and one that does not is named by its own id.
+        val missingOwner = when (val owner = row.owner) {
+            is AttachmentOwner.OfAsset -> owner.assetId.value.takeUnless { assetAvailable(it) }
+            is AttachmentOwner.OfEvent -> owner.eventId.value.takeUnless { it in localEvents || it in acceptedEvents }
+            is AttachmentOwner.OfSupplyItem -> owner.supplyId.value.takeUnless { supplyItemAvailable(it) }
+            is AttachmentOwner.OfInstalledComponent -> owner.componentId.value.takeUnless { installedComponentAvailable(it) }
         }
         val stored = snapshot.storedBytes[dto.storageLocator]
         decisions += when {
@@ -1007,8 +1016,8 @@ internal fun mergePlanOf(
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
-            !ownerAvailable ->
-                MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, owner)
+            missingOwner != null ->
+                MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingOwner)
             locatorHolder != null ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.ATTACHMENT_LOCATOR_TAKEN, locatorHolder)
             !snapshot.attachmentStoreConfigured ->
@@ -1036,9 +1045,9 @@ internal fun mergePlanOf(
     }
 
     // --- references (1.3, D-18 C) -----------------------------------------------------------
-    // After ATTACHMENTS in write order: a reference's only foreign key is `asset_id`, so any
-    // position after ASSETS would do, and 1.3 appended it as the smaller diff; 1.4's three tables
-    // follow it. The arm order is the closure pass's, with one
+    // After ATTACHMENTS in write order: a reference's foreign keys are its owner's — an asset, a SupplyItem or an
+    // installed component (#69) — so any position after those three would do, and 1.3 appended it as the smaller
+    // diff; 1.4's three tables follow it. The arm order is the closure pass's, with one
     // difference that is the whole of D-18 C: the **diverged** second identity is a `SKIPPED` and
     // never a `CONFLICT`, because there is no UPDATE verdict for the incoming name and description
     // to be adopted by, so refusing the archive could not produce a better merged state.
@@ -1058,7 +1067,14 @@ internal fun mergePlanOf(
     }
     for (dto in data.assetReferences) {
         val id = dto.id
-        val pair = dto.assetId to dto.uri
+        val incoming = dto.toDomain()
+        val pair = incoming.owner to dto.uri
+        // #69 (C13): each owner resolves here or in this plan — a component by "here or accepted", as its parent does.
+        val missingOwner = when (val owner = incoming.owner) {
+            is ReferenceOwner.OfAsset -> owner.assetId.value.takeUnless { assetAvailable(it) }
+            is ReferenceOwner.OfSupplyItem -> owner.supplyId.value.takeUnless { supplyItemAvailable(it) }
+            is ReferenceOwner.OfInstalledComponent -> owner.componentId.value.takeUnless { installedComponentAvailable(it) }
+        }
         val local = localReferences[id]
         val samePair = localReferencesByPair[pair]
         val pairHolder = claimedReferencePairs[pair]
@@ -1084,10 +1100,10 @@ internal fun mergePlanOf(
                     MergeTable.REFERENCES, id, MergeVerdict.CONFLICT,
                     MergeReason.REFERENCE_DUPLICATED_IN_ARCHIVE, pairHolder,
                 )
-            !assetAvailable(dto.assetId) ->
-                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            missingOwner != null ->
+                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingOwner)
             else -> {
-                referenceWrites += dto.toDomain()
+                referenceWrites += incoming
                 claimedReferencePairs[pair] = id
                 MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.INSERT)
             }
@@ -1376,6 +1392,7 @@ internal fun mergePlanOf(
         val linksById = (snapshot.links + linkWrites).associateBy { it.id }
         val definitionsById = (snapshot.definitions + definitionWrites).associateBy { it.id }
         val profilesById = (snapshot.profiles + profileWrites).associateBy { it.id }
+        val componentsById = (snapshot.installedComponents + installedComponentWrites).associateBy { it.id }
         val lookup = object : OwnerLookup {
             override fun event(id: EventId) = eventsById[id]
             override fun case(id: ServiceCaseId) = casesById[id]
@@ -1384,6 +1401,7 @@ internal fun mergePlanOf(
             override fun link(id: LinkId) = linksById[id]
             override fun definition(id: DefinitionId) = definitionsById[id]
             override fun profile(id: ProfileId) = profilesById[id]
+            override fun installedComponent(id: InstalledComponentId) = componentsById[id]
         }
         val inserted = decisions.withIndex()
             .filter { it.value.verdict == MergeVerdict.INSERT }

@@ -177,8 +177,8 @@ class AttachmentsSectionViewModel(
     )
 
     /**
-     * #67, C7: whether the edit sheet offers the Role chips — an asset's files only, decided by
-     * R67-11's one statement of the rule rather than restated here.
+     * #67, C7: whether the edit sheet offers the Role chips — every owner's files but a journal
+     * entry's (R67-11 widened by #69 R69-6), decided by R67-11's one statement of the rule rather than restated here.
      */
     val rolesOffered: Boolean = DocumentRole.entries.all(owner::accepts)
 

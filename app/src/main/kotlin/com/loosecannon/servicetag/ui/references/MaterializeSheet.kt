@@ -32,9 +32,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.share.IntakeStrings
 import com.loosecannon.servicetag.ui.api.OPEN_APP_SETTINGS
@@ -67,7 +69,8 @@ import kotlinx.coroutines.Dispatchers
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MaterializeSheet(
-    assetId: AssetId,
+    /** #69 (C25): the reference's owner; the saved file lands on it, and the already-have line names its kind. */
+    owner: ReferenceOwner,
     row: ReferenceRowState,
     graph: AppGraph,
     /** Done, handed off once: the host closes the sheet and says P85-7. */
@@ -75,9 +78,10 @@ internal fun MaterializeSheet(
     /** Closed: the host closes the sheet with nothing to say. */
     onClose: () -> Unit,
 ) {
-    val model: MaterializeViewModel = viewModel(key = "materialize-${assetId.value}-${row.id}") {
-        MaterializeViewModel(graph, assetId, ReferenceId(row.id), row.uri)
-    }
+    val model: MaterializeViewModel =
+        viewModel(key = "materialize-${AttachmentLocator.dirFor(owner.asAttachmentOwner())}-${row.id}") {
+            MaterializeViewModel(graph, owner, ReferenceId(row.id), row.uri)
+        }
     // Main.immediate, so a keystroke's rename lands in the field in the same frame (the fields bind to the model).
     val state by model.state.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     val saved by rememberUpdatedState(onSaved)

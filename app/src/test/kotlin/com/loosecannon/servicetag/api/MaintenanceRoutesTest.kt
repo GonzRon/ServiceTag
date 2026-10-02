@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.SeasonAction
@@ -1194,7 +1195,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(19, report.formatVersion)
+        assertEquals(20, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1531,7 +1532,7 @@ class MaintenanceRoutesTest {
      * (the succession table and the archive that carries the successions), and its B4 adds the `assetSuccessions`
      * count — none here; `SuccessionRoutesTest` counts appended ones.
      */
-    @Test fun statusReports19And19AndTheNewCounts() {
+    @Test fun statusReports20And20AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1548,8 +1549,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(19, status.schemaVersion)
-        assertEquals(19, status.backupFormatVersion)
+        assertEquals(20, status.schemaVersion)
+        assertEquals(20, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1580,11 +1581,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-19** archive (this build's export) and reports **twenty-three** tables: the donor's
+     * Import-merge reads a **format-20** archive (this build's export) and reports **twenty-three** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat19AndReportsTwentyThreeTables() {
+    @Test fun importMergeReadsFormat20AndReportsTwentyThreeTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1596,7 +1597,7 @@ class MaintenanceRoutesTest {
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
         assertEquals(23, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(19, report.formatVersion)
+        assertEquals(20, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)
@@ -1677,7 +1678,7 @@ class MaintenanceRoutesTest {
                 donor.references.upsert(
                     AssetReference(
                         id = ReferenceId("00000000-0000-4000-8000-900000008888"),
-                        assetId = asset.id,
+                        owner = ReferenceOwner.OfAsset(asset.id),
                         kind = ReferenceKind.WEB_URL,
                         uri = "https://example-mower.invalid/donor-manual",
                         displayName = "Donor manual",

@@ -173,6 +173,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_15_16
 import com.loosecannon.servicetag.data.room.MIGRATION_16_17
 import com.loosecannon.servicetag.data.room.MIGRATION_17_18
 import com.loosecannon.servicetag.data.room.MIGRATION_18_19
+import com.loosecannon.servicetag.data.room.MIGRATION_19_20
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
@@ -272,7 +273,7 @@ class AppGraph(private val context: Context) {
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
             MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
-            MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
+            MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
         )
         .build()
 
@@ -296,6 +297,7 @@ class AppGraph(private val context: Context) {
     private val roomGroups = RoomGroupRepository(db.maintenanceGroupDao())
     private val roomSchedules = RoomScheduleRepository(db.maintenanceScheduleDao())
     private val roomServiceCases = RoomServiceCaseRepository(db.serviceCaseDao())
+    private val roomInstalledComponents = RoomInstalledComponentRepository(db.installedComponentDao())
 
     /**
      * #77 (C12) — the one write guard: every one of the eighteen asset-owned ports below is its wrapped port, so every
@@ -305,6 +307,7 @@ class AppGraph(private val context: Context) {
      */
     private val heldWriteGuard = HeldWriteGuard(
         transferRecords, roomEvents, roomDefinitions, roomProfiles, roomGroups, roomSchedules, roomServiceCases, links,
+        roomInstalledComponents,
     )
 
     private val roomAssets = RoomAssetRepository(db.assetDao())
@@ -378,7 +381,7 @@ class AppGraph(private val context: Context) {
      * needs no raw port. Its rules live in the use cases.
      */
     val installedComponents: InstalledComponentRepository =
-        heldWriteGuard.installedComponents(RoomInstalledComponentRepository(db.installedComponentDao()))
+        heldWriteGuard.installedComponents(roomInstalledComponents)
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -572,7 +575,7 @@ class AppGraph(private val context: Context) {
 
     // Phase 4A — attachments.
     val addAttachment: AddAttachment =
-        AddAttachment(attachments, assets, events, attachmentStorage, uow, ids, clock)
+        AddAttachment(attachments, assets, events, supplyItems, installedComponents, attachmentStorage, uow, ids, clock)
     val updateAttachment: UpdateAttachment = UpdateAttachment(attachments, uow, clock)
     val deleteAttachment: DeleteAttachment = DeleteAttachment(attachments, attachmentStorage, uow)
     val restoreArtifacts: RestoreArtifacts = RestoreArtifacts(attachments, attachmentStorage)
@@ -586,7 +589,7 @@ class AppGraph(private val context: Context) {
         setOf(BuildConfig.APPLICATION_ID, "${BuildConfig.APPLICATION_ID}.files"),
     )
     val addReference: AddReference =
-        AddReference(references, assets, linkLaunchPolicy, uow, ids, clock)
+        AddReference(references, assets, supplyItems, installedComponents, linkLaunchPolicy, uow, ids, clock)
     val updateReference: UpdateReference = UpdateReference(references, uow, clock)
     val removeReference: RemoveReference = RemoveReference(references, uow)
 
@@ -858,7 +861,7 @@ class AppGraph(private val context: Context) {
     val retireAsset: RetireAsset =
         RetireAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val deleteAsset: DeleteAsset =
-        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures)
+        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures, installedComponents)
 
     // Phase 2A — the maintenance journal.
     val logEvent: LogEvent =
@@ -1094,6 +1097,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 19
+        const val SCHEMA_VERSION = 20
     }
 }

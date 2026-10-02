@@ -7,9 +7,11 @@ import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.ConsumableUsage
@@ -22,6 +24,8 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
@@ -31,14 +35,26 @@ import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.StoredBytes
+import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.dataTreeOf
+import com.loosecannon.servicetag.core.testing.editRows
+import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.sealed
+import com.loosecannon.servicetag.core.testing.supplyItemOf
+import com.loosecannon.servicetag.core.testing.without
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
@@ -1495,5 +1511,181 @@ class MergePlannerTest {
         assertTrue(report.applicable)
         // One attachment, no bytes in the store: SKIPPED, and `applicable` is unaffected.
         assertEquals(MergeTally(0, 0, 0, 1), report.attachments)
+    }
+
+    // --- #69 (C14, row 29): a SupplyItem's and an installed component's files ------------------------
+
+    private fun onItem(id: String) = AttachmentOwner.OfSupplyItem(SupplyId(id))
+    private fun onComponent(id: String) = AttachmentOwner.OfInstalledComponent(InstalledComponentId(id))
+
+    /** [owner]'s file [id], codec-shaped: its locator under that owner's own directory, its four bytes stored. */
+    private fun fileOn(owner: AttachmentOwner, id: String) =
+        attachment(id, "unused", locator = "${AttachmentLocator.dirFor(owner)}/$id.pdf").copy(owner = owner)
+
+    /** A format-20 archive of [assets], [supplyItems], [components] and [files]. */
+    private fun ownersBackupOf(
+        assets: List<Asset> = emptyList(),
+        supplyItems: List<SupplyItem> = emptyList(),
+        components: List<InstalledComponent> = emptyList(),
+        files: List<Attachment> = emptyList(),
+    ) = backupOf(assets = assets, attachments = files, formatVersion = 20).let { backup ->
+        backup.copy(
+            data = backup.data.copy(
+                supplyItems = supplyItems.map { it.toDto() },
+                installedComponents = components.map { it.toDto() },
+            ),
+        )
+    }
+
+    /** A phone holding [assets], [supplyItems] and [components], and the bytes of every one of [files]. */
+    private fun ownersSnapshotOf(
+        files: List<Attachment>,
+        assets: List<Asset> = emptyList(),
+        supplyItems: List<SupplyItem> = emptyList(),
+        components: List<InstalledComponent> = emptyList(),
+    ) = MergeSnapshot(
+        assets = assets,
+        supplyItems = supplyItems,
+        installedComponents = components,
+        storedBytes = files.associate { it.storageLocator to storedFour },
+        attachmentStoreConfigured = true,
+    )
+
+    private fun ownerNotAvailable(id: String, owner: String) =
+        MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, owner)
+
+    /**
+     * Hazard: the attachment pass knowing two owners. A file whose SupplyItem or installed component is here, or is an
+     * INSERT of this same plan (the SupplyItem and component passes both precede this one), inserts on its own owner.
+     */
+    @Test
+    fun aSupplyItemOrComponentOwnerHereOrAcceptedIsAvailable() {
+        val files = listOf(
+            fileOn(onItem("s-here"), "att-s-here"),
+            fileOn(onItem("s-new"), "att-s-new"),
+            fileOn(onComponent("c-here"), "att-c-here"),
+            fileOn(onComponent("c-new"), "att-c-new"),
+        )
+        val plan = mergePlanOf(
+            ownersBackupOf(
+                supplyItems = listOf(supplyItemOf("s-new", "Example 12 V Battery")),
+                components = listOf(installedComponentOf("c-new", assetId = "a1", name = "Example Alternator")),
+                files = files,
+            ),
+            ownersSnapshotOf(
+                files,
+                assets = listOf(asset("a1", "Example Generator")),
+                supplyItems = listOf(supplyItemOf("s-here", "Example Prefilter Cartridge")),
+                components = listOf(installedComponentOf("c-here", assetId = "a1")),
+            ),
+        )
+
+        assertTrue(plan.applicable, "unexpected conflicts: ${plan.conflicts}")
+        for (file in files) {
+            assertEquals(
+                MergeDecision(MergeTable.ATTACHMENTS, file.id.value, MergeVerdict.INSERT),
+                plan.decision(MergeTable.ATTACHMENTS, file.id.value),
+            )
+        }
+        assertEquals(files.map { it.owner }, plan.writes.attachments.map { it.owner })
+    }
+
+    /** A file whose SupplyItem or component is neither here nor in the archive is `OWNER_NOT_AVAILABLE`, naming that id. */
+    @Test
+    fun anAbsentOneIsOwnerNotAvailableNamingIt() {
+        val files = listOf(fileOn(onItem("s9"), "att-s9"), fileOn(onComponent("c9"), "att-c9"))
+        val plan = mergePlanOf(
+            ownersBackupOf(files = files),
+            ownersSnapshotOf(files, assets = listOf(asset("a1", "Example Generator"))),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(ownerNotAvailable("att-s9", "s9"), plan.decision(MergeTable.ATTACHMENTS, "att-s9"))
+        assertEquals(ownerNotAvailable("att-c9", "c9"), plan.decision(MergeTable.ATTACHMENTS, "att-c9"))
+        assertEquals(MergeWrites(), plan.writes)
+    }
+
+    /**
+     * "Accepted" means accepted: a component the archive carries but this plan refuses (its asset is nowhere) refuses
+     * its files by the component's id, exactly as it refuses its children.
+     */
+    @Test
+    fun aComponentThisPlanRefusesRefusesItsFiles() {
+        val files = listOf(fileOn(onComponent("c3"), "att-c3"))
+        val plan = mergePlanOf(
+            ownersBackupOf(components = listOf(installedComponentOf("c3", assetId = "a9")), files = files),
+            ownersSnapshotOf(files, assets = listOf(asset("a1", "Example Generator"))),
+        )
+
+        assertEquals(
+            MergeDecision(MergeTable.INSTALLED_COMPONENTS, "c3", MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, "a9"),
+            plan.decision(MergeTable.INSTALLED_COMPONENTS, "c3"),
+        )
+        assertEquals(ownerNotAvailable("att-c3", "c3"), plan.decision(MergeTable.ATTACHMENTS, "att-c3"))
+    }
+
+    /**
+     * Hazard (H3): an untyped owner key. An asset `x1` is here, and the files name SupplyItem `x1` and component `x1`,
+     * neither of which exists: each owner is resolved by its kind, so both files are `OWNER_NOT_AVAILABLE`.
+     */
+    @Test
+    fun anAssetSharingTheIdStringMakesNoOtherOwnerAvailable() {
+        val files = listOf(fileOn(onItem("x1"), "att-s-x1"), fileOn(onComponent("x1"), "att-c-x1"))
+        val plan = mergePlanOf(
+            ownersBackupOf(files = files),
+            ownersSnapshotOf(files, assets = listOf(asset("x1", "Example Generator"))),
+        )
+
+        assertEquals(ownerNotAvailable("att-s-x1", "x1"), plan.decision(MergeTable.ATTACHMENTS, "att-s-x1"))
+        assertEquals(ownerNotAvailable("att-c-x1", "x1"), plan.decision(MergeTable.ATTACHMENTS, "att-c-x1"))
+        assertFalse(plan.applicable)
+    }
+
+    // --- #69 (C14, row 31): no older-archive exception ------------------------------------------------
+
+    private fun linkOn(owner: ReferenceOwner, id: String) = AssetReference(
+        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/$id",
+        displayName = "Example page", description = "", scheme = "https", createdAt = 1L, updatedAt = 2L,
+    )
+
+    /**
+     * Hazard: an owner column read as new content. An owner is written once, so a format-19 export's row — no owner
+     * key at all — equals the row here, whose two new keys are null; the shipped comparisons need no exception. The
+     * export is taken first; then the install gains a SupplyItem, a component and a file and a link on each. The old
+     * archive re-plans with every row it names IDENTICAL and no decision about a row it does not name.
+     */
+    @Test
+    fun aFormat19ExportAgainstAnInstallWithNewOwnersResourcesIsApplicableAndIdentical() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(asset("x1", "Example Generator"))
+        install.events.upsert(event("e1", "x1"))
+        install.attachments.upsert(attachment("att-asset", "x1"))
+        install.attachments.upsert(eventAttachment("att-entry", "e1"))
+        install.references.upsert(linkOn(ReferenceOwner.OfAsset(AssetId("x1")), "ref-asset"))
+        val ownerKeys = arrayOf("supplyItemId", "installedComponentId")
+        val format19 = sealed(
+            dataTreeOf(install.export.run().data)
+                .editRows("attachments") { it.without(*ownerKeys) }
+                .editRows("assetReferences") { it.without(*ownerKeys) },
+            formatVersion = 19,
+        )
+        install.supplyItems.upsert(supplyItemOf("s1", "Example 12 V Battery"))
+        install.installedComponents.insert(installedComponentOf("c1", assetId = "x1", supplyId = "s1"))
+        install.attachments.upsert(fileOn(onItem("s1"), "att-s1"))
+        install.attachments.upsert(fileOn(onComponent("c1"), "att-c1"))
+        install.references.upsert(linkOn(ReferenceOwner.OfSupplyItem(SupplyId("s1")), "ref-s1"))
+        install.references.upsert(linkOn(ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1")), "ref-c1"))
+
+        val plan = install.build.run(format19)
+
+        assertEquals(19, plan.report().formatVersion)
+        assertTrue(plan.applicable, "unexpected conflicts: ${plan.conflicts}")
+        assertTrue(plan.decisions.all { it.verdict == MergeVerdict.IDENTICAL }, plan.decisions.toString())
+        assertEquals(
+            setOf(MergeTable.ATTACHMENTS to "att-asset", MergeTable.ATTACHMENTS to "att-entry", MergeTable.REFERENCES to "ref-asset"),
+            plan.decisions.filter { it.table == MergeTable.ATTACHMENTS || it.table == MergeTable.REFERENCES }
+                .map { it.table to it.id }.toSet(),
+        )
+        assertEquals(MergeWrites(), plan.writes)
     }
 }

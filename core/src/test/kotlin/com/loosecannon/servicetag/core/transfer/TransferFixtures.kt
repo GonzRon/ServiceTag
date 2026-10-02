@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -161,7 +162,7 @@ object TransferFixtures {
 
     val references = listOf(
         AssetReference(
-            id = ReferenceId("r1"), assetId = AssetId(HEATER), kind = ReferenceKind.WEB_URL,
+            id = ReferenceId("r1"), owner = ReferenceOwner.OfAsset(AssetId(HEATER)), kind = ReferenceKind.WEB_URL,
             uri = "https://example.com/heater", displayName = "Example heater page", description = "",
             scheme = "https", createdAt = 100L, updatedAt = 100L,
         ),

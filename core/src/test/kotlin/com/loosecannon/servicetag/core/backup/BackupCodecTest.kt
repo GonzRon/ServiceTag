@@ -1064,11 +1064,11 @@ class BackupCodecTest {
 
     /**
      * The numbers this tip carries: the format moved to 10 (#67), on to 11 (#79), on to 12 (#79b) and on
-     * to 13 (#72), on to 16 (#85), on to 17 (#91), on to 18 (#15) and on to 19 (#47), the legacy boundary did not.
+     * to 13 (#72), on to 16 (#85), on to 17 (#91), on to 18 (#15), on to 19 (#47) and on to 20 (#69), the legacy boundary did not.
      */
     @Test
-    fun theFormatIsNineteenAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(19, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsTwentyAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(20, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 

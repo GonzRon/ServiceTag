@@ -176,7 +176,8 @@ class ImportBackupReplace(
             definitions.deleteAll()
             tags.deleteAll()
             links.deleteAll()
-            // References point only at assets, so they clear just before them.
+            // References point at their owner — an asset, a SupplyItem or an installed component (#69) — so they
+            // clear before every one of them.
             references.deleteAll()
             // #79's case aggregate would go with its assets by the CASCADE too; it is wiped by name, the
             // timeline before the headers it points at, so no reader of this list has to know that.
@@ -215,9 +216,6 @@ class ImportBackupReplace(
             restoredCategories.forEach { categories.upsert(it) }
             AssetTree.parentsFirst(canonicalAssets).forEach { assets.upsert(it) }
             promotion.newRows.forEach { categories.upsert(it) }
-            // Straight after the assets: `asset_id` is a reference's only foreign key, so this is
-            // the earliest point at which every one of them resolves.
-            data.assetReferences.forEach { references.upsert(it.toDomain()) }
             // #15: the SupplyItems (each with its specifications) after the assets, then their applicability, which
             // names both. A line's link is soft, so the quick actions and events below need nothing more.
             data.supplyItems.forEach { supplyItems.upsert(it.toDomain()) }
@@ -226,6 +224,9 @@ class ImportBackupReplace(
             // and SupplyItems, all in by now; parents first whatever the file's order, so no child precedes its parent.
             InstalledComponentTree.parentsFirst(data.installedComponents.map { it.toDomain() })
                 .forEach { installedComponents.insert(it) }
+            // #69 (H1): the references after every owner: assets, SupplyItems and installed components. A reference's
+            // owner is a foreign key, so this is the earliest point at which every one of them resolves.
+            data.assetReferences.forEach { references.upsert(it.toDomain()) }
             // Groups before schedules, and both before events: a group's members name assets, a
             // schedule names an asset or a group plus a meter definition and a profile, a closure
             // names a schedule, and an event may name one too. This is `MergeTable`'s order.
@@ -254,7 +255,8 @@ class ImportBackupReplace(
             // #86: the successions after both their assets. The graph check held the file to one row per end and no
             // cycle, so the schema's unique indexes have nothing to refuse here.
             data.assetSuccessions.forEach { successions.append(it.toDomain()) }
-            // Attachment rows go last: every owner, asset or event, is already in.
+            // Attachment rows go last: every owner — an asset, an entry, a SupplyItem or an installed component — is
+            // already in.
             data.attachments.forEach { attachments.upsert(it.toDomain()) }
             // #77: the transfer records after every row, as a merge appends them — the archive's own records,
             // which the codec proved hold none of the assets it lands.

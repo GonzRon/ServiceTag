@@ -21,7 +21,7 @@ private const val BEARER_PREFIX = "Bearer "
  * [body] is empty when there was none. Not a `data class` deliberately — a `ByteArray` member makes
  * the generated `equals` identity-based and misleading, and nothing here needs `copy`.
  *
- * [stream] is set on one shape only, the attachment upload ([isAttachmentUpload], #92 C9): exactly
+ * [stream] is set on the attachment upload alone ([isAttachmentUpload], #92 C9; one shape per owner since #69): exactly
  * `Content-Length` bytes of the socket, **not yet read**, so the router can check the token before
  * a byte of it moves (C10). [body] is then empty. Every other request's body is read here, as ever.
  */
@@ -34,14 +34,17 @@ internal class ApiRequest(
 )
 
 /**
- * #92 (C9): `POST /v1/assets/<one segment>/attachments` on the canonical path — the one request whose
- * body is left on the socket, with its own ceiling. Every other method on that shape is framed and
- * read like any other request.
+ * #92 (C9): `POST /v1/assets/<one segment>/attachments` on the canonical path — the request whose body
+ * is left on the socket, with its own ceiling. #69 (C19, C-3) adds exactly the same upload to the
+ * other two owners a route names, `POST /v1/supply-items/<one segment>/attachments` and
+ * `POST /v1/installed-components/<one segment>/attachments`, and nothing else. Every other method on
+ * those shapes is framed and read like any other request.
  */
 internal fun isAttachmentUpload(method: String, path: String): Boolean {
     if (method != "POST") return false
     val segments = path.split('/')
-    return segments.size == 5 && segments[0].isEmpty() && segments[1] == "v1" && segments[2] == "assets" &&
+    return segments.size == 5 && segments[0].isEmpty() && segments[1] == "v1" &&
+        (segments[2] == "assets" || segments[2] == "supply-items" || segments[2] == "installed-components") &&
         segments[3].isNotEmpty() && segments[4] == "attachments"
 }
 
@@ -98,8 +101,8 @@ internal class MalformedRequest(val response: ApiResponse, val why: String) : Ex
  *
  * [bodyCapFor] is consulted with the method and the path *before* a single body byte is read, which
  * is what makes the 4 MiB import ceiling reachable at two paths and the 256 MiB upload ceiling at one
- * method on one shape, and nowhere else. On that shape ([isAttachmentUpload]) the body is **left on
- * the socket** behind [ApiRequest.stream], bounded to exactly `Content-Length` bytes.
+ * method on three shapes, one per owner, and nowhere else. On those shapes ([isAttachmentUpload]) the body is
+ * **left on the socket** behind [ApiRequest.stream], bounded to exactly `Content-Length` bytes.
  */
 internal fun parseRequest(input: InputStream, bodyCapFor: (String, String) -> Int): ApiRequest {
     val requestLine = readLine(input, MAX_REQUEST_LINE)

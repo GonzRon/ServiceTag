@@ -15,13 +15,20 @@ import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.AttachmentStore
@@ -32,6 +39,8 @@ import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
+import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
 import com.loosecannon.servicetag.core.usecase.MaterializeRefusal
@@ -168,12 +177,15 @@ class MaterializeViewModelTest {
                 if (brokenRead) throw IllegalStateException("the read failed") else graph.references.get(id)
         }
         val attachments = object : AttachmentRepository by graph.attachments {
-            override suspend fun forAsset(assetId: AssetId): List<Attachment> =
-                graph.attachments.forAsset(assetId).also { afterDuplicateCheck?.invoke() }
+            override suspend fun forOwner(owner: AttachmentOwner): List<Attachment> =
+                graph.attachments.forOwner(owner).also { afterDuplicateCheck?.invoke() }
         }
         val storage: AttachmentStorage = gated ?: graph.attachmentStorage
         val add = gated?.let {
-            AddAttachment(graph.attachments, graph.assets, graph.events, it, graph.uow, graph.ids, graph.clock)
+            AddAttachment(
+                graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, it,
+                graph.uow, graph.ids, graph.clock,
+            )
         } ?: graph.addAttachment
         return MaterializeReference(
             references, attachments, storage, LinkLaunchPolicy(), hops,
@@ -188,7 +200,7 @@ class MaterializeViewModelTest {
         graph.uow.write {
             graph.references.upsert(
                 AssetReference(
-                    id = ReferenceId("ref-1"), assetId = assetId, kind = ReferenceKind.WEB_URL, uri = URI,
+                    id = ReferenceId("ref-1"), owner = ReferenceOwner.OfAsset(assetId), kind = ReferenceKind.WEB_URL, uri = URI,
                     displayName = name, description = description, scheme = "https", createdAt = 10L, updatedAt = 10L,
                     role = role,
                 ),
@@ -197,11 +209,14 @@ class MaterializeViewModelTest {
         graph.documentTransport.serve(URI, PDF, "application/pdf")
     }
 
-    private fun model(referenceId: String = "ref-1"): MaterializeViewModel {
+    private fun model(
+        referenceId: String = "ref-1",
+        owner: ReferenceOwner = ReferenceOwner.OfAsset(assetId),
+    ): MaterializeViewModel {
         val factory = viewModelFactory {
             initializer {
                 MaterializeViewModel(
-                    assetId, ReferenceId(referenceId), URI, materialize(), io = StandardTestDispatcher(scheduler),
+                    owner, ReferenceId(referenceId), URI, materialize(), io = StandardTestDispatcher(scheduler),
                 )
             }
         }
@@ -352,7 +367,8 @@ class MaterializeViewModelTest {
             MaterializeRefusal.AlreadyHave(NAME, AttachmentId("att-1")) to
                 Refused("This asset already has this file: Example Pool Pump manual.", false),
         )
-        val answered = table.associate { (why, _) -> why to refusalState(why, HOST) }
+        val anAsset = ReferenceOwner.OfAsset(AssetId("a1"))
+        val answered = table.associate { (why, _) -> why to refusalState(why, HOST, anAsset) }
         assertEquals(table.toMap(), answered)
 
         // Wired: the permission off answers P85-10 with the settings button, and nothing is fetched or written.
@@ -362,6 +378,104 @@ class MaterializeViewModelTest {
         assertEquals(Refused(NETWORK_DENIED, true), vm.state.first { it !is Downloading })
         assertTrue(graph.documentTransport.requests.isEmpty())
         assertTrue(rows().isEmpty())
+        clearModels()
+    }
+
+    // --- #69 (C25, C28; row 49): the sheet keyed by the reference's owner -------------------------------------------
+
+    /** A SupplyItem's and an installed component's web link to [URI] ("ref-supply", "ref-component"), served. */
+    private suspend fun ownersLinks(): Pair<ReferenceOwner, ReferenceOwner> {
+        assetId = graph.createAsset.run(AssetCommand(name = "Example UPS")).id
+        val supply = SupplyId("example-battery")
+        val component = InstalledComponentId("example-tray")
+        graph.uow.write {
+            graph.supplyItems.upsert(
+                SupplyItem(
+                    id = supply, name = "Example 12 V Battery", category = "Battery",
+                    manufacturer = "Example Power Co.", model = "EP-12", partNumber = "EP-12-7", preferredUnit = "ea",
+                    notes = "", archivedAt = null, createdAt = 1_000L, updatedAt = 1_000L, specifications = emptyList(),
+                ),
+            )
+            graph.installedComponents.insert(
+                InstalledComponent(
+                    id = component, assetId = assetId, parentId = null, name = "Example Battery Tray",
+                    supplyId = null, composition = emptyList(), serialOrLot = "", installedOn = "2026-01-10",
+                    removedOn = null, replacesId = null, sortOrder = 0, notes = "", createdAt = 1_000L,
+                    updatedAt = 1_000L,
+                ),
+            )
+            listOf("ref-supply" to ReferenceOwner.OfSupplyItem(supply), "ref-component" to
+                ReferenceOwner.OfInstalledComponent(component)).forEach { (id, owner) ->
+                graph.references.upsert(
+                    AssetReference(
+                        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = URI,
+                        displayName = NAME, description = DESCRIPTION, scheme = "https", createdAt = 10L,
+                        updatedAt = 10L,
+                    ),
+                )
+            }
+        }
+        graph.documentTransport.serve(URI, PDF, "application/pdf")
+        return ReferenceOwner.OfSupplyItem(supply) to ReferenceOwner.OfInstalledComponent(component)
+    }
+
+    /** C25: `prepare` gets the sheet's owner, so a SupplyItem's and a component's link download and save onto it. */
+    @Test fun preparePassesTheOwner() = runTest {
+        val (supply, component) = ownersLinks()
+
+        listOf("ref-supply" to supply, "ref-component" to component).forEach { (id, owner) ->
+            val vm = model(id, owner)
+            assertTrue("the owner's own link reaches the review", vm.state.first { it !is Downloading } is Review)
+            vm.save()
+            vm.state.first { it == Done }
+        }
+
+        assertEquals(
+            "each file lands on its link's owner, carrying the source",
+            listOf(listOf(URI), listOf(URI)),
+            listOf(supply, component).map { owner ->
+                graph.attachments.forOwner(owner.asAttachmentOwner()).map { it.source?.uri }
+            },
+        )
+        assertTrue("nothing lands on the asset", graph.attachments.forAsset(assetId).isEmpty())
+        clearModels()
+    }
+
+    /**
+     * C28 (R69-13): P85-17 in the owner's own words — P69-15 and P69-16 — and the shipped sentence for an asset. Each
+     * owner already holds the same bytes (the check is by content, on the owner's own files).
+     */
+    @Test fun alreadyHaveIsTheOwnersTwin() = runTest {
+        val (supply, component) = ownersLinks()
+        listOf(supply, component).forEach { owner ->
+            graph.addAttachment.run(
+                owner.asAttachmentOwner(),
+                AddAttachmentCommand(
+                    displayName = "Example data sheet", mimeType = "application/pdf", sizeBytes = PDF.size.toLong(),
+                    source = AttachmentSource(URI, null, 5_000L, NAME),
+                ),
+                ByteSource { PDF.inputStream() },
+            ) as AttachmentResult.Ok
+        }
+
+        val said = listOf("ref-supply" to supply, "ref-component" to component).map { (id, owner) ->
+            model(id, owner).state.first { it !is Downloading }
+        }
+
+        assertEquals(
+            listOf(
+                Refused("This supply already has this file: Example data sheet.", false),
+                Refused("This installed component already has this file: Example data sheet.", false),
+            ),
+            said,
+        )
+        assertEquals(
+            Refused("This asset already has this file: Example data sheet.", false),
+            refusalState(
+                MaterializeRefusal.AlreadyHave("Example data sheet", AttachmentId("att-1")), HOST,
+                ReferenceOwner.OfAsset(assetId),
+            ),
+        )
         clearModels()
     }
 

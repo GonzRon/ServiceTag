@@ -17,6 +17,8 @@ import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.StoredBytes
@@ -334,7 +336,7 @@ class AttachmentsSectionViewModelTest {
         val gated = GatedPutStorage(graph.attachmentStorage)
         val vm = model(
             addAttachment = AddAttachment(
-                graph.attachments, graph.assets, graph.events, gated,
+                graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, gated,
                 graph.uow, graph.ids, graph.clock,
             ),
         )
@@ -593,6 +595,40 @@ class AttachmentsSectionViewModelTest {
         clearModels()
     }
 
+    /**
+     * #69 row 49 (R69-6, C25): the Role chips follow `accepts`, so a SupplyItem's and an installed component's files
+     * are offered them with no UI edit.
+     */
+    @Test fun rolesOfferedOnASupplyItemAndAComponent() = runTest {
+        hotTub()
+
+        assertTrue(model(AttachmentOwner.OfSupplyItem(SupplyId("example-battery"))).rolesOffered)
+        assertTrue(model(AttachmentOwner.OfInstalledComponent(InstalledComponentId("example-tray"))).rolesOffered)
+        clearModels()
+    }
+
+    /** #69 row 49 (R69-6): the widening stops at an entry's file — "anything but an entry's file". */
+    @Test fun notOnAnEntry() = runTest {
+        hotTub()
+        val entry = graph.logEvent.run(
+            EventCommand(
+                assetId = assetId,
+                profileId = null,
+                kind = EventKind.MAINTENANCE,
+                title = "Battery check",
+                occurredOn = "2026-09-14",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = emptyMap(),
+                consumables = emptyList(),
+            ),
+        )
+
+        assertFalse(model(AttachmentOwner.OfEvent(entry.id)).rolesOffered)
+        clearModels()
+    }
+
     @Test fun savingRenamesTheRowAndLeavesTheLocatorAlone() = runTest {
         hotTub()
         val vm = model()
@@ -842,8 +878,8 @@ class AttachmentsSectionViewModelTest {
         val vm = model(
             storage = seams.storage,
             addAttachment = AddAttachment(
-                graph.attachments, graph.assets, graph.events, seams.storage,
-                seams.uow, graph.ids, graph.clock,
+                graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents,
+                seams.storage, seams.uow, graph.ids, graph.clock,
             ),
             updateAttachment = UpdateAttachment(graph.attachments, seams.uow, graph.clock),
             deleteAttachment = DeleteAttachment(graph.attachments, seams.storage, seams.uow),

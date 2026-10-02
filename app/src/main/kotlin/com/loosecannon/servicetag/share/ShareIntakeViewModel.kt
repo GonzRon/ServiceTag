@@ -2,13 +2,20 @@ package com.loosecannon.servicetag.share
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentKinds
-import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -33,7 +40,12 @@ import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
+import com.loosecannon.servicetag.ui.installed.INSTALLED_COMPONENTS_SECTION
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.nav.ASSETS_LABEL
+import com.loosecannon.servicetag.ui.references.DUPLICATE_URI_ON_INSTALLED_COMPONENT
+import com.loosecannon.servicetag.ui.references.DUPLICATE_URI_ON_SUPPLY
+import com.loosecannon.servicetag.ui.supplies.SUPPLIES_SECTION
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportViewModel
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackInbox
@@ -86,8 +98,43 @@ internal object IntakeStrings {
     const val BLANK_REFERENCE_NAME = "Give the reference a name"
     const val CONFIRM_TITLE = "Save this link?"
 
-    /** #93 (R93-5, G1): the form's action back to the picker, trailing the chosen asset's name. */
+    /** #93 (R93-5, G1): the form's action back to the picker, trailing the chosen destination's line (#69 C29). */
     const val CHANGE = "Change"
+
+    /** #69 (C30, C-4; P69-26): the Assets list's line when no asset is maintained here, before any filtering. */
+    const val NO_ACTIVE_ASSETS = "No active assets"
+
+    /** #69 (C30 step 3; P69-24): the search box's hint and accessible name over the installed-component list. */
+    const val SEARCH_INSTALLED_COMPONENTS = "Search installed components"
+
+    /** #69 (C30 step 3; P69-25): the same, over the supply list. */
+    const val SEARCH_SUPPLIES = "Search supplies"
+
+    /** #69 (C28, R69-13): the duplicate by the owner's kind — P69-11/-12 from their one home; an asset's stays. */
+    fun duplicateUri(owner: ReferenceOwner): String = when (owner) {
+        is ReferenceOwner.OfAsset -> DUPLICATE_URI
+        is ReferenceOwner.OfSupplyItem -> DUPLICATE_URI_ON_SUPPLY
+        is ReferenceOwner.OfInstalledComponent -> DUPLICATE_URI_ON_INSTALLED_COMPONENT
+    }
+
+    /** #69 (C29; P69-20): a path — the asset's name, then each installed component's — joined a pair at a time. */
+    fun pathOf(names: List<String>): String = names.reduceOrNull { outer, inner -> "$outer › $inner" }.orEmpty()
+
+    /** #69 (C30 step 5; P69-17): an asset level's first row, the asset itself as the destination. */
+    const val THIS_ASSET = "This asset"
+
+    /** #69 (C30 step 5; P69-18): the quiet line under each SupplyItem row on a browsing level. */
+    const val SUPPLY_SHARED = "Supply — shared across uses"
+
+    /** #69 (C30 step 5; P69-19): a component row's click label on a browsing level; the tap opens its level. */
+    fun showInside(componentName: String): String = "Show what is inside $componentName"
+
+    /** #69 (C29; P69-21): under a supply destination on the save form, which is the confirmation (no dialog). */
+    fun onSupply(supplyName: String): String =
+        "This will be saved on the supply $supplyName and available wherever that supply is used."
+
+    /** #69 (C29; P69-22): the saved line after a supply save. */
+    fun savedToSupply(supplyName: String): String = "Saved to supply $supplyName."
 
     fun confirmBody(scheme: String): String =
         "ServiceTag does not recognise \"$scheme\" links. It will be saved as written and opened " +
@@ -104,10 +151,96 @@ internal object IntakeStrings {
 internal enum class IntakePath { LINK, BYTES, NOTE, TRANSFER_PACK }
 
 /**
- * The chosen asset: the tapped picker row's id and name (#93, C4), and a row of the read-time snapshot. The id is
- * carried as a string so the state holds no value class.
+ * #69 (C29, R69-3): where this share is saved — the final selection, the one thing every save arm reads. Each arm
+ * carries only what the save form draws and nothing about how it was reached (ownership is the final selection), so a
+ * supply picked from its list and one picked while browsing an asset are the same value and write the same row. Ids
+ * are strings so the state holds no value class. #93's tapped asset row is the [Asset] arm (C4).
  */
-internal data class AssetChoice(val id: String, val name: String)
+internal sealed interface ShareDestination {
+    data class Asset(val assetId: String, val assetName: String) : ShareDestination
+    /** [path]: the asset's name, each ancestor component's, then this one's (display only). */
+    data class Component(val assetId: String, val componentId: String, val path: List<String>) : ShareDestination
+    /** [productLine]: manufacturer · model · part number as C30 builds it (display only). */
+    data class Supply(val supplyId: String, val supplyName: String, val productLine: String) : ShareDestination
+}
+
+/** #69 (C29): the one owner a destination names; a link is saved on it, a file on its attachment twin (C12). */
+internal val ShareDestination.owner: ReferenceOwner get() = when (this) {
+    is ShareDestination.Asset -> ReferenceOwner.OfAsset(AssetId(assetId))
+    is ShareDestination.Component -> ReferenceOwner.OfInstalledComponent(InstalledComponentId(componentId))
+    is ShareDestination.Supply -> ReferenceOwner.OfSupplyItem(SupplyId(supplyId))
+}
+
+/** #69 (C29): the save form's destination line — an asset's name, a component's path (P69-20), a supply's name. */
+internal val ShareDestination.label: String get() = when (this) {
+    is ShareDestination.Asset -> assetName
+    is ShareDestination.Component -> IntakeStrings.pathOf(path)
+    is ShareDestination.Supply -> supplyName
+}
+
+/** #69 (C29): the quiet lines under it — a supply's product line, when it has one, then P69-21; none otherwise. */
+internal val ShareDestination.notes: List<String> get() = when (this) {
+    is ShareDestination.Asset, is ShareDestination.Component -> emptyList()
+    is ShareDestination.Supply -> listOfNotNull(productLine.ifBlank { null }, IntakeStrings.onSupply(supplyName))
+}
+
+/** #69 (C29): what the screen says once saved — "Saved to %s" with the destination line, or P69-22 for a supply. */
+internal val ShareDestination.savedLine: String get() = when (this) {
+    is ShareDestination.Asset, is ShareDestination.Component -> IntakeStrings.savedTo(label)
+    is ShareDestination.Supply -> IntakeStrings.savedToSupply(supplyName)
+}
+
+/**
+ * #69 (C30 step 2): the picker's three lists, Assets the default — a mode, not a filter. Each label is the shipped word
+ * for that list, imported from its one home.
+ */
+internal enum class ShareTargetType(val label: String) {
+    ASSETS(ASSETS_LABEL),
+    INSTALLED_COMPONENTS(INSTALLED_COMPONENTS_SECTION),
+    SUPPLIES(SUPPLIES_SECTION),
+}
+
+/**
+ * #69 (C30 step 4): what the installed-component and supply lists are built from, read once with the share — every
+ * asset, the held set, every installed component and every SupplyItem. Who is offered is `ShareTargets`' to decide.
+ * Read once, while the Assets list beside them stays live: nothing inside the share activity can add, archive or
+ * remove a component or a supply, so the read cannot go stale under the person's own hand.
+ */
+internal data class ShareSources(
+    val assets: List<Asset> = emptyList(),
+    val held: Set<AssetId> = emptySet(),
+    val components: List<InstalledComponent> = emptyList(),
+    val supplyItems: List<SupplyItem> = emptyList(),
+    /** #69 (C30 step 5): every asset link to a SupplyItem — what an asset's level offers besides its components. */
+    val assetSupplies: List<AssetSupply> = emptyList(),
+)
+
+/**
+ * #69 (C30 step 5): one browsing level, opened from an asset row or, on a level, from a component row. [self] is the
+ * level's own destination — P69-17 for an asset, P69-2 for an installed component — exactly the value the direct
+ * route gives the same row; [path] is its breadcrumb's segments (P69-20). A level writes nothing: only a chosen
+ * destination and Save do.
+ */
+internal sealed interface ShareLevel {
+    val self: ShareDestination
+    val path: List<String>
+
+    data class OfAsset(override val self: ShareDestination.Asset) : ShareLevel {
+        override val path: List<String> get() = listOf(self.assetName)
+    }
+
+    data class OfComponent(override val self: ShareDestination.Component) : ShareLevel {
+        override val path: List<String> get() = self.path
+    }
+}
+
+/** #69 (C29, C30 step 5): a tapped installed-component row is the final selection, carried whole. */
+internal val ComponentTarget.destination: ShareDestination.Component
+    get() = ShareDestination.Component(assetId.value, componentId.value, path)
+
+/** #69 (C29, C30 step 5): a tapped supply row is the final selection, carried whole. */
+internal val SupplyTarget.destination: ShareDestination.Supply
+    get() = ShareDestination.Supply(supplyId.value, name, productLine)
 
 /**
  * The one state the intake screen draws. [deadEnd] and the form are mutually exclusive; the
@@ -120,12 +253,21 @@ internal data class ShareIntakeState(
     /** What arrived, drawn under "Received". */
     val received: String = "",
     /**
-     * The read-time eligible set — every asset not transferred out, read once with the share. #93 (C4): it decides
-     * the no-assets dead end and nothing else; it is not drawn, and a choice is never looked up in it.
+     * The read-time eligible set — every asset maintained here (#69, C30), read once with the share. #93 (C4): it
+     * decides the no-assets dead end and nothing else; it is not drawn, and a choice is never looked up in it.
      */
-    val assets: List<AssetChoice> = emptyList(),
-    /** #93 (C4): the tapped row's `(id, name)`, exactly what every save arm reads; null on the picker step. */
-    val chosen: AssetChoice? = null,
+    val assets: List<ShareDestination.Asset> = emptyList(),
+    /** #93 (C4), #69 (C29): the final selection, exactly what every save arm reads; null on the picker step. */
+    val destination: ShareDestination? = null,
+    /** #69 (C30 step 2): the list the picker shows; a "Change" keeps it, so the person returns to where they chose. */
+    val type: ShareTargetType = ShareTargetType.ASSETS,
+    /** #69 (C30 step 4): the component and supply lists' rows, read with the share; not drawn as they are. */
+    val sources: ShareSources = ShareSources(),
+    /**
+     * #69 (C30 step 5): the browsing levels open, outermost first — an asset's, then each component's below it; empty
+     * on the list. Back takes one off; a chosen destination keeps them, so "Change" returns to the level chosen from.
+     */
+    val levels: List<ShareLevel> = emptyList(),
     val name: String = "",
     val description: String = "",
     val kind: AttachmentKind = AttachmentKind.OTHER,
@@ -159,16 +301,47 @@ internal data class ShareIntakeState(
     /** #67 (R67-9), #91 (R91-4): the Role control is offered on a byte share and on a web-link share. */
     val roleOffered: Boolean get() = path == IntakePath.BYTES || (path == IntakePath.LINK && linkTakesRole)
 
+    /** #69 (C30 step 1): a link or a file may go to a component or a supply; prose has no type control. */
+    val typeOffered: Boolean get() = path == IntakePath.LINK || path == IntakePath.BYTES
+
+    /**
+     * #69 (C30 steps 3–4): the installed-component list under [query] — the one query, the hosted Assets list's own,
+     * passed in, so a type switch never touches it.
+     */
+    fun componentRows(query: String): ShareTargetList<ComponentTarget> =
+        componentList(sources.assets, sources.held, sources.components, query)
+
+    /** #69 (C30 steps 3–4): the supply list under the same [query]. */
+    fun supplyRows(query: String): ShareTargetList<SupplyTarget> = supplyList(sources.supplyItems, query)
+
+    /** #69 (C30 step 5): the level the picker draws, or null for the list. */
+    val level: ShareLevel? get() = levels.lastOrNull()
+
+    /** #69 (C30 step 5): a browsing level is drawn — Back goes up one level, then to the list. */
+    val browsing: Boolean get() = picking && levels.isNotEmpty()
+
+    /** #69 (C30 step 5): what [level] offers under its own destination, from the rows read with the share. */
+    fun levelRows(level: ShareLevel): LevelRows = when (level) {
+        is ShareLevel.OfAsset -> assetLevelRows(
+            AssetId(level.self.assetId), sources.assets, sources.held, sources.components, sources.supplyItems,
+            sources.assetSupplies,
+        )
+        is ShareLevel.OfComponent -> componentLevelRows(
+            AssetId(level.self.assetId), InstalledComponentId(level.self.componentId), sources.assets, sources.held,
+            sources.components, sources.supplyItems,
+        )
+    }
+
     /**
      * **Disabling Save is the intake behaviour** (spec §7), which is why no blank-name sentence is
-     * ever drawn on this screen: an asset is chosen, the sanitised name is non-blank, and on a byte
-     * share the folder is there.
+     * ever drawn on this screen: a destination is chosen, the sanitised name is non-blank, and on a
+     * byte share the folder is there.
      */
     val saveEnabled: Boolean get() = !loading &&
         deadEnd == null &&
         !saving &&
         saved == null &&
-        chosen != null &&
+        destination != null &&
         ReferenceText.sanitiseName(name).isNotEmpty() &&
         (path != IntakePath.BYTES || storeReady) &&
         path != IntakePath.TRANSFER_PACK
@@ -179,7 +352,7 @@ internal data class ShareIntakeState(
     val picking: Boolean get() = !loading &&
         deadEnd == null &&
         saved == null &&
-        chosen == null &&
+        destination == null &&
         path != IntakePath.TRANSFER_PACK
 
     /**
@@ -187,7 +360,7 @@ internal data class ShareIntakeState(
      * today — and while confirming, where the dialog takes Back.
      */
     val backChangesAsset: Boolean get() = !loading &&
-        chosen != null &&
+        destination != null &&
         !saving &&
         saved == null &&
         deadEnd == null &&
@@ -223,6 +396,15 @@ internal class ShareIntakeViewModel(
     private val packInbox: TransferPackInbox? = null,
     /** #91 (C-4): reads a shared link's scheme for [ShareIntakeState.linkTakesRole]; stateless. */
     private val linkPolicy: LinkLaunchPolicy = LinkLaunchPolicy(),
+    /**
+     * #69 (C30, C-5): every SupplyItem, read once with the share — an unarchived one keeps a link or a file with no
+     * active asset off the no-assets dead end. Empty supplies none.
+     */
+    private val supplyItems: suspend () -> List<SupplyItem> = { emptyList() },
+    /** #69 (C30 step 4): every installed component, read once with the share; the list keeps the current ones. */
+    private val installedComponents: suspend () -> List<InstalledComponent> = { emptyList() },
+    /** #69 (C30 step 5): every asset link to a SupplyItem, read once with the share, for an asset's level. */
+    private val assetSupplies: suspend () -> List<AssetSupply> = { emptyList() },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ShareIntakeState())
@@ -233,8 +415,9 @@ internal class ShareIntakeViewModel(
 
     init {
         viewModelScope.launch {
-            // One hop: the provider IPC, the stream read, the asset list and the store's state are
-            // all off the main thread, and the screen commits to nothing until they land together.
+            // One hop: the provider IPC, the stream read, the asset list, the held set, the installed components,
+            // the SupplyItems (the dead end's unarchived count among them) and the store's state are all off the main
+            // thread, and the screen commits to nothing until they land together.
             //
             // **Guarded, because a failure here has nowhere else to go.** Before the read moved off
             // `onCreate` a throw at least ended the activity; from inside `viewModelScope.launch`
@@ -268,14 +451,16 @@ internal class ShareIntakeViewModel(
                             packCopy = copy,
                         )
                     }
-                    // rm-5: an asset transferred out from this phone is never offered.
+                    // #69 (C30, R69-3): only an asset maintained here is offered — never an archived or retired one, nor
+                    // one transferred out from this phone (rm-5).
                     val held = heldIds()
+                    val everyAsset = assets.all()
                     loadedState(
                         content = found.content,
-                        choices = assets.all()
-                            .filter { it.id !in held }
-                            .map { AssetChoice(it.id.value, it.name) }
-                            .sortedBy { it.name.lowercase() },
+                        choices = shareableAssets(everyAsset, held)
+                            .map { ShareDestination.Asset(it.id.value, it.name) }
+                            .sortedBy { it.assetName.lowercase() },
+                        sources = ShareSources(everyAsset, held, installedComponents(), supplyItems(), assetSupplies()),
                         store = storage.state(),
                     )
                 }
@@ -294,17 +479,44 @@ internal class ShareIntakeViewModel(
     private fun unreadable() =
         ShareIntakeState(loading = false, deadEnd = IntakeStrings.UNREADABLE)
 
-    /** #93 (C4): the tapped row, carried whole; nothing is looked up. */
-    fun choose(assetId: String, name: String) =
-        _state.update { it.copy(chosen = AssetChoice(assetId, name), message = null) }
+    /**
+     * #93 (C4), #69 (C29): the final selection, carried whole; nothing is looked up. Prose is a journal note, which
+     * belongs to an asset, so on the note path only an [ShareDestination.Asset] is taken.
+     */
+    fun choose(destination: ShareDestination) = _state.update {
+        if (it.path == IntakePath.NOTE && destination !is ShareDestination.Asset) it
+        else it.copy(destination = destination, message = null)
+    }
+
+    /**
+     * #69 (C30 step 5): an asset row on the list. On a link or a file it opens the asset's level, where the asset
+     * itself is one destination among its supplies and components; prose is an asset's note, so there the row is the
+     * choice. Opening a level chooses nothing and writes nothing.
+     */
+    fun pickAsset(asset: ShareDestination.Asset) {
+        if (!_state.value.typeOffered) return choose(asset)
+        _state.update { if (it.picking) it.copy(levels = listOf(ShareLevel.OfAsset(asset))) else it }
+    }
+
+    /** #69 (C30 step 5): a component row on a level opens its own level, one down. Nothing is chosen or written. */
+    fun openComponent(target: ComponentTarget) = _state.update {
+        if (it.browsing) it.copy(levels = it.levels + ShareLevel.OfComponent(target.destination)) else it
+    }
+
+    /** #69 (C30 step 5): Back on a level — one level up, and from the outermost to the list, as it was left. */
+    fun levelUp() = _state.update { if (it.browsing) it.copy(levels = it.levels.dropLast(1)) else it }
+
+    /** #69 (C30 step 2): the type control, on a link or a file only; the query and any choice are left as they are. */
+    fun chooseType(type: ShareTargetType) = _state.update { if (it.typeOffered) it.copy(type = type) else it }
 
     /**
      * #93 (C6): back to the picker — the choice and any refusal cleared, Name, Description, Type and Role kept (each
-     * came from the share, not the asset). "That is not a link." is not restored. A no-op unless
+     * came from the share, not the asset), and #69 (C29) the list type and the levels kept, so the person is back where
+     * the destination was chosen. "That is not a link." is not restored. A no-op unless
      * [ShareIntakeState.backChangesAsset].
      */
     fun changeAsset() = _state.update {
-        if (it.backChangesAsset) it.copy(chosen = null, message = null) else it
+        if (it.backChangesAsset) it.copy(destination = null, message = null) else it
     }
 
     /**
@@ -351,29 +563,34 @@ internal class ShareIntakeViewModel(
 
     private suspend fun commit(confirmedUnknownScheme: Boolean) {
         val current = _state.value
-        val choice = current.chosen
-        if (choice == null) {
+        val destination = current.destination
+        if (destination == null) {
             _state.update { it.copy(saving = false, deadEnd = IntakeStrings.NO_ASSETS) }
             return
         }
         when (current.path) {
-            IntakePath.LINK -> saveLink(current, choice, confirmedUnknownScheme)
-            IntakePath.BYTES -> saveBytes(current, choice)
-            IntakePath.NOTE -> saveNote(current, choice)
+            IntakePath.LINK -> saveLink(current, destination, confirmedUnknownScheme)
+            IntakePath.BYTES -> saveBytes(current, destination)
+            // #69 (C29, N-5): a note is an asset's journal entry; [choose] never takes another kind on this path.
+            IntakePath.NOTE -> when (destination) {
+                is ShareDestination.Asset -> saveNote(current, destination)
+                is ShareDestination.Component, is ShareDestination.Supply ->
+                    error("a shared note is saved on an asset only")
+            }
             IntakePath.TRANSFER_PACK -> Unit
         }
     }
 
     private suspend fun saveLink(
         current: ShareIntakeState,
-        choice: AssetChoice,
+        destination: ShareDestination,
         confirmedUnknownScheme: Boolean,
     ) {
         val uri = (share?.content as? ShareContent.Link)?.uri
             ?: return refuse(IntakeStrings.UNREADABLE)
         val result = try {
             addReference.run(
-                AssetId(choice.id),
+                destination.owner,
                 AddReferenceCommand(
                     uri = uri,
                     displayName = current.name,
@@ -386,13 +603,13 @@ internal class ShareIntakeViewModel(
             return refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
         }
         when (result) {
-            is ReferenceResult.Ok -> succeed(choice)
+            is ReferenceResult.Ok -> succeed(destination)
             is ReferenceResult.Refused -> when (val problem = result.problem) {
                 // The one refusal that is a question rather than an answer: the person is asked
                 // about the scheme by name, and only their "Save" sets the flag (plan §18.2).
                 is ReferenceProblem.UnknownSchemeNeedsConfirmation ->
                     _state.update { it.copy(saving = false, confirming = problem.scheme) }
-                ReferenceProblem.DuplicateUri -> refuse(IntakeStrings.DUPLICATE_URI)
+                ReferenceProblem.DuplicateUri -> refuse(IntakeStrings.duplicateUri(destination.owner))
                 ReferenceProblem.UriTooLong -> refuse(IntakeStrings.URI_TOO_LONG)
                 ReferenceProblem.SchemeBlocked -> refuse(IntakeStrings.SCHEME_BLOCKED)
                 ReferenceProblem.NotALink -> refuse(IntakeStrings.NOT_A_LINK)
@@ -415,7 +632,7 @@ internal class ShareIntakeViewModel(
      * `AddAttachment` **before** it opens the source, with the same ratified sentence, so a second
      * copy of that rule here would be two places to keep in step for no behaviour at all.
      */
-    private suspend fun saveBytes(current: ShareIntakeState, choice: AssetChoice) {
+    private suspend fun saveBytes(current: ShareIntakeState, destination: ShareDestination) {
         val content = share?.content
         val bytes = (content as? ShareContent.Bytes) ?: return refuse(IntakeStrings.UNREADABLE)
         val open = share?.bytes ?: return refuse(IntakeStrings.UNREADABLE)
@@ -433,7 +650,7 @@ internal class ShareIntakeViewModel(
                 return refuse(IntakeStrings.EMPTY_FILE)
             }
             addAttachment.run(
-                AttachmentOwner.OfAsset(AssetId(choice.id)),
+                destination.owner.asAttachmentOwner(),
                 AddAttachmentCommand(
                     displayName = current.name,
                     mimeType = bytes.mimeType,
@@ -460,7 +677,7 @@ internal class ShareIntakeViewModel(
             return refuse(IntakeStrings.UNREADABLE)
         }
         when (result) {
-            is AttachmentResult.Ok -> succeed(choice)
+            is AttachmentResult.Ok -> succeed(destination)
             is AttachmentResult.Refused -> when (val problem = result.problem) {
                 AttachmentProblem.NoStore, AttachmentProblem.StoreUnavailable ->
                     _state.update { it.copy(saving = false, storeReady = false) }
@@ -472,12 +689,12 @@ internal class ShareIntakeViewModel(
     }
 
     /** #43 AC 5 and D-5: prose becomes a journal note through the shipped `EventKind.NOTE`. */
-    private suspend fun saveNote(current: ShareIntakeState, choice: AssetChoice) {
+    private suspend fun saveNote(current: ShareIntakeState, destination: ShareDestination.Asset) {
         val prose = (share?.content as? ShareContent.PlainText)?.text.orEmpty()
         try {
             logEvent.run(
                 EventCommand(
-                    assetId = AssetId(choice.id),
+                    assetId = AssetId(destination.assetId),
                     profileId = null,
                     kind = EventKind.NOTE,
                     title = ReferenceText.sanitiseName(current.name),
@@ -504,11 +721,11 @@ internal class ShareIntakeViewModel(
         } catch (_: SecurityException) {
             return refuse(IntakeStrings.UNREADABLE)
         }
-        succeed(choice)
+        succeed(destination)
     }
 
-    private fun succeed(choice: AssetChoice) = _state.update {
-        it.copy(saving = false, saved = IntakeStrings.savedTo(choice.name))
+    private fun succeed(destination: ShareDestination) = _state.update {
+        it.copy(saving = false, saved = destination.savedLine)
     }
 
     private fun refuse(sentence: String) = _state.update {
@@ -521,12 +738,14 @@ internal class ShareIntakeViewModel(
 
     /**
      * The one state the read produces, so a cold start and a warm one cannot differ: it is a pure
-     * function of what arrived, the asset list and the store's state, with nothing read from a
-     * field that a second process might have set differently.
+     * function of what arrived, the asset list, the rows the other two lists are built from (the
+     * unarchived SupplyItem count among them) and the store's state, with nothing read from a field
+     * that a second process might have set differently.
      */
     private fun loadedState(
         content: ShareContent,
-        choices: List<AssetChoice>,
+        choices: List<ShareDestination.Asset>,
+        sources: ShareSources,
         store: StoreState,
     ): ShareIntakeState {
         val base = when (content) {
@@ -560,10 +779,14 @@ internal class ShareIntakeViewModel(
                 },
             )
         }
+        // #69 (C30, C-5): prose needs an active asset; a link or a file can also go to an unarchived supply.
+        val supplies = sources.supplyItems.count { it.isShareable }
+        val nowhere = choices.isEmpty() && (base.path == IntakePath.NOTE || supplies == 0)
         return base.copy(
             loading = false,
             assets = choices,
-            deadEnd = base.deadEnd ?: IntakeStrings.NO_ASSETS.takeIf { choices.isEmpty() },
+            sources = sources,
+            deadEnd = base.deadEnd ?: IntakeStrings.NO_ASSETS.takeIf { nowhere },
         )
     }
 }

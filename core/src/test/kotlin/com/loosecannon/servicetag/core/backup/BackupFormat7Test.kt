@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
@@ -189,7 +190,7 @@ class BackupFormat7Test {
         assertEquals("https", reference.scheme)
         assertEquals(1_000L, reference.createdAt)
         assertEquals(2_000L, reference.updatedAt)
-        assertEquals(AssetId("a1"), reference.assetId)
+        assertEquals(ReferenceOwner.OfAsset(AssetId("a1")), reference.owner)
         assertEquals("joplin", decoded.data.assetReferences.single { it.id == "r2" }.toDomain().scheme)
 
         // the 2.6 tombstone travelled beside it, byte for byte, and was not re-purposed
@@ -197,10 +198,11 @@ class BackupFormat7Test {
     }
 
     /**
-     * Hazard: DTO field-set drift. The ten element names are pinned in order, and `"provenance"`
+     * Hazard: DTO field-set drift. The twelve element names are pinned in order, and `"provenance"`
      * is asserted absent — the assertion that actually carries D-21 C, since an in-app "Add link"
      * and a share write identical rows and nothing in the product distinguishes them. Format 17
-     * (#91, C6) appended the tenth, `"role"`, last: the nine columns before it never moved.
+     * (#91, C6) appended the tenth, `"role"`, and format 20 (#69, C9) the two owner keys after it:
+     * the nine columns before them never moved.
      *
      * `BackupData`'s own new member is pinned last for the same reason, and the two 2.6 tombstone
      * fields are pinned where they have always been.
@@ -211,11 +213,11 @@ class BackupFormat7Test {
         assertEquals(
             listOf(
                 "id", "assetId", "kind", "uri", "displayName", "description", "scheme",
-                "createdAt", "updatedAt", "role",
+                "createdAt", "updatedAt", "role", "supplyItemId", "installedComponentId",
             ),
             names,
         )
-        assertEquals(10, AssetReferenceDto.serializer().descriptor.elementsCount)
+        assertEquals(12, AssetReferenceDto.serializer().descriptor.elementsCount)
         assertTrue("provenance" !in names, "a reference carries no provenance (D-21 C)")
 
         val tables = BackupData.serializer().descriptor.elementNames.toList()
@@ -455,7 +457,7 @@ class BackupFormat7Test {
                 outgoing.assetReferences.sortedBy { it.id },
                 target.references.all().map { it.toDto() }.sortedBy { it.id },
             )
-            assertNotNull(target.references.findByUri(AssetId("a2"), onSecond.uri))
+            assertNotNull(target.references.findByUri(ReferenceOwner.OfAsset(AssetId("a2")), onSecond.uri))
         }
     }
 
@@ -489,8 +491,8 @@ class BackupFormat7Test {
         private val owners: () -> Set<String>,
     ) : InMemoryReferenceRepository() {
         override suspend fun upsert(reference: AssetReference) {
-            check(reference.assetId.value in owners()) {
-                "reference ${reference.id.value} names asset ${reference.assetId.value}, " +
+            check((reference.owner as? ReferenceOwner.OfAsset)?.assetId?.value in owners()) {
+                "reference ${reference.id.value} names asset ${(reference.owner as? ReferenceOwner.OfAsset)?.assetId?.value}, " +
                     "which is not inserted yet"
             }
             super.upsert(reference)

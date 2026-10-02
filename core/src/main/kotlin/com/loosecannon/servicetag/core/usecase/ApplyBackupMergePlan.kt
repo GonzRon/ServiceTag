@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -292,10 +293,17 @@ internal class ReturnScope private constructor(
             }.mapTo(HashSet()) { it.id }
             val events = full.events.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
             val cases = full.serviceCases.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
+            // #69 (C5, H2): a returning asset's components, current and removed; the asset delete's CASCADE takes
+            // their files, so they leave the snapshot and their locators are swept.
+            val returningComponents =
+                full.installedComponents.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
             val attachments = full.attachments.filter { a ->
                 when (val owner = a.owner) {
                     is AttachmentOwner.OfAsset -> owner.assetId in returning
                     is AttachmentOwner.OfEvent -> owner.eventId in events
+                    // A SupplyItem is global and never removed by a return; its files stay.
+                    is AttachmentOwner.OfSupplyItem -> false
+                    is AttachmentOwner.OfInstalledComponent -> owner.componentId in returningComponents
                 }
             }
             val keptLinks = full.links.filter { it.assetId in returning }
@@ -312,7 +320,14 @@ internal class ReturnScope private constructor(
                 closures = full.closures.filterNot { it.scheduleId in schedules },
                 events = full.events.filterNot { it.id in events },
                 attachments = full.attachments - attachments.toSet(),
-                references = full.references.filterNot { it.assetId in returning },
+                // #69 (C13): a returning asset's links and its components' leave with it; a SupplyItem's stay.
+                references = full.references.filterNot { r ->
+                    when (val owner = r.owner) {
+                        is ReferenceOwner.OfAsset -> owner.assetId in returning
+                        is ReferenceOwner.OfSupplyItem -> false
+                        is ReferenceOwner.OfInstalledComponent -> owner.componentId in returningComponents
+                    }
+                },
                 seasonActivations = full.seasonActivations.filterNot { it.assetId in returning },
                 conditions = full.conditions.filterNot { it.assetId in returning },
                 healthSubjects = full.healthSubjects.filterNot { it.assetId in returning },

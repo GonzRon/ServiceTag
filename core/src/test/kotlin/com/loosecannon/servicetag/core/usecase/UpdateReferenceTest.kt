@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
@@ -31,7 +32,7 @@ class UpdateReferenceTest {
     private val id = ReferenceId("ref-1")
     private val stored = AssetReference(
         id = id,
-        assetId = AssetId("a1"),
+        owner = ReferenceOwner.OfAsset(AssetId("a1")),
         kind = ReferenceKind.WEB_URL,
         uri = "https://example-mower.invalid/xt1?a=1#frag",
         displayName = "Deck belt",
@@ -105,7 +106,7 @@ class UpdateReferenceTest {
         assertEquals(MAX_REFERENCE_DESCRIPTION_CHARS, row.description.length)
         assertEquals(now, row.updatedAt)
         assertEquals(stored.uri, row.uri)
-        assertEquals(stored.assetId, row.assetId)
+        assertEquals(stored.owner, row.owner)
         assertEquals(stored.kind, row.kind)
         assertEquals(stored.scheme, row.scheme)
         assertEquals(stored.createdAt, row.createdAt)

@@ -974,13 +974,15 @@ TWENTY_THREE_TALLIES = TWENTY_TWO_TALLIES + ("installedComponents",)
 """#47 (format 19) appends the installed components, each with its composition, last."""
 
 
-def test_import_merge_docs_say_formats_1_to_19_twenty_three_tables_and_the_four_reasons() -> None:
-    """#77 (C24), #86 (C21), #15 (C28) and #47 (C24): the tool's docstring and the README's `import_merge` section
-    name the range 1–19, the twenty-three tables, the `transfers`, `successions`, `supplyItems`, `assetSupplies`
-    and `installedComponents` tallies, the two reasons a transfer record conflicts with and the two a succession
-    does; the README lists the twenty-three tallies in the report's order."""
+def test_import_merge_docs_say_formats_1_to_20_twenty_three_tables_and_the_four_reasons() -> None:
+    """#77 (C24), #86 (C21), #15 (C28), #47 (C24) and #69 (C23): the tool's docstring and the README's
+    `import_merge` section name the range 1–20, the twenty-three tables (format 20 adds none), the `transfers`,
+    `successions`, `supplyItems`, `assetSupplies` and `installedComponents` tallies, the two reasons a transfer
+    record conflicts with and the two a succession does; the README lists the twenty-three tallies in the report's
+    order."""
     doc = " ".join((server_module.import_merge.__doc__ or "").split())
-    assert "format 1–19" in doc and "1–18" not in doc and "1–17" not in doc
+    assert "format 1–20" in doc and "1–19" not in doc and "1–18" not in doc and "1–17" not in doc
+    assert "format 20 adds" in doc and "`supplyItemId`" in doc and "`installedComponentId`" in doc
     assert "twenty-three tables" in doc and "twenty-two tables" not in doc and "twenty tables" not in doc
     assert "nineteen" not in doc
     for word in ("`transfers`", "`successions`", "`supplyItems`", "`assetSupplies`", "`installedComponents`",
@@ -991,7 +993,8 @@ def test_import_merge_docs_say_formats_1_to_19_twenty_three_tables_and_the_four_
     readme = README.read_text(encoding="utf-8")
     section = readme.split("### `import_merge`", 1)[1].split("\n## ", 1)[0]
     flat = " ".join(section.split())
-    assert "format **1–19**" in flat and "1–18" not in flat and "1–17" not in flat
+    assert "format **1–20**" in flat and "1–19" not in flat and "1–18" not in flat and "1–17" not in flat
+    assert "format 20" in flat and "`supplyItemId`" in flat and "`installedComponentId`" in flat
     assert "each of **twenty-three** tables" in flat and "twenty-two" not in flat and "nineteen" not in flat
     for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
         assert word in flat, word
@@ -1009,4 +1012,5 @@ def test_the_readme_names_every_tool_the_supply_gate_and_the_installed_component
         assert f"`{name}`" in readme, name
     assert "The supply tools need schema 18." in readme
     assert "The installed component tools need schema 19." in readme
+    assert "A supply item or installed component owner needs schema 20." in readme
     assert "`supplyId`" in tools and "`APP_SCHEMA_TOO_OLD`" in tools

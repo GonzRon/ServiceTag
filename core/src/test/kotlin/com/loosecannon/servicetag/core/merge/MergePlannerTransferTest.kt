@@ -7,24 +7,38 @@ import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.shortPackId
+import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.conditionOf
 import com.loosecannon.servicetag.core.testing.groupOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.transfer.TransferFixtures
 import kotlin.test.assertEquals
@@ -149,6 +163,86 @@ class MergePlannerTransferTest {
         )
         assertEquals(listOf(transferredOut(MergeTable.EVENTS, "e9", "h1")), plan.of(MergeTable.EVENTS))
         assertEquals(listOf(transferredOut(MergeTable.CONDITIONS, "co9", "h1")), plan.of(MergeTable.CONDITIONS))
+        assertFalse(plan.applicable)
+    }
+
+    // --- M2, the resource owners (#69, C14; row 30) ----------------------------------------------------
+
+    /** The held heater's battery tray, here, which names the SupplyItem below; and that SupplyItem, here too. */
+    private val heaterTray = installedComponentOf("c1", assetId = "h1", supplyId = "s1")
+    private val batteryItem = supplyItemOf("s1", "Example 12 V Battery")
+    private val onTray = AttachmentOwner.OfInstalledComponent(InstalledComponentId("c1"))
+    private val onBattery = AttachmentOwner.OfSupplyItem(SupplyId("s1"))
+
+    private fun fileOn(owner: AttachmentOwner, id: String) = Attachment(
+        id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "Example sheet.pdf",
+        mimeType = "application/pdf", sizeBytes = 4L, sha256 = "d".repeat(64),
+        storageLocator = "${AttachmentLocator.dirFor(owner)}/$id.pdf", capturedOn = null,
+        createdAt = 100L, updatedAt = 100L,
+    )
+
+    private fun linkOn(owner: ReferenceOwner, id: String) = AssetReference(
+        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/$id",
+        displayName = "Example page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
+    )
+
+    /** The phone: the heater held (its OUT open here), its tray and the SupplyItem, and the bytes of [files]. */
+    private fun heldHere(files: List<Attachment> = emptyList()) = MergeSnapshot(
+        assets = listOf(heldHeater), transfers = listOf(outQ), supplyItems = listOf(batteryItem),
+        installedComponents = listOf(heaterTray),
+        storedBytes = files.associate { it.storageLocator to StoredBytes("d".repeat(64), 4L) },
+        attachmentStoreConfigured = true,
+    )
+
+    /** A real archive of the same heater, tray and SupplyItem, with [files] and [links] on them. */
+    private fun resourcesArchive(files: List<Attachment> = emptyList(), links: List<AssetReference> = emptyList()) =
+        decoded(assets = listOf(heldHeater)) { data ->
+            data.copy(
+                supplyItems = listOf(batteryItem.toDto()), installedComponents = listOf(heaterTray.toDto()),
+                attachments = files.map { it.toDto() }, assetReferences = links.map { it.toDto() },
+            )
+        }
+
+    /** M2 through the component (I5): a file a held asset's component owns is that asset's, so its insert is refused. */
+    @Test
+    fun aComponentsFileInsertedForAHeldAssetIsTransferredOut() {
+        val files = listOf(fileOn(onTray, "att-c1"))
+
+        val plan = mergePlanOf(resourcesArchive(files), heldHere(files))
+
+        assertEquals(listOf(transferredOut(MergeTable.ATTACHMENTS, "att-c1", "h1")), plan.of(MergeTable.ATTACHMENTS))
+        assertFalse(plan.applicable)
+    }
+
+    /** A SupplyItem is global and is no asset's: its file inserts though the only row naming it is the held asset's. */
+    @Test
+    fun aSupplyItemsFileIsNot() {
+        val files = listOf(fileOn(onBattery, "att-s1"))
+
+        val plan = mergePlanOf(resourcesArchive(files), heldHere(files))
+
+        assertEquals(listOf(MergeDecision(MergeTable.ATTACHMENTS, "att-s1", MergeVerdict.INSERT)), plan.of(MergeTable.ATTACHMENTS))
+        assertTrue(plan.applicable, plan.conflicts.toString())
+        assertEquals(files, plan.writes.attachments)
+    }
+
+    /** The links take the same rule: the tray's link is the held heater's and refused, the SupplyItem's inserts. */
+    @Test
+    fun aComponentsLinkInsertedForAHeldAssetIsTransferredOutAndASupplyItemsIsNot() {
+        val links = listOf(
+            linkOn(ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1")), "ref-c1"),
+            linkOn(ReferenceOwner.OfSupplyItem(SupplyId("s1")), "ref-s1"),
+        )
+
+        val plan = mergePlanOf(resourcesArchive(links = links), heldHere())
+
+        assertEquals(
+            listOf(
+                transferredOut(MergeTable.REFERENCES, "ref-c1", "h1"),
+                MergeDecision(MergeTable.REFERENCES, "ref-s1", MergeVerdict.INSERT),
+            ),
+            plan.of(MergeTable.REFERENCES),
+        )
         assertFalse(plan.applicable)
     }
 
