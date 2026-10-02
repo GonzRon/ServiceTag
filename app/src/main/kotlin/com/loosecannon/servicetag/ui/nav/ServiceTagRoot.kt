@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportScreen
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
+import com.loosecannon.servicetag.ui.installed.InstalledComponentDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.loan.LoanEditScreen
@@ -244,6 +245,8 @@ fun ServiceTagRoot(
                         onReplace = { backStack.add(Route.ReplaceAsset(it)) },
                         // #15 (C33, C-1): a Supplies row opens the SupplyItem's detail; the tap writes nothing.
                         onOpenSupply = { backStack.add(Route.SupplyDetail(it)) },
+                        // #69 (C27): P69-1 on a row sheet opens the installed component's screen; it writes nothing.
+                        onOpenInstalledComponent = { backStack.add(Route.InstalledComponentDetail(it)) },
                     )
                 }
                 // #86 (C18): a finished replace swaps this entry for the new asset's detail, so Back returns to the
@@ -585,6 +588,17 @@ fun ServiceTagRoot(
                         onEdit = { backStack.add(Route.SupplyEdit(it)) },
                         // A "Used by" row opens the real equipment's own screen, where its Supplies are edited (C33).
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                        onOpenSettings = { backStack.add(Route.Settings) },
+                    )
+                }
+                // #69 (C27): one installed component's files and links, pushed from its row sheet on the asset detail.
+                // A group heading opens the SupplyItem's own detail, where its files and links are changed.
+                entry<Route.InstalledComponentDetail> { key ->
+                    InstalledComponentDetailScreen(
+                        graph = graph,
+                        componentId = key.id,
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenSupply = { backStack.add(Route.SupplyDetail(it)) },
                         onOpenSettings = { backStack.add(Route.Settings) },
                     )
                 }

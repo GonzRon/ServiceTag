@@ -232,6 +232,8 @@ fun AssetDetailScreen(
     onReplace: (assetId: String) -> Unit = {},
     /** #15 (C33, C-1): a Supplies row opens that SupplyItem's own detail. The tap writes nothing. */
     onOpenSupply: (supplyId: String) -> Unit = {},
+    /** #69 (C27): P69-1 on an installed component's row sheet opens that component's screen. The tap writes nothing. */
+    onOpenInstalledComponent: (componentId: String) -> Unit = {},
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -460,6 +462,7 @@ fun AssetDetailScreen(
                     graph = graph,
                     snackbars = snackbars,
                     onOpenSupply = onOpenSupply,
+                    onOpenDocuments = onOpenInstalledComponent,
                     readOnly = !current.offersWrites,
                 )
                 ComponentsSection(
