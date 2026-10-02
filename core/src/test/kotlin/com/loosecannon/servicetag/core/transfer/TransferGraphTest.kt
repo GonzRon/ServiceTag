@@ -3,8 +3,22 @@ package com.loosecannon.servicetag.core.transfer
 import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
+import com.loosecannon.servicetag.core.backup.AssetReferenceDto
+import com.loosecannon.servicetag.core.backup.AttachmentDto
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.compositionEntryOf
@@ -19,6 +33,7 @@ import com.loosecannon.servicetag.core.transfer.TransferFixtures.EMPTY_GROUP
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.GROUP
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.HEATER
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.OPENER
+import com.loosecannon.servicetag.core.usecase.artifactsPlanOf
 import kotlin.random.Random
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -474,5 +489,107 @@ class TransferGraphTest {
         assertEquals(listOf("c5"), kept.installedComponents.map { it.id }, "only the compressor's row stays")
         assertEquals(data.supplyItems, kept.supplyItems, "every item, s6 and s7 included")
         assertEquals(kept.installedComponents, BackupCodec.decode(encode(kept)).data.installedComponents)
+    }
+
+    // --- #69 (C15, rows 35): a file or link travels with its component, or with its SupplyItem in use ------------------
+
+    /**
+     * [fitted] with one file and one link on each of four installed components — the heater's tray (c1), its removed
+     * pack (c2), the anode's sleeve (c4) and the compressor's housing (c5) — and on five SupplyItems: s1 (the heater's
+     * applicability row), s4 (archived, named only by the heater's completion line), s6 (only by the removed pack's
+     * entry), s7 (only by the tray's direct link) and s8 (only by the compressor's housing), plus s9, which nothing
+     * names. Fictional, every link under example.invalid.
+     */
+    private fun resourced(): BackupData = fitted().let { data ->
+        val owners = listOf(
+            "c1" to component("c1"), "c2" to component("c2"), "c4" to component("c4"), "c5" to component("c5"),
+            "s1" to supply("s1"), "s4" to supply("s4"), "s6" to supply("s6"), "s7" to supply("s7"), "s8" to supply("s8"),
+            "s9" to supply("s9"),
+        )
+        data.copy(
+            supplyItems = data.supplyItems + supplyItemOf("s9", "Example Fuse").toDto(),
+            attachments = data.attachments + owners.map { (id, owner) -> fileOf("f$id", owner.first) },
+            assetReferences = data.assetReferences + owners.map { (id, owner) -> linkOf("r$id", owner.second) },
+        )
+    }
+
+    private fun component(id: String) =
+        AttachmentOwner.OfInstalledComponent(InstalledComponentId(id)) to ReferenceOwner.OfInstalledComponent(InstalledComponentId(id))
+
+    private fun supply(id: String) = AttachmentOwner.OfSupplyItem(SupplyId(id)) to ReferenceOwner.OfSupplyItem(SupplyId(id))
+
+    private fun fileOf(id: String, owner: AttachmentOwner): AttachmentDto {
+        val bytes = "Example $id sheet".toByteArray()
+        return Attachment(
+            id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "$id file",
+            mimeType = "application/pdf", sizeBytes = bytes.size.toLong(), sha256 = InMemoryAttachmentStore.sha256Hex(bytes),
+            storageLocator = "${AttachmentLocator.dirFor(owner)}/$id.pdf", capturedOn = null, createdAt = 100L, updatedAt = 100L,
+        ).toDto()
+    }
+
+    private fun linkOf(id: String, owner: ReferenceOwner): AssetReferenceDto = AssetReference(
+        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/$id",
+        displayName = "Example $id page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
+    ).toDto()
+
+    /**
+     * Every installed component of a carried asset travels (R47-4), so its files and links do, verbatim — the removed
+     * pack's and the anode's included — and the pack decodes with every owner inside it; the compressor's stay home.
+     */
+    @Test
+    fun aPackCarriesItsComponentsFilesAndLinks() {
+        val data = resourced()
+
+        val pack = selected(data, HEATER).data
+
+        assertEquals(listOf("fc1", "fc2", "fc4"), pack.attachments.filter { it.installedComponentId != null }.map { it.id })
+        assertEquals(listOf("rc1", "rc2", "rc4"), pack.assetReferences.filter { it.installedComponentId != null }.map { it.id })
+        assertEquals(
+            data.attachments.filter { it.id in setOf("fc1", "fc2", "fc4") } to data.assetReferences.filter { it.id in setOf("rc1", "rc2", "rc4") },
+            pack.attachments.filter { it.installedComponentId != null } to pack.assetReferences.filter { it.installedComponentId != null },
+            "verbatim",
+        )
+        assertEquals(pack, BackupCodec.decode(encode(pack)).data, "every component a carried row names is in the pack")
+    }
+
+    /**
+     * R69-7 (H5): a SupplyItem in use travels whole — its files and links with it, archived item included, whichever
+     * carried row names it — and the pack's artifacts plan names every carried file, so its bytes travel too.
+     */
+    @Test
+    fun aPackCarriesTheResourcesOfEverySupplyItemInUseWithBytes() {
+        val data = resourced()
+
+        val pack = selected(data, HEATER).data
+
+        assertEquals(listOf("fs1", "fs4", "fs6", "fs7"), pack.attachments.filter { it.supplyItemId != null }.map { it.id })
+        assertEquals(listOf("rs1", "rs4", "rs6", "rs7"), pack.assetReferences.filter { it.supplyItemId != null }.map { it.id })
+        assertEquals(
+            data.attachments.filter { it.id in setOf("fs1", "fs4", "fs6", "fs7") },
+            pack.attachments.filter { it.supplyItemId != null },
+            "verbatim",
+        )
+        assertEquals(
+            pack.attachments.map { it.storageLocator }.sorted(),
+            artifactsPlanOf(pack, "pack-test", 1L).entries.map { it.locator }.sorted(),
+            "the bytes follow the carried rows",
+        )
+        assertTrue("supply-items/s4/fs4.pdf" in artifactsPlanOf(pack, "pack-test", 1L).entries.map { it.locator })
+        assertEquals(pack, BackupCodec.decode(encode(pack)).data, "every SupplyItem a carried row names is in the pack")
+    }
+
+    /** A SupplyItem no carried row names stays home with its resources; one nothing names never travels at all. */
+    @Test
+    fun anUnusedSupplyItemsResourcesStayHome() {
+        val data = resourced()
+
+        val heater = selected(data, HEATER).data
+        assertTrue(heater.attachments.none { it.id in setOf("fs8", "fs9", "fc5") }, "the compressor's and the unused item's")
+        assertTrue(heater.assetReferences.none { it.id in setOf("rs8", "rs9", "rc5") })
+
+        val compressor = selected(data, COMPRESSOR).data
+        assertEquals(listOf("at3", "fc5", "fs8"), compressor.attachments.map { it.id }, "its own, its housing's and s8's")
+        assertEquals(listOf("rc5", "rs8"), compressor.assetReferences.map { it.id }, "s9 is named by nothing")
+        assertEquals(compressor, BackupCodec.decode(encode(compressor)).data)
     }
 }

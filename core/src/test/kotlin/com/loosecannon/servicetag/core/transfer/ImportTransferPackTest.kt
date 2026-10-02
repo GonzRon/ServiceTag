@@ -47,6 +47,7 @@ import com.loosecannon.servicetag.core.usecase.TransferImportPreview
 import com.loosecannon.servicetag.core.usecase.TransferImportResult
 import java.io.ByteArrayInputStream
 import org.junit.jupiter.api.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertSame
@@ -378,6 +379,133 @@ class ImportTransferPackTest {
         assertEquals(setOf("rcx", "rs1"), links.keys.filter { s.raw.references.get(ReferenceId(it)) != null }.toSet())
         assertEquals(listOf("c1", "c2", "c3", "cx"), s.raw.installedComponents.all().map { it.id.value }, "the pack's rows landed")
     }
+
+    // ---- #69 (C15; rows 36's twin, 37, 37a): a pack carries component and SupplyItem resources, and what that means ---
+
+    /**
+     * Row 25's borrowed-phone case, reachable now that a pack carries a component's link (row 36's twin): the borrowing
+     * phone edits the tray's link and the heater comes home. The return's scope drops the stale local link with the
+     * heater's components (C13), so the plan inserts the pack's and the edit lands; the tray's file comes back as it
+     * left, its bytes never swept.
+     */
+    @Test
+    fun aComponentsLinkEditedOnTheBorrowingPhoneComesHomeEdited() = runTest {
+        val (s, r) = outWithResources()
+        val link = r.raw.references.get(ReferenceId("rc1"))!!
+        r.references.upsert(link.copy(displayName = "Example tray wiring page", updatedAt = IMPORT_NOW + 1))
+        val q2 = r.pack("pack-q2", HEATER)
+
+        val ready = s.ready(q2.bytes)
+        assertEquals(TransferImportOutcome.READY, ready.outcome, "${ready.plan.conflicts}")
+        assertIs<TransferImportResult.Imported>(s.importer.import(ready) { q2.bytes.inputStream() })
+
+        assertEquals(r.raw.references.get(ReferenceId("rc1")), s.raw.references.get(ReferenceId("rc1")), "the edit came home")
+        assertEquals("Example tray wiring page", s.raw.references.get(ReferenceId("rc1"))!!.displayName)
+        val file = s.raw.attachments.get(AttachmentId("fc1"))!!
+        assertEquals(r.raw.attachments.get(AttachmentId("fc1")), file, "the tray's file came back as it left")
+        assertContentEquals(sheetOf("fc1"), s.raw.storage.store.files[file.storageLocator], "with its bytes")
+    }
+
+    /**
+     * Limit 2 (R69-7, H5; accepted, pinned): a SupplyItem's resources are never held, so its file is edited here, through
+     * the write guard, while a pack naming the item is out. The pack carries the file as it left, so the return plans
+     * that one row CONFLICT and is refused whole: Import is not offered and nothing is written — the edit, every byte
+     * and the hold stay as they were.
+     */
+    @Test
+    fun aSupplyItemsFileEditedHereWhileThePackIsOutRefusesTheReturnAsConflict() = runTest {
+        val (s, r) = outWithResources()
+        val edited = s.raw.attachments.get(AttachmentId("fs1"))!!
+            .copy(displayName = "Example battery data sheet", updatedAt = IMPORT_NOW + 1)
+        s.attachments.upsert(edited)
+        val q2 = r.pack("pack-q2", HEATER)
+        val before = s.data()
+        val bytes = s.raw.storage.store.files.mapValues { it.value.toList() }
+
+        val ready = s.ready(q2.bytes)
+
+        assertEquals(TransferImportOutcome.CONFLICTS, ready.outcome)
+        assertEquals(false, ready.importable)
+        assertEquals(
+            listOf(Triple(MergeTable.ATTACHMENTS, "fs1", MergeReason.CONTENT_DIFFERS)),
+            ready.plan.conflicts.map { Triple(it.table, it.id, it.reason) },
+            "the one edit refuses the whole return",
+        )
+        assertEquals(before, s.data(), "nothing written")
+        assertEquals(edited, s.raw.attachments.get(AttachmentId("fs1")), "the edit stays")
+        assertEquals(bytes, s.raw.storage.store.files.mapValues { it.value.toList() }, "every byte stays")
+        assertEquals(setOf(AssetId(HEATER), AssetId(ANODE)), s.raw.transfers.heldIds(), "the heater is still out")
+    }
+
+    /**
+     * Limit 2a (C-9; accepted, pinned): the battery SupplyItem's file and link are removed here — both rows, and the
+     * file's bytes — while the heater is out in a pack naming the item. The pack carries both, its owner is here, so the
+     * return plans them INSERT and they come back: each row as the pack carries it, the file's bytes staged from the pack.
+     */
+    @Test
+    fun aSupplyItemsFileRemovedHereWhileThePackIsOutComesBackOnReturn() = runTest {
+        val (s, r) = outWithResources()
+        val file = s.raw.attachments.get(AttachmentId("fs1"))!!
+        val link = s.raw.references.get(ReferenceId("rs1"))!!
+        s.attachments.delete(file.id)
+        s.raw.storage.store.files.remove(file.storageLocator)
+        s.references.delete(link.id)
+        val q2 = r.pack("pack-q2", HEATER)
+
+        val ready = s.ready(q2.bytes)
+        assertEquals(TransferImportOutcome.READY, ready.outcome, "${ready.plan.conflicts}")
+        assertEquals(
+            setOf(MergeTable.ATTACHMENTS to MergeVerdict.INSERT, MergeTable.REFERENCES to MergeVerdict.INSERT),
+            ready.plan.decisions.filter { it.id in setOf("fs1", "rs1") }.map { it.table to it.verdict }.toSet(),
+        )
+        assertIs<TransferImportResult.Imported>(s.importer.import(ready) { q2.bytes.inputStream() })
+
+        assertEquals(file, s.raw.attachments.get(AttachmentId("fs1")), "the file's row is back")
+        assertEquals(link, s.raw.references.get(ReferenceId("rs1")), "the link is back")
+        assertContentEquals(sheetOf("fs1"), s.raw.storage.store.files[file.storageLocator], "and the file's bytes")
+    }
+
+    /**
+     * [fittedSender] with a file and a link on the heater's tray (c1) and on the battery SupplyItem (s1, in use by the
+     * heater's position and pack), laid down **before** `pack-q1` is sealed — so, unlike [returnWithLocalFiles]'s,
+     * `pack-q1` carries all four, the file with its bytes (C15) — and the heater out in it, imported on the borrowing
+     * phone, which this returns beside the sender.
+     */
+    private suspend fun outWithResources(): Pair<TransferInstall, TransferInstall> {
+        val s = fittedSender()
+        val tray = InstalledComponentId("c1")
+        val battery = SupplyId("s1")
+        listOf("fc1" to AttachmentOwner.OfInstalledComponent(tray), "fs1" to AttachmentOwner.OfSupplyItem(battery))
+            .forEach { (id, owner) ->
+                val bytes = sheetOf(id)
+                val locator = "${AttachmentLocator.dirFor(owner)}/$id.pdf"
+                s.raw.storage.store.files[locator] = bytes
+                s.raw.attachments.upsert(
+                    Attachment(
+                        id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "$id file",
+                        mimeType = "application/pdf", sizeBytes = bytes.size.toLong(),
+                        sha256 = InMemoryAttachmentStore.sha256Hex(bytes), storageLocator = locator, capturedOn = null,
+                        createdAt = 100L, updatedAt = 100L,
+                    ),
+                )
+            }
+        listOf("rc1" to ReferenceOwner.OfInstalledComponent(tray), "rs1" to ReferenceOwner.OfSupplyItem(battery))
+            .forEach { (id, owner) ->
+                s.raw.references.upsert(
+                    AssetReference(
+                        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/$id",
+                        displayName = "Example $id page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
+                    ),
+                )
+            }
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        val r = TransferInstall("set-recipient")
+        assertIs<TransferImportResult.Imported>(r.import(q1.bytes))
+        return s to r
+    }
+
+    private fun sheetOf(id: String): ByteArray = "Example $id sheet".toByteArray()
 
     /**
      * [fittedSender], plus a removed tray on the heater (c4, travelling in both packs as #47's rows do), with the heater

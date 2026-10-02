@@ -3,10 +3,25 @@ package com.loosecannon.servicetag.core.transfer
 import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
+import com.loosecannon.servicetag.core.backup.AssetReferenceDto
+import com.loosecannon.servicetag.core.backup.AttachmentDto
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.ANODE
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.COMPRESSOR
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.EMPTY_GROUP
@@ -132,5 +147,79 @@ class TransferGraphRetainTest {
 
         assertEquals(listOf(staying.toDto()), kept.assetSuccessions)
         assertEquals(lineage.assetSuccessions, assertIs<TransferRetention.Retained>(TransferGraph.retain(lineage, emptySet())).data.assetSuccessions)
+    }
+
+    // --- #69 (C15, row 36): a held asset's components take their files and links; a SupplyItem's always stay --------
+
+    /**
+     * The estate with installed components (fictional) on the heater — a tray (c1) whose direct link is the battery
+     * SupplyItem s1, and an old tray removed on 2026-01-10 (c2) — on the anode (c4) and on the compressor (cx); each, and
+     * s1, owns one file and one link. Only a held row (c1) names s1.
+     */
+    private fun resourced(): BackupData {
+        val components = listOf("c1", "c2", "c4", "cx").map { InstalledComponentId(it) }
+        return estate.copy(
+            supplyItems = listOf(supplyItemOf("s1", "Example 12 V Battery").toDto()),
+            installedComponents = listOf(
+                installedComponentOf("c1", assetId = HEATER, name = "Example Battery Tray", supplyId = "s1"),
+                installedComponentOf("c2", assetId = HEATER, name = "Example Old Tray", installedOn = "2025-01-10", removedOn = "2026-01-10"),
+                installedComponentOf("c4", assetId = ANODE, name = "Example Anode Sleeve"),
+                installedComponentOf("cx", assetId = COMPRESSOR, name = "Example Intake Housing"),
+            ).map { it.toDto() },
+            attachments = estate.attachments +
+                components.map { fileOf("f${it.value}", AttachmentOwner.OfInstalledComponent(it)) } +
+                fileOf("fs1", AttachmentOwner.OfSupplyItem(SupplyId("s1"))),
+            assetReferences = estate.assetReferences +
+                components.map { linkOf("r${it.value}", ReferenceOwner.OfInstalledComponent(it)) } +
+                linkOf("rs1", ReferenceOwner.OfSupplyItem(SupplyId("s1"))),
+        )
+    }
+
+    private fun fileOf(id: String, owner: AttachmentOwner): AttachmentDto {
+        val bytes = "Example $id sheet".toByteArray()
+        return Attachment(
+            id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "$id file",
+            mimeType = "application/pdf", sizeBytes = bytes.size.toLong(), sha256 = InMemoryAttachmentStore.sha256Hex(bytes),
+            storageLocator = "${AttachmentLocator.dirFor(owner)}/$id.pdf", capturedOn = null, createdAt = 100L, updatedAt = 100L,
+        ).toDto()
+    }
+
+    private fun linkOf(id: String, owner: ReferenceOwner): AssetReferenceDto = AssetReference(
+        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/$id",
+        displayName = "Example $id page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
+    ).toDto()
+
+    /**
+     * The held assets' components leave, current and removed, and their files and links leave with them — so the kept
+     * archive names no component it does not carry and decodes; the compressor's housing keeps its own.
+     */
+    @Test
+    fun aHeldAssetsComponentsResourcesDropAndTheKeptArchiveDecodes() {
+        val data = resourced()
+
+        val kept = assertIs<TransferRetention.Retained>(TransferGraph.retain(data, heaterAndAnode)).data
+
+        assertEquals(
+            kept,
+            BackupCodec.decode(
+                BackupCodec.encode(kept, appVersion = "1.4.1", schemaVersion = 13, createdAt = 1L, backupSetId = "set-kept"),
+            ).data,
+            "every kept row's owner is in the kept archive",
+        )
+        assertEquals(listOf("cx"), kept.installedComponents.map { it.id })
+        assertEquals(listOf("at3", "fcx", "fs1"), kept.attachments.map { it.id }, "the heater's, the anode's and their components' go")
+        assertEquals(listOf("rcx", "rs1"), kept.assetReferences.map { it.id })
+    }
+
+    /** H5: a SupplyItem is global — it and its files and links stay whole, even when only a held row names it. */
+    @Test
+    fun aSupplyItemsResourcesAreKeptWhenOnlyHeldRowsNameIt() {
+        val data = resourced()
+
+        val kept = assertIs<TransferRetention.Retained>(TransferGraph.retain(data, heaterAndAnode)).data
+
+        assertEquals(data.supplyItems, kept.supplyItems, "s1, named only by the held tray, stays")
+        assertEquals(data.attachments.filter { it.supplyItemId != null }, kept.attachments.filter { it.supplyItemId != null })
+        assertEquals(data.assetReferences.filter { it.supplyItemId != null }, kept.assetReferences.filter { it.supplyItemId != null })
     }
 }
