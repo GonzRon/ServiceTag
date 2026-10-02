@@ -35,7 +35,6 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
-import com.loosecannon.servicetag.ui.supplies.SupplyItemPickerSheet
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /** One depth step of the tree (C25). */
@@ -102,36 +101,28 @@ fun InstalledComponentsSection(
         )
     }
     state.form?.let { form ->
-        // One sheet at a time, the Supplies section's shape: the form gives way to the picker and comes back with the
-        // pick applied, its fields kept by the view model. The picker, for the link or an entry, is handed the
-        // unarchived SupplyItems only (R47-3); the form's lines get every one (C-1).
-        if (form.picking != null) {
-            SupplyItemPickerSheet(rows = state.choices, onPick = model::pick, onDismiss = model::dismissPicker)
-        } else {
-            ComponentFormSheet(
-                form = form,
-                supplies = state.supplies,
-                onName = model::onName,
-                onLink = model::startLinkPick,
-                onUnlink = model::unlink,
-                onSerialOrLot = model::onSerialOrLot,
-                onDate = model::onDate,
-                onNotes = model::onNotes,
-                onSave = model::save,
-                onDismiss = model::dismissForm,
-                composition = {
-                    CompositionEditor(
-                        form = form,
-                        supplies = state.supplies,
-                        onQuantity = model::onEntryQuantity,
-                        onUnit = model::onEntryUnit,
-                        onPickEntry = model::startEntryPick,
-                        onRemove = model::removeEntry,
-                        onAdd = model::startAddEntry,
-                    )
-                },
-            )
-        }
+        // One sheet at a time: the form, or the picker in its place, its fields kept by the view model. The picker,
+        // for the link or an entry, is handed the unarchived SupplyItems only (R47-3); the form's lines get every one (C-1).
+        ComponentFormOrPicker(
+            form = form,
+            supplies = state.supplies,
+            choices = state.choices,
+            onName = model::onName,
+            onLink = model::startLinkPick,
+            onUnlink = model::unlink,
+            onSerialOrLot = model::onSerialOrLot,
+            onDate = model::onDate,
+            onNotes = model::onNotes,
+            onSave = model::save,
+            onDismiss = model::dismissForm,
+            onQuantity = model::onEntryQuantity,
+            onUnit = model::onEntryUnit,
+            onPickEntry = model::startEntryPick,
+            onRemoveEntry = model::removeEntry,
+            onAddEntry = model::startAddEntry,
+            onPick = model::pick,
+            onDismissPicker = model::dismissPicker,
+        )
     }
     state.removing?.let { sheet ->
         RemoveComponentSheet(

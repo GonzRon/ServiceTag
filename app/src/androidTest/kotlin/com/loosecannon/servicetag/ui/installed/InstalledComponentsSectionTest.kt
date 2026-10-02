@@ -31,6 +31,7 @@ import com.loosecannon.servicetag.core.usecase.CompositionInput
 import com.loosecannon.servicetag.ui.asset.NAME_FIELD
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.supplies.ADD_SUPPLY
+import com.loosecannon.servicetag.ui.supplies.CHOOSE_A_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.LINK_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.REMOVE_LINK
@@ -557,6 +558,63 @@ class InstalledComponentsSectionTest {
         rule.onNodeWithText(SUPPLY_ITEM_GONE).assertExists()
         rule.onNodeWithText("ARCHIVED").assertExists()
         rule.onNodeWithText(REPLACE_COMPONENT).performScrollTo().assertIsEnabled()
+    }
+
+    /**
+     * C26, the one-sheet-at-a-time swap: "Add supply" hands the form to the picker (P15-15, the unarchived SupplyItems
+     * only), and taking the form's sheet out of composition reports no dismiss — the platform fact the swap rests on;
+     * a pick hands it back with the typed name and the date intact and the entry appended.
+     */
+    @Test fun addSupplyHandsTheFormToThePickerAndAPickHandsItBack() {
+        var dismissals = 0
+        var pickerDismissals = 0
+        rule.setContent {
+            ServiceTagTheme {
+                var sheet by remember { mutableStateOf(form(ComponentFormTarget.Install(null), INSTALL_COMPONENT, date = "2026-01-05")) }
+                ComponentFormOrPicker(
+                    form = sheet,
+                    supplies = catalog,
+                    choices = catalog.values.filterNot { it.archived },
+                    onName = { sheet = sheet.copy(name = it) },
+                    onLink = { sheet = sheet.copy(picking = PickFor.LINK) },
+                    onUnlink = {},
+                    onSerialOrLot = {},
+                    onDate = {},
+                    onNotes = {},
+                    onSave = {},
+                    onDismiss = { dismissals += 1 },
+                    onQuantity = { _, _ -> },
+                    onUnit = { _, _ -> },
+                    onPickEntry = {},
+                    onRemoveEntry = {},
+                    onAddEntry = { sheet = sheet.copy(picking = PickFor.ENTRY) },
+                    onPick = { row ->
+                        sheet = sheet.copy(picking = null, composition = sheet.composition + CompositionInput(null, row.id, "", ""))
+                    },
+                    onDismissPicker = { pickerDismissals += 1 },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNode(hasSetTextAction() and hasText(NAME_FIELD)).performTextInput("Example Battery Pack")
+        rule.onNodeWithText(ADD_SUPPLY).performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(CHOOSE_A_SUPPLY).assertIsDisplayed()
+        rule.onAllNodesWithText(INSTALL_COMPONENT).assertCountEquals(0)
+        rule.onAllNodesWithText("Example Old Battery").assertCountEquals(0)
+        assertEquals(0, dismissals)
+
+        rule.onNodeWithText("Example 12 V Battery").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(INSTALL_COMPONENT).assertIsDisplayed()
+        rule.onAllNodesWithText(CHOOSE_A_SUPPLY).assertCountEquals(0)
+        rule.onNode(hasSetTextAction() and hasText("Example Battery Pack")).assertExists()
+        rule.onNode(hasSetTextAction() and hasText("2026-01-05")).assertExists()
+        rule.onAllNodesWithContentDescription(REMOVE_FROM_COMPOSITION).assertCountEquals(1)
+        rule.onNodeWithText("Example 12 V Battery").performScrollTo().assertIsDisplayed()
+        assertEquals(0, dismissals)
+        assertEquals(0, pickerDismissals)
     }
 
     private fun left(text: String) = rule.onNodeWithText(text, useUnmergedTree = true).getUnclippedBoundsInRoot().left

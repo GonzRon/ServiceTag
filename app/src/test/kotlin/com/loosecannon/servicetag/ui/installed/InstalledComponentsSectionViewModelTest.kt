@@ -707,8 +707,9 @@ class InstalledComponentsSectionViewModelTest {
     /**
      * Row 52 (the counted RED: a pick overwrites a typed unit). C26, #15 C34: "Add supply" opens the picker for a new
      * entry, and a pick appends it with no id, an empty quantity and the SupplyItem's preferred unit; a pick on an
-     * entry swaps its SupplyItem in place and fills its unit only while that is blank, so a typed unit stays. Nothing
-     * is written by any of it.
+     * entry swaps its SupplyItem in place and fills its unit only while that is blank, so a typed unit stays. The
+     * date, serial or lot and notes typed before a pick are still there after it, and a dismissed picker returns the
+     * form unchanged. Nothing is written by any of it.
      */
     @Test fun aPickAppendsAnEntryAndFillsOnlyABlankUnit() = runTest {
         val ups = asset("Example UPS")
@@ -720,6 +721,9 @@ class InstalledComponentsSectionViewModelTest {
 
         vm.startInstall()
         vm.state.first { it.form != null }
+        vm.onDate("2026-01-05")
+        vm.onSerialOrLot("SN-EXAMPLE-03")
+        vm.onNotes("Example note")
         vm.startAddEntry()
         val picking = vm.state.first { it.form?.picking != null }.form!!
         assertEquals(PickFor.ENTRY, picking.picking)
@@ -728,6 +732,11 @@ class InstalledComponentsSectionViewModelTest {
         val appended = vm.state.first { it.form?.composition?.size == 1 }.form!!
         assertEquals(listOf(CompositionInput(null, coolant.id, "", "L")), appended.composition)
         assertNull(appended.picking)
+        assertEquals(Triple("2026-01-05", "SN-EXAMPLE-03", "Example note"), Triple(appended.date, appended.serialOrLot, appended.notes))
+        vm.startEntryPick(0)
+        vm.state.first { it.form?.picking != null }
+        vm.dismissPicker()
+        assertEquals(appended, vm.state.first { it.form?.picking == null }.form)
 
         vm.onEntryUnit(0, "ml")
         vm.startEntryPick(0)
