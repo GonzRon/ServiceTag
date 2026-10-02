@@ -27,6 +27,37 @@
       "attachmentId": "dc34deba-488e-8628-97d6-730a6de4dc19"
     }
   ],
+  "ownerPrefix": "servicetag:attachment-upload:v3",
+  "ownerVectors": [
+    {
+      "installationId": "5f0c2a9e-81d4-4b7a-9c3e-2d6f1a8b0e47",
+      "ownerKind": "supply-item",
+      "ownerId": "3b9d2f70-6a1e-4c8b-9f25-7e0a1c4d8b36",
+      "operationKey": "op-1",
+      "attachmentId": "4bd39858-6c98-8f91-a39f-23499e4204c3"
+    },
+    {
+      "installationId": "c41b7e02-9d3a-4e6f-8b15-0a2c7d9e4f61",
+      "ownerKind": "supply-item",
+      "ownerId": "7d3e9a10-4c2b-4f8e-a1d5-6b0c9e2f3a84",
+      "operationKey": "op-1",
+      "attachmentId": "5fc5bb4a-d57e-87ed-bd53-8e9a631e3474"
+    },
+    {
+      "installationId": "5f0c2a9e-81d4-4b7a-9c3e-2d6f1a8b0e47",
+      "ownerKind": "installed-component",
+      "ownerId": "8e1f4a27-0c6b-4d93-a5e2-1b7c9d0f3e58",
+      "operationKey": "sha256:0b9f6a6c2d1e3f4a:17",
+      "attachmentId": "989302bc-8186-83df-a2f7-157c891e17dd"
+    },
+    {
+      "installationId": "c41b7e02-9d3a-4e6f-8b15-0a2c7d9e4f61",
+      "ownerKind": "installed-component",
+      "ownerId": "7d3e9a10-4c2b-4f8e-a1d5-6b0c9e2f3a84",
+      "operationKey": "op-1",
+      "attachmentId": "8e6e4165-f6f3-8501-9eb8-1b2f519f8115"
+    }
+  ],
   "kinds": [
     {
       "contentType": "application/pdf",

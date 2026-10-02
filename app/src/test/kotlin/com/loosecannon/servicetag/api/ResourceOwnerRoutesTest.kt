@@ -23,6 +23,11 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
 import java.util.Base64
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -378,12 +383,67 @@ class ResourceOwnerRoutesTest {
             onComponent.storageLocator,
             onComponent.storageLocator.startsWith("installed-components/${w.tray}/"),
         )
-        // One operation key on two owners is two rows; a retry on one owner is that owner's row, written once.
+        // Each id is the owner's v3 derivation; one operation key on two owners is two rows, and a retry on one owner
+        // is that owner's row, written once.
+        val installation = graph.installationIdentity.id()
+        assertEquals(
+            attachmentOperationId(installation, ReferenceOwner.OfSupplyItem(SupplyId(w.battery)), "op-1").value,
+            onSupply.id,
+        )
+        assertEquals(
+            attachmentOperationId(installation, ReferenceOwner.OfInstalledComponent(InstalledComponentId(w.tray)), "op-1")
+                .value,
+            onComponent.id,
+        )
         assertTrue(onSupply.id != onComponent.id)
         val commits = graph.commits
         assertEquals(onComponent, uploaded(upload("/v1/installed-components/${w.tray}/attachments"), status = 200))
         assertEquals(commits, graph.commits)
         assertEquals(2, runBlocking { graph.attachments.all() }.size)
+    }
+
+    private val golden: JsonObject =
+        Json.parseToJsonElement(repoFile("docs/api/attachment-operation-ids.json").readText()).jsonObject
+
+    private fun JsonObject.text(key: String): String = getValue(key).jsonPrimitive.content
+
+    @Test fun theAssetDerivationIsByteIdenticalToTheShippedVectors() {
+        assertEquals(OPERATION_ID_PREFIX, golden.text("prefix"))
+        val vectors = golden.getValue("vectors").jsonArray.map { it.jsonObject }
+        assertEquals(4, vectors.size)
+        for (v in vectors) {
+            val owner = ReferenceOwner.OfAsset(AssetId(v.text("assetId")))
+            val derived = attachmentOperationId(v.text("installationId"), owner, v.text("operationKey"))
+            assertEquals(v.toString(), v.text("attachmentId"), derived.value)
+        }
+    }
+
+    /** N-4: the `ownerVectors` were computed with `sha256sum` and the bits set by hand, never by this code. */
+    @Test fun theNewOwnersMatchTheV3Vectors() {
+        assertEquals("servicetag:attachment-upload:v3", golden.text("ownerPrefix"))
+        assertEquals(OWNER_OPERATION_ID_PREFIX, golden.text("ownerPrefix"))
+        val vectors = golden.getValue("ownerVectors").jsonArray.map { it.jsonObject }
+        val perKind = vectors.groupingBy { it.text("ownerKind") }.eachCount()
+        assertEquals(mapOf("supply-item" to 2, "installed-component" to 2), perKind)
+        for (v in vectors) {
+            val owner = when (val kind = v.text("ownerKind")) {
+                "supply-item" -> ReferenceOwner.OfSupplyItem(SupplyId(v.text("ownerId")))
+                "installed-component" -> ReferenceOwner.OfInstalledComponent(InstalledComponentId(v.text("ownerId")))
+                else -> error("no owner kind $kind")
+            }
+            val derived = attachmentOperationId(v.text("installationId"), owner, v.text("operationKey"))
+            assertEquals(v.toString(), v.text("attachmentId"), derived.value)
+        }
+        // One installation, one id string and one key under the three owner kinds: three rows, never one.
+        val installation = "c41b7e02-9d3a-4e6f-8b15-0a2c7d9e4f61"
+        val id = "7d3e9a10-4c2b-4f8e-a1d5-6b0c9e2f3a84"
+        val key = "op-1"
+        val three = setOf(
+            attachmentOperationId(installation, ReferenceOwner.OfAsset(AssetId(id)), key),
+            attachmentOperationId(installation, ReferenceOwner.OfSupplyItem(SupplyId(id)), key),
+            attachmentOperationId(installation, ReferenceOwner.OfInstalledComponent(InstalledComponentId(id)), key),
+        )
+        assertEquals(3, three.size)
     }
 
     @Test fun aHeldAssetsComponentIs409() {

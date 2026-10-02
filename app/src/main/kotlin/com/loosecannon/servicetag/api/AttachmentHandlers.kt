@@ -8,18 +8,20 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentKinds
-import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.MimeTypes
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.accepts
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -27,7 +29,6 @@ import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
 import com.loosecannon.servicetag.core.usecase.MaterializeReview
-import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.Prepared
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.SourceSnapshot
@@ -75,12 +76,19 @@ import kotlinx.serialization.json.jsonObject
  * runs for an unauthenticated caller (C10).
  *
  * **Save as document (B2, C14–C17)** is `MaterializeReference.prepare` then `commit`, for an existing web reference
- * **by id** — the asset is the reference's, and `prepare` alone reads its URI — under the same [apiLongWrites]. The
+ * **by id** — the owner is the reference's, and `prepare` alone reads its URI — under the same [apiLongWrites]. The
  * download runs inside a `Job` the listener's `stop()` cancels; the commit, once it began, runs to its end (R87-4).
+ *
+ * **#69 (C19, C21):** the list and the upload take any of the three owners a route names — an asset, a SupplyItem, an
+ * installed component — through [ResourceOwners]: each owner's own shipped 404, and the held check asked of the
+ * owner's asset (a component's own asset; a SupplyItem's none, it is never held). Save as document asks the same of
+ * the reference's owner.
  */
 internal class AttachmentHandlers(
     private val attachments: AttachmentRepository,
-    private val assets: AssetRepository,
+    assets: AssetRepository,
+    supplyItems: SupplyItemRepository,
+    installedComponents: InstalledComponentRepository,
     private val storage: AttachmentStorage,
     private val updateAttachment: UpdateAttachment,
     private val installation: InstallationIdentity,
@@ -99,22 +107,27 @@ internal class AttachmentHandlers(
         { snapshot, type -> reviewPrefill(snapshot, type) },
 ) {
     constructor(graph: AppGraph) : this(
-        graph.attachments, graph.assets, graph.attachmentStorage, graph.updateAttachment, graph.installationIdentity,
-        graph.transferRecords, graph.addAttachment, graph.materializeStaging, graph.apiLongWrites,
+        graph.attachments, graph.assets, graph.supplyItems, graph.installedComponents, graph.attachmentStorage,
+        graph.updateAttachment, graph.installationIdentity, graph.transferRecords, graph.addAttachment,
+        graph.materializeStaging, graph.apiLongWrites,
         references = graph.references, materializeReference = graph.materializeReference,
     )
+
+    private val owners = ResourceOwners(assets, supplyItems, installedComponents)
 
     /** `/v1/status`' `installationId` (C5a): read from its file once per process, never minted twice. */
     fun installationId(): String = installation.id()
 
     /**
-     * `GET /v1/assets/{id}/attachments` (C5): the asset's own rows — never its events' — oldest first, then by id, and
-     * the folder's state by name alone. A transferred-out asset's rows read like any other. Writes nothing.
+     * `GET /v1/assets/{id}/attachments` (C5): the asset's own rows — never its events' or its components' — oldest
+     * first, then by id, and the folder's state by name alone; and since #69 (C19) the same for
+     * `/v1/supply-items/{id}/attachments` and `/v1/installed-components/{id}/attachments`. A transferred-out asset's
+     * rows, and its components', read like any other. Writes nothing.
      */
-    suspend fun listForAsset(assetId: String): ApiResponse {
-        val id = AssetId(assetId)
-        assets.get(id) ?: throw NoSuchAsset(id)
-        val rows = attachments.forAsset(id).sortedWith(compareBy<Attachment>({ it.createdAt }, { it.id.value }))
+    suspend fun listForOwner(owner: ReferenceOwner): ApiResponse {
+        owners.require(owner)
+        val rows = attachments.forOwner(owner.asAttachmentOwner())
+            .sortedWith(compareBy<Attachment>({ it.createdAt }, { it.id.value }))
         return ok(
             AttachmentListResponse.serializer(),
             AttachmentListResponse(rows.map { it.toDto() }, folderOf(storage.state())),
@@ -145,16 +158,18 @@ internal class AttachmentHandlers(
     }
 
     /**
-     * `POST /v1/assets/{id}/attachments` (C12). **An answer is written only after the declared body has been read to
-     * its end** — into staging on the way to `AddAttachment`, into a hashing sink on a replay, into a counting sink
-     * when a refusal was decided first — so a refusal is never a reset. A failure of the request's own stream (a read
-     * timeout, a reset, `stop()`, the deadline) is [RequestStreamFailed]: nothing written, staging discarded, no
-     * answer. A failure writing staging is 409 `UPLOAD_NOT_STAGED`. The two are told apart by which stream failed.
+     * `POST /v1/assets/{id}/attachments` (C12), and since #69 (C19) the same upload to
+     * `/v1/supply-items/{id}/attachments` and `/v1/installed-components/{id}/attachments`. **An answer is written only
+     * after the declared body has been read to its end** — into staging on the way to `AddAttachment`, into a hashing
+     * sink on a replay, into a counting sink when a refusal was decided first — so a refusal is never a reset. A
+     * failure of the request's own stream (a read timeout, a reset, `stop()`, the deadline) is [RequestStreamFailed]:
+     * nothing written, staging discarded, no answer. A failure writing staging is 409 `UPLOAD_NOT_STAGED`. The two are
+     * told apart by which stream failed.
      */
-    suspend fun upload(assetId: String, request: ApiRequest): ApiResponse {
+    suspend fun upload(owner: ReferenceOwner, request: ApiRequest): ApiResponse {
         val body = UploadBody(request.stream ?: ByteArrayInputStream(request.body))
         return try {
-            val upload = admit(AssetId(assetId), request)
+            val upload = admit(owner, request)
             apiLongWrites.withLock { write(upload, body) }
         } catch (gone: RequestStreamFailed) {
             throw gone
@@ -169,28 +184,28 @@ internal class AttachmentHandlers(
     /**
      * Step 1: the cheap checks, in C12's order, before a body byte is read — each refusal spares a 256 MiB stage. The
      * row id is derived here too (the installation id is a file read on a process's first call, and its failure is
-     * no staging failure); it is looked up under the lock, in [write].
+     * no staging failure); it is looked up under the lock, in [write]. The owner's own 404 and its asset's hold
+     * (C21) come where the asset's did.
      */
-    private suspend fun admit(assetId: AssetId, request: ApiRequest): Upload {
+    private suspend fun admit(owner: ReferenceOwner, request: ApiRequest): Upload {
         val meta = decodeMetadata(request.headers[UPLOAD_METADATA_HEADER])
-        assets.get(assetId) ?: throw NoSuchAsset(assetId)
-        if (assetId in transfers.heldIds()) throw AssetTransferredOut(assetId)
+        refuseIfHeld(owners.require(owner))
         val folderProblem = when (storage.state()) {
             StoreState.NotConfigured -> AttachmentProblem.NoStore
             is StoreState.AccessLost -> AttachmentProblem.StoreUnavailable
             is StoreState.Ready -> if (storage.store() == null) AttachmentProblem.StoreUnavailable else null
         }
-        folderProblem?.let { throw addRefusal(assetId, it) }
+        folderProblem?.let { throw addRefusal(owner, it) }
         if (!isOperationKey(meta.operationKey)) throw operationKeyInvalid()
         val name = meta.displayName.trim()
-        if (name.isEmpty()) throw addRefusal(assetId, AttachmentProblem.BlankName)
+        if (name.isEmpty()) throw addRefusal(owner, AttachmentProblem.BlankName)
         val capturedOn = meta.capturedOn?.trim()?.takeIf { it.isNotEmpty() }
         if (capturedOn?.let(::isIsoDate) == false) throw attachmentBadDate()
         if (!SHA256_HEX.matches(meta.sha256)) throw sha256Invalid()
         val mimeType = MimeTypes.normalise(request.headers["content-type"] ?: OCTET_STREAM)
         return Upload(
-            assetId = assetId,
-            id = attachmentOperationId(installation.id(), assetId, meta.operationKey),
+            owner = owner,
+            id = attachmentOperationId(installation.id(), owner, meta.operationKey),
             meta = meta.copy(displayName = name, capturedOn = capturedOn),
             mimeType = mimeType,
             kind = meta.kind ?: AttachmentKinds.inferFrom(mimeType, fromCamera = false),
@@ -220,11 +235,11 @@ internal class AttachmentHandlers(
                 role = upload.meta.role,
                 source = null,
             )
-            val owner = AttachmentOwner.OfAsset(upload.assetId)
+            val owner = upload.owner.asAttachmentOwner()
             return when (val result = addAttachment.run(owner, command, staged.source(), presetId = upload.id)) {
                 is AttachmentResult.Ok ->
                     createdResponse(AttachmentResponse.serializer(), AttachmentResponse(result.value.toDto()))
-                is AttachmentResult.Refused -> throw addRefusal(upload.assetId, result.problem)
+                is AttachmentResult.Refused -> throw addRefusal(upload.owner, result.problem)
             }
         } finally {
             staged.discard()
@@ -240,7 +255,7 @@ internal class AttachmentHandlers(
     private fun replay(row: Attachment, upload: Upload, body: UploadBody): ApiResponse {
         val arrived = body.pump { _, _ -> }
         if (arrived.sha256 != upload.meta.sha256) throw sha256Mismatch()
-        val same = row.owner == AttachmentOwner.OfAsset(upload.assetId) &&
+        val same = row.owner == upload.owner.asAttachmentOwner() &&
             row.kind == upload.kind &&
             row.role == upload.meta.role &&
             row.displayName == upload.meta.displayName &&
@@ -256,7 +271,7 @@ internal class AttachmentHandlers(
      * 1. the four review fields (BC1: any other key, `url` and `uri` included, is the strict decoder's 400), then
      *    whether the body names `role` at all (#91, C17), read through the same 400 path; a **given** name blank
      *    after trim is 422 — before any fetch;
-     * 2. the reference by id (404), its asset, and that asset transferred out (409) — before any fetch;
+     * 2. the reference by id (404), its owner's asset, and that asset transferred out (409) — before any fetch;
      * 3. the download's `Job`, a child of the listener [generation] that read the request, registered in [downloads]
      *    **before** it waits for [apiLongWrites]: a `stop()` while it waits, or one that landed before it registered
      *    (BC5), cancels it and nothing is fetched. Under the lock, `prepare` inside that `Job`; a refusal is C17's;
@@ -280,18 +295,16 @@ internal class AttachmentHandlers(
         if (given.displayName?.isBlank() == true) throw nameRequired()
         val reference = references.get(ReferenceId(referenceId))
             ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
-        // #69 (B2b, interim until C17/C21): the save stays asset-keyed, so a link of another owner is no such
-        // reference here.
-        val assetId = (reference.owner as? ReferenceOwner.OfAsset)?.assetId
-            ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
-        if (assetId in transfers.heldIds()) throw AssetTransferredOut(assetId)
+        // #69 (C21): the hold is the reference owner's asset's — an asset's own, a component's asset's, and none for a
+        // SupplyItem's link, which is never held.
+        refuseIfHeld(owners.require(reference.owner))
 
         val download = Job(generation)
         downloads.register(download)
         try {
             return withContext(download) {
                 apiLongWrites.withLock {
-                    saveAsDocument(materializeReference, assetId, reference.owner, reference.id, given, namesRole)
+                    saveAsDocument(materializeReference, reference.owner, reference.id, given, namesRole)
                 }
             }
         } finally {
@@ -317,7 +330,6 @@ internal class AttachmentHandlers(
      */
     private suspend fun saveAsDocument(
         materializeReference: MaterializeReference,
-        assetId: AssetId,
         owner: ReferenceOwner,
         referenceId: ReferenceId,
         given: MaterializeRequest,
@@ -341,7 +353,7 @@ internal class AttachmentHandlers(
             return when (saved) {
                 is AttachmentResult.Ok ->
                     createdResponse(AttachmentResponse.serializer(), AttachmentResponse(saved.value.toDto()))
-                is AttachmentResult.Refused -> throw addRefusal(assetId, saved.problem)
+                is AttachmentResult.Refused -> throw addRefusal(owner, saved.problem)
             }
         } finally {
             materializeReference.discard(ready)
@@ -351,19 +363,27 @@ internal class AttachmentHandlers(
     private fun nameRequired(): Exception =
         attachmentRefusal(AttachmentProblem.BlankName) ?: IllegalStateException("a blank name is always refused")
 
-    /** An add's `OwnerMissing` is the asset (a phone-side delete racing the upload), not an attachment row. */
-    private fun addRefusal(assetId: AssetId, problem: AttachmentProblem): Exception =
+    /**
+     * An add's `OwnerMissing` is the owner (a phone-side delete racing the upload), not an attachment row: the owner's
+     * own path 404 (C-6), with no `field` — the owner is the path's, never a body key.
+     */
+    private fun addRefusal(owner: ReferenceOwner, problem: AttachmentProblem): Exception =
         if (problem == AttachmentProblem.OwnerMissing) {
-            NoSuchAsset(assetId)
+            noSuchOwner(owner)
         } else {
             attachmentRefusal(problem) ?: IllegalStateException("an add is never Unchanged")
         }
+
+    /** C21: a write to a held asset's rows — its own, or its components' — is the guard's 409, before any fetch. */
+    private suspend fun refuseIfHeld(asset: AssetId?) {
+        if (asset != null && asset in transfers.heldIds()) throw AssetTransferredOut(asset)
+    }
 
     private suspend fun row(id: String): Attachment = attachments.get(AttachmentId(id)) ?: throw noSuchAttachment()
 
     /** One upload's checked request: the derived id, the normalised metadata, the type and the kind as resolved. */
     private class Upload(
-        val assetId: AssetId,
+        val owner: ReferenceOwner,
         val id: AttachmentId,
         val meta: UploadMetadata,
         val mimeType: String,

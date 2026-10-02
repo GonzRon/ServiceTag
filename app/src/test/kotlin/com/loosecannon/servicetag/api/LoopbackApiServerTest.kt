@@ -718,7 +718,8 @@ class LoopbackApiServerTest {
             graph.uow, graph.ids, graph.clock,
         )
         val routes = AttachmentHandlers(
-            attachments = graph.attachments, assets = graph.assets, storage = folder,
+            attachments = graph.attachments, assets = graph.assets, supplyItems = graph.supplyItems,
+            installedComponents = graph.installedComponents, storage = folder,
             updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
             transfers = graph.transferRecords, addAttachment = add, staging = graph.materializeStaging,
             apiLongWrites = graph.apiLongWrites,
@@ -781,7 +782,8 @@ class LoopbackApiServerTest {
         )
         private val hops = HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) })
         val routes = AttachmentHandlers(
-            attachments = graph.attachments, assets = graph.assets, storage = folder,
+            attachments = graph.attachments, assets = graph.assets, supplyItems = graph.supplyItems,
+            installedComponents = graph.installedComponents, storage = folder,
             updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
             transfers = graph.transferRecords, addAttachment = add, staging = graph.materializeStaging,
             apiLongWrites = graph.apiLongWrites, references = references ?: graph.references,

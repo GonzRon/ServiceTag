@@ -939,7 +939,7 @@ internal fun attachmentBadDate(): ApiFailure = ApiFailure(
 
 /** 422: a role on an event's attachment (R67-11), refused before `UpdateAttachment` could treat it as a bug. */
 internal fun attachmentRoleNotAllowed(): ApiFailure = ApiFailure(
-    422, "Unprocessable Content", "ATTACHMENT_ROLE_NOT_ALLOWED", "a document role belongs on an asset's attachment",
+    422, "Unprocessable Content", "ATTACHMENT_ROLE_NOT_ALLOWED", "a document role cannot go on an entry's attachment",
     field = "role",
 )
 

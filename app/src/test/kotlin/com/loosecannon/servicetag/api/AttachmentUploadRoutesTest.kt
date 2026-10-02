@@ -140,6 +140,8 @@ class AttachmentUploadRoutesTest {
     ) = AttachmentHandlers(
         attachments = graph.attachments,
         assets = graph.assets,
+        supplyItems = graph.supplyItems,
+        installedComponents = graph.installedComponents,
         storage = graph.attachmentStorage,
         updateAttachment = graph.updateAttachment,
         installation = graph.installationIdentity,

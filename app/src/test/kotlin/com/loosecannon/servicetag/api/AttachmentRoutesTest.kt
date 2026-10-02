@@ -261,7 +261,7 @@ class AttachmentRoutesTest {
         val error = response.errorDetail()
         assertEquals("ATTACHMENT_ROLE_NOT_ALLOWED", error.code)
         assertEquals("role", error.field)
-        assertEquals("a document role belongs on an asset's attachment", error.message)
+        assertEquals("a document role cannot go on an entry's attachment", error.message)
         assertEquals(row, stored("att-e"))
         assertEquals(before, graph.commits)
     }

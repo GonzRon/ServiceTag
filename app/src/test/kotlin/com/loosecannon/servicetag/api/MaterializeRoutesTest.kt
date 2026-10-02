@@ -114,7 +114,8 @@ class MaterializeRoutesTest {
             serviceCaseHandlersFor(graph),
             loanHandlersFor(graph),
             AttachmentHandlers(
-                attachments = graph.attachments, assets = graph.assets, storage = folder,
+                attachments = graph.attachments, assets = graph.assets, supplyItems = graph.supplyItems,
+                installedComponents = graph.installedComponents, storage = folder,
                 updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
                 transfers = graph.transferRecords,
                 addAttachment = AddAttachment(
