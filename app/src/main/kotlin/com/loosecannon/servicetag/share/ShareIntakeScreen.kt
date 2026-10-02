@@ -336,7 +336,7 @@ private fun TypeControl(type: ShareTargetType, onPick: (ShareTargetType) -> Unit
 /**
  * #69 (C30 steps 3–4): the installed-component or supply list, laid out as the Assets list — the shared [header], the
  * search box under the one [query] with this type's [hint], then the rows with the tab's dividers. With nothing of this
- * type eligible before filtering, its own [noneEligible] line; for a miss, the tab's "Nothing matches that." line.
+ * type eligible before filtering, its own [noneEligible] line; for a miss, the tab's own miss line ([EmptyList]).
  */
 @Composable
 private fun <T> TargetList(

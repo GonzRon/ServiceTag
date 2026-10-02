@@ -15,9 +15,9 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 /**
  * #93 (C3): one asset chosen from the Assets tab's own list — its search box, its Type / Components / Archived
  * controls, its rows and its empty sentences, all drawn by the tab's composables from an [AssetsState] the tab's
- * [AssetsViewModel] built (the Share intake's switched to drop held rows, C2). It decides nothing and holds nothing:
- * no filter, sort, sentence or selection of its own; a tap reports the row and the host does the rest
- * (single-select is the host's). Stateless and view-model-free, so a later owner-picking flow can host it too.
+ * [AssetsViewModel] built (the Share intake's switched to offer active, unheld assets only, C2; #69 C30). It decides
+ * nothing and holds nothing: no filter, sort, sentence or selection of its own; a tap reports the row and the host does
+ * the rest (single-select is the host's). Stateless and view-model-free, so a later owner-picking flow can host it too.
  *
  * One `LazyColumn`: the host's [header] items, then the search box and the controls as items with the tab's
  * paddings, then the rows with the tab's dividers — or, when the list is empty, the tab's [EmptyList] with no

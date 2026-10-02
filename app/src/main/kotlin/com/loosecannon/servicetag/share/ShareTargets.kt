@@ -141,7 +141,8 @@ private fun anyFieldHolds(fields: List<String>, query: String): Boolean {
 
 /**
  * A SupplyItem's product line (C30, the owner's): manufacturer, model and part number joined by a middle dot, each
- * only when it is there; a part number equal to the model, casefolded, is not repeated. Empty when none is there.
+ * only when it is there; a part number equal to the model, trimmed and casefolded, is not repeated. Empty when none is
+ * there.
  */
 internal fun productLineOf(item: SupplyItem): String {
     val partNumber = item.partNumber.takeUnless { it.trim().lowercase() == item.model.trim().lowercase() }.orEmpty()

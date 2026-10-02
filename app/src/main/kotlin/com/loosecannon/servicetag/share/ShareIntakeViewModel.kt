@@ -97,7 +97,7 @@ internal object IntakeStrings {
     const val BLANK_REFERENCE_NAME = "Give the reference a name"
     const val CONFIRM_TITLE = "Save this link?"
 
-    /** #93 (R93-5, G1): the form's action back to the picker, trailing the chosen asset's name. */
+    /** #93 (R93-5, G1): the form's action back to the picker, trailing the chosen destination's line (#69 C29). */
     const val CHANGE = "Change"
 
     /** #69 (C30, C-4; P69-26): the Assets list's line when no asset is maintained here, before any filtering. */
@@ -278,8 +278,8 @@ internal data class ShareIntakeState(
 
     /**
      * **Disabling Save is the intake behaviour** (spec §7), which is why no blank-name sentence is
-     * ever drawn on this screen: an asset is chosen, the sanitised name is non-blank, and on a byte
-     * share the folder is there.
+     * ever drawn on this screen: a destination is chosen, the sanitised name is non-blank, and on a
+     * byte share the folder is there.
      */
     val saveEnabled: Boolean get() = !loading &&
         deadEnd == null &&
