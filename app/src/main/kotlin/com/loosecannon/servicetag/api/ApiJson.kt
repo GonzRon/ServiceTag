@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.core.usecase.HealthProblem
 import com.loosecannon.servicetag.core.usecase.HealthScheduleTaken
 import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
 import com.loosecannon.servicetag.core.usecase.HealthValidation
+import com.loosecannon.servicetag.core.usecase.InstalledComponentProblem
 import com.loosecannon.servicetag.core.usecase.LegacyWriteCannotRepresent
 import com.loosecannon.servicetag.core.usecase.LoanReturned
 import com.loosecannon.servicetag.core.usecase.LoanValidation
@@ -826,6 +827,93 @@ internal fun assetSupplyFailure(problem: AssetSupplyProblem): ApiFailure {
         AssetSupplyProblem.NoSuchAssetSupply ->
             ApiFailure(404, "Not Found", "NO_SUCH_ASSET_SUPPLY", "no such applicability row", problems)
         AssetSupplyProblem.Unchanged -> ApiFailure(500, "Internal Server Error", "internal", "Unchanged")
+    }
+}
+
+// --- #47, the installed-component codes (C2, C21) -----------------------------------------------
+//
+// Each code, status and `field` is C2's table and each sentence G1's, verbatim; the two reused SupplyItem codes keep
+// their shipped sentences, with `field` `supplyId` for the direct link and `composition` for an entry. One exhaustive
+// `when` over the first problem with no `else`, so a problem added later is a compile error here rather than a
+// refusal with a code nobody documented; `problems` names every problem by its domain name.
+
+internal const val INSTALLED_COMPONENT_INVALID: String = "INSTALLED_COMPONENT_INVALID"
+
+/**
+ * The 422 fallback: a refusal naming no use-case problem. The use cases always name one; the one route that answers
+ * it is a sent `sortOrder` outside its bound ([boundedSortOrder]), with [field] `sortOrder`.
+ */
+internal fun installedComponentInvalid(field: String? = null, problems: List<String> = emptyList()): ApiFailure =
+    ApiFailure(
+        422, "Unprocessable Content", INSTALLED_COMPONENT_INVALID, "the installed component was refused", problems, field,
+    )
+
+/**
+ * Every [InstalledComponentProblem] as the refusal the router answers (C2, C21): 404 for a row that is not there (the
+ * path's row, the body's parent, the asset, a SupplyItem), 409 for one the store will not take as it stands (a
+ * removed parent or row, an archived SupplyItem), 422 for a body that must change. `OwnerMissing` answers the shipped
+ * `no_such_asset`. A held asset is not here: the guarded port raises `AssetTransferredOut`, the shipped 409.
+ *
+ * `Unchanged` is never emitted: the edit answers 200 with the stored row before anything is mapped. Its arm keeps the
+ * `when` exhaustive and answers the shipped 500 `internal` — no code is invented for a refusal no route returns.
+ */
+internal fun installedComponentRefusal(problems: List<InstalledComponentProblem>): ApiFailure {
+    val named = problems.map { it.toString() }
+    val first = problems.firstOrNull() ?: return installedComponentInvalid(problems = named)
+    return when (first) {
+        InstalledComponentProblem.NoSuchInstalledComponent -> ApiFailure(
+            404, "Not Found", "NO_SUCH_INSTALLED_COMPONENT", "no such installed component", named,
+        )
+        InstalledComponentProblem.ParentMissing -> ApiFailure(
+            404, "Not Found", "NO_SUCH_INSTALLED_COMPONENT", "no such installed component", named, field = "parentId",
+        )
+        InstalledComponentProblem.NameRequired -> ApiFailure(
+            422, "Unprocessable Content", "INSTALLED_COMPONENT_NAME_REQUIRED", "an installed component needs a name",
+            named, field = "name",
+        )
+        is InstalledComponentProblem.BadDate -> ApiFailure(
+            422, "Unprocessable Content", "INSTALLED_COMPONENT_DATE_INVALID", "a date must be YYYY-MM-DD", named,
+            field = first.field,
+        )
+        is InstalledComponentProblem.AfterToday -> ApiFailure(
+            422, "Unprocessable Content", "INSTALLED_COMPONENT_DATE_AFTER_TODAY", "a date cannot be later than today",
+            named, field = first.field,
+        )
+        is InstalledComponentProblem.RemovedBeforeInstalled -> ApiFailure(
+            422, "Unprocessable Content", "INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED",
+            "the removal date cannot be before the install date", named, field = first.field,
+        )
+        InstalledComponentProblem.ParentOnAnotherAsset -> ApiFailure(
+            422, "Unprocessable Content", "INSTALLED_COMPONENT_PARENT_ON_ANOTHER_ASSET",
+            "the parent belongs to another asset", named, field = "parentId",
+        )
+        InstalledComponentProblem.ParentRemoved -> ApiFailure(
+            409, "Conflict", "INSTALLED_COMPONENT_PARENT_REMOVED", "the parent has been removed", named,
+            field = "parentId",
+        )
+        InstalledComponentProblem.AlreadyRemoved -> ApiFailure(
+            409, "Conflict", "INSTALLED_COMPONENT_REMOVED", "this installed component has already been removed", named,
+        )
+        is InstalledComponentProblem.QuantityInvalid -> ApiFailure(
+            422, "Unprocessable Content", "COMPOSITION_QUANTITY_INVALID",
+            "every composition quantity must be a number above zero", named, field = "composition",
+        )
+        InstalledComponentProblem.OwnerMissing -> ApiFailure(404, "Not Found", "no_such_asset", "no such asset", named)
+        InstalledComponentProblem.SupplyItemMissing -> ApiFailure(
+            404, "Not Found", NO_SUCH_SUPPLY_ITEM, "no such supply item", named, field = "supplyId",
+        )
+        is InstalledComponentProblem.EntrySupplyItemMissing -> ApiFailure(
+            404, "Not Found", NO_SUCH_SUPPLY_ITEM, "no such supply item", named, field = "composition",
+        )
+        InstalledComponentProblem.SupplyItemArchived -> ApiFailure(
+            409, "Conflict", "SUPPLY_ITEM_ARCHIVED", "an archived supply item takes no new asset", named,
+            field = "supplyId",
+        )
+        is InstalledComponentProblem.EntrySupplyItemArchived -> ApiFailure(
+            409, "Conflict", "SUPPLY_ITEM_ARCHIVED", "an archived supply item takes no new asset", named,
+            field = "composition",
+        )
+        InstalledComponentProblem.Unchanged -> ApiFailure(500, "Internal Server Error", "internal", "Unchanged")
     }
 }
 

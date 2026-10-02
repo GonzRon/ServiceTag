@@ -95,7 +95,7 @@ internal class ApiRouter(
     internal fun downloadInFlight(): Job? = download.current()
 
     /**
-     * The whole surface. Seventy-two path shapes over eighty-nine method-and-path rows; anything
+     * The whole surface. Seventy-seven path shapes over ninety-five method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -170,6 +170,13 @@ internal class ApiRouter(
      * row is configuration, not a record, so the references' "the API adds and amends, the phone removes" is
      * deliberately not followed; `DELETE /v1/events/{id}` is the precedent). **Nothing deletes a SupplyItem**: it is
      * archived, never removed, so no verb on its shapes does.
+     *
+     * #47 added six rows over five shapes: the twenty-seventh `/v1/assets/{id}/…` sub-resource, an asset's installed
+     * components, current and removed, read only; `POST /v1/installed-components`; `GET` and `PATCH
+     * /v1/installed-components/{id}` (the `PATCH` an overlay); and `POST /v1/installed-components/{id}/remove` and
+     * `…/replace`, each one write through its use case. **Nothing deletes an installed component**: a row is removed
+     * or replaced and stays as history, so no verb on its shapes deletes one. An asset's child Assets keep
+     * `/v1/assets/{id}/components` (R47-1).
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -243,6 +250,8 @@ internal class ApiRouter(
                 "replace" to "POST" -> handlers.replace.replace(rest[1], request)
                 // #15 — the twenty-sixth: the asset's supplies and each item they name once, read only.
                 "supply-items" to "GET" -> handlers.supplies.listForAsset(rest[1])
+                // #47 — the twenty-seventh: the asset's installed components, current and removed, read only.
+                "installed-components" to "GET" -> handlers.installedComponents.listForAsset(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -291,6 +300,23 @@ internal class ApiRouter(
                 "DELETE" -> handlers.supplies.removeAssetSupply(rest[1])
                 else -> notAllowed(request)
             }
+
+            // #47 — an installed component is installed, read, amended by overlay, removed and replaced, and never
+            // deleted: a verb a shape does not take is a 405, any other sub-path no shape at all.
+            rest == listOf("installed-components") ->
+                if (method == "POST") handlers.installedComponents.install(request) else notAllowed(request)
+
+            rest.size == 2 && rest[0] == "installed-components" -> when (method) {
+                "GET" -> handlers.installedComponents.get(rest[1])
+                "PATCH" -> handlers.installedComponents.update(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 3 && rest[0] == "installed-components" && rest[2] == "remove" ->
+                if (method == "POST") handlers.installedComponents.remove(rest[1], request) else notAllowed(request)
+
+            rest.size == 3 && rest[0] == "installed-components" && rest[2] == "replace" ->
+                if (method == "POST") handlers.installedComponents.replace(rest[1], request) else notAllowed(request)
 
             rest == listOf("schedules") -> when (method) {
                 "GET" -> handlers.maintenance.listSchedules()

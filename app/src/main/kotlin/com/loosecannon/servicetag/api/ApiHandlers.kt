@@ -66,7 +66,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Thirty-one collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Thirty-two collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -173,6 +173,11 @@ internal class ApiHandlers(
      * `handlers.supplies.*`, and asked for the two counts `/v1/status` gained.
      */
     internal val supplies: SupplyHandlers,
+    /**
+     * #47's installed-component rows, on the same terms: one collaborator, reached from the router as
+     * `handlers.installedComponents.*`, and asked for the two counts `/v1/status` gained.
+     */
+    internal val installedComponents: InstalledComponentHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -191,6 +196,7 @@ internal class ApiHandlers(
         AttachmentHandlers(graph),
         ReplaceHandlers(graph),
         SupplyHandlers(graph),
+        InstalledComponentHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 
@@ -226,6 +232,11 @@ internal class ApiHandlers(
                 // every applicability row. Specifications are nested in their item and not counted on their own.
                 "supplyItems" to supplies.itemCount(),
                 "assetSupplies" to supplies.assetSupplyCount(),
+                // Format 19's (#47), under the archive's own manifest keys: every row, current and removed, and every
+                // composition entry — counted, unlike a SupplyItem's specifications, so a client can check what a
+                // load landed.
+                "installedComponents" to installedComponents.rowCount(),
+                "compositionEntries" to installedComponents.entryCount(),
             ) + maintenance.counts() + seasonHealth.counts() + serviceCases.counts() + loans.counts(),
         ),
     )
