@@ -3,8 +3,14 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetSupply
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
@@ -12,6 +18,9 @@ import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.SupplySpecification
@@ -22,6 +31,7 @@ import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -968,6 +978,94 @@ class ApiRouterTest {
         val again = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
         assertEquals(200, again.status)
         assertEquals(MergeTallyDto(insert = 0, identical = 4, conflict = 0, skipped = 0), reportIn(again).installedComponents)
+    }
+
+    /**
+     * #69 (C14, row 33) — a merge inserting a SupplyItem, an installed component and a file and a link on each commits
+     * on Room. Every resource is a foreign key to its owner, so the apply writes the files and links after the
+     * SupplyItems and the components (`ApplyBackupMergePlan`'s field order); the bytes are in the store first, as a
+     * restored artifacts archive leaves them. The second apply is all IDENTICAL. The names are fictional.
+     */
+    @Test fun aMergeInsertingSupplyItemsComponentsAndTheirResourcesCommits() {
+        val bytes = "Example datasheet".encodeToByteArray()
+        val donor = FakeGraph()
+        val (archive, files, links) = try {
+            var n = 0
+            val disjoint = IdGenerator { "00000000-0000-4000-8000-9300%08d".format(++n) }
+            val createAsset = CreateAsset(
+                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory,
+            )
+            runBlocking {
+                val ups = createAsset.run("Example UPS", "Power")
+                val battery = SupplyId("supply-battery")
+                val tray = InstalledComponentId("installed-tray")
+                donor.supplyItems.upsert(
+                    SupplyItem(
+                        id = battery, name = "Example 12 V Battery", category = "Battery",
+                        manufacturer = "Example Power Co.", model = "EP-12", partNumber = "EP-12-7", preferredUnit = "ea",
+                        notes = "", archivedAt = null,
+                        createdAt = 1_000L, updatedAt = 2_000L, specifications = emptyList(),
+                    ),
+                )
+                donor.installedComponents.insert(
+                    InstalledComponent(
+                        id = tray, assetId = ups.id, parentId = null, name = "Example Battery Tray", supplyId = battery,
+                        composition = emptyList(), serialOrLot = "", installedOn = "2026-01-10", removedOn = null,
+                        replacesId = null, sortOrder = 0, notes = "", createdAt = 1_000L, updatedAt = 2_000L,
+                    ),
+                )
+                val fileOwners = listOf(
+                    "att-battery" to AttachmentOwner.OfSupplyItem(battery),
+                    "att-tray" to AttachmentOwner.OfInstalledComponent(tray),
+                )
+                for ((id, owner) in fileOwners) {
+                    donor.attachments.upsert(
+                        Attachment(
+                            id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT,
+                            displayName = "Example datasheet.pdf", mimeType = "application/pdf",
+                            sizeBytes = bytes.size.toLong(), sha256 = InMemoryAttachmentStore.sha256Hex(bytes),
+                            storageLocator = "${AttachmentLocator.dirFor(owner)}/$id.pdf", capturedOn = null,
+                            createdAt = 1_000L, updatedAt = 2_000L,
+                        ),
+                    )
+                }
+                val linkOwners = listOf(
+                    "ref-battery" to ReferenceOwner.OfSupplyItem(battery),
+                    "ref-tray" to ReferenceOwner.OfInstalledComponent(tray),
+                )
+                for ((id, owner) in linkOwners) {
+                    donor.references.upsert(
+                        AssetReference(
+                            id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL,
+                            uri = "https://example.invalid/$id", displayName = "Example page", description = "",
+                            scheme = "https", createdAt = 1_000L, updatedAt = 2_000L,
+                        ),
+                    )
+                }
+                Triple(donor.exportBackupSet.run().data, donor.attachments.all(), donor.references.all())
+            }
+        } finally {
+            donor.close()
+        }
+        createHotTub()
+        files.forEach { graph.attachmentStorage.store.files[it.storageLocator] = bytes }
+
+        val applied = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+
+        assertEquals(applied.text(), 200, applied.status)
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), reportIn(applied).supplyItems)
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), reportIn(applied).installedComponents)
+        assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), reportIn(applied).attachments)
+        assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), reportIn(applied).references)
+        runBlocking {
+            assertEquals(files.sortedBy { it.id.value }, graph.attachments.all().sortedBy { it.id.value })
+            assertEquals(links.sortedBy { it.id.value }, graph.references.all().sortedBy { it.id.value })
+        }
+
+        val again = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+        assertEquals(200, again.status)
+        assertEquals(MergeTallyDto(insert = 0, identical = 2, conflict = 0, skipped = 0), reportIn(again).attachments)
+        assertEquals(MergeTallyDto(insert = 0, identical = 2, conflict = 0, skipped = 0), reportIn(again).references)
     }
 
     /**

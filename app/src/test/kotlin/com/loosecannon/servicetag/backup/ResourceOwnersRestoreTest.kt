@@ -105,7 +105,11 @@ class ResourceOwnersRestoreTest {
         seed(source)
         val export = source.exportBackupSet.run().data
         val archive = shuffled(export)
-        assertNotEquals("the fixture is reordered", entryOf(export, BackupCodec.DATA_ENTRY).decodeToString(), entryOf(archive, BackupCodec.DATA_ENTRY).decodeToString())
+        assertNotEquals(
+            "the fixture is reordered",
+            entryOf(export, BackupCodec.DATA_ENTRY).decodeToString(),
+            entryOf(archive, BackupCodec.DATA_ENTRY).decodeToString(),
+        )
 
         target.importBackupReplace.run(archive)
 

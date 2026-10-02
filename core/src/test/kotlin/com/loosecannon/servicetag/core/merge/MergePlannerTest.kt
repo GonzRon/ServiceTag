@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
@@ -34,6 +35,9 @@ import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -42,10 +46,15 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.StoredBytes
+import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.dataTreeOf
+import com.loosecannon.servicetag.core.testing.editRows
 import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.sealed
 import com.loosecannon.servicetag.core.testing.supplyItemOf
+import com.loosecannon.servicetag.core.testing.without
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
@@ -1630,5 +1639,53 @@ class MergePlannerTest {
         assertEquals(ownerNotAvailable("att-s-x1", "x1"), plan.decision(MergeTable.ATTACHMENTS, "att-s-x1"))
         assertEquals(ownerNotAvailable("att-c-x1", "x1"), plan.decision(MergeTable.ATTACHMENTS, "att-c-x1"))
         assertFalse(plan.applicable)
+    }
+
+    // --- #69 (C14, row 31): no older-archive exception ------------------------------------------------
+
+    private fun linkOn(owner: ReferenceOwner, id: String) = AssetReference(
+        id = ReferenceId(id), owner = owner, kind = ReferenceKind.WEB_URL, uri = "https://example.invalid/$id",
+        displayName = "Example page", description = "", scheme = "https", createdAt = 1L, updatedAt = 2L,
+    )
+
+    /**
+     * Hazard: an owner column read as new content. An owner is written once, so a format-19 export's row — no owner
+     * key at all — equals the row here, whose two new keys are null; the shipped comparisons need no exception. The
+     * export is taken first; then the install gains a SupplyItem, a component and a file and a link on each. The old
+     * archive re-plans with every row it names IDENTICAL and no decision about a row it does not name.
+     */
+    @Test
+    fun aFormat19ExportAgainstAnInstallWithNewOwnersResourcesIsApplicableAndIdentical() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(asset("x1", "Example Generator"))
+        install.events.upsert(event("e1", "x1"))
+        install.attachments.upsert(attachment("att-asset", "x1"))
+        install.attachments.upsert(eventAttachment("att-entry", "e1"))
+        install.references.upsert(linkOn(ReferenceOwner.OfAsset(AssetId("x1")), "ref-asset"))
+        val ownerKeys = arrayOf("supplyItemId", "installedComponentId")
+        val format19 = sealed(
+            dataTreeOf(install.export.run().data)
+                .editRows("attachments") { it.without(*ownerKeys) }
+                .editRows("assetReferences") { it.without(*ownerKeys) },
+            formatVersion = 19,
+        )
+        install.supplyItems.upsert(supplyItemOf("s1", "Example 12 V Battery"))
+        install.installedComponents.insert(installedComponentOf("c1", assetId = "x1", supplyId = "s1"))
+        install.attachments.upsert(fileOn(onItem("s1"), "att-s1"))
+        install.attachments.upsert(fileOn(onComponent("c1"), "att-c1"))
+        install.references.upsert(linkOn(ReferenceOwner.OfSupplyItem(SupplyId("s1")), "ref-s1"))
+        install.references.upsert(linkOn(ReferenceOwner.OfInstalledComponent(InstalledComponentId("c1")), "ref-c1"))
+
+        val plan = install.build.run(format19)
+
+        assertEquals(19, plan.report().formatVersion)
+        assertTrue(plan.applicable, "unexpected conflicts: ${plan.conflicts}")
+        assertTrue(plan.decisions.all { it.verdict == MergeVerdict.IDENTICAL }, plan.decisions.toString())
+        assertEquals(
+            setOf(MergeTable.ATTACHMENTS to "att-asset", MergeTable.ATTACHMENTS to "att-entry", MergeTable.REFERENCES to "ref-asset"),
+            plan.decisions.filter { it.table == MergeTable.ATTACHMENTS || it.table == MergeTable.REFERENCES }
+                .map { it.table to it.id }.toSet(),
+        )
+        assertEquals(MergeWrites(), plan.writes)
     }
 }
