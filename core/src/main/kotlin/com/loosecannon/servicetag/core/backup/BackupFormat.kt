@@ -381,7 +381,8 @@ data class OccurrenceClosureDto(
 )
 
 /**
- * Owner is `assetId` xor `eventId`; there is no SQL CHECK, so the readers are the rule (§11.5).
+ * Owner is exactly one of `assetId`, `eventId`, `supplyItemId` and `installedComponentId`; there is no
+ * SQL CHECK, so the readers are the rule (§11.5).
  *
  * [role] is format 10's (#67, C4): a `DocumentRole` name or null, written as `"role": null` when
  * unset (the codec encodes defaults). It defaults to null so a format ≤9 archive, which never had
@@ -390,6 +391,11 @@ data class OccurrenceClosureDto(
  * The four `source…` fields are format 16's (#85, C4): the attachment's source provenance, written as
  * explicit nulls when unset, like [role]. They default to null so a format ≤15 archive still decodes;
  * `BackupCodec` refuses a non-null one in such an archive, and [toDomain] refuses a malformed set.
+ *
+ * [supplyItemId] and [installedComponentId] are format 20's (#69, C9), appended last: the SupplyItem or
+ * the installed component that owns the file, written as explicit nulls when unset, like [role]. They
+ * default to null so a format ≤19 archive, which never had the keys, still decodes; `BackupCodec`
+ * refuses a non-null one in such an archive, and [toDomain] refuses a row naming no owner or more than one.
  */
 @Serializable
 data class AttachmentDto(
@@ -413,16 +419,24 @@ data class AttachmentDto(
     val sourceResolvedUri: String? = null,
     val sourceRetrievedAt: Long? = null,
     val sourceName: String? = null,
+    val supplyItemId: String? = null,
+    val installedComponentId: String? = null,
 )
 
 /**
- * Format 7. The `asset_reference` table's ten columns, in column order — **no `provenance`**
+ * Format 7. The `asset_reference` table's columns, in column order — **no `provenance`**
  * (D-21 C), and no byte-bearing field of any kind, because a reference has none (I-3).
  *
- * [role] is format 17's (#91, C6), appended last: a `DocumentRole` name or null, written as `"role": null`
- * when unset (the codec encodes defaults). It defaults to null so a format ≤16 archive, which never had the
- * key, still decodes; `BackupCodec` refuses a non-null one in such an archive, and [toDomain] refuses one on
- * a row whose kind takes no role.
+ * [role] is format 17's (#91, C6), appended after the nine shipped columns: a `DocumentRole` name or null,
+ * written as `"role": null` when unset (the codec encodes defaults). It defaults to null so a format ≤16
+ * archive, which never had the key, still decodes; `BackupCodec` refuses a non-null one in such an archive,
+ * and [toDomain] refuses one on a row whose kind takes no role.
+ *
+ * [supplyItemId] and [installedComponentId] are format 20's (#69, C9), appended after [role]: the SupplyItem
+ * or the installed component that owns the link, written as explicit nulls when unset, like [role]. They
+ * default to null so a format ≤19 archive, which never had the keys, still decodes; `BackupCodec` refuses a
+ * non-null one in such an archive, and [toDomain] refuses a row naming more than one owner. Interim (#69):
+ * [assetId] stays required while the domain reference can name only an asset.
  */
 @Serializable
 data class AssetReferenceDto(
@@ -436,6 +450,8 @@ data class AssetReferenceDto(
     val createdAt: Long,
     val updatedAt: Long,
     val role: String? = null,
+    val supplyItemId: String? = null,
+    val installedComponentId: String? = null,
 )
 
 /**
@@ -1137,21 +1153,29 @@ fun Attachment.toDto(): AttachmentDto = AttachmentDto(
     sourceResolvedUri = source?.resolvedUri,
     sourceRetrievedAt = source?.retrievedAt,
     sourceName = source?.name,
+    // Interim (#69): the domain owner is still an asset or an event, so format 20's two keys are written as nulls.
+    supplyItemId = null,
+    installedComponentId = null,
 )
 
 /**
- * The owner and the role are checked first (#67, C1): a role must be one of [DocumentRole]'s names,
- * and only an asset's file may carry one (R67-11). Then the source (#85, C4): the four fields must pass
- * [attachmentSourceProblem], the one home of the shape rule, on any owner — so a half-set source is a
- * refusal naming the row, and never reaches a constructor. The decode's naming pass and `validateGraph`
- * both run through here, so an archive breaking any rule is refused before anything is written.
+ * The owner and the role are checked first (#67, C1): exactly one of the four owner keys (#69, C10), a role
+ * one of [DocumentRole]'s names, and only an asset's file may carry one (R67-11). Then the source (#85, C4):
+ * the four fields must pass [attachmentSourceProblem], the one home of the shape rule, on any owner — so a
+ * half-set source is a refusal naming the row, and never reaches a constructor. The decode's naming pass and
+ * `validateGraph` both run through here, so an archive breaking any rule is refused before anything is written.
  */
 fun AttachmentDto.toDomain(): Attachment {
-    if ((assetId == null) == (eventId == null)) {
-        throw BackupCorrupt("attachment $id must name exactly one owner, an asset or an event")
-    }
-    val owner = assetId?.let { AttachmentOwner.OfAsset(AssetId(it)) }
-        ?: AttachmentOwner.OfEvent(EventId(eventId!!))
+    val owner = when {
+        listOfNotNull(assetId, eventId, supplyItemId, installedComponentId).size != 1 -> null
+        assetId != null -> AttachmentOwner.OfAsset(AssetId(assetId))
+        eventId != null -> AttachmentOwner.OfEvent(EventId(eventId))
+        // Interim (#69): the domain holds no SupplyItem or installed component owner yet, so a row naming one
+        // is refused by this rule until the owner is widened.
+        else -> null
+    } ?: throw BackupCorrupt(
+        "attachment $id must name exactly one owner, an asset, an event, a supply item or an installed component",
+    )
     val documentRole = role?.let { enumOrCorrupt<DocumentRole>(it, "document role", "attachment $id") }
     if (!owner.accepts(documentRole)) {
         throw BackupCorrupt("attachment $id is an entry's file and carries a document role; only an asset's may")
@@ -1328,16 +1352,23 @@ fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
     createdAt = createdAt,
     updatedAt = updatedAt,
     role = role?.name,
+    // Interim (#69): the domain owner is still an asset, so format 20's two keys are written as nulls.
+    supplyItemId = null,
+    installedComponentId = null,
 )
 
 /**
- * The kind and the role are names first: each must be one of its enum's. Then the role must be one the
+ * The owner first: exactly one of the three owner keys (#69, C10). Then the kind and the role are names: each
+ * must be one of its enum's. Then the role must be one the
  * row's stored kind takes (#91, R91-1: [ReferenceKind.accepts], the reference rule's one home) — so a role on a note link
  * or an "other" link is a refusal naming the row. The kind read is the row's stored one, never re-derived from
- * the uri. The decode's naming pass runs every row through here, so an archive breaking either rule is refused
+ * the uri. The decode's naming pass runs every row through here, so an archive breaking any rule is refused
  * before anything is written.
  */
 fun AssetReferenceDto.toDomain(): AssetReference {
+    if (listOfNotNull(assetId, supplyItemId, installedComponentId).size != 1) {
+        throw BackupCorrupt("reference $id must name exactly one owner, an asset, a supply item or an installed component")
+    }
     val referenceKind = enumOrCorrupt<ReferenceKind>(kind, "reference kind", "reference $id")
     val documentRole = role?.let { enumOrCorrupt<DocumentRole>(it, "document role", "reference $id") }
     if (!referenceKind.accepts(documentRole)) {

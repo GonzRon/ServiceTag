@@ -171,6 +171,14 @@ import kotlinx.serialization.json.JsonObject
  * itself — a blank name, a date that is not ISO, a removal before the install, an entry's quantity not a finite
  * number above zero — is the content check's, asked with no today.
  *
+ * **Format 20 (#69, C9, C10) adds two keys to two rows, and no list, table, count key or upgrade.** Every
+ * `attachments[]` and `assetReferences[]` row appends `supplyItemId` and `installedComponentId`, written as explicit
+ * nulls when unset and defaulting to null, so a format ≤19 archive decodes through the same strict decode with every
+ * row on its shipped owner; `LAST_LEGACY_FORMAT` stays 7. No shipped writer put either key into a format ≤19 archive,
+ * so a non-null one there is a hand-built file and is refused naming the list and the row
+ * ([FIRST_RESOURCE_OWNER_FORMAT]); explicit nulls are accepted. A row names exactly one owner, and its own reader
+ * refuses a row naming none or more than one.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -178,7 +186,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 19
+    const val FORMAT_VERSION = 20
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -229,6 +237,12 @@ object BackupCodec {
      * by hand, and the decode refuses it.
      */
     internal const val FIRST_INSTALLED_COMPONENT_FORMAT = 19
+
+    /**
+     * The first format that can carry a SupplyItem or installed component owner on an attachment or a reference (#69):
+     * an archive below it that carries one was built by hand.
+     */
+    internal const val FIRST_RESOURCE_OWNER_FORMAT = 20
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -452,6 +466,24 @@ object BackupCodec {
             }
         }
 
+        // #69, the same rule for a file's or a link's SupplyItem or installed component owner: the two keys did not
+        // exist before format 20, so a non-null one in an older archive was put there by hand. Explicit nulls are
+        // accepted.
+        if (manifest.formatVersion < FIRST_RESOURCE_OWNER_FORMAT) {
+            data.attachments.firstOrNull { it.supplyItemId != null || it.installedComponentId != null }?.let { owned ->
+                throw BackupCorrupt(
+                    "attachments: a format ${manifest.formatVersion} archive cannot carry a supply item or installed " +
+                        "component owner (attachment ${owned.id})",
+                )
+            }
+            data.assetReferences.firstOrNull { it.supplyItemId != null || it.installedComponentId != null }?.let { owned ->
+                throw BackupCorrupt(
+                    "assetReferences: a format ${manifest.formatVersion} archive cannot carry a supply item or installed " +
+                        "component owner (reference ${owned.id})",
+                )
+            }
+        }
+
         // #79, the same rule for the warranty reminder's lead: the key did not exist before format 11,
         // so a non-null one in an older archive was put there by hand. An explicit null is accepted.
         if (manifest.formatVersion < FIRST_LEAD_FORMAT) {
@@ -564,7 +596,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 19 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 20 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
