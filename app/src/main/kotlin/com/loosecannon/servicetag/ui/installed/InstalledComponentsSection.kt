@@ -92,6 +92,13 @@ fun InstalledComponentsSection(
             onRemove = { model.startRemove(sheet.id) },
             onEdit = { model.startEdit(sheet.id) },
             onDismiss = model::closeRow,
+            composition = {
+                CompositionLines(
+                    entries = sheet.composition,
+                    supplies = state.supplies,
+                    onOpenSupply = { model.closeRow(); onOpenSupply(it.value) },
+                )
+            },
         )
     }
     state.form?.let { form ->
@@ -106,8 +113,20 @@ fun InstalledComponentsSection(
             onNotes = model::onNotes,
             onSave = model::save,
             onDismiss = model::dismissForm,
+            composition = {
+                CompositionEditor(
+                    form = form,
+                    supplies = state.supplies,
+                    onQuantity = model::onEntryQuantity,
+                    onUnit = model::onEntryUnit,
+                    onPickEntry = model::startEntryPick,
+                    onRemove = model::removeEntry,
+                    onAdd = model::startAddEntry,
+                )
+            },
         )
-        // The picker is handed the unarchived SupplyItems only (R47-3); the lines above get every one (C-1).
+        // The picker, for the link or an entry, is handed the unarchived SupplyItems only (R47-3); the lines above get
+        // every one (C-1).
         if (form.picking != null) {
             SupplyItemPickerSheet(rows = state.choices, onPick = model::pick, onDismiss = model::dismissPicker)
         }

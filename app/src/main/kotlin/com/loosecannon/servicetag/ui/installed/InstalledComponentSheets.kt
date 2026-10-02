@@ -11,20 +11,33 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.usecase.CompositionInput
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.asset.FormField
 import com.loosecannon.servicetag.ui.asset.NAME_FIELD
@@ -32,16 +45,19 @@ import com.loosecannon.servicetag.ui.attachments.NOTES_LABEL
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.supplies.ADD_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.SupplyLinkLine
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
+import com.loosecannon.servicetag.ui.theme.ControlShape
+import com.loosecannon.servicetag.ui.theme.MonoText
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /*
  * #47 (C26) — the Installed components sheets, on #15's sheet pattern (`AssetSuppliesSection`'s role sheet): fully
  * expanded, scrolling, stateless and view-model-free. Each draws what it is handed and reports a tap; the section's
- * wrapper owns the view model and decides. Each takes a `composition` slot, empty here, where the composition display
- * and editor draw (P47-23).
+ * wrapper owns the view model and decides. The row sheet and the install / edit / replace sheet each take a
+ * `composition` slot, where the wrapper draws [CompositionLines] and [CompositionEditor] (P47-23).
  */
 
 /**
@@ -193,25 +209,141 @@ internal fun RemoveComponentSheet(
     }
 }
 
+/**
+ * The row sheet's composition (C26): "Composition" (P47-23), then one line per stored entry in P47-21 — the quantity
+ * as `formatNumber` draws it with its unit, then the SupplyItem's name — with the shipped "Archived" badge when that
+ * SupplyItem is archived; a tap opens it through [onOpenSupply]. [supplies] holds every SupplyItem, archived included
+ * (C-1), and an entry whose SupplyItem it does not hold draws nothing. An empty composition draws nothing (N-11).
+ */
+@Composable
+internal fun CompositionLines(
+    entries: List<CompositionEntry>,
+    supplies: Map<SupplyId, SupplyListRow>,
+    onOpenSupply: (SupplyId) -> Unit,
+) {
+    if (entries.isEmpty()) return
+    SectionHeader(title = COMPOSITION_SECTION)
+    entries.forEach { entry ->
+        supplies[entry.supplyId]?.let { item ->
+            SupplyLine(compositionLine(amountOf(entry), item.name), item.archived, onClick = { onOpenSupply(item.id) })
+        }
+    }
+}
+
+/**
+ * The install, edit and replace sheet's composition editor (C26): "Composition" (P47-23); one row per draft entry —
+ * the SupplyItem's name with the shipped "Archived" badge (a tap asks the picker for that entry), a close glyph
+ * labelled P47-24, "Qty" and "Unit" (the Materials row's fields), and the entry's own sentence (P15-20) under it; the
+ * entries a refused save named in the error state with P47-25 under the rows; then the "Add supply" row button
+ * (P15-13), which asks for the picker. [supplies] holds every SupplyItem, archived included (C-1); the picker the
+ * wrapper opens is handed the unarchived ones only.
+ */
+@Composable
+internal fun CompositionEditor(
+    form: ComponentFormState,
+    supplies: Map<SupplyId, SupplyListRow>,
+    onQuantity: (Int, String) -> Unit,
+    onUnit: (Int, String) -> Unit,
+    onPickEntry: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
+    onAdd: () -> Unit,
+) {
+    SectionHeader(title = COMPOSITION_SECTION)
+    form.composition.forEachIndexed { index, entry ->
+        CompositionEntryEditor(
+            entry = entry,
+            item = supplies[entry.supplyId],
+            marked = index in form.markedEntries,
+            problem = form.entryProblems[index],
+            onQuantity = { onQuantity(index, it) },
+            onUnit = { onUnit(index, it) },
+            onPick = { onPickEntry(index) },
+            onRemove = { onRemove(index) },
+        )
+    }
+    form.compositionProblem?.let { Problem(it) }
+    OutlinedButton(onClick = onAdd, shape = ControlShape, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+        Text(text = ADD_SUPPLY, modifier = Modifier.padding(start = 6.dp))
+    }
+}
+
+/** One composition entry being edited, on the specification row's shape: the SupplyItem and the close glyph, then "Qty" and "Unit". */
+@Composable
+private fun CompositionEntryEditor(
+    entry: CompositionInput,
+    item: SupplyListRow?,
+    marked: Boolean,
+    problem: String?,
+    onQuantity: (String) -> Unit,
+    onUnit: (String) -> Unit,
+    onPick: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            SupplyLine(item?.name.orEmpty(), item?.archived == true, onClick = onPick, modifier = Modifier.weight(1f))
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Outlined.Close, contentDescription = REMOVE_FROM_COMPOSITION)
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                value = entry.quantity,
+                onValueChange = onQuantity,
+                label = { Text("Qty") },
+                singleLine = true,
+                isError = marked,
+                textStyle = MonoText,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                shape = ControlShape,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = entry.unit,
+                onValueChange = onUnit,
+                label = { Text("Unit") },
+                singleLine = true,
+                shape = ControlShape,
+                modifier = Modifier.width(96.dp),
+            )
+        }
+        problem?.let { Problem(it) }
+    }
+}
+
 /** "Linked to {name}" (P15-22) with the shipped "Archived" badge; the line opens the SupplyItem. */
 @Composable
 private fun LinkedSupply(item: SupplyListRow, onOpen: () -> Unit) {
+    SupplyLine(LINKED_TO.format(item.name), item.archived, onClick = onOpen)
+}
+
+/** A line naming a SupplyItem — [text], then the shipped "Archived" badge while it is [archived] — that reports a tap. */
+@Composable
+private fun SupplyLine(text: String, archived: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier.fillMaxWidth()) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
+        modifier = modifier
+            .clickable(onClick = onClick)
             .heightIn(min = 48.dp),
     ) {
         Text(
-            text = LINKED_TO.format(item.name),
+            text = text,
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
-        if (item.archived) {
+        if (archived) {
             StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
     }

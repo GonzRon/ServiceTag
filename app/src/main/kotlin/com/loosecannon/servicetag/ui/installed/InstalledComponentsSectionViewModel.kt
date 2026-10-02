@@ -88,6 +88,8 @@ data class InstalledComponentsState(
     val supplies: Map<SupplyId, SupplyListRow> = emptyMap(),
     /** What a picker offers: the **unarchived** SupplyItems only, in the Supplies list's order (R47-3). */
     val choices: List<SupplyListRow> = emptyList(),
+    /** Each SupplyItem's preferred unit, by id: what a composition pick fills a blank "Unit" with (#15 C34's rule). */
+    val preferredUnits: Map<SupplyId, String> = emptyMap(),
     /** False on a held asset: the rows, the toggle and the facts draw, and nothing that writes is offered. */
     val offersWrites: Boolean = true,
     /** The open row's sheet (C26), or null; it closes by itself once the row is gone. */
@@ -141,15 +143,19 @@ sealed interface ComponentFormTarget {
     data class Replace(val id: InstalledComponentId) : ComponentFormTarget
 }
 
-/** What an open picker fills: the direct link. The composition editor adds its own target. */
-enum class PickFor { LINK }
+/**
+ * What an open picker fills: the direct link, or a composition entry — the one at [ComponentFormState.pickingEntry],
+ * or a new one appended when that is null ("Add supply").
+ */
+enum class PickFor { LINK, ENTRY }
 
 /**
  * The install, edit and replace sheet (C26), one shape for the three [target]s. The fields hold exactly what the
- * person sees: on replace they start as an editable draft of the predecessor's name and direct link (R47-17b), and
- * Save sends them as they stand — a cleared link is none. [composition] is the draft the composition editor draws and
- * edits: the stored entries on edit (so an edit keeps them), none on install and replace until the editor offers
- * them. [date] is "Installed on" (P47-7), on replace the replacement date. Each problem is the sentence drawn under
+ * person sees: on replace they start as an editable draft of the predecessor's name, direct link and composition
+ * (R47-17b), and Save sends them as they stand — a cleared link is none, an emptied composition is none.
+ * [composition] is the draft the composition editor draws and edits: the stored entries with their ids on edit (so an
+ * edit keeps them), the predecessor's entries with **no** ids on replace (the successor's are minted fresh), none on
+ * install. [date] is "Installed on" (P47-7), on replace the replacement date. Each problem is the sentence drawn under
  * its field: [dateProblem], [linkProblem], [compositionProblem] with the [markedEntries] it names, an entry's own line
  * in [entryProblems], and P47-19 in [problem].
  */
@@ -167,6 +173,8 @@ data class ComponentFormState(
     /** P47-12 above the button: a replace of a row with current children closes them too (R47-6). */
     val subtreeToo: Boolean,
     val picking: PickFor? = null,
+    /** With [picking] at [PickFor.ENTRY]: the entry a pick sets the SupplyItem of; null appends a new entry. */
+    val pickingEntry: Int? = null,
     val dateProblem: String? = null,
     val linkProblem: String? = null,
     val compositionProblem: String? = null,
@@ -232,6 +240,7 @@ class InstalledComponentsSectionViewModel(
         val components: List<InstalledComponent>,
         val supplies: Map<SupplyId, SupplyListRow>,
         val choices: List<SupplyListRow>,
+        val preferredUnits: Map<SupplyId, String>,
     )
 
     private data class Ui(
@@ -258,6 +267,7 @@ class InstalledComponentsSectionViewModel(
             components = rows,
             supplies = listRowsOf(all).associateBy { it.id },
             choices = listRowsOf(all.filter { it.archivedAt == null }),
+            preferredUnits = all.associate { it.id to it.preferredUnit },
         )
     }
 
@@ -270,6 +280,7 @@ class InstalledComponentsSectionViewModel(
                 components = c.components,
                 supplies = c.supplies,
                 choices = c.choices,
+                preferredUnits = c.preferredUnits,
                 offersWrites = u.offersWrites,
                 rowSheet = u.openRow?.let { rowSheetOf(c.components, it) },
                 form = u.form,
@@ -337,9 +348,10 @@ class InstalledComponentsSectionViewModel(
     }
 
     /**
-     * "Replace" (P47-9, P47-10) on a current row: the name and the direct link start as an editable draft of the
-     * predecessor's (R47-17b) — nothing is saved until Save, which sends what the fields then hold. The serial or lot
-     * and the notes start empty; the date is the replacement date, today.
+     * "Replace" (P47-9, P47-10) on a current row: the name, the direct link and the composition start as an editable
+     * draft of the predecessor's (R47-17b) — nothing is saved until Save, which sends what the fields then hold. The
+     * draft's entries carry no id, so the successor's are minted fresh and the predecessor keeps its own. The serial or
+     * lot and the notes start empty; the date is the replacement date, today.
      */
     fun startReplace(id: InstalledComponentId) {
         openForm { rows ->
@@ -350,7 +362,7 @@ class InstalledComponentsSectionViewModel(
                     inside = null,
                     name = row.name,
                     supplyId = row.supplyId,
-                    composition = emptyList(),
+                    composition = row.composition.map { CompositionInput(null, it.supplyId, formatNumber(it.quantity), it.unit) },
                     serialOrLot = "",
                     date = today.localDate().toString(),
                     notes = "",
@@ -384,18 +396,41 @@ class InstalledComponentsSectionViewModel(
     /** "Link supply" (P15-21): the picker, offered the unarchived SupplyItems only. */
     fun startLinkPick() = form { it.copy(picking = PickFor.LINK) }
 
-    fun dismissPicker() = form { it.copy(picking = null) }
+    /** "Add supply" (P15-13) under the composition: the picker, offered the unarchived SupplyItems only; a pick appends. */
+    fun startAddEntry() = form { it.copy(picking = PickFor.ENTRY, pickingEntry = null) }
+
+    /**
+     * An entry's SupplyItem tapped: the picker for that entry, so it can be swapped in place — an archived draft entry
+     * is removed or replaced (C-1). The entry keeps its quantity, its unit and its id.
+     */
+    fun startEntryPick(index: Int) = form { f ->
+        if (index in f.composition.indices) f.copy(picking = PickFor.ENTRY, pickingEntry = index) else f
+    }
+
+    fun dismissPicker() = form { it.copy(picking = null, pickingEntry = null) }
 
     /** A picked SupplyItem fills what the picker was opened for. */
-    fun pick(row: SupplyListRow) = form { f ->
-        when (f.picking) {
-            PickFor.LINK -> f.copy(supplyId = row.id, linkProblem = null, picking = null)
-            null -> f
+    fun pick(row: SupplyListRow) {
+        val preferredUnit = state.value.preferredUnits[row.id].orEmpty()
+        form { f ->
+            when (f.picking) {
+                PickFor.LINK -> f.copy(supplyId = row.id, linkProblem = null, picking = null)
+                PickFor.ENTRY -> f.withPickedEntry(row.id, preferredUnit).copy(picking = null, pickingEntry = null)
+                null -> f
+            }
         }
     }
 
     /** "Remove link" (P15-23): the draft holds no link, and Save sends none. */
     fun unlink() = form { it.copy(supplyId = null, linkProblem = null) }
+
+    /** An entry's "Qty", kept as typed (the use case reads it); typing clears that entry's P47-25 mark. */
+    fun onEntryQuantity(index: Int, text: String) = form { f -> f.withEntry(index) { it.copy(quantity = text) }.unmarked(index) }
+
+    fun onEntryUnit(index: Int, text: String) = form { f -> f.withEntry(index) { it.copy(unit = text) } }
+
+    /** An entry's close glyph (P47-24): only that entry leaves the draft; the others keep their order, ids and marks. */
+    fun removeEntry(index: Int) = form { f -> f.withoutEntry(index) }
 
     /** Cancel, or the sheet dismissed: nothing is written. */
     fun dismissForm() {
@@ -592,6 +627,47 @@ private fun ComponentFormState.cleared(): ComponentFormState = copy(
     entryProblems = emptyMap(), problem = null,
 )
 
+/** #15 C34's rule: a pick fills a blank "Unit" with the SupplyItem's preferred unit, and never overwrites one typed. */
+internal fun unitAfterPick(typed: String, preferred: String): String = typed.ifBlank { preferred }
+
+/**
+ * [supplyId] picked for the composition (C26): appended as a new entry with no id and an empty quantity, or set on
+ * the entry at [ComponentFormState.pickingEntry], which keeps its id, quantity and unit and loses its own sentence.
+ * Either way the unit follows [unitAfterPick].
+ */
+private fun ComponentFormState.withPickedEntry(supplyId: SupplyId, preferredUnit: String): ComponentFormState {
+    val at = pickingEntry
+    return when {
+        at == null -> copy(composition = composition + CompositionInput(null, supplyId, "", unitAfterPick("", preferredUnit)))
+        at in composition.indices -> withEntry(at) { it.copy(supplyId = supplyId, unit = unitAfterPick(it.unit, preferredUnit)) }
+            .copy(entryProblems = entryProblems - at)
+        else -> this
+    }
+}
+
+private fun ComponentFormState.withEntry(index: Int, change: (CompositionInput) -> CompositionInput): ComponentFormState =
+    if (index in composition.indices) copy(composition = composition.mapIndexed { i, e -> if (i == index) change(e) else e }) else this
+
+/** [index]'s P47-25 mark cleared; P47-25 itself goes with the last mark. */
+private fun ComponentFormState.unmarked(index: Int): ComponentFormState {
+    if (index !in markedEntries) return this
+    val marks = markedEntries - index
+    return copy(markedEntries = marks, compositionProblem = compositionProblem.takeIf { marks.isNotEmpty() })
+}
+
+/** The draft without entry [index]: the later entries' marks and sentences move up one place with them. */
+private fun ComponentFormState.withoutEntry(index: Int): ComponentFormState {
+    if (index !in composition.indices) return this
+    val shifted = { i: Int -> if (i > index) i - 1 else i }
+    val marks = (markedEntries - index).mapTo(HashSet(), shifted)
+    return copy(
+        composition = composition.filterIndexed { i, _ -> i != index },
+        markedEntries = marks,
+        compositionProblem = compositionProblem.takeIf { marks.isNotEmpty() },
+        entryProblems = (entryProblems - index).mapKeys { (i, _) -> shifted(i) },
+    )
+}
+
 /** A blank install sheet: the name, link, serial or lot, install date and notes all empty (an unknown day is allowed, R47-8). */
 private fun blankForm(target: ComponentFormTarget.Install, inside: String?) = ComponentFormState(
     target = target,
@@ -672,6 +748,9 @@ private fun rowState(
     )
 }
 
-/** The quantity as the shipped material lines draw theirs (`formatNumber`: "4", never "4.0"), then the unit. */
-private fun amountOf(entry: CompositionEntry): String =
+/**
+ * The quantity as the shipped material lines draw theirs (`formatNumber`: "4", never "4.0"), then the unit: P47-21's
+ * first argument on the quiet line and the row sheet's composition lines.
+ */
+internal fun amountOf(entry: CompositionEntry): String =
     listOf(formatNumber(entry.quantity), entry.unit).filter { it.isNotBlank() }.joinToString(" ")
