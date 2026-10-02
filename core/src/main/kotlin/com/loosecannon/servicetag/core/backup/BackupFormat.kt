@@ -1171,7 +1171,8 @@ fun AttachmentDto.toDomain(): Attachment {
         assetId != null -> AttachmentOwner.OfAsset(AssetId(assetId))
         eventId != null -> AttachmentOwner.OfEvent(EventId(eventId))
         supplyItemId != null -> AttachmentOwner.OfSupplyItem(SupplyId(supplyItemId))
-        else -> AttachmentOwner.OfInstalledComponent(InstalledComponentId(checkNotNull(installedComponentId)))
+        installedComponentId != null -> AttachmentOwner.OfInstalledComponent(InstalledComponentId(installedComponentId))
+        else -> null
     } ?: throw BackupCorrupt(
         "attachment $id must name exactly one owner, an asset, an event, a supply item or an installed component",
     )

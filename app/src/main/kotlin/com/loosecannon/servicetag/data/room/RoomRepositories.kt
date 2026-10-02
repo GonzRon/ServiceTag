@@ -98,7 +98,7 @@ class RoomLinkRepository(private val dao: ExternalLinkDao) : LinkRepository {
 /**
  * The `attachment` table's side of [AttachmentRepository]. Metadata only: the bytes are the
  * store's, never Room's, and `storage_locator` is the only thing here that knows where they are.
- * Every write goes through [requireExactlyOneOwner], so a row with both owners or neither is
+ * Every write goes through [requireExactlyOneOwner], so a row naming no owner or more than one is
  * refused before SQLite ever sees it (spec §11.5).
  */
 class RoomAttachmentRepository(private val dao: AttachmentDao) : AttachmentRepository {

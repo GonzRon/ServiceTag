@@ -28,11 +28,12 @@ import org.junit.Test
 
 /**
  * The `attachment` table as the app will actually use it (spec §9.1): a row per file, metadata
- * only, hanging off either an asset or an event. What is worth proving here is not the round trip
- * — that is one mapper — but the three rules the *schema* enforces and no Kotlin code re-checks:
- * the two CASCADEs that make a row die with its owner, the unique `(provider, locator)` that
- * stops two rows claiming the same bytes, and the exactly-one-owner `require` that stands in for
- * the CHECK constraint Room cannot express.
+ * only, hanging off exactly one owner — an asset, an event, a supply item or an installed component
+ * (#69). The round trip is proven once per owner, since each owner has its own column and a mapper
+ * that writes the wrong one reads back as another owner's file. Beyond that, the rules the *schema*
+ * enforces and no Kotlin code re-checks: the CASCADEs that make a row die with its owner, the unique
+ * `(provider, locator)` that stops two rows claiming the same bytes, and the exactly-one-owner
+ * `require` that stands in for the CHECK constraint Room cannot express.
  */
 class AttachmentDaoTest {
 
