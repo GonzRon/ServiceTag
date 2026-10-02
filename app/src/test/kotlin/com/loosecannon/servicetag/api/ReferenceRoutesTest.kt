@@ -64,6 +64,7 @@ class ReferenceRoutesTest {
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
             supplyHandlersFor(graph),
+            installedComponentHandlersFor(graph),
             appVersion = "1.3.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -668,6 +669,8 @@ class ReferenceRoutesTest {
                 "assetSuccessions",
                 // #15's two, under the archive's own list names (format 18).
                 "supplyItems", "assetSupplies",
+                // #47's two, under the archive's own manifest keys (format 19).
+                "installedComponents", "compositionEntries",
             ),
             counts.keys,
         )

@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
 import com.loosecannon.servicetag.api.seasonHealthHandlersFor
 import com.loosecannon.servicetag.api.serviceCaseHandlersFor
+import com.loosecannon.servicetag.api.installedComponentHandlersFor
 import com.loosecannon.servicetag.api.supplyHandlersFor
 import com.loosecannon.servicetag.api.warrantyHandlersFor
 import com.loosecannon.servicetag.core.backup.BackupCodec
@@ -135,6 +136,7 @@ class VersionAgreementTest {
                 attachmentHandlersFor(graph),
                 replaceHandlersFor(graph),
                 supplyHandlersFor(graph),
+                installedComponentHandlersFor(graph),
                 appVersion = BuildConfig.VERSION_NAME,
                 schemaVersion = AppGraph.SCHEMA_VERSION,
             ),

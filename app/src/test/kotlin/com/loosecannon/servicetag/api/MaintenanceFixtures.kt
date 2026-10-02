@@ -156,6 +156,17 @@ internal fun supplyHandlersFor(graph: FakeGraph): SupplyHandlers = SupplyHandler
     removeAssetSupply = graph.removeAssetSupply,
 )
 
+/** #47's installed-component rows over a [FakeGraph]: the fake graph's guarded port and its four use cases. */
+internal fun installedComponentHandlersFor(graph: FakeGraph): InstalledComponentHandlers = InstalledComponentHandlers(
+    installedComponents = graph.installedComponents,
+    supplyItems = graph.supplyItems,
+    assets = graph.assets,
+    installComponent = graph.installComponent,
+    updateInstalledComponent = graph.updateInstalledComponent,
+    removeInstalledComponent = graph.removeInstalledComponent,
+    replaceInstalledComponent = graph.replaceInstalledComponent,
+)
+
 /**
  * 1.4 (B09): one `/v1` client over a [FakeGraph] for the new suites — the production router, the
  * production handlers (every collaborator above) and the production serializers, exactly as
@@ -179,6 +190,7 @@ internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
             supplyHandlersFor(graph),
+            installedComponentHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
