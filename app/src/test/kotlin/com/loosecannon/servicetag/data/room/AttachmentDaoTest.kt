@@ -10,9 +10,13 @@ import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.StorageProvider
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
 import com.loosecannon.servicetag.data.room.entities.AttachmentEntity
+import com.loosecannon.servicetag.data.room.entities.InstalledComponentEntity
+import com.loosecannon.servicetag.data.room.entities.SupplyItemEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -262,6 +266,89 @@ class AttachmentDaoTest {
             attachments.observeForOwner(eventOwner).first().map { it.displayName },
         )
     }
+
+    // --- #69: the SupplyItem and installed component owners (B2a row 15; C5) -------------------
+
+    /**
+     * Each of the four owners round-trips through the production mappers and reads back by its own `forOwner` —
+     * a SupplyItem's file on `supply_item_id`, a component's on `installed_component_id`, the other three columns
+     * null. The SupplyItem and the component share the id string `x1`, so a column written for the wrong owner
+     * reads back as the other owner's file.
+     */
+    @Test fun fourOwnersRoundTripThroughTheRepository() = runTest {
+        seedAsset("a1")
+        seedEvent("e1", "a1")
+        seedSupplyItem("x1")
+        seedComponent("x1", "a1")
+        val rows = listOf(
+            attachment("att-1", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-1.pdf"),
+            attachment("att-2", AttachmentOwner.OfEvent(EventId("e1")), "events/e1/att-2.pdf", createdAt = 2L),
+            attachment("att-3", AttachmentOwner.OfSupplyItem(SupplyId("x1")), "supply-items/x1/att-3.pdf", createdAt = 3L),
+            attachment(
+                "att-4", AttachmentOwner.OfInstalledComponent(InstalledComponentId("x1")),
+                "installed-components/x1/att-4.jpg", kind = AttachmentKind.PHOTO, mimeType = "image/jpeg", createdAt = 4L,
+            ),
+        )
+        rows.forEach { attachments.upsert(it) }
+
+        for (row in rows) {
+            assertEquals(row, attachments.get(row.id))
+            assertEquals(listOf(row), attachments.forOwner(row.owner))
+        }
+        assertEquals(rows, attachments.all())
+        val stored = rows.associate { row ->
+            row.id.value to db.attachmentDao().byId(row.id.value)!!.let {
+                listOf(it.assetId, it.eventId, it.supplyItemId, it.installedComponentId)
+            }
+        }
+        assertEquals(
+            mapOf(
+                "att-1" to listOf("a1", null, null, null),
+                "att-2" to listOf(null, "e1", null, null),
+                "att-3" to listOf(null, null, "x1", null),
+                "att-4" to listOf(null, null, null, "x1"),
+            ),
+            stored,
+        )
+    }
+
+    /** `observeForOwner` emits each new owner's own files, by name, and nothing of the other's. */
+    @Test fun observeForOwnerEmitsPerOwner() = runTest {
+        seedAsset("a1")
+        seedSupplyItem("x1")
+        seedComponent("x1", "a1")
+        val supply = AttachmentOwner.OfSupplyItem(SupplyId("x1"))
+        val component = AttachmentOwner.OfInstalledComponent(InstalledComponentId("x1"))
+        assertEquals(emptyList<Attachment>(), attachments.observeForOwner(supply).first())
+        assertEquals(emptyList<Attachment>(), attachments.observeForOwner(component).first())
+
+        attachments.upsert(attachment("att-1", supply, "supply-items/x1/att-1.pdf", displayName = "Wiring.pdf"))
+        attachments.upsert(attachment("att-2", supply, "supply-items/x1/att-2.pdf", displayName = "Data sheet.pdf"))
+        assertEquals(listOf("Data sheet.pdf", "Wiring.pdf"), attachments.observeForOwner(supply).first().map { it.displayName })
+        assertEquals(emptyList<Attachment>(), attachments.observeForOwner(component).first())
+
+        attachments.upsert(attachment("att-3", component, "installed-components/x1/att-3.jpg", displayName = "Fitted.jpg"))
+        assertEquals(listOf("Fitted.jpg"), attachments.observeForOwner(component).first().map { it.displayName })
+        assertEquals(listOf("Data sheet.pdf", "Wiring.pdf"), attachments.observeForOwner(supply).first().map { it.displayName })
+    }
+
+    private suspend fun seedSupplyItem(id: String) = db.supplyItemDao().upsert(
+        SupplyItemEntity(
+            id = id, name = "Example 12 V Battery $id", category = "Batteries", manufacturer = "Example Power Co.",
+            model = "EB-$id", partNumber = "EB-$id-1", preferredUnit = "ea", notes = "", archivedAt = null,
+            createdAt = 10L, updatedAt = 20L,
+        ),
+        emptyList(),
+    )
+
+    private suspend fun seedComponent(id: String, assetId: String) = db.installedComponentDao().insert(
+        InstalledComponentEntity(
+            id = id, assetId = assetId, parentId = null, name = "Example Battery Tray $id", supplyId = null,
+            serialOrLot = "", installedOn = null, removedOn = null, replacesId = null, sortOrder = 0, notes = "",
+            createdAt = 30L, updatedAt = 40L,
+        ),
+        emptyList(),
+    )
 
     private suspend fun seedAsset(id: String) = assets.upsert(
         Asset(

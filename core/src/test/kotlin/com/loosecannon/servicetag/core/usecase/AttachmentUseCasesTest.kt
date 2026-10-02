@@ -13,7 +13,9 @@ import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -31,6 +33,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
+import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import kotlinx.coroutines.test.runTest
 import java.io.InputStream
 import kotlin.coroutines.cancellation.CancellationException
@@ -624,6 +628,99 @@ class AttachmentUseCasesTest {
         assertEquals(commits, uow.commits)
     }
 
+    // --- #69: a SupplyItem's and an installed component's own files (B2a row 16; C5, R69-10) ---------
+
+    private suspend fun supplyItem(id: String, archivedAt: Long? = null): SupplyId {
+        supplyItems.upsert(supplyItemOf(id, "Example 12 V Battery", archivedAt = archivedAt))
+        return SupplyId(id)
+    }
+
+    private suspend fun component(id: String, removedOn: String? = null): InstalledComponentId {
+        installedComponents.insert(installedComponentOf(id, assetId = "a1", installedOn = "2026-09-01", removedOn = removedOn))
+        return InstalledComponentId(id)
+    }
+
+    /** Hazard: a SupplyItem refused as an owner, or an archived one (R69-10). Both take a file, with a role (R69-6). */
+    @Test fun addsToASupplyItemArchivedIncluded() = runTest {
+        val battery = AttachmentOwner.OfSupplyItem(supplyItem("s1"))
+        val retired = AttachmentOwner.OfSupplyItem(supplyItem("s2", archivedAt = 3_000L))
+
+        val manual = (add.run(battery, cmd().copy(role = DocumentRole.USER_MANUAL), source()) as AttachmentResult.Ok).value
+        val sheet = (add.run(retired, cmd(name = "Example data sheet.pdf"), source()) as AttachmentResult.Ok).value
+
+        assertEquals(battery, manual.owner)
+        assertEquals(DocumentRole.USER_MANUAL, manual.role)
+        assertEquals(listOf(manual), attachments.forOwner(battery))
+        assertEquals(listOf(sheet), attachments.forOwner(retired))
+        assertEquals(2, uow.commits)
+    }
+
+    /** Hazard: a removed component refused as an owner. A current one and a removed one both take a file. */
+    @Test fun addsToAComponentRemovedIncluded() = runTest {
+        asset()
+        val tray = AttachmentOwner.OfInstalledComponent(component("c1"))
+        val old = AttachmentOwner.OfInstalledComponent(component("c2", removedOn = "2026-09-10"))
+
+        val photo = (add.run(tray, cmd(name = "Installed.jpg", mime = "image/jpeg"), source()) as AttachmentResult.Ok).value
+        val label = (add.run(old, cmd(name = "Label.jpg", mime = "image/jpeg"), source()) as AttachmentResult.Ok).value
+
+        assertEquals(listOf(photo), attachments.forOwner(tray))
+        assertEquals(listOf(label), attachments.forOwner(old))
+        assertEquals(2, uow.commits)
+    }
+
+    /** I4: the bytes land under the owner's own directory, `supply-items/<id>` or `installed-components/<id>`. */
+    @Test fun bytesLandUnderTheOwnersDirectory() = runTest {
+        asset()
+        val battery = AttachmentOwner.OfSupplyItem(supplyItem("s1"))
+        val tray = AttachmentOwner.OfInstalledComponent(component("c1"))
+
+        val manual = (add.run(battery, cmd(), source()) as AttachmentResult.Ok).value
+        val photo = (add.run(tray, cmd(name = "Installed.jpg", mime = "image/jpeg"), source()) as AttachmentResult.Ok).value
+
+        assertEquals("supply-items/s1/att-1.pdf", manual.storageLocator)
+        assertEquals("installed-components/c1/att-2.jpg", photo.storageLocator)
+        assertEquals(setOf("supply-items/s1/att-1.pdf", "installed-components/c1/att-2.jpg"), store.files.keys)
+    }
+
+    /**
+     * Hazard: an owner that is not there answered as present. A SupplyItem or a component nobody stored is
+     * `OwnerMissing` — including one whose id string is another owner's (an asset's, a SupplyItem's) — and nothing is
+     * copied or written.
+     */
+    @Test fun anUnknownSupplyItemOrComponentIsOwnerMissing() = runTest {
+        asset("x1")
+        supplyItem("s1")
+        val unknown = listOf(
+            AttachmentOwner.OfSupplyItem(SupplyId("nope")),
+            AttachmentOwner.OfSupplyItem(SupplyId("x1")),
+            AttachmentOwner.OfInstalledComponent(InstalledComponentId("nope")),
+            AttachmentOwner.OfInstalledComponent(InstalledComponentId("s1")),
+        )
+
+        for (owner in unknown) {
+            assertEquals(AttachmentResult.Refused(AttachmentProblem.OwnerMissing), add.run(owner, cmd(), source()), "$owner")
+        }
+
+        assertTrue(attachments.rows.isEmpty())
+        assertTrue(store.files.isEmpty())
+        assertEquals(0, uow.commits)
+    }
+
+    /** R69-6 keeps R67-11's one refusal: a role on an entry's file is still a caller's mistake, before any copy. */
+    @Test fun aRoleOnAnEntryStillThrows() = runTest {
+        asset()
+        val entry = AttachmentOwner.OfEvent(event())
+
+        val refusal = assertFailsWith<IllegalArgumentException> {
+            add.run(entry, cmd().copy(role = DocumentRole.SERVICE_MANUAL), source())
+        }
+
+        assertTrue("not an entry's" in refusal.message!!, "unhelpful: ${refusal.message}")
+        assertTrue(store.files.isEmpty())
+        assertTrue(attachments.rows.isEmpty())
+        assertEquals(0, uow.commits)
+    }
 }
 
 /**

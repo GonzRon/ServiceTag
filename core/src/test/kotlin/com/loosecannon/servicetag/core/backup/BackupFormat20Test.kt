@@ -1,8 +1,15 @@
 package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.dataTreeOf
 import com.loosecannon.servicetag.core.testing.editRows
@@ -279,5 +286,123 @@ class BackupFormat20Test {
         assertEquals(20, refusal.supported)
         // The same tree at this build's format is parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 20)) }
+    }
+
+    // --- B2a row 14: a SupplyItem's and an installed component's files (C5; R69-6, R69-10) ---------
+
+    private val onBattery = AttachmentOwner.OfSupplyItem(SupplyId("s1"))
+    private val onTray = AttachmentOwner.OfInstalledComponent(InstalledComponentId("c1"))
+
+    /** A file on [owner] as the phone writes it: its locator under the owner's own directory. */
+    private fun fileOn(owner: AttachmentOwner, id: String, role: DocumentRole? = null) = Attachment(
+        id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT, displayName = "Example data sheet.pdf",
+        mimeType = "application/pdf", sizeBytes = 21L, sha256 = "c".repeat(64),
+        storageLocator = AttachmentLocator.forOwner(owner, AttachmentId(id), "Example data sheet.pdf", "application/pdf"),
+        capturedOn = null, createdAt = 1_000L, updatedAt = 2_000L, role = role,
+    )
+
+    /** [base] with [files] beside the asset's and the entry's. */
+    private fun dataWith(vararg files: AttachmentDto, base: BackupData = data()): BackupData =
+        base.copy(attachments = base.attachments + files)
+
+    /**
+     * Hazard: a new owner's key dropped on the way out or misread on the way in. A SupplyItem's file and a component's
+     * write their own key and null the other three, under their own directory, and read back equal.
+     */
+    @Test
+    fun aSupplyItemsAndAComponentsFilesRoundTrip() {
+        val sheet = fileOn(onBattery, "att-3")
+        val fitted = fileOn(onTray, "att-4")
+        val bytes = archiveOf(dataWith(sheet.toDto(), fitted.toDto()))
+
+        val decoded = BackupCodec.decode(bytes)
+
+        assertEquals(listOf(sheet, fitted), decoded.data.attachments.drop(2).map { it.toDomain() })
+        assertEquals("supply-items/s1/att-3.pdf", sheet.storageLocator)
+        assertEquals("installed-components/c1/att-4.pdf", fitted.storageLocator)
+        val rows = dataTreeOf(bytes).getValue("attachments").jsonArray.map { it.jsonObject }.associateBy { it.id }
+        val written = mapOf(
+            "att-3" to listOf(JsonNull, JsonNull, JsonPrimitive("s1"), JsonNull),
+            "att-4" to listOf(JsonNull, JsonNull, JsonNull, JsonPrimitive("c1")),
+        )
+        for ((id, values) in written) {
+            val keys = listOf("assetId", "eventId") + ownerKeys
+            assertEquals(values, keys.map { rows.getValue(id)[it] }, "$id: $keys")
+        }
+    }
+
+    /** R69-10: an archived SupplyItem and a removed component are owners like any other in the file. */
+    @Test
+    fun anArchivedSupplyItemOrRemovedComponentIsAValidOwner() {
+        val retired = data().copy(
+            supplyItems = listOf(supplyItemOf("s1", "Example 12 V Battery", archivedAt = 3_000L).toDto()),
+            installedComponents = listOf(
+                installedComponentOf("c1", name = "Example Battery Tray", installedOn = "2026-09-01", removedOn = "2026-09-10")
+                    .toDto(),
+            ),
+        )
+
+        val files = arrayOf(fileOn(onBattery, "att-3").toDto(), fileOn(onTray, "att-4").toDto())
+
+        val decoded = BackupCodec.decode(archiveOf(dataWith(*files, base = retired)))
+
+        assertEquals(listOf(onBattery, onTray), decoded.data.attachments.drop(2).map { it.toDomain().owner })
+    }
+
+    /**
+     * Hazard: an owner checked against the wrong list. A SupplyItem's file must name a SupplyItem in the file and a
+     * component's a component in the file — an id string another list holds is not enough — in the two shipped
+     * templates (G2).
+     */
+    @Test
+    fun anOwnerNotInTheFileIsCorrupt() {
+        val cases = listOf(
+            AttachmentOwner.OfSupplyItem(SupplyId("s9")) to "points at supply item s9, which is not in supplyItems",
+            AttachmentOwner.OfSupplyItem(SupplyId("c1")) to "points at supply item c1, which is not in supplyItems",
+            AttachmentOwner.OfInstalledComponent(InstalledComponentId("c9")) to
+                "points at installed component c9, which is not in installedComponents",
+            AttachmentOwner.OfInstalledComponent(InstalledComponentId("s1")) to
+                "points at installed component s1, which is not in installedComponents",
+        )
+        for ((owner, problem) in cases) {
+            val refusal = refusalOf(archiveOf(dataWith(fileOn(owner, "att-3").toDto())))
+            assertEquals("attachments: attachment att-3 $problem", refusal, "$owner")
+        }
+    }
+
+    /** I4: a SupplyItem's or a component's locator under any other directory is not its own. */
+    @Test
+    fun aLocatorUnderAnotherOwnersDirectoryIsCorrupt() {
+        val sheet = fileOn(onBattery, "att-3").toDto()
+        val fitted = fileOn(onTray, "att-4").toDto()
+        val misplaced = listOf(
+            sheet.copy(storageLocator = "installed-components/s1/att-3.pdf"),
+            sheet.copy(storageLocator = "assets/s1/att-3.pdf"),
+            sheet.copy(storageLocator = "supply-items/s2/att-3.pdf"),
+            fitted.copy(storageLocator = "supply-items/c1/att-4.pdf"),
+            fitted.copy(storageLocator = "components/c1/att-4.pdf"),
+        )
+        for (row in misplaced) {
+            assertEquals(
+                "attachments: attachment ${row.id} has a locator that is not its own",
+                refusalOf(archiveOf(dataWith(row))),
+                row.storageLocator,
+            )
+        }
+    }
+
+    /** R69-6: a role on a SupplyItem's or a component's file reads back; one on an entry's file is still refused. */
+    @Test
+    fun aRoleOnASupplyItemsFileDecodes() {
+        val guide = fileOn(onBattery, "att-3", DocumentRole.USER_MANUAL)
+        val service = fileOn(onTray, "att-4", DocumentRole.SERVICE_MANUAL)
+
+        val decoded = BackupCodec.decode(archiveOf(dataWith(guide.toDto(), service.toDto())))
+
+        assertEquals(listOf(guide, service), decoded.data.attachments.drop(2).map { it.toDomain() })
+        assertEquals(
+            "attachment att-2 is an entry's file and carries a document role; an entry's file takes none",
+            refusalOf(archiveOf(data().copy(attachments = listOf(manual, photo.copy(role = "USER_MANUAL"))))),
+        )
     }
 }
