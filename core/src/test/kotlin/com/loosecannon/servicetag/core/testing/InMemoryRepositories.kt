@@ -21,6 +21,7 @@ import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -151,8 +152,14 @@ open class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
     /**
      * #79 (C17): the schema's CASCADE from `asset`, for the stores that ask for it — the service cases
      * ([InMemoryServiceCaseRepository.cascadeFromAsset]) and #72's loans
-     * ([InMemoryAssetLoanRepository.cascadeFromAsset]). Every other table's cascade is still the
-     * Room tests' to prove; a double that registers nothing deletes the asset row alone, as before.
+     * ([InMemoryAssetLoanRepository.cascadeFromAsset]), and #47's installed components
+     * ([InMemoryInstalledComponentRepository.cascadeFromAsset]) among the rest [BackupInstall] registers. #69 (C11)
+     * carries one second level: the component double hands the ids it removed to
+     * [InMemoryAttachmentRepository.cascadeFromInstalledComponents], so a component's files go with the asset's
+     * components. The asymmetry is deliberate (N-16): an asset's own files and an entry's are **not** cascaded from
+     * here, because the shipped core tests were written against a double that leaves them, so that half stays the
+     * Room tests' to prove. Every other table's cascade is still the Room tests' to prove; a double that registers
+     * nothing deletes the asset row alone, as before.
      */
     private val cascades = mutableListOf<(AssetId) -> Unit>()
 
@@ -415,6 +422,16 @@ open class InMemoryAttachmentRepository : AttachmentRepository, Rollbackable, Wi
 
     override fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>> = version.map {
         rows.values.filter { it.owner == owner }.sortedBy { it.displayName.lowercase() }
+    }
+
+    /**
+     * #69 (C11): the schema's CASCADE from `installed_component` — the files the components [ids] own go, and only
+     * those. [BackupInstall] registers it on the component double; why nothing cascades here from the asset double is
+     * [InMemoryAssetRepository.cascadesTo]'s.
+     */
+    fun cascadeFromInstalledComponents(ids: Set<InstalledComponentId>) {
+        val removed = rows.values.removeAll { (it.owner as? AttachmentOwner.OfInstalledComponent)?.componentId in ids }
+        if (removed) version.value += 1
     }
 }
 
