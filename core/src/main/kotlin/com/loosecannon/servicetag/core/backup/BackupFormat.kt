@@ -1153,32 +1153,31 @@ fun Attachment.toDto(): AttachmentDto = AttachmentDto(
     sourceResolvedUri = source?.resolvedUri,
     sourceRetrievedAt = source?.retrievedAt,
     sourceName = source?.name,
-    // Interim (#69): the domain owner is still an asset or an event, so format 20's two keys are written as nulls.
-    supplyItemId = null,
-    installedComponentId = null,
+    supplyItemId = (owner as? AttachmentOwner.OfSupplyItem)?.supplyId?.value,
+    installedComponentId = (owner as? AttachmentOwner.OfInstalledComponent)?.componentId?.value,
 )
 
 /**
  * The owner and the role are checked first (#67, C1): exactly one of the four owner keys (#69, C10), a role
- * one of [DocumentRole]'s names, and only an asset's file may carry one (R67-11). Then the source (#85, C4):
- * the four fields must pass [attachmentSourceProblem], the one home of the shape rule, on any owner — so a
- * half-set source is a refusal naming the row, and never reaches a constructor. The decode's naming pass and
- * `validateGraph` both run through here, so an archive breaking any rule is refused before anything is written.
+ * one of [DocumentRole]'s names, and an entry's file may not carry one (R67-11, widened by R69-6). Then the
+ * source (#85, C4): the four fields must pass [attachmentSourceProblem], the one home of the shape rule, on any
+ * owner — so a half-set source is a refusal naming the row, and never reaches a constructor. The decode's naming
+ * pass and `validateGraph` both run through here, so an archive breaking any rule is refused before anything is
+ * written.
  */
 fun AttachmentDto.toDomain(): Attachment {
     val owner = when {
         listOfNotNull(assetId, eventId, supplyItemId, installedComponentId).size != 1 -> null
         assetId != null -> AttachmentOwner.OfAsset(AssetId(assetId))
         eventId != null -> AttachmentOwner.OfEvent(EventId(eventId))
-        // Interim (#69): the domain holds no SupplyItem or installed component owner yet, so a row naming one
-        // is refused by this rule until the owner is widened.
-        else -> null
+        supplyItemId != null -> AttachmentOwner.OfSupplyItem(SupplyId(supplyItemId))
+        else -> AttachmentOwner.OfInstalledComponent(InstalledComponentId(checkNotNull(installedComponentId)))
     } ?: throw BackupCorrupt(
         "attachment $id must name exactly one owner, an asset, an event, a supply item or an installed component",
     )
     val documentRole = role?.let { enumOrCorrupt<DocumentRole>(it, "document role", "attachment $id") }
     if (!owner.accepts(documentRole)) {
-        throw BackupCorrupt("attachment $id is an entry's file and carries a document role; only an asset's may")
+        throw BackupCorrupt("attachment $id is an entry's file and carries a document role; an entry's file takes none")
     }
     attachmentSourceProblem(sourceUri, sourceResolvedUri, sourceRetrievedAt, sourceName)?.let { problem ->
         throw BackupCorrupt("attachment $id carries a malformed source: $problem")

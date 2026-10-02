@@ -297,6 +297,7 @@ class AppGraph(private val context: Context) {
     private val roomGroups = RoomGroupRepository(db.maintenanceGroupDao())
     private val roomSchedules = RoomScheduleRepository(db.maintenanceScheduleDao())
     private val roomServiceCases = RoomServiceCaseRepository(db.serviceCaseDao())
+    private val roomInstalledComponents = RoomInstalledComponentRepository(db.installedComponentDao())
 
     /**
      * #77 (C12) — the one write guard: every one of the eighteen asset-owned ports below is its wrapped port, so every
@@ -306,6 +307,7 @@ class AppGraph(private val context: Context) {
      */
     private val heldWriteGuard = HeldWriteGuard(
         transferRecords, roomEvents, roomDefinitions, roomProfiles, roomGroups, roomSchedules, roomServiceCases, links,
+        roomInstalledComponents,
     )
 
     private val roomAssets = RoomAssetRepository(db.assetDao())
@@ -379,7 +381,7 @@ class AppGraph(private val context: Context) {
      * needs no raw port. Its rules live in the use cases.
      */
     val installedComponents: InstalledComponentRepository =
-        heldWriteGuard.installedComponents(RoomInstalledComponentRepository(db.installedComponentDao()))
+        heldWriteGuard.installedComponents(roomInstalledComponents)
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -573,7 +575,7 @@ class AppGraph(private val context: Context) {
 
     // Phase 4A — attachments.
     val addAttachment: AddAttachment =
-        AddAttachment(attachments, assets, events, attachmentStorage, uow, ids, clock)
+        AddAttachment(attachments, assets, events, supplyItems, installedComponents, attachmentStorage, uow, ids, clock)
     val updateAttachment: UpdateAttachment = UpdateAttachment(attachments, uow, clock)
     val deleteAttachment: DeleteAttachment = DeleteAttachment(attachments, attachmentStorage, uow)
     val restoreArtifacts: RestoreArtifacts = RestoreArtifacts(attachments, attachmentStorage)

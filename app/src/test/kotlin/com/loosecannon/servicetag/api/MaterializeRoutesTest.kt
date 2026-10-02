@@ -80,7 +80,10 @@ class MaterializeRoutesTest {
 
     private fun materializeOver(folder: AttachmentStorage): MaterializeReference {
         val hops = HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) })
-        val add = AddAttachment(graph.attachments, graph.assets, graph.events, folder, graph.uow, graph.ids, graph.clock)
+        val add = AddAttachment(
+            graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, folder,
+            graph.uow, graph.ids, graph.clock,
+        )
         return MaterializeReference(
             graph.references, graph.attachments, folder, LinkLaunchPolicy(), hops,
             FetchDocument(transport, hops, graph.materializeStaging), add, { graph.networkGranted }, graph.clock,
@@ -108,7 +111,8 @@ class MaterializeRoutesTest {
                 updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
                 transfers = graph.transferRecords,
                 addAttachment = AddAttachment(
-                    graph.attachments, graph.assets, graph.events, folder, graph.uow, graph.ids, graph.clock,
+                    graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, folder,
+                    graph.uow, graph.ids, graph.clock,
                 ),
                 staging = graph.materializeStaging, apiLongWrites = graph.apiLongWrites,
                 references = graph.references, materializeReference = materializeOver(folder), prefill = prefill,

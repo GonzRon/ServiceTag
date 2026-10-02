@@ -292,10 +292,17 @@ internal class ReturnScope private constructor(
             }.mapTo(HashSet()) { it.id }
             val events = full.events.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
             val cases = full.serviceCases.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
+            // #69 (C5, H2): a returning asset's components, current and removed; the asset delete's CASCADE takes
+            // their files, so they leave the snapshot and their locators are swept.
+            val returningComponents =
+                full.installedComponents.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
             val attachments = full.attachments.filter { a ->
                 when (val owner = a.owner) {
                     is AttachmentOwner.OfAsset -> owner.assetId in returning
                     is AttachmentOwner.OfEvent -> owner.eventId in events
+                    // A SupplyItem is global and never removed by a return; its files stay.
+                    is AttachmentOwner.OfSupplyItem -> false
+                    is AttachmentOwner.OfInstalledComponent -> owner.componentId in returningComponents
                 }
             }
             val keptLinks = full.links.filter { it.assetId in returning }

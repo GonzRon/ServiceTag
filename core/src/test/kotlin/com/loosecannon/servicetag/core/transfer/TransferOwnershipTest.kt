@@ -7,6 +7,8 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -35,6 +37,7 @@ class TransferOwnershipTest {
         override fun link(id: LinkId): ExternalLink? = null
         override fun definition(id: DefinitionId): MeasurementDefinition? = definitions[id]
         override fun profile(id: ProfileId): EventProfile? = null
+        override fun installedComponent(id: InstalledComponentId): InstalledComponent? = null
     }
 
     private val held = setOf(AssetId("x1"), AssetId("h1"))

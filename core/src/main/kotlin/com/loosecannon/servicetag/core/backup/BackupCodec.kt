@@ -177,7 +177,8 @@ import kotlinx.serialization.json.JsonObject
  * row on its shipped owner; `LAST_LEGACY_FORMAT` stays 7. No shipped writer put either key into a format ≤19 archive,
  * so a non-null one there is a hand-built file and is refused naming the list and the row
  * ([FIRST_RESOURCE_OWNER_FORMAT]); explicit nulls are accepted. A row names exactly one owner, and its own reader
- * refuses a row naming none or more than one.
+ * refuses a row naming none or more than one. A SupplyItem's file names a SupplyItem in the file, archived included,
+ * and an installed component's file a component in the file, current or removed (#69, C5).
  *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
@@ -1168,6 +1169,17 @@ object BackupCodec {
                     "attachments: attachment ${attachment.id} points at event ${owner.eventId.value}, " +
                         "which is not in assetEvents",
                 )
+                // #69 (C5, R69-10): an archived SupplyItem and a removed component are in their lists like any other.
+                is AttachmentOwner.OfSupplyItem -> if (owner.supplyId.value !in supplyIds) throw BackupCorrupt(
+                    "attachments: attachment ${attachment.id} points at supply item ${owner.supplyId.value}, " +
+                        "which is not in supplyItems",
+                )
+                is AttachmentOwner.OfInstalledComponent -> if (owner.componentId.value !in componentIds) {
+                    throw BackupCorrupt(
+                        "attachments: attachment ${attachment.id} points at installed component " +
+                            "${owner.componentId.value}, which is not in installedComponents",
+                    )
+                }
             }
             if (!SHA256_HEX.matches(attachment.sha256)) throw BackupCorrupt(
                 "attachments: attachment ${attachment.id} has a malformed sha256",

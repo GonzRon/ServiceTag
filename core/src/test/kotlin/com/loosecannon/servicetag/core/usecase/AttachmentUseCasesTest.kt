@@ -28,6 +28,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import kotlinx.coroutines.test.runTest
 import java.io.InputStream
@@ -44,6 +46,8 @@ class AttachmentUseCasesTest {
     private val attachments = InMemoryAttachmentRepository()
     private val assets = InMemoryAssetRepository()
     private val events = InMemoryEventRepository()
+    private val supplyItems = InMemorySupplyItemRepository()
+    private val installedComponents = InMemoryInstalledComponentRepository(supplyItems)
     private val uow = FakeUnitOfWork(assets, events, attachments)
     private val storage = FakeAttachmentStorage()
     private val store: InMemoryAttachmentStore get() = storage.store
@@ -51,7 +55,9 @@ class AttachmentUseCasesTest {
     private var seq = 0
     private val ids = IdGenerator { "att-${++seq}" }
 
-    private val add = AddAttachment(attachments, assets, events, storage, uow, ids, Clock { now })
+    private val add = AddAttachment(
+        attachments, assets, events, supplyItems, installedComponents, storage, uow, ids, Clock { now },
+    )
     private val update = UpdateAttachment(attachments, uow, Clock { now })
     private val remove = DeleteAttachment(attachments, storage, uow)
 
@@ -186,7 +192,7 @@ class AttachmentUseCasesTest {
         val owner = AttachmentOwner.OfAsset(asset())
         val oversized = RiggedStore(reportedSize = MAX_ATTACHMENT_BYTES + 1)
         val adder = AddAttachment(
-            attachments, assets, events, OneStore(oversized), uow, ids, Clock { now },
+            attachments, assets, events, supplyItems, installedComponents, OneStore(oversized), uow, ids, Clock { now },
         )
 
         assertEquals(
@@ -207,7 +213,7 @@ class AttachmentUseCasesTest {
             failDeleteWith = { StoreIoException("rigged delete failure") },
         )
         val adder = AddAttachment(
-            attachments, assets, events, OneStore(brittle), uow, ids, Clock { now },
+            attachments, assets, events, supplyItems, installedComponents, OneStore(brittle), uow, ids, Clock { now },
         )
 
         assertEquals(
@@ -235,7 +241,7 @@ class AttachmentUseCasesTest {
         val owner = AttachmentOwner.OfAsset(asset())
         val brittle = RiggedStore(failDeleteWith = { StoreIoException("rigged delete failure") })
         val adder = AddAttachment(
-            attachments, assets, events, OneStore(brittle), uow, ids, Clock { now },
+            attachments, assets, events, supplyItems, installedComponents, OneStore(brittle), uow, ids, Clock { now },
         )
         attachments.failOnUpsert = 1
 
@@ -322,7 +328,7 @@ class AttachmentUseCasesTest {
         val owner = AttachmentOwner.OfAsset(asset())
         val brittle = RiggedStore(failDeleteWith = { StoreIoException("rigged delete failure") })
         val adder = AddAttachment(
-            attachments, assets, events, OneStore(brittle), uow, ids, Clock { now },
+            attachments, assets, events, supplyItems, installedComponents, OneStore(brittle), uow, ids, Clock { now },
         )
         val row = (adder.run(owner, cmd(), source()) as AttachmentResult.Ok).value
 
@@ -341,7 +347,7 @@ class AttachmentUseCasesTest {
         val owner = AttachmentOwner.OfAsset(asset())
         val cancelling = RiggedStore(failDeleteWith = { CancellationException("cancelled") })
         val adder = AddAttachment(
-            attachments, assets, events, OneStore(cancelling), uow, ids, Clock { now },
+            attachments, assets, events, supplyItems, installedComponents, OneStore(cancelling), uow, ids, Clock { now },
         )
         val row = (adder.run(owner, cmd(), source()) as AttachmentResult.Ok).value
 
@@ -362,7 +368,9 @@ class AttachmentUseCasesTest {
         asset()
         val owner = AttachmentOwner.OfEvent(event())
         val spy = RiggedStore()
-        val adder = AddAttachment(attachments, assets, events, OneStore(spy), uow, ids, Clock { now })
+        val adder = AddAttachment(
+            attachments, assets, events, supplyItems, installedComponents, OneStore(spy), uow, ids, Clock { now },
+        )
 
         assertFailsWith<IllegalArgumentException> {
             adder.run(owner, cmd().copy(role = DocumentRole.USER_MANUAL), source())
@@ -546,7 +554,9 @@ class AttachmentUseCasesTest {
     @Test fun aMalformedSourceIsAProgrammingError() = runTest {
         val owner = AttachmentOwner.OfAsset(asset())
         val spy = RiggedStore()
-        val adder = AddAttachment(attachments, assets, events, OneStore(spy), uow, ids, Clock { now })
+        val adder = AddAttachment(
+            attachments, assets, events, supplyItems, installedComponents, OneStore(spy), uow, ids, Clock { now },
+        )
         val malformed = listOf(
             manualSource.copy(uri = "http://manuals.example.invalid/pool-pump/manual.pdf"),
             manualSource.copy(resolvedUri = "https://cdn.example.invalid/files/manual.pdf?token=abc"),
@@ -596,7 +606,9 @@ class AttachmentUseCasesTest {
     @Test fun aPresetIdOfAnExistingRowThrowsBeforePutAndTouchesNothing() = runTest {
         val owner = AttachmentOwner.OfAsset(asset())
         val spy = RiggedStore()
-        val adder = AddAttachment(attachments, assets, events, OneStore(spy), uow, ids, Clock { now })
+        val adder = AddAttachment(
+            attachments, assets, events, supplyItems, installedComponents, OneStore(spy), uow, ids, Clock { now },
+        )
         val existing = (adder.run(owner, cmd(), source(), presetId = preset) as AttachmentResult.Ok).value
         val bytes = spy.inner.files.getValue(existing.storageLocator).copyOf()
         val commits = uow.commits
@@ -611,6 +623,7 @@ class AttachmentUseCasesTest {
         assertTrue(bytes.contentEquals(spy.inner.files.getValue(existing.storageLocator)))
         assertEquals(commits, uow.commits)
     }
+
 }
 
 /**

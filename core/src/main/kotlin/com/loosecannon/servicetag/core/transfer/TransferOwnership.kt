@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -52,6 +53,8 @@ sealed interface OwnerRef {
     data class OfDefinition(val id: DefinitionId) : OwnerRef
     /** An event profile an entangled reference lands on: its asset owns it (NOTE 2). */
     data class OfProfile(val id: ProfileId) : OwnerRef
+    /** #69: a component's resource: the component's asset owns it. */
+    data class OfInstalledComponent(val id: InstalledComponentId) : OwnerRef
 }
 
 /** How a caller answers an [OwnerRef] that names another row. `null`: the row is not there. */
@@ -63,6 +66,7 @@ interface OwnerLookup {
     fun link(id: LinkId): ExternalLink?
     fun definition(id: DefinitionId): MeasurementDefinition?
     fun profile(id: ProfileId): EventProfile?
+    fun installedComponent(id: InstalledComponentId): InstalledComponent?
 }
 
 /**
@@ -70,10 +74,11 @@ interface OwnerLookup {
  * would insert, and B2b's write guard (C12) of every row a port would write, so a plan never calls
  * applicable an insert the guard would refuse (rm-2). An asset is owned by itself **and its parent**; a group
  * by every asset any of its rows names, current or removed; a schedule by its asset, or its group's owners;
- * a closure by its schedule's; an event's attachment by the event's asset; an entry by its case's asset; a
- * tag by the asset it targets (a link's tag by the link's asset); a succession by both its assets (#86). Everything
- * else by its own `assetId` — #15's applicability rows and #47's installed components included. A SupplyItem is
- * global: no asset owns it, so it has no overload here.
+ * a closure by its schedule's; an event's attachment by the event's asset; an installed component's attachment by
+ * the component's asset (#69); an entry by its case's asset; a tag by the asset it targets (a link's tag by the
+ * link's asset); a succession by both its assets (#86). Everything else by its own `assetId` — #15's applicability
+ * rows and #47's installed components included. A SupplyItem is global: no asset owns it, so it has no overload
+ * here, and a SupplyItem's attachment is no asset's (#69).
  * A guard also asks about a tag's **current** target — the stored row — which is a second call, not a rule.
  */
 object TransferOwnership {
@@ -93,6 +98,8 @@ object TransferOwnership {
     fun of(attachment: Attachment): List<OwnerRef> = when (val owner = attachment.owner) {
         is AttachmentOwner.OfAsset -> listOf(OwnerRef.OfAsset(owner.assetId))
         is AttachmentOwner.OfEvent -> listOf(OwnerRef.OfEvent(owner.eventId))
+        is AttachmentOwner.OfSupplyItem -> emptyList()
+        is AttachmentOwner.OfInstalledComponent -> listOf(OwnerRef.OfInstalledComponent(owner.componentId))
     }
 
     fun of(group: MaintenanceGroup): List<OwnerRef> = group.members.map { OwnerRef.OfAsset(it.assetId) }.distinct()
@@ -136,6 +143,7 @@ object TransferOwnership {
                 is OwnerRef.OfLink -> lookup.link(ref.id)?.let { owners += resolve(of(it), lookup) }
                 is OwnerRef.OfDefinition -> lookup.definition(ref.id)?.let { owners += resolve(of(it), lookup) }
                 is OwnerRef.OfProfile -> lookup.profile(ref.id)?.let { owners += resolve(of(it), lookup) }
+                is OwnerRef.OfInstalledComponent -> lookup.installedComponent(ref.id)?.let { owners += it.assetId }
             }
         }
         return owners

@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -78,7 +79,8 @@ class AssetTransferredOut(val assetId: AssetId) :
  *   written **and** of the stored row it replaces or deletes (a tag's new and current target; an asset and its
  *   parent; a group with any row, current or removed, naming a held asset, so a save that soft-removes a held
  *   member or adds a staying one is refused; a schedule by its asset or its group; a closure by its schedule; an
- *   attachment by its asset or its event's asset; an entry by its case's asset; everything else by `assetId`);
+ *   attachment by its asset, its event's asset or its installed component's asset, a SupplyItem's by none (#69); an
+ *   entry by its case's asset; everything else by `assetId`);
  * - or (R77-B2b-GUARD) the row being written would **gain** a reference to a row the held graph owns — a staying
  *   event naming a held schedule, profile or measured definition, a subject naming a held schedule, a schedule naming
  *   a held meter definition or profile, a profile field naming a held definition — by exactly
@@ -120,6 +122,8 @@ class HeldWriteGuard(
     private val schedules: ScheduleRepository,
     private val cases: ServiceCaseRepository,
     private val links: LinkRepository,
+    /** #69 (C5): the unwrapped component port, so a component's attachment resolves to its asset. */
+    private val installedComponents: InstalledComponentRepository,
 ) {
 
     fun assets(port: AssetRepository): AssetRepository = GuardedAssets(port, this)
@@ -232,6 +236,7 @@ class HeldWriteGuard(
         private val linksById = HashMap<LinkId, ExternalLink>()
         private val definitionsById = HashMap<DefinitionId, MeasurementDefinition>()
         private val profilesById = HashMap<ProfileId, EventProfile>()
+        private val componentsById = HashMap<InstalledComponentId, InstalledComponent>()
 
         suspend fun fetch(ref: OwnerRef) {
             when (ref) {
@@ -247,6 +252,7 @@ class HeldWriteGuard(
                 }
                 is OwnerRef.OfDefinition -> definitions.get(ref.id)?.let { definitionsById[ref.id] = it }
                 is OwnerRef.OfProfile -> profiles.get(ref.id)?.let { profilesById[ref.id] = it }
+                is OwnerRef.OfInstalledComponent -> installedComponents.get(ref.id)?.let { componentsById[ref.id] = it }
             }
         }
 
@@ -257,6 +263,7 @@ class HeldWriteGuard(
         override fun link(id: LinkId): ExternalLink? = linksById[id]
         override fun definition(id: DefinitionId): MeasurementDefinition? = definitionsById[id]
         override fun profile(id: ProfileId): EventProfile? = profilesById[id]
+        override fun installedComponent(id: InstalledComponentId): InstalledComponent? = componentsById[id]
     }
 }
 

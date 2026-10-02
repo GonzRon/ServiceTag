@@ -930,6 +930,7 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
 
     private val guard = HeldWriteGuard(
         raw.transfers, raw.events, raw.definitions, raw.profiles, raw.groups, raw.schedules, raw.serviceCases, raw.links,
+        raw.installedComponents,
     )
     val assets = guard.assets(raw.assets)
     val tags = guard.tags(raw.tags)

@@ -27,7 +27,9 @@ class UpdateAttachment(
         val row = attachments.get(id)
             ?: return AttachmentResult.Refused(AttachmentProblem.OwnerMissing)
         // #67, C1: the same caller's mistake `AddAttachment` refuses, before anything is written.
-        require(row.owner.accepts(cmd.role)) { "a document role belongs on an asset's attachment, not an event's" }
+        require(row.owner.accepts(cmd.role)) {
+            "a document role belongs on an asset's, a supply item's or an installed component's file, not an entry's"
+        }
         val name = cmd.displayName.trim()
         if (name.isEmpty()) return AttachmentResult.Refused(AttachmentProblem.BlankName)
 

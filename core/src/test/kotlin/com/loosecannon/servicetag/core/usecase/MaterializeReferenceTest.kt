@@ -35,6 +35,8 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.RecordingReferenceRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import com.loosecannon.servicetag.core.testing.transferOf
@@ -130,7 +132,10 @@ class MaterializeReferenceTest {
         policy = LinkLaunchPolicy(),
         hops = HopPolicy(resolver),
         fetch = FetchDocument(transport, HopPolicy(resolver), staging, FetchLimits(), EmptyCoroutineContext),
-        addAttachment = AddAttachment(writes, assets, events, storage, uow, ids, clock),
+        addAttachment = AddAttachment(
+            writes, assets, events, InMemorySupplyItemRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), storage, uow, ids, clock,
+        ),
         networkPermissionGranted = { permission },
         clock = clock,
     )
@@ -718,7 +723,7 @@ class MaterializeReferenceTest {
         val install = BackupInstall()
         val guard = HeldWriteGuard(
             install.transfers, install.events, install.definitions, install.profiles, install.groups,
-            install.schedules, install.serviceCases, install.links,
+            install.schedules, install.serviceCases, install.links, install.installedComponents,
         )
         val guarded = materializer(writes = guard.attachments(rows))
         transport.serve(manualUri, pdf, "application/pdf")

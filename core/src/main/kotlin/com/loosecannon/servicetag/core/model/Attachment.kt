@@ -14,19 +14,26 @@ enum class AttachmentMode { MANAGED, REFERENCE }
 /** No LOCAL member by the owner's ruling (spec §11.8): absent, not reserved. */
 enum class StorageProvider { SAF_TREE, SAF_DOCUMENT }
 
+/** Who a file belongs to. The owner model is stated once, in D14 (#69). */
 sealed interface AttachmentOwner {
     data class OfAsset(val assetId: AssetId) : AttachmentOwner
     data class OfEvent(val eventId: EventId) : AttachmentOwner
+    /** #69: a SupplyItem's own file, archived or not. */
+    data class OfSupplyItem(val supplyId: SupplyId) : AttachmentOwner
+    /** #69: an installed component's own file, current or removed. */
+    data class OfInstalledComponent(val componentId: InstalledComponentId) : AttachmentOwner
 }
 
 /**
- * R67-11, stated once: no role at all, or an asset's attachment. The use cases and the codec ask this.
+ * R67-11 as widened by R69-6, stated once: no role at all, or a file that is not an entry's. The use cases and the
+ * codec ask this.
  *
- * A [DocumentRole] is allowed on an **asset-owned** attachment only (R67-11). There is deliberately no
- * `init` rule on [Attachment]: the use cases refuse a role on an event owner before they write anything,
- * and the backup reader refuses one in a file, which are the two places such a row could come from.
+ * A [DocumentRole] is allowed on an asset's, a SupplyItem's or an installed component's attachment, and never on an
+ * event's. There is deliberately no `init` rule on [Attachment]: the use cases refuse a role on an event owner before
+ * they write anything, and the backup reader refuses one in a file, which are the two places such a row could come
+ * from.
  */
-fun AttachmentOwner.accepts(role: DocumentRole?): Boolean = role == null || this is AttachmentOwner.OfAsset
+fun AttachmentOwner.accepts(role: DocumentRole?): Boolean = role == null || this !is AttachmentOwner.OfEvent
 
 data class Attachment(
     val id: AttachmentId,
@@ -107,10 +114,15 @@ sealed interface AttachmentProblem {
 object AttachmentLocator {
     private val EXTENSION = Regex("^[a-z0-9]{1,8}$")
 
-    /** `assets/<asset-id>` or `events/<event-id>` — the per-owner directory. */
+    /**
+     * The per-owner directory, and its one home: `assets/<asset-id>`, `events/<event-id>`,
+     * `supply-items/<supply-id>` or `installed-components/<component-id>` (#69, H6: permanent names).
+     */
     fun dirFor(owner: AttachmentOwner): String = when (owner) {
         is AttachmentOwner.OfAsset -> "assets/${owner.assetId.value}"
         is AttachmentOwner.OfEvent -> "events/${owner.eventId.value}"
+        is AttachmentOwner.OfSupplyItem -> "supply-items/${owner.supplyId.value}"
+        is AttachmentOwner.OfInstalledComponent -> "installed-components/${owner.componentId.value}"
     }
 
     fun forOwner(

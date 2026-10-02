@@ -49,6 +49,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.InstalledComponentTree
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -1376,6 +1377,7 @@ internal fun mergePlanOf(
         val linksById = (snapshot.links + linkWrites).associateBy { it.id }
         val definitionsById = (snapshot.definitions + definitionWrites).associateBy { it.id }
         val profilesById = (snapshot.profiles + profileWrites).associateBy { it.id }
+        val componentsById = (snapshot.installedComponents + installedComponentWrites).associateBy { it.id }
         val lookup = object : OwnerLookup {
             override fun event(id: EventId) = eventsById[id]
             override fun case(id: ServiceCaseId) = casesById[id]
@@ -1384,6 +1386,7 @@ internal fun mergePlanOf(
             override fun link(id: LinkId) = linksById[id]
             override fun definition(id: DefinitionId) = definitionsById[id]
             override fun profile(id: ProfileId) = profilesById[id]
+            override fun installedComponent(id: InstalledComponentId) = componentsById[id]
         }
         val inserted = decisions.withIndex()
             .filter { it.value.verdict == MergeVerdict.INSERT }

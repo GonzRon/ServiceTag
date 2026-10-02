@@ -108,6 +108,8 @@ class RoomAttachmentRepository(private val dao: AttachmentDao) : AttachmentRepos
     override suspend fun forOwner(owner: AttachmentOwner): List<Attachment> = when (owner) {
         is AttachmentOwner.OfAsset -> dao.forAsset(owner.assetId.value)
         is AttachmentOwner.OfEvent -> dao.forEvent(owner.eventId.value)
+        is AttachmentOwner.OfSupplyItem -> dao.forSupplyItem(owner.supplyId.value)
+        is AttachmentOwner.OfInstalledComponent -> dao.forInstalledComponent(owner.componentId.value)
     }.map { it.toDomain() }
 
     override suspend fun forAsset(assetId: AssetId): List<Attachment> =
@@ -121,6 +123,8 @@ class RoomAttachmentRepository(private val dao: AttachmentDao) : AttachmentRepos
     override fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>> = when (owner) {
         is AttachmentOwner.OfAsset -> dao.observeForAsset(owner.assetId.value)
         is AttachmentOwner.OfEvent -> dao.observeForEvent(owner.eventId.value)
+        is AttachmentOwner.OfSupplyItem -> dao.observeForSupplyItem(owner.supplyId.value)
+        is AttachmentOwner.OfInstalledComponent -> dao.observeForInstalledComponent(owner.componentId.value)
     }.map { list -> list.map { it.toDomain() } }
 }
 

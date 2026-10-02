@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -553,4 +555,5 @@ private class InHand(private val schedule: MaintenanceSchedule, private val grou
     override fun link(id: LinkId): ExternalLink? = null
     override fun definition(id: DefinitionId): MeasurementDefinition? = null
     override fun profile(id: ProfileId): EventProfile? = null
+    override fun installedComponent(id: InstalledComponentId): InstalledComponent? = null
 }

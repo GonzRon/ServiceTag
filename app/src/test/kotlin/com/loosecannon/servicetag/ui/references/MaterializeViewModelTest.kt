@@ -173,7 +173,10 @@ class MaterializeViewModelTest {
         }
         val storage: AttachmentStorage = gated ?: graph.attachmentStorage
         val add = gated?.let {
-            AddAttachment(graph.attachments, graph.assets, graph.events, it, graph.uow, graph.ids, graph.clock)
+            AddAttachment(
+                graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, it,
+                graph.uow, graph.ids, graph.clock,
+            )
         } ?: graph.addAttachment
         return MaterializeReference(
             references, attachments, storage, LinkLaunchPolicy(), hops,

@@ -197,7 +197,7 @@ class HeldWriteGuardTest {
     private val install = BackupInstall()
     private val guard = HeldWriteGuard(
         install.transfers, install.events, install.definitions, install.profiles, install.groups, install.schedules,
-        install.serviceCases, install.links,
+        install.serviceCases, install.links, install.installedComponents,
     )
 
     // The eighteen guarded ports, as AppGraph hands them to every use case (#15's applicability the seventeenth, #47's
@@ -412,7 +412,9 @@ class HeldWriteGuardTest {
         refused(
             heater,
             "AddAttachment" to {
-                AddAttachment(attachments, assets, events, install.storage, uow, ids, clock).run(
+                AddAttachment(
+                    attachments, assets, events, install.supplyItems, installedComponents, install.storage, uow, ids, clock,
+                ).run(
                     AttachmentOwner.OfAsset(heater),
                     AddAttachmentCommand(displayName = "Example receipt.pdf", mimeType = "application/pdf"),
                     ByteSource { ByteArrayInputStream("Example receipt".toByteArray()) },

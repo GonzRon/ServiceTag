@@ -334,7 +334,7 @@ class AttachmentsSectionViewModelTest {
         val gated = GatedPutStorage(graph.attachmentStorage)
         val vm = model(
             addAttachment = AddAttachment(
-                graph.attachments, graph.assets, graph.events, gated,
+                graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents, gated,
                 graph.uow, graph.ids, graph.clock,
             ),
         )
@@ -842,8 +842,8 @@ class AttachmentsSectionViewModelTest {
         val vm = model(
             storage = seams.storage,
             addAttachment = AddAttachment(
-                graph.attachments, graph.assets, graph.events, seams.storage,
-                seams.uow, graph.ids, graph.clock,
+                graph.attachments, graph.assets, graph.events, graph.supplyItems, graph.installedComponents,
+                seams.storage, seams.uow, graph.ids, graph.clock,
             ),
             updateAttachment = UpdateAttachment(graph.attachments, seams.uow, graph.clock),
             deleteAttachment = DeleteAttachment(graph.attachments, seams.storage, seams.uow),

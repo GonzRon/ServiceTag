@@ -645,11 +645,15 @@ class BackupUseCasesTest {
     private class FkCheckingAttachmentRepository : InMemoryAttachmentRepository() {
         lateinit var assets: InMemoryAssetRepository
         lateinit var events: InMemoryEventRepository
+        lateinit var supplyItems: InMemorySupplyItemRepository
+        lateinit var installedComponents: InMemoryInstalledComponentRepository
 
         override suspend fun upsert(a: Attachment) {
             val ownerIsIn = when (val owner = a.owner) {
                 is AttachmentOwner.OfAsset -> assets.get(owner.assetId) != null
                 is AttachmentOwner.OfEvent -> events.get(owner.eventId) != null
+                is AttachmentOwner.OfSupplyItem -> supplyItems.get(owner.supplyId) != null
+                is AttachmentOwner.OfInstalledComponent -> installedComponents.get(owner.componentId) != null
             }
             check(ownerIsIn) { "attachment ${a.id.value} has an owner that is not inserted yet" }
             super.upsert(a)

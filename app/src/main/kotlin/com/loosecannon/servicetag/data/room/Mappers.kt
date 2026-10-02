@@ -15,11 +15,13 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.StorageProvider
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -175,6 +177,8 @@ fun AttachmentEntity.toDomain(): Attachment = Attachment(
     owner = when {
         assetId != null -> AttachmentOwner.OfAsset(AssetId(assetId))
         eventId != null -> AttachmentOwner.OfEvent(EventId(eventId))
+        supplyItemId != null -> AttachmentOwner.OfSupplyItem(SupplyId(supplyItemId))
+        installedComponentId != null -> AttachmentOwner.OfInstalledComponent(InstalledComponentId(installedComponentId))
         else -> error("attachment '$id' has no owner")
     },
     kind = AttachmentKind.valueOf(kind),
@@ -222,8 +226,8 @@ fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
     sourceResolvedUri = source?.resolvedUri,
     sourceRetrievedAt = source?.retrievedAt,
     sourceName = source?.name,
-    supplyItemId = null,
-    installedComponentId = null,
+    supplyItemId = (owner as? AttachmentOwner.OfSupplyItem)?.supplyId?.value,
+    installedComponentId = (owner as? AttachmentOwner.OfInstalledComponent)?.componentId?.value,
 )
 
 // #74: a catalog row passes through unchanged in both directions; its key rule lives in core.
