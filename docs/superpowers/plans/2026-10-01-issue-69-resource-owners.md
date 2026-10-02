@@ -1,16 +1,11 @@
 # #69 — resources owned by SupplyItems and installed components, and Share intake to all three owners: plan and briefs (rev 1.3, 2026-10-02)
 
-> **Rev 1.3 (2026-10-02) — the owner REPLACED R69-3** with a binding hierarchical Share flow (quoted in §6 R69-3 and
-> above C29): an **active** asset first (#93's picker, its eligibility narrowed to `maintainedHere` — archived, retired
-> and so replaced, and transferred-out assets dropped; season and DOWN play no part), then **where within it** — the
-> asset, a current installed component reached level by level, or a SupplyItem linked to the asset or to a component —
-> then confirm and save; prose stays Asset-only. Landed: C29 (the `ShareDestination` type and the three save arms,
-> ownership = the final selection), C30 (the three steps; the `AssetPicker` Archived control hidden in Share), C27
-> (its supply derivation one reusable function), rows 53, 53a, 53c, 54, §3's B7 pins, §4 (B7 split into **B7, B7c,
-> B7b** — nineteen dispatches, each ≤ 1 h), the gate estimate (+2 Compose cases, ~14.0–14.2 min), §5 (P69-6…10
-> **withdrawn**, P69-5 re-homed, P69-17…22 **PROPOSED (rev 1.3) — pending ratification**), §6 R69-3, briefs §24–§26 (B8 is now §27).
-> Everything else — the resource model, R69-0/2/4, the defaults, the Transfer Pack limits, F-1, the non-Share strings —
-> stays as rev 1.2.
+> **Rev 1.4 (2026-10-02) — R69-3 final:** one "Share to" picker (type dropdown Assets / Installed components /
+> Supplies, one search box, one list of that type, direct selection to the existing save form — no dialog) with
+> browsing kept as the optional path; rev 1.3's readings and Share strings approved (P69-18, -21, -22 reworded).
+> Landed: C29, C30, rows 53, 53a–53c, 54, §3's pins, §4 (B7 / B7c / **B7d** / B7b — twenty dispatches, each ≤ 1 h),
+> the gate projection (~14.2–14.4 min), §5 (RATIFIED; P69-23…26 PROPOSED), §6 R69-3, briefs §24–§27 (B8 §28).
+> Nothing outside Share changes. *(Rev 1.3, superseded: an asset-first hierarchical step.)*
 
 > **Rev 1.2 (2026-10-02, the owner's rulings — mechanical reconciliation, no review round):** R69-0 the scope sentence
 > APPROVED (one existing resource system extended to Asset, SupplyItem and InstalledComponent ownership; event-owned
@@ -48,8 +43,8 @@
 > **Ledger:** `.superpowers/sdd/2026-10-01-issue-69/progress.md` (the controller's; implementers never write it).
 > **Audit (inventory of record):** `.superpowers/sdd/2026-10-01-issue-69/audit.md`, every citation read on `ad49b788`.
 > This planner re-read on the same base every site it cites beyond the audit, and **corrects the audit in five
-> places** (§4, "Audit corrections"). **Nineteen dispatches (rev 1.3) on one branch `issue-69`:** B1a, B1b, B2a,
-> B2a2, B2b, B2b2, B3a, B3b, B3c, then **B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7c → B7b)**, then B5, B8 — each `<base>` the previous accepted tip; **B1a's `<base>`
+> places** (§4, "Audit corrections"). **Twenty dispatches (rev 1.4) on one branch `issue-69`:** B1a, B1b, B2a,
+> B2a2, B2b, B2b2, B3a, B3b, B3c, then **B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7c → B7d → B7b)**, then B5, B8 — each `<base>` the previous accepted tip; **B1a's `<base>`
 > is master at dispatch** (today `ad49b788`: 1.6.0 / code 19, Room schema 19 / backup format 19, MCP 89 tools, gitlink
 > `7e0377a`) plus this plan's commit. One task review each, at most one bounded fix round each, one whole-branch review,
 > the merge, one merged-tip gate.
@@ -147,7 +142,7 @@ the last comment); the audit; the #47 plan rev 1.1 with its §20 errata
 - **Standing rules.** Gitlink `libs/nfc-tag-core` stays `7e0377a`. **No version bump** (1.6.0 / 19). Commits: one
   casual lowercase subject line; no body, no trailers, no AI attribution. `tools/` never names a screen-driving tool.
   **Implementers never write ledgers.** No dependency is added. **Every `AppGraph` and `FakeGraph` edit lands in
-  B1a–B3b** (#47 C-1): B3c, B4, B5, B6a–c2, B7, B7c, B7b and B8 edit neither.
+  B1a–B3b** (#47 C-1): B3c, B4, B5, B6a–c2, B7, B7c, B7d, B7b and B8 edit neither.
 - **Schema 20 on master.** Master debug builds carry schema 20 under version name 1.6.0: emulator only, never a phone.
   The schema-20 release gate is written by B8 into `docs/release-proofs.md` (C31), run by the release that carries it.
 - **Time boxes:** every brief 1 h target, 2 h hard stop; past 1 h with under half the rows green, stop and report.
@@ -610,83 +605,73 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
 
 ### B7 / B7c — Share intake (C29–C30)
 
-**The owner's binding Share flow (R69-3, DECIDED 2026-10-02 — it replaces the rev 1.1/1.2 three-way step), verbatim:**
-1. *Choose an ACTIVE Asset — exclude transferred-out, replaced and archived Assets, keep the existing transfer-hold
-   restrictions; "active" is lifecycle eligibility — out of season or DOWN does not exclude.*
-2. *Choose where within that Asset to attach: the Asset itself; a CURRENT installed component, navigating recursively
-   through nested components; a SupplyItem linked directly to the Asset or linked to a component through its direct
-   supply link or its composition.*
-3. *Confirm the destination and save. Selecting a component must let the person attach to that component OR continue
-   into its children and linked supplies; navigation alone writes nothing.*
-
-*No standalone Supply or Installed-component entry point; no unrelated global SupplyItem picker. Removed/replaced
-component instances and archived supplies are excluded from the choices. "Navigation establishes context; the final
-selection establishes ownership": choosing a SupplyItem stores the resource ONCE on that SupplyItem (other
-assets/components using it see it) and the confirmation must make that shared ownership clear. Shared PROSE keeps the
-existing Asset-only journal-note destination after the active-Asset selection; files, images and links use the
-hierarchical flow.*
+**R69-3 (DECIDED 2026-10-02, final; quoted verbatim in §6)** drives C29–C30: one "Share to" picker — type dropdown,
+one search box, one list of that type — with direct selection, optional browsing, and prose Asset-only.
 
 - **C29, the destination (fact 12; H8; R69-3).** `AssetChoice` (`A/share/ShareIntakeViewModel.kt:110`) becomes a
-  sealed **`ShareDestination`**, held in `destination` (was `chosen`, `:128`); each arm carries what the confirmation
-  line draws, and nothing a use case reads beyond its id:
+  sealed **`ShareDestination`**, held in `destination` (was `chosen`, `:128`); each arm carries only what the save form
+  draws — **ownership is the final selection**, and no browsing context reaches a command:
 
   ```kotlin
   internal sealed interface ShareDestination {
       data class Asset(val assetId: String, val assetName: String) : ShareDestination
-      /** [path]: the asset's name, then each ancestor component's, then this one's — display only. */
+      /** [path]: the asset's name, each ancestor component's, then this one's (display only). */
       data class Component(val assetId: String, val componentId: String, val path: List<String>) : ShareDestination
-      /** [via]: the asset or component path it was reached through — context only, never stored. */
-      data class Supply(val supplyId: String, val supplyName: String, val via: List<String>) : ShareDestination
+      /** [productLine]: the shipped identifying line (`listRowsOf`'s `detail`), display only. */
+      data class Supply(val supplyId: String, val supplyName: String, val productLine: String) : ShareDestination
   }
   ```
 
   The three save arms map it once, an exhaustive `when` with no `else`: the link arm (`:367-376`) to
   `AddReference.run(ReferenceOwner.OfAsset | OfInstalledComponent | OfSupplyItem)`, the bytes arm (`:418-436`) to
-  `AddAttachment.run(AttachmentOwner.…)` likewise; **the note arm (`:475-480`) takes an `Asset` only** (a prose share
-  never reaches the hierarchy, so its state cannot hold another arm). **Ownership is the final selection only:** a
-  `Supply` destination stores the resource **once, on the SupplyItem** — `via` never reaches a command, and two
-  different paths to one SupplyItem write identical commands. `save` stays the only writer (`:338`); Cancel writes
-  nothing (`:334`) at every step; the #43 security rules, the managed copy and the size checks run before any
-  destination exists and are untouched; every save still meets the guard (`A/di/AppGraph.kt:316`, `:324`). **The
-  confirmation:** the form shows the destination line — an asset's name; a component's `path` joined by P69-20; a
-  SupplyItem's name with **P69-21** under it (shared ownership stated **before** Save) — and "Change" (`:90`). After a
-  save: "Saved to %s" (`:96`, reused) with the asset's name or the component's joined path; **P69-22** for a SupplyItem.
-  The duplicate sentence is C28's twin for the destination's owner kind (ratified P69-11/-12).
-- **C30, the steps (R69-3 DECIDED).**
-  1. **The active asset.** #93's picker step, with one rule changed: the flag `excludeHeld`
-     (`A/ui/asset/AssetViewModels.kt:346-351`, filter at `:448`; its only `true` caller `ShareIntakeActivity.kt:106`)
-     becomes **`activeOnly`**, dropping — once, first, before the controls, the archived count and the empty reason —
-     every row that is not **`Asset.maintainedHere(held)`** (`C/model/Asset.kt:49-60`: ACTIVE, not retired, not
-     transferred out). That excludes archived assets, held (transferred-out) assets and **replaced** assets — #86's
-     Replace retires every predecessor (`C/usecase/ReplaceAsset.kt:46`, R86-3) — while a season, a condition or DOWN
-     plays no part. **Correction to "unchanged":** #93's picker as shipped lists retired (so replaced) assets and,
-     with Archived on, archived ones (`AssetViewModels.kt:519-523`), so it cannot be reused unchanged. The Archived
-     control has nothing left to admit and is **not drawn** in the Share picker: `AssetPicker`
-     (`A/ui/asset/AssetPicker.kt:27-39`) gains one defaulted parameter (`showArchivedControl = true`; the Share passes
-     `false`); the Assets tab is untouched.
-  2. **Where within it** — link and bytes only — one level at a time, titled P69-5 "Attach to":
-     - **the asset level** (headed by the asset's name): **P69-17 "This asset"** (→ `Asset`); then the SupplyItems
-       linked directly to the asset — its applicability rows (`AssetSupplyRepository.forAsset`,
-       `C/ports/Repositories.kt:379-387`), each SupplyItem once, **unarchived only**, by name casefolded then id (→
-       `Supply`); then its current root components;
-     - **a component level** (headed by the shipped P47-5 "Inside %s" with the component's name): **P69-2 "This
-       installed component"** (→ `Component`, reused); then the SupplyItems it names — direct link first, then
-       composition entries in order, each once, **archived excluded** — by **C27's derivation** (one pure function,
-       B6c's, called, never copied); then its current children;
-     - the component rows of a level are `C/model/InstalledComponentTree.current`'s entries (`:67`) whose parent is
-       the level's component (the roots, for the asset level), in `current`'s order — **removed and replaced instances
-       never appear**; a SupplyItem row draws the item's name with the quiet line **P69-18**;
-     - **a component row's tap opens its level** (TalkBack's click label **P69-19**) and writes nothing; a "This …" row
-       or a SupplyItem row chooses the destination and opens the form; Back (system or the shipped top-bar "Back") goes
-       up one level, and from the asset level returns to the picker.
-  3. **Confirm and save** on #93's form (C29's destination line and sentences); "Change" returns to the asset level.
-
-  A **prose** share goes from the active asset straight to the note form, as today; its "Change" returns to the
-  picker. **No** standalone Supply or Installed-component entry point and **no** global SupplyItem picker: the shipped
-  `SupplyItemPicker` is not used by the intake. The dead end `NO_ASSETS` (`:76`, unchanged) shows when no asset passes
-  `maintainedHere(held)`. The view model gains three reads — `supplyItems`, `assetSupplies`, `installedComponents` —
-  which `AppGraph` already exposes (`A/di/AppGraph.kt:370`, `:371`, `:380`): the activity's and the test's
-  constructions take them as arguments; `AppGraph` and `FakeGraph` are not edited.
+  `AddAttachment.run(AttachmentOwner.…)` likewise; **the note arm (`:475-480`) takes an `Asset` only**, reached by
+  selecting an asset on a prose share. A `Supply` destination stores the resource **once, on the catalog item**,
+  however it was reached (directly or while browsing an asset). **The save form is the confirmation — no dialog:**
+  #93's form (`ShareIntakeScreen.kt:249-254`) draws the destination line — an asset's name; a component's joined
+  `path`; a SupplyItem's name, product line and **P69-21** — and "Change" (`:90`), back to the picker **where the
+  destination was chosen** (type, query, level). Saved: "Saved to %s" (`:96`), or **P69-22** for a SupplyItem. `save`
+  stays the only writer (`:338`); Cancel writes nothing (`:334`); the #43 rules run before any destination exists;
+  every save meets the guard (`A/di/AppGraph.kt:316`, `:324`); the duplicate sentence is C28's owner-kind twin.
+- **C30, the picker (R69-3 DECIDED, final).**
+  1. **The type control** (link and bytes only), in the shape of the Assets tab's private `TypeChip`
+     (`A/ui/asset/AssetsScreen.kt:219-245`: an `AssistChip` with the dropdown icon, `Role.DropdownList`, a fixed
+     accessible name — P69-23 — and the choice as its state): "Assets" (default), "Installed components", "Supplies".
+     A **prose** share draws none: Assets only, and an asset opens the note form directly, as today.
+  2. **The search box:** #93's `SearchBox` (`A/ui/asset/AssetSearch.kt:51`), its placeholder made a defaulted
+     parameter (today the private `SEARCH_ASSETS`, `:84`) so the hint follows the type ("Search assets" kept;
+     P69-24, P69-25). One query, kept across a type switch, applied to the selected type only.
+  3. **The lists, eligibility identical on both routes:**
+     - **Assets** — #93's list, its flag `excludeHeld` (`A/ui/asset/AssetViewModels.kt:346-351`, `:448`; only caller
+       `ShareIntakeActivity.kt:106`) becoming **`activeOnly`**: rows not **`Asset.maintainedHere(held)`**
+       (`C/model/Asset.kt:49-60`) dropped first — archived, retired (every replaced asset is, R86-3; a never-replaced
+       retired one too, owner-approved), transferred-out and held; season and DOWN play no part. Search: the shipped
+       `Asset.matches` (`AssetSearch.kt:37`). The Archived control hidden in Share only (`AssetPicker.kt:27-39`, one
+       defaulted parameter). None eligible → **P69-26**; no hit → "Nothing matches that." (`AssetsScreen.kt:286`).
+     - **Installed components** — every **current** row (`removedOn == null`) whose asset is eligible above, from
+       `InstalledComponentRepository.all()`; each row draws the component's name with a quiet line — the asset's name
+       and its ancestors' names joined by P69-20, read whole by TalkBack; ordered by that path casefolded, then id.
+       **The component matcher:** case-insensitive substring over the asset's, each ancestor's and its own name.
+       None eligible → P47-2 "No installed components"; no hit → "Nothing matches that.".
+     - **Supplies** — every **unarchived** SupplyItem, with or without an asset association, drawn by the shipped
+       `SupplyRow` (`A/ui/supplies/SupplyListScreen.kt:112`) from `listRowsOf` (`SupplyListViewModel.kt:14-20`: the
+       name, and manufacturer · part number as the product line). **The supply matcher** (none ships) is a
+       case-insensitive substring over `name`, `manufacturer`, `model` and `partNumber` (`C/model/SupplyItem.kt:21-33`).
+       None → the shipped `NO_SUPPLY_ITEMS_YET` (`A/ui/supplies/SupplyStrings.kt:63`); no hit → "Nothing matches that.".
+  4. **Selecting** a component or a SupplyItem row opens the save form with it as the destination; **selecting an
+     asset row opens browsing** at that asset ("Attach here" is P69-17 / P69-2):
+     - **the asset level:** P69-17 "This asset" (→ `Asset`); the SupplyItems linked to it (its applicability rows,
+       `AssetSupplyRepository.forAsset`, `C/ports/Repositories.kt:379-387`; unarchived, once each, by name) with the
+       quiet line P69-18; its current root components;
+     - **a component level**, headed P47-5 "Inside %s": P69-2 "This installed component" (→ `Component`); the
+       SupplyItems its direct link and composition name, archived excluded, by **C27's derivation** (one pure
+       function, B6c's, called); its current children;
+     - a level's components are `InstalledComponentTree.current`'s entries (`C/model/InstalledComponentTree.kt:67`)
+       whose parent is the level's component, in its order; tapping one opens its level (click label P69-19) and
+       writes nothing; a **breadcrumb** over the level shows the path joined by P69-20; Back (system or the shipped
+       "Back") goes up one level, then to the list with its type, query and scroll **preserved**.
+  Data: `assets`, `installedComponents`, `supplyItems`, `assetSupplies`, already on `AppGraph` (`:370`, `:371`, `:380`)
+  — passed as arguments; `AppGraph`/`FakeGraph` unedited. The pure pieces (eligibility, matchers, rows, paths) live in
+  `A/share/ShareTargets.kt` (new). `NO_ASSETS` (`:76`) is the dead end only when nothing at all is eligible.
 
 ### B8 and cross-cutting (C31–C33)
 
@@ -779,10 +764,11 @@ untyped owner key collides observably.
 | 50 | C26 SupplyItem detail | `SupplyDetailViewModelTest` (+1) · `anArchivedItemIsWritable`; **Compose** `AT/ui/supplies/SupplySurfacesTest` (+3) · both sections drawn below "Used by"; add actions present with a folder; an archived item's sections draw | none in-brief: device cases |
 | 51 | C27 the component screen | `T/ui/installed/InstalledComponentDetailViewModelTest` (new) · `ownSectionsAreKeyedByTheComponent`; `oneGroupPerDistinctSupplyItemDirectFirstThenEntries`; `anArchivedSupplyItemsGroupIsDrawn`; `aHeldAssetMakesOwnSectionsReadOnly`; `aRemovedComponentIsWritable`; `aDeletedAssetGoesBack` (observed, N-8); `aHoldWhileOpenMakesItReadOnly` | a SupplyItem named by the link and an entry drawn twice |
 | 52 | C27 drawn | **Compose** `AT/ui/installed/InstalledComponentDetailTest` (new, ~10 cases) · the title; P69-2 then both own sections; each "From {name}" group with P69-4 and no add or edit action; a group tap opens the SupplyItem; held → no add action; empty sections' shipped lines; **Compose** `InstalledComponentsSectionTest` (+2) · the row sheet offers P69-1 on a current, a removed and a held row; the tap closes the sheet, then reports the id | none in-brief: device cases (B6c2; compiled there, first run at the merged-tip gate) |
-| 53a | C30 step 1, the active asset | `T/ui/asset/AssetPickerModelTest` (+4) · `anArchivedARetiredOrReplacedAndAHeldAssetAreNeverOfferedWhateverArchivedSays`; `anOutOfSeasonOrDownAssetIsOffered`; `theArchivedCountAndTheReasonSeeOnlyEligibleRows`; `theTabListsRetiredAndArchivedAsShipped` (`activeOnly` false) | the filter left at `id !in held` (a retired, replaced asset offered) |
-| 53c | C29 the saves and the confirmation | `T/share/ShareIntakeViewModelTest` (+~8) · each destination's link save calls `AddReference` and bytes save `AddAttachment` with **that** owner; two `via` paths to one SupplyItem write identical commands; a Supply form carries P69-21 and its save P69-22; "Saved to %s" names the asset or the joined component path; the duplicate twin per owner kind; prose saves a note on the asset only; Cancel on the form writes nothing | the bytes arm maps a `Component` destination to its asset (`OfAsset`) |
-| 53 | C30 step 2, the hierarchy | same class (+~10) · the asset level lists "This asset", each unarchived applicability SupplyItem once, then the current root components; a component level lists "This installed component", its direct and composition SupplyItems once each (archived excluded), then its current children; removed and replaced instances never appear; a component tap opens its level and **writes nothing** (witnessed doubles: zero writes); Back goes up a level, then to the picker; a prose share skips the hierarchy; "Change" returns to the asset level; Cancel at any level writes nothing | the level lists a removed child (`current` bypassed); an archived SupplyItem offered |
-| 54 | C30 drawn | **Compose** `AT/share/ShareIntakeScreenTest` (+7) · the asset level's three kinds of row (P69-17, a SupplyItem with P69-18, a component); a component tap opens "Inside {name}" (P47-5) with P69-2 first; the form's destination line (a path joined by P69-20) and P69-21 under a SupplyItem; a prose share opens the form after the asset; the Share picker draws no Archived control; the shipped `:166`, `:308`, `:368` keep their behaviour (the picker is still the first step; arguments only, B7) | none in-brief: device cases (B7b; compiled there, first run at the gate) |
+| 53a | C30 the Assets list (B7) | `T/ui/asset/AssetPickerModelTest` (+4) · `anArchivedARetiredNeverReplacedAReplacedAndAHeldAssetAreNeverOffered`; `anOutOfSeasonOrDownAssetIsOffered`; `noArchivedReasonArisesInTheSharePicker`; `theTabListsRetiredAndArchivedAsShipped` (`activeOnly` false) | the filter left at `id !in held` (a retired asset offered) |
+| 53c | C29 the saves and the save form (B7) | `T/share/ShareIntakeViewModelTest` (+~8) · each destination's link save calls `AddReference` and bytes save `AddAttachment` with **that** owner; a SupplyItem reached directly and one reached while browsing write identical commands; the form's destination line per kind (path joined by P69-20; product line and P69-21 for a SupplyItem); "Saved to %s" / P69-22; the duplicate twin per owner kind; prose saves a note on the asset only; Cancel writes nothing | the bytes arm maps a `Component` destination to its asset (`OfAsset`) |
+| 53b | C30 the direct lists (B7c) | `T/share/ShareTargetsTest` (new, ~12) and `ShareIntakeViewModelTest` (+~4) · each type's list holds that type only; components: current rows of eligible assets only (a removed, a replaced, a held asset's and a retired asset's never), the context line, the path order; the component matcher hits the asset's name, an ancestor's name and its own name, not an unrelated row; supplies: unarchived only, with and without an asset association; the supply matcher over name, manufacturer, model, part number; one query kept across a type switch; per-type empty and no-hit lines; a component or SupplyItem pick opens the form; a prose share has no type control | (1) the component list fed from all types (a type leak); (2) a removed component offered; (3) an archived SupplyItem offered; (4) the matcher reading the own name only (an ancestor search misses) |
+| 53 | C30 browsing (B7d) | `ShareIntakeViewModelTest` (+~8) · an asset row opens its level ("This asset", its unarchived linked SupplyItems once each, its current root components); a component level ("This installed component", direct and composition SupplyItems, current children); removed and replaced instances never appear; the breadcrumb path; **browsing writes nothing** (witnessed doubles: zero writes); Back goes up a level, then to the list with type, query and scroll preserved; "Change" returns to the level chosen from | (1) a level lists a removed child (`current` bypassed); (2) a navigation tap writes (a witnessed write) |
+| 54 | C30 drawn (B7b) | **Compose** `AT/share/ShareIntakeScreenTest` (+11, counted): the type control's three labels with Assets chosen; a component row with its context line; a SupplyItem row with its product line; the per-type search hint; the per-type empty line and "Nothing matches that."; the asset level (P69-17, a SupplyItem with P69-18, a component with P69-19); a component level (P47-5, P69-2, the breadcrumb); the form's component destination line; the form's SupplyItem lines with P69-21; a prose share draws no type control and an asset opens the note form; no Archived control in the Share picker. The shipped `:166`, `:308`, `:368` keep their behaviour (arguments only, B7) | none in-brief: device cases (B7b; compiled there, first run at the gate) |
 | 55 | the boundary unchanged | `AT/share/ShareBoundaryTest` (3), `ShareResolutionContractTest` (4), `SharedItemLiftTest` (7): untouched, re-run at the gate | none: re-run |
 | 56 | C31 the documents | `ReleaseProofPolicyTest` unchanged and green; B8's anchored greps (§7) | none: tripwire |
 | 57 | C33 the fence | the six greps at every brief | none: greps |
@@ -804,8 +790,8 @@ re-read on `ad49b788`; each brief confirms by grep and lists twins).
 | the `T/api` handler construction sites if a handler constructor grows: `MaintenanceFixtures.kt:60`, `:132`; `AttachmentUploadRoutesTest.kt:140`; `LoopbackApiServerTest.kt:717`, `:777`; `MaterializeRoutesTest.kt:106`; a create omitting `assetId` now G1's 400 | B4 | the new routes' handlers (C-4, N-12) |
 | `T/api/CommandShapesGoldenTest.kt:137-139`, `:176-180`; `T/api/ReferenceRoutesTest.kt:748-760`; `InstalledComponentRoutesTest.kt:746-750`; `SupplyRoutesTest.kt:634`; `ApiRouter.kt:98`'s KDoc | B4 | range 1–20, "20 since #69", 81 shapes / 101 rows |
 | `M/tests/test_tools.py:979-994`; `test_argument_guard.py`; the "89" docstrings (`test_reference_tools.py:35`, `test_installed_component_tools.py:45`, `test_maintenance_tools.py:45`, `test_supply_tools.py:45`); `server.py:1265` | B5 | range 1–20; the widened signatures (the count stays 89) |
-| `T/ui/asset/AssetPickerModelTest.kt` (`excludeHeld` → `activeOnly`, one site); `T/share/ShareIntakeViewModelTest.kt` (47; `chosen` → `destination`); `AT/share/ShareIntakeScreenTest.kt` argument-only fixes, `:166`, `:308`, `:368` included — the picker stays the first step, so their behaviour holds | B7 | the destination type and the active-asset rule (R69-3, DECIDED 2026-10-02) |
-| any `ShareIntakeViewModelTest` case that taps an asset on a link or bytes share and expects the form | B7c | the hierarchy now sits between (each a twin, listed) |
+| `T/ui/asset/AssetPickerModelTest.kt` (`excludeHeld` → `activeOnly`, one site); `T/share/ShareIntakeViewModelTest.kt` (47; `chosen` → `destination`); `AT/share/ShareIntakeScreenTest.kt` argument-only fixes, `:166`, `:308`, `:368` included — the Assets list stays the default first view, so their behaviour holds | B7 | the destination type and the active-asset rule (R69-3, final) |
+| `ShareIntakeScreenTest` / `ShareIntakeViewModelTest` construction and `show(…)` arguments as the screen and model gain the picker's and browsing's inputs; any case that taps an asset on a link or bytes share and expects the form | B7c, B7d | the picker, then browsing, sit before the form (each a twin, listed) |
 | `AT/ui/references/ReferencesSectionTest` (12) | B6a | the composable's parameter is an owner (arguments only) |
 
 **Device rows.** No device-boundary class (planning policy's hard rule): the Share grant from another UID is
@@ -814,12 +800,10 @@ target-independent and already proven by `ShareBoundaryTest`; SAF directory crea
 `SafTreeAttachmentStoreContractTest`. What remains is Compose drawing an already-proven state: **one new class**
 (`InstalledComponentDetailTest`, ~10 cases; budget up to ~14, #47's E-33 overran by 4) and cases added to
 `SupplySurfacesTest` (+3), `InstalledComponentsSectionTest` (+2) and `ShareIntakeScreenTest` (+5).
-**Gate growth (C-8, restated):** 58 → **59** device classes, 318 → ~340–344 tests (rev 1.3: +2 Share cases). **#47's base was never timed in
-a clean single run** (#47 §20); the only measured rate is #15's (12.37 min for ~300 tests, **~2.47 s per test**), by
-which today's 318 tests are already **~13.1 min** and #69's tip is **~14.0–14.2 min — at the 14-minute warning line,
-under 15** — and the new cases draw graph-backed screens, dearer per case than the list cases they are compared with.
-Reporting only; #90's 15-minute trigger is not reached; **the #69 merged-tip gate owes the clean single-run
-measurement**, and the #90 question goes to the owner as a flag (§6 F-1), not a ruling. **Known cost:** the SupplyItem detail grows below "Used by", and the
+**Gate growth (C-8; rev 1.4's final UI):** 58 → **59** classes, 318 → ~344–348 tests (Share +11, the component screen
+~10–14, `SupplySurfacesTest` +3, `InstalledComponentsSectionTest` +2). At #15's measured ~2.47 s per test (#47's base was
+never timed cleanly) the base is ~13.1 min and #69's tip **~14.2–14.4 min — over the 14-minute warning, under 15**,
+graph-backed cases dearer still. Reporting only; the merged-tip gate owes the clean single-run measurement (F-1). **Known cost:** the SupplyItem detail grows below "Used by", and the
 installed-component row sheet gains one action, under the shipped `SupplySurfacesTest` and
 `InstalledComponentsSectionTest` — first seen at the merged-tip gate (one fix round, accepted as #15's N-12).
 
@@ -842,23 +826,24 @@ installed-component row sheet gains one action, under the shipped `SupplySurface
 | B6b | `A/ui/supplies/{SupplyDetailScreen,SupplyDetailViewModel}.kt`; `A/ui/nav/ServiceTagRoot.kt` (`:580-589`'s arguments only, C-4); `T/ui/supplies/SupplyDetailViewModelTest.kt`; `AT/ui/supplies/SupplySurfacesTest.kt` | as B6a, and `A/ui/references` |
 | B6c | `A/ui/installed/{InstalledComponentDetailScreen (new),InstalledComponentDetailViewModel (new),InstalledComponentSheets,InstalledComponentsSection,InstalledComponentStrings}.kt`; `A/ui/nav/{Route,ServiceTagRoot}.kt`; `A/ui/asset/AssetDetailScreen.kt` (one defaulted parameter); `T/ui/installed/InstalledComponentDetailViewModelTest.kt` (new) — row 51 | as B6b, and `A/ui/supplies`, `AT/**` |
 | B6c2 | `AT/ui/installed/{InstalledComponentDetailTest (new),InstalledComponentsSectionTest}.kt` — row 52 | every main file |
-| B7 | `A/ui/asset/{AssetViewModels,AssetPicker}.kt` (the `activeOnly` flag; one defaulted parameter); `A/share/{ShareIntakeScreen,ShareIntakeViewModel,ShareIntakeActivity}.kt` (the destination type, the save arms, the form's destination line and P69-20…22); `T/ui/asset/AssetPickerModelTest.kt`, `T/share/ShareIntakeViewModelTest.kt` — rows 53a, 53c; `AT/share/ShareIntakeScreenTest.kt` (arguments) | `C/**`, `A/api`, every other `A/ui/**` main file, the three boundary classes, the manifest, `docs`, `tools` |
-| B7c | `A/share/{ShareIntakeScreen,ShareIntakeViewModel,ShareIntakeActivity}.kt` (the hierarchy step; the three reads); `T/share/ShareIntakeViewModelTest.kt` — row 53 | `C/**`, `A/api`, `A/ui/**` main (calls `InstalledComponentTree.current` and C27's supply derivation as they are), the three boundary classes, the manifest, `docs`, `tools` |
+| B7 | `A/ui/asset/{AssetViewModels,AssetPicker}.kt` (the `activeOnly` flag; one defaulted parameter); `A/share/{ShareIntakeScreen,ShareIntakeViewModel,ShareIntakeActivity}.kt` (the destination type, the save arms, the form's destination lines); `T/ui/asset/AssetPickerModelTest.kt`, `T/share/ShareIntakeViewModelTest.kt` — rows 53a, 53c; `AT/share/ShareIntakeScreenTest.kt` (arguments) | `C/**`, `A/api`, every other `A/ui/**` main file, the three boundary classes, the manifest, `docs`, `tools` |
+| B7c | `A/share/ShareTargets.kt` (new: eligibility, matchers, rows, paths); `A/share/{ShareIntakeScreen,ShareIntakeViewModel,ShareIntakeActivity}.kt` (the type control, the three lists, direct selection); `A/ui/asset/AssetSearch.kt` (`SearchBox`'s defaulted placeholder only); `T/share/ShareTargetsTest.kt` (new), `T/share/ShareIntakeViewModelTest.kt` — row 53b; `AT/share/ShareIntakeScreenTest.kt` (arguments) | `C/**`, `A/api`, every other `A/ui/**` main file (`SupplyRow`, `listRowsOf`, `Asset.matches` called as they are), the boundary classes, the manifest, `docs`, `tools` |
+| B7d | `A/share/{ShareTargets,ShareIntakeScreen,ShareIntakeViewModel}.kt` (browsing: levels, breadcrumb, Back); `T/share/{ShareTargetsTest,ShareIntakeViewModelTest}.kt` — row 53; `AT/share/ShareIntakeScreenTest.kt` (arguments) | `C/**`, `A/api`, `A/ui/**` main (`InstalledComponentTree.current` and C27's derivation called as they are), the boundary classes, the manifest, `docs`, `tools` |
 | B7b | `AT/share/ShareIntakeScreenTest.kt` — row 54 | every main file |
 | B8 | `docs/release-proofs.md`; `docs/design/{04-domain-data-model,14-asset-model}.md` | any `.kt`, `.py`, `tools`, `docs/api`, `docs/versioning.md`, `README.md` |
 
-**B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7c → B7b) — the one parallel pair.** B4's files are `A/api/**`, `docs/api/**` and
+**B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7c → B7d → B7b) — the one parallel pair.** B4's files are `A/api/**`, `docs/api/**` and
 `T/api/**`; the
 UI lane's are `A/ui/references/**`, `A/ui/supplies/{SupplyDetailScreen,SupplyDetailViewModel}.kt`, `A/ui/installed/**`,
 `A/ui/nav/{Route,ServiceTagRoot}.kt`, two lines of `AssetDetailScreen.kt`, `A/share/**` and their tests — **no file in
 common**, and neither edits `AppGraph` or `FakeGraph`. Under the two-lane rule the UI lane may run in a second worktree
 off B3c's tip; the controller lands it before B5, whose `<base>` holds both.
 
-**Order:** B1a → B1b → B2a → B2a2 → B2b → B2b2 → B3a → B3b → B3c → { B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7c → B7b) } →
-B5 → B8 — **nineteen dispatches** (rev 1.3), every one ≤ 1 h by estimate, split **up front** (C-7); no clause is left that
+**Order:** B1a → B1b → B2a → B2a2 → B2b → B2b2 → B3a → B3b → B3c → { B4 ∥ (B6a → B6b → B6c → B6c2 → B7 → B7c → B7d → B7b) } →
+B5 → B8 — **twenty dispatches** (rev 1.4), every one ≤ 1 h by estimate, split **up front** (C-7); no clause is left that
 triggers past an hour. B1b needs nothing of B1a's (core only) but follows it so the schema and format move one at a
 time; B2a needs both (its Room arms read B1a's DAO, its DTO arms B1b's keys); B2a2 B2a's arms; B2b B2a's `OwnerRef`
-and B2a2's doubles; B2b2 B2b's owner type; B3a B2a's lookup; B3b B2b's reference owner; B3c everything core; B4 and B6 the use cases; B7 B6a's owner twins; B7c B7's destination type and B6c's supply derivation; B5 B4's
+and B2a2's doubles; B2b2 B2b's owner type; B3a B2a's lookup; B3b B2b's reference owner; B3c everything core; B4 and B6 the use cases; B7 B6a's owner twins; B7c B7's destination type; B7d B7c's picker and B6c's supply derivation; B5 B4's
 routes; B8 describes everything.
 
 **The owner shape (R69-1, accepted).** (a) nullable FK columns: two `ALTER`s on `attachment` and one rebuild of
@@ -893,14 +878,13 @@ sentences, not one (C28).
 | moving pins | 24 literal + 4 one-past pairs + 7 migration-test assertions (C-1) + strip/key-order twins + the 16 construction sites and ~20 test reads (C-4) + 2 race doubles (C-5) + B4's and B5's ranges, plus 10–20 twins |
 | construction sites (C-1) | `AddAttachment` (21), `HeldWriteGuard` (8) in B2a; `AddReference` (7) in B2b; `DeleteAsset` (5) in B3b — the review's counts, each re-counted by its brief |
 | new phone strings | **16** (P69-1…16), 0 relabels |
-| device classes | 58 → **59**, ~+22–26 cases, **~14.0–14.2 min** by #15's measured rate (C-8; rev 1.3) |
-| dispatches | **19** (rev 1.3: B7 split into B7 and B7c), all split up front |
+| device classes | 58 → **59**, ~+26–30 cases, **~14.2–14.4 min** by #15's measured rate (C-8; rev 1.4) |
+| dispatches | **20** (rev 1.4: Share in B7, B7c, B7d, B7b), all split up front |
 
 **Gate budget** at the merged tip (estimates; B1a records the base's exact counts): core +~95 (format 15, domain and
 seams 30, merge 10, pack, return and delete 12, scenario 6, use cases 22); app +~75 (Room 12, routes 25, view models
-24, Share 14, wire 3); MCP +~20; loader unchanged; device classes **59**, **~14.0–14.2 min at #15's measured ~2.47
-s per test — at the 14-minute warning line, under 15** (C-8). #47's base was never timed in a clean single run; the
-#69 merged-tip gate owes that measurement. Reporting only, no rerun-until-green; #90 is the owner's (§6 F-1).
+24, Share ~36, wire 3); MCP +~20; loader unchanged; device classes **59**, **~14.2–14.4 min** (§3's projection;
+over the 14-minute warning, under 15; reporting only; F-1 stands).
 
 **Between-brief gaps (N-1)** — each unreachable on the branch (no UI or API path writes a new owner before B4, B6 or
 B7), each closed by its row:
@@ -917,7 +901,7 @@ B7), each closed by its row:
 
 ## 5. Strings
 
-**RATIFIED by the owner as one block (2026-10-02): P69-1…16 as written here, the reused words, G1–G3** — rev 1.3: P69-6…10 withdrawn and P69-5 re-homed by R69-3's replacement; P69-17…22 PROPOSED, pending ratification (below). Each new string is declared once as a `const val` (or a
+**RATIFIED by the owner as one block (2026-10-02): P69-1…16 as written here, the reused words, G1–G3** — P69-6…10 withdrawn and P69-5 re-homed by R69-3's replacement; rev 1.3's Share strings RATIFIED and rev 1.4's PROPOSED (below). Each new string is declared once as a `const val` (or a
 one-line function for a format) at the home named, and imported, never copied.
 
 | id | proposed wording | home · where (contract) |
@@ -926,7 +910,7 @@ one-line function for a format) at the home named, and imported, never copied.
 | P69-2 | "This installed component" — **the recommendation** (rev 1 "This component"; P69-8's noun, since the asset detail keeps a child-Asset "Components" section until #98) | same · the heading over the component's own Documents and References (C27) |
 | P69-3 | "From %s" — `%s` the SupplyItem's name | same · each open-only group's heading; a tap opens the SupplyItem (C27) |
 | P69-4 | "Open the supply to add or change these." — **the recommendation** (rev 1 "Added and changed on the supply."; "Open" from `ReferencesSection.kt:245`) | same · the quiet line under each group's heading (C27) |
-| P69-5 | "Attach to" — **re-homed, PROPOSED (rev 1.3) — pending ratification** (ratified for the withdrawn three-way step) | `IntakeStrings` · the title of the hierarchy step, every level (C30 step 2) |
+| P69-5 | "Attach to" — **RATIFIED 2026-10-02 (rev 1.3) in its new home** | `IntakeStrings` · the title over a browsing level (C30 step 4) |
 | P69-6 … P69-10 | "Asset", "Supply", "Installed component", "Choose an installed component", "%1$s · %2$s" — **WITHDRAWN (rev 1.3)**: they named the three-way first step R69-3 replaced; P69-17…20 take their places | — |
 | P69-11 | "That link is already on this supply" | `A/ui/references/ReferencesSectionViewModel.kt` beside `:283` (declared by B6a; `IntakeStrings` imports it in B7) (C28) |
 | P69-12 | "That link is already on this installed component" | as P69-11 (C28) |
@@ -935,18 +919,30 @@ one-line function for a format) at the home named, and imported, never copied.
 | P69-15 | "This supply already has this file: %s." | `MaterializeStrings.kt` (C28; P85-17's shape) |
 | P69-16 | "This installed component already has this file: %s." | as P69-15 (C28) |
 
-**PROPOSED (rev 1.3) — pending ratification** (R69-3's replacement; the owner ratifies them, with P69-5's new home, as one block). Homes: `IntakeStrings` (`A/share/ShareIntakeViewModel.kt:76-97`), each declared once:
+**RATIFIED 2026-10-02 (rev 1.3's Share strings, as the owner reworded them; kept by rev 1.4).** Homes: `IntakeStrings` (`A/share/ShareIntakeViewModel.kt:76-97`), each declared once:
+
+| id | wording | where (contract) |
+|---|---|---|
+| P69-17 | "This asset" | an asset level's first row: the asset itself as the destination (C30 step 4) |
+| P69-18 | "Supply — shared across uses" | the quiet line under each SupplyItem row on a browsing level (C30) |
+| P69-19 | "Show what is inside %s" — `%s` the component's name | a component row's click label (TalkBack) on a browsing level (C30) |
+| P69-20 | "%1$s › %2$s" — joins a path: the asset's name, then each component's | the breadcrumb, a component result's context line, the form's component line, the argument of "Saved to %s" (C29, C30) |
+| P69-21 | "This will be saved on the supply %s and available wherever that supply is used." | on the save form under a SupplyItem destination — no dialog (C29) |
+| P69-22 | "Saved to supply %s." | the saved line after a SupplyItem save (C29) |
+
+**Reused and approved, verbatim from their homes:** P69-2 "This installed component" (a component level's first row); P47-5 "Inside %s" (a component level's heading, `A/ui/installed/InstalledComponentStrings.kt`); "Saved to %s" (`ShareIntakeViewModel.kt:96`); "Change" (`:90`); "Back"; P69-11/-12 for a duplicate link; `NO_ASSETS` (`:76`).
+
+**PROPOSED (rev 1.4) — pending ratification:** only the words the combined picker adds (C30 steps 1–3); homes `IntakeStrings` unless named.
 
 | id | proposed wording | where (contract) |
 |---|---|---|
-| P69-17 | "This asset" | the asset level's first row: the asset itself as the destination (C30 step 2) |
-| P69-18 | "Supply — shared wherever it is used" | the quiet line under each SupplyItem row at either level (C30) |
-| P69-19 | "Show what is inside %s" — `%s` the component's name | a component row's click label (TalkBack), opening its level (C30) |
-| P69-20 | "%1$s › %2$s" — joins the path: the asset's name, then each component's | the form's destination line for a component, and the argument of "Saved to %s" (C29) |
-| P69-21 | "This will be saved on the supply %s. Every asset and component that uses it will see it." | under the destination line on the form, a SupplyItem destination only, before Save (C29) |
-| P69-22 | "Saved on the supply %s — every asset and component that uses it sees it." | the saved line after a SupplyItem save (C29) |
-
-**Reused in the Share hierarchy, verbatim from their homes:** P69-2 "This installed component" (a component level's first row); P47-5 "Inside %s" (a component level's heading, `A/ui/installed/InstalledComponentStrings.kt`); "Saved to %s" (`ShareIntakeViewModel.kt:96`) for an asset or a component; "Change" (`:90`); "Back"; P69-11/-12 for a duplicate link; `NO_ASSETS` (`:76`).
+| P69-23 | "Share to" | the picker's title and the type control's accessible name (C30 step 1) |
+| — | "Assets", "Installed components", "Supplies" — **the shipped words, reused** (`A/ui/nav/BottomBar.kt:52`; P47-1, `InstalledComponentStrings.kt:14`; `SUPPLIES_SECTION`, `A/ui/supplies/SupplyStrings.kt:18`) | the type control's three labels (C30 step 1) — to confirm |
+| — | "Search assets" — **#93's hint, reused** (`A/ui/asset/AssetSearch.kt:84`) | the search box with Assets chosen (C30 step 2) |
+| P69-24 | "Search installed components" | the search box with Installed components chosen (C30 step 2) |
+| P69-25 | "Search supplies" | the search box with Supplies chosen (C30 step 2) |
+| P69-26 | "No active assets" | the Assets list when no asset is eligible (C30 step 3) |
+| — | P47-2 "No installed components"; `NO_SUPPLY_ITEMS_YET` "No supply items yet. Add one under Maintenance › Supplies." (`SupplyStrings.kt:63`); "Nothing matches that." (`A/ui/asset/AssetsScreen.kt:286`) — **reused** | the empty Installed components and Supplies lists; a query with no hit, every type (C30 step 3) |
 
 **Reused verbatim from their one home:** "Documents", "No documents yet", "Add file", "Take photo"
 (`A/ui/attachments/DocumentsSection.kt:93`, `:100`, `:108-109`); "References", "No references yet", "Add link", "Open"
@@ -991,7 +987,7 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
 | **R69-0** | **owner — DECIDED 2026-10-02** | **The scope sentence** (header): ratify as written, or amend. | every brief's must-nots |
 | R69-1 | controller default | **The owner shape (a):** nullable owner FK columns, each CASCADE, exactly one set, enforced on the Room write and the backup read; the sealed `AttachmentOwner` gains two members; `asset_reference` rebuilt with one unique `(owner, uri)` index per owner. (b) loses referential safety exactly where #47 made rows leave only by CASCADE; (c) forks the use cases, views and #85 (§4's table). | C4–C13 |
 | **R69-2** | **owner — DECIDED 2026-10-02** | **The vendor URL (AC11 against #15's "no URL"):** recommend **C — reference rows owned by the SupplyItem, no marker**; **D** (a soft `preferred_reference_id`) only if one link must be marked preferred (+1 brief B2d, a C12-style exception, a PATCH key and a `clear_fields` entry); **never A** (a second link system). §4's table costs all four. | C20, C31, §4 |
-| **R69-3** | **owner — DECIDED 2026-10-02 (REPLACED; supersedes the rev 1.2 three-way step)** | **The binding Share flow, the owner's words:** "1. Choose an ACTIVE Asset — exclude transferred-out, replaced and archived Assets, keep the existing transfer-hold restrictions; 'active' is lifecycle eligibility — out of season or DOWN does not exclude. 2. Choose where within that Asset to attach: the Asset itself; a CURRENT installed component, navigating recursively through nested components; a SupplyItem linked directly to the Asset or linked to a component through its direct supply link or its composition. 3. Confirm the destination and save. Selecting a component must let the person attach to that component OR continue into its children and linked supplies; navigation alone writes nothing. No standalone Supply or Installed-component entry point; no unrelated global SupplyItem picker. Removed/replaced component instances and archived supplies are excluded from the choices. 'Navigation establishes context; the final selection establishes ownership': choosing a SupplyItem stores the resource ONCE on that SupplyItem (other assets/components using it see it) and the confirmation must make that shared ownership clear. Shared PROSE keeps the existing Asset-only journal-note destination after the active-Asset selection; files, images and links use the hierarchical flow." **Planner's reading (flagged):** "active" = `Asset.maintainedHere(held)`, so a retired asset with no successor is excluded too. | C29–C30, rows 53–54, P69-5, P69-17…22 |
+| **R69-3** | **owner — DECIDED 2026-10-02 (final; supersedes both earlier layouts)** | **The binding Share flow, the owner's words:** "One 'Share to' picker with (a) a type dropdown — Assets / Installed components / Supplies — defaulting to Assets; (b) a search box filtering the selected type; (c) ONE list showing only that type, with enough context to distinguish similarly named items. Direct selection is fast: choose the type, optionally search, select the destination, then the EXISTING save form — no additional confirmation dialog. Asset browsing remains available alongside: selecting an Asset offers 'Attach here' and access to its components and linked supplies; selecting a component offers 'Attach here', its nested components and its linked supplies; this continues recursively with a breadcrumb and Back preserving the position; selecting a SupplyItem makes it the destination. Direct component results show Asset name → component ancestry → component name, and search matches that context as well as the component's own name. Supplies show their identifying product information; selecting one attaches to the shared catalog item, with that ownership clear ON THE SAVE FORM. Eligibility, consistent across both routes: Assets — exclude transferred-out, replaced, archived and transfer-held; Components — current instances belonging to eligible Assets; Supplies — unarchived SupplyItems, reachable directly without an Asset association. Shared prose keeps the existing Asset-only journal-note path. Amend only the affected Share UI, strings and tests; the resource model stays." **Approved with it (2026-10-02):** "active" = `Asset.maintainedHere` (a retired asset is excluded even when never replaced) plus the transfer-hold restrictions; the Archived control hidden in Share only; browsing one level at a time with "This asset" / "This installed component" (the owner's "Attach here"), linked supplies, children and Back. | C29–C30, rows 53, 53a–53c, 54, §5 |
 | **R69-4** | **owner — DECIDED 2026-10-02** | **The Asset detail:** recommend it **reaches** its components' and SupplyItems' resources by navigation only (a component row → its screen; a Supplies row → the SupplyItem detail) and never lists them (AC12: nothing reads as Asset-owned; the busiest screen does not grow). | C27, §1 out |
 | R69-5 | controller default | **Schema 20 / format 20, a normal bump.** Never amend the unreleased 19 in place: emulator databases and format-19 exports exist, and Room refuses a hash mismatch with no migration. ~40 mechanical sites (§3). | C6–C10 |
 | R69-6 | controller default | **Document roles on SupplyItem- and component-owned files too** (R67-11 widened to "anything but an entry's file"; `DocumentRole.kt:9-11` anticipates it); **no new `AttachmentKind`** — SPECIFICATION and DIAGRAM stay `DOCUMENT` (§5's table). Load-bearing for AC13: #85 carries the reference's role into its saved file. | C4, C5, C17, C25 |
@@ -1014,7 +1010,7 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
   skips; rows 50, 52 and 54 run here first — a red is one post-merge fix round), R3 (the three Python suites), R5
   (`ManifestContractTest`, `MergedManifestContractTest`, `VersionAgreementTest`), R6 greps. `ReleaseProofPolicyTest`
   unchanged and green. **Record the environment** (#47 §20: which emulator, how started, whether one run). **A clean
-  single-run wall time is owed here** (#47's base was never measured in one): estimated ~14.0–14.2 min at #15's
+  single-run wall time is owed here** (#47's base was never measured in one): estimated ~14.2–14.4 min at #15's
   ~2.47 s per test — at the 14-minute warning line, under 15; reporting only (C-8, §6 F-1). B6c2's and B7b's Compose
   cases (rows 52, 54) and B6b's (row 50) first run here.
 - **R6 greps (anchored; `git grep -nE`), expected counts at the tip:**
@@ -1071,7 +1067,7 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
   **#76** — the roadmap of record. **#90** — the gate-time trigger is not reached (§3). **#62** — no black-box UI
   driving; rows 50, 52 and 54 are tier-2 Compose semantics.
 
-## Briefs — common to every brief (nineteen dispatches)
+## Briefs — common to every brief (twenty dispatches)
 
 Read §1–§8, the audit, issue #69 (`.superpowers/sdd/2026-10-01-issue-69/issue-69.md`, the FINAL clarification) and
 every earlier report on this branch. **Dispatch precondition:** R69-0, R69-2, R69-3, R69-4 ruled and §5 ratified. **The
@@ -1288,39 +1284,47 @@ a SupplyItem group; copy a SupplyItem's row into the component's list; read the 
 gate); add a device-boundary class. **Counted RED (0):** device cases. **Caps:** 3 runs (`compileDebugAndroidTestKotlin`);
 1 h / 2 h. **Size:** ~12 cases, about 280 test lines. **Estimate:** 40 min.
 
-## 24. B7 — Share intake: the active asset, the destination and the saves (C29, C30 step 1; app JVM)
+## 24. B7 — Share: the destination, the active assets and the save form (C29; C30's Assets list; app JVM)
 
-**Read:** audit §6, H8; this plan's C29, C30 and §6 R69-3 (the owner's text); `A/share/*`;
-`A/ui/asset/AssetViewModels.kt:329-360`, `:440-476`, `:515-526`; `A/ui/asset/AssetPicker.kt`; `C/model/Asset.kt:40-60`;
-`T/ui/asset/AssetPickerModelTest.kt`; `T/share/ShareIntakeViewModelTest.kt`; `AT/share/ShareIntakeScreenTest.kt`
-(compile only); #93's plan (`docs/superpowers/plans/2026-10-01-issue-93-share-intake-asset-picker.md`). **Rows:** 53a,
-53c, 55 (re-run) and B7's pins. **Rulings:** R69-3, R69-13. **Interfaces produced:** `activeOnly`, `ShareDestination`
-(at B7's tip a link or bytes share still goes asset → form with an `Asset` destination; B7c inserts the hierarchy).
-**Greps:** the three boundary classes' diff → empty; `AndroidManifest.xml` diff → empty; `'excludeHeld'` → 0;
-P69-20…22 each declared once; `SupplyItemPicker` not referenced from `A/share`. **Untouched:** as §4. **Must NOT:**
-let `via` reach a command; give a prose share a non-`Asset` destination; offer an archived, retired or held asset;
-change a security rule; write before Save; change the Assets tab's behaviour. **Counted RED (2):** rows 53a, 53c.
-**Caps:** 7 runs; 1 h / 2 h. **Size:** about 110 production lines, 240 test lines. **Estimate:** 55 min.
+**Read:** audit §6, H8; C29, C30 and §6 R69-3; `A/share/*`; `A/ui/asset/AssetViewModels.kt:329-360`, `:440-476`,
+`:515-526`; `A/ui/asset/AssetPicker.kt`; `C/model/Asset.kt:40-60`; `T/ui/asset/AssetPickerModelTest.kt`;
+`T/share/ShareIntakeViewModelTest.kt`; `AT/share/ShareIntakeScreenTest.kt` (compile only); #93's plan. **Rows:** 53a,
+53c, 55 (re-run), B7's pins. **Rulings:** R69-3, R69-13. **Interfaces produced:** `activeOnly`, `ShareDestination`, the
+save form's destination lines (at B7's tip a share still goes asset → form). **Greps:** the boundary classes' and the
+manifest's diff → empty; `'excludeHeld'` → 0; P69-21, P69-22 declared once. **Must NOT:** offer an archived, retired or
+held asset; give prose a non-`Asset` destination; add a confirmation dialog; change a security rule or the Assets tab.
+**Counted RED (2):** rows 53a, 53c. **Caps:** 7 runs; 1 h / 2 h. **Size:** ~100 production, 220 test lines.
+**Estimate:** 55 min.
 
-## 25. B7c — Share intake: the hierarchy step (C30 step 2; app JVM)
+## 25. B7c — Share: the type control, the search and the direct lists (C30 steps 1–3; app JVM)
 
-**Read:** this plan's C30, C27 (the supply derivation B6c wrote) and B7's report; `C/model/InstalledComponentTree.kt`;
-`C/ports/Repositories.kt:379-387`; `A/di/AppGraph.kt:370-382`; `A/share/*`; `T/share/ShareIntakeViewModelTest.kt`.
-**Rows:** 53 and B7c's twins. **Rulings:** R69-3, R69-10. **Interfaces produced:** the level state and its navigation.
-**Greps:** `git diff <base> -- app/src/main/kotlin/com/loosecannon/servicetag/ui core` → empty; P69-17…19 each declared
-once; `AppGraph`/`FakeGraph` diff → empty. **Untouched:** as §4. **Must NOT:** list a removed or replaced component or an
-archived SupplyItem; re-implement the current tree or the supply derivation; write on a navigation tap; add a
-standalone Supply or component entry point. **Counted RED (2):** row 53's removed-child and archived-supply cases.
-**Caps:** 7 runs; 1 h / 2 h. **Size:** about 130 production lines, 240 test lines. **Estimate:** 55 min.
+**Read:** C30; B7's report; `A/ui/asset/{AssetSearch,AssetsScreen}.kt` (`SearchBox`, `Asset.matches`, `TypeChip`
+`:219-245`, "Nothing matches that." `:286`); `A/ui/supplies/{SupplyListScreen,SupplyListViewModel,SupplyStrings}.kt`;
+`C/model/{SupplyItem,InstalledComponent}.kt`; `C/ports/Repositories.kt` (the component and catalog reads). **Rows:**
+53b and its twins. **Rulings:** R69-3. **Interfaces produced:** `A/share/ShareTargets.kt`. **Greps:** `AssetSearch.kt`
+diff → `SearchBox`'s defaulted placeholder only; `AppGraph`/`FakeGraph` diff → empty; P69-23…26 declared once.
+**Must NOT:** let one type's list show another's rows; offer a removed component, a held or retired asset's component
+or an archived SupplyItem; copy `TypeChip`, `SupplyRow` or `Asset.matches` instead of calling or mirroring as C30 says;
+add a standalone entry point outside the picker. **Counted RED (4):** row 53b's four mutations. **Caps:** 8 runs;
+1 h / 2 h. **Size:** ~140 production, 280 test lines. **Estimate:** 60 min.
 
-## 26. B7b — Share intake drawn (row 54; Compose sources)
+## 26. B7d — Share: browsing from an asset or a component (C30 step 4; app JVM)
 
-**Read:** this plan's C29–C30; B7's and B7c's reports; `AT/share/ShareIntakeScreenTest.kt`. **Rows:** 54 (the shipped
-`:166`, `:308`, `:368` keep their behaviour). **Greps:** `git diff <base_of_B7b> -- '*/src/main/*'` → empty.
-**Untouched:** every main file; the three boundary classes. **Must NOT:** run a device. **Counted RED (0):** device
-cases. **Caps:** 3 runs; 1 h / 2 h. **Size:** ~7 new cases, about 200 test lines. **Estimate:** 40 min.
+**Read:** C30, C27 (B6c's supply derivation), B7c's report; `C/model/InstalledComponentTree.kt`;
+`C/ports/Repositories.kt:379-387`; `A/share/*`; `T/share/*`. **Rows:** 53. **Rulings:** R69-3, R69-10. **Greps:**
+`git diff <base> -- app/src/main/kotlin/com/loosecannon/servicetag/ui core` → empty. **Must NOT:** list a removed or
+replaced component or an archived SupplyItem; re-implement the current tree or the supply derivation; write on a
+navigation tap; lose the list's type, query or scroll on Back. **Counted RED (2):** row 53's two mutations.
+**Caps:** 6 runs; 1 h / 2 h. **Size:** ~110 production, 220 test lines. **Estimate:** 50 min.
 
-## 27. B8 — the documents and the release-proofs paragraph (C31–C32; docs)
+## 27. B7b — Share drawn (row 54; Compose sources)
+
+**Read:** C29–C30; the B7, B7c and B7d reports; `AT/share/ShareIntakeScreenTest.kt`. **Rows:** 54 (11 counted cases;
+the shipped `:166`, `:308`, `:368` keep their behaviour). **Greps:** `git diff <base_of_B7b> -- '*/src/main/*'` →
+empty. **Untouched:** every main file; the boundary classes. **Must NOT:** run a device. **Counted RED (0):** device
+cases. **Caps:** 3 runs; 1 h / 2 h. **Size:** ~11 cases, about 300 test lines. **Estimate:** 50 min.
+
+## 28. B8 — the documents and the release-proofs paragraph (C31–C32; docs)
 
 **Read:** `docs/release-proofs.md:120-140`; `docs/design/04-domain-data-model.md:438-460`; `docs/design/14-asset-model.md`;
 every report on the branch. **Rows:** 56. **Greps:** `'^\*\*The first signed release carrying Room schema 20'` in
