@@ -50,6 +50,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.isWrittenFor
 import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
@@ -344,18 +345,19 @@ class AssetsViewModel(
      */
     transfers: TransferRecordRepository? = null,
     /**
-     * #93 (C2): the Share intake's asset picker — every held row is dropped once, first, before the controls, the
-     * archived count and the empty reason run, so a held asset is never offered whatever Archived says. False (the
-     * tab) lists held rows as #77 rules them.
+     * #93 (C2), #69 (C30, R69-3): the Share intake's asset picker — every row not [maintainedHere] (archived,
+     * retired — a replaced one included — or held) is dropped once, first, before the controls, the archived count and
+     * the empty reason run, so Share offers active assets only whatever Archived says; season and condition play no
+     * part. False (the tab) lists them as #73 and #77 rule them.
      */
-    excludeHeld: Boolean = false,
+    activeOnly: Boolean = false,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, excludeHeld: Boolean = false) : this(
+    constructor(graph: AppGraph, activeOnly: Boolean = false) : this(
         graph.assets, graph.categories, graph.seasonActivations, graph.tags, graph.assetHealthReadModel, graph.today,
         loans = graph.loans,
         transfers = graph.transferRecords,
-        excludeHeld = excludeHeld,
+        activeOnly = activeOnly,
     )
 
     private val filters = MutableStateFlow(AssetFilters())
@@ -443,9 +445,9 @@ class AssetsViewModel(
             val controls = if (stale != null) picked.copy(type = null) else picked
             val day = today.localDate()
             val byId = rows.associateBy { it.id }
-            // #93 (C2): the picker's rows — held ones dropped once, here, before the controls, the count and the
-            // reason; byId above keeps every row, so a component of a held parent still names it.
-            val eligible = if (excludeHeld) rows.filter { it.id !in held } else rows
+            // #93 (C2), #69 (C30): the picker's rows — those not maintained here dropped once, here, before the controls,
+            // the count and the reason; byId above keeps every row, so a component of a held parent still names it.
+            val eligible = if (activeOnly) rows.filter { it.maintainedHere(held) } else rows
             // The four predicates, ANDed: the three controls admit a row, and the query searches only
             // what they admitted (R73-1) — #39's six-field predicate, unchanged.
             val matching = eligible.filter { controls.admits(it, held) && it.matches(query) }

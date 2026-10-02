@@ -184,6 +184,7 @@ internal fun AssetsFilterRow(
     onToggleComponents: () -> Unit,
     onToggleArchived: () -> Unit,
     modifier: Modifier = Modifier,
+    archivedControl: Boolean = true,
 ) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -197,7 +198,7 @@ internal fun AssetsFilterRow(
             label = { Text(COMPONENTS) },
             shape = ControlShape,
         )
-        FilterChip(
+        if (archivedControl) FilterChip(
             selected = filters.showArchived,
             onClick = onToggleArchived,
             label = { Text(ARCHIVED) },

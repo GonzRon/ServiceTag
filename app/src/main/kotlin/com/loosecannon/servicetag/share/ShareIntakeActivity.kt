@@ -101,9 +101,10 @@ class ShareIntakeActivity : ComponentActivity() {
                         modifier = Modifier.padding(top = 24.dp),
                     )
                 } else {
-                    // #93 (C9): the picker is the Assets tab's own list model, switched to drop held assets (C2). It
-                    // outlives the two steps, so the query and the controls survive a Change (R93-12).
-                    val picker = viewModel(key = "share-asset-picker") { AssetsViewModel(graph, excludeHeld = true) }
+                    // #93 (C9): the picker is the Assets tab's own list model, switched to offer only the assets maintained
+                    // here (C2; #69 C30, R69-3). It outlives the two steps, so the query and the controls survive a Change
+                    // (R93-12).
+                    val picker = viewModel(key = "share-asset-picker") { AssetsViewModel(graph, activeOnly = true) }
                     val pickerState by picker.state.collectAsStateWithLifecycle()
                     // The box draws from the model's own query holder, never `pickerState.query` (F3, the tab's shape).
                     val pickerQuery by picker.query.collectAsStateWithLifecycle()
