@@ -45,6 +45,7 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
@@ -276,8 +277,8 @@ import java.security.MessageDigest
  *
  * This propagates `IllegalStateException` from [AssetTree.parentsFirst] on a cyclic asset set (and from
  * [InstalledComponentTree.parentsFirst] on a cyclic installed-component set),
- * `BackupCorrupt` from a `toDomain()` that cannot name a value, and an NPE from the attachment
- * pass's `eventId!!` if a row names neither owner. `BackupCodec.decode` refuses all three before a
+ * and `BackupCorrupt` from a `toDomain()` that cannot name a value — an attachment or a reference naming no owner, or
+ * more than one, included (#69). `BackupCodec.decode` refuses each before a
  * plan exists, so no caller of `BuildBackupMergePlan` can reach them — only a test constructing a
  * `Backup` directly can. See Task 1 decision 10 for what the API maps them to.
  */
@@ -662,6 +663,9 @@ internal fun mergePlanOf(
     val installedComponentDtos = data.installedComponents.associateBy { it.id }
     val installedComponentWrites = mutableListOf<InstalledComponent>()
     val acceptedInstalledComponents = mutableSetOf<String>()
+    // #69 (C14): the one reading of "here or accepted" for a component — its children's parent arm below, and the
+    // files and links it owns, decided after this pass.
+    fun installedComponentAvailable(id: String) = id in localInstalledComponents || id in acceptedInstalledComponents
     for (row in InstalledComponentTree.parentsFirst(data.installedComponents.map { it.toDomain() })) {
         val id = row.id.value
         val dto = installedComponentDtos.getValue(id)
@@ -681,7 +685,7 @@ internal fun mergePlanOf(
                 MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
             missingSupply != null ->
                 MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingSupply)
-            parent != null && parent !in localInstalledComponents && parent !in acceptedInstalledComponents ->
+            parent != null && !installedComponentAvailable(parent) ->
                 MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, parent)
             replacementHolder != null ->
                 MergeDecision(
@@ -998,11 +1002,13 @@ internal fun mergePlanOf(
         val local = localAttachments[id]
         val locatorKey = dto.storageProvider to dto.storageLocator
         val locatorHolder = claimedLocators[locatorKey]
-        val owner = dto.assetId ?: dto.eventId!!
-        val ownerAvailable = if (dto.assetId != null) {
-            assetAvailable(dto.assetId)
-        } else {
-            dto.eventId in localEvents || dto.eventId in acceptedEvents
+        // #69 (C14): each of the four owners resolves here or in this plan — an event and a component by "here or
+        // accepted", both passes preceding this one — and one that does not is named by its own id.
+        val missingOwner = when (val owner = row.owner) {
+            is AttachmentOwner.OfAsset -> owner.assetId.value.takeUnless { assetAvailable(it) }
+            is AttachmentOwner.OfEvent -> owner.eventId.value.takeUnless { it in localEvents || it in acceptedEvents }
+            is AttachmentOwner.OfSupplyItem -> owner.supplyId.value.takeUnless { supplyItemAvailable(it) }
+            is AttachmentOwner.OfInstalledComponent -> owner.componentId.value.takeUnless { installedComponentAvailable(it) }
         }
         val stored = snapshot.storedBytes[dto.storageLocator]
         decisions += when {
@@ -1010,8 +1016,8 @@ internal fun mergePlanOf(
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
-            !ownerAvailable ->
-                MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, owner)
+            missingOwner != null ->
+                MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingOwner)
             locatorHolder != null ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.ATTACHMENT_LOCATOR_TAKEN, locatorHolder)
             !snapshot.attachmentStoreConfigured ->
@@ -1039,9 +1045,9 @@ internal fun mergePlanOf(
     }
 
     // --- references (1.3, D-18 C) -----------------------------------------------------------
-    // After ATTACHMENTS in write order: a reference's only foreign key is `asset_id`, so any
-    // position after ASSETS would do, and 1.3 appended it as the smaller diff; 1.4's three tables
-    // follow it. The arm order is the closure pass's, with one
+    // After ATTACHMENTS in write order: a reference's foreign keys are its owner's — an asset, a SupplyItem or an
+    // installed component (#69) — so any position after those three would do, and 1.3 appended it as the smaller
+    // diff; 1.4's three tables follow it. The arm order is the closure pass's, with one
     // difference that is the whole of D-18 C: the **diverged** second identity is a `SKIPPED` and
     // never a `CONFLICT`, because there is no UPDATE verdict for the incoming name and description
     // to be adopted by, so refusing the archive could not produce a better merged state.
@@ -1067,8 +1073,7 @@ internal fun mergePlanOf(
         val missingOwner = when (val owner = incoming.owner) {
             is ReferenceOwner.OfAsset -> owner.assetId.value.takeUnless { assetAvailable(it) }
             is ReferenceOwner.OfSupplyItem -> owner.supplyId.value.takeUnless { supplyItemAvailable(it) }
-            is ReferenceOwner.OfInstalledComponent -> owner.componentId.value
-                .takeUnless { it in localInstalledComponents || it in acceptedInstalledComponents }
+            is ReferenceOwner.OfInstalledComponent -> owner.componentId.value.takeUnless { installedComponentAvailable(it) }
         }
         val local = localReferences[id]
         val samePair = localReferencesByPair[pair]
