@@ -4,8 +4,9 @@ import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 
 /*
  * #47 (§5, ratified 2026-10-01) — the Installed components words the phone draws, one home per literal, imported and
- * never copied. Every P47 string is declared here once, P47-1 to P47-25: the section draws some, and the sheets and
- * the composition editor draw the rest. A format is a one-line function, so its argument is named where it is filled.
+ * never copied. Every new string of the ratified block is declared here once: the section draws some, and the sheets
+ * and the composition editor draw the rest. A format is a one-line function, so its argument is named where it is
+ * filled.
  * The reused words (§5's list) stay at their own homes and are imported from there.
  */
 
