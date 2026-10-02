@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -22,10 +24,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.usecase.CompositionInput
 import com.loosecannon.servicetag.ui.asset.NAME_FIELD
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
+import com.loosecannon.servicetag.ui.supplies.ADD_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.LINK_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.REMOVE_LINK
@@ -39,12 +44,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * #47 (C25–C27; row 53, the list and sheet cases): the asset's Installed components section drawn.
- * [InstalledComponentsList] and the sheets are pure functions of their arguments, so every case renders one directly,
- * as `SupplySurfacesTest` renders `AssetSuppliesList` and the role sheet; the state they draw is proven on the JVM
- * (rows 50 and 51). What only a device shows is the indent, the wording that reaches the semantics tree, the toggle,
- * a sheet's fields, sentences and buttons, and which controls a read-only section or sheet leaves out. The composition
- * cases are the next brief's.
+ * #47 (C25–C27; row 53, the list, sheet and composition cases): the asset's Installed components section drawn.
+ * [InstalledComponentsList], the sheets and the composition's lines and editor are pure functions of their arguments,
+ * so every case renders one directly, as `SupplySurfacesTest` renders `AssetSuppliesList` and the role sheet; the state
+ * they draw is proven on the JVM (rows 50, 51 and 52). What only a device shows is the indent, the wording that reaches
+ * the semantics tree, the toggle, a sheet's fields, sentences and buttons, the composition's rows, and which controls a
+ * read-only section or sheet leaves out.
  *
  * Every sentence comes from its one home (`InstalledComponentStrings.kt`), so a re-worded constant moves this test with
  * it. A section header and a badge draw their words upper-case, so that is what the tree carries.
@@ -414,6 +419,142 @@ class InstalledComponentsSectionTest {
         rule.onNodeWithText(SUBTREE_REMOVED_TOO).assertExists()
         rule.onNodeWithText("Remove").performScrollTo().assertIsEnabled().performClick()
         assertEquals(1, removes)
+    }
+
+    /**
+     * C26 (P47-21, P47-23): the row sheet's "Composition" draws each entry as the amount — `formatNumber`'s "4", the
+     * unit after the number — then the SupplyItem's name, an archived SupplyItem's entry with its badge; a tap opens
+     * that SupplyItem; a row with no composition draws no section (N-11).
+     */
+    @Test fun theRowSheetDrawsItsCompositionAndATapOpensItsSupply() {
+        var openedSupply: SupplyId? = null
+        val sheet = mutableStateOf(
+            rowSheet(current = true).copy(
+                supplyId = null,
+                composition = listOf(
+                    CompositionEntry("ce-1", cellId, 4.0, "", 0),
+                    CompositionEntry("ce-2", SupplyId("si-old"), 0.5, "L", 1),
+                ),
+            ),
+        )
+        rule.setContent {
+            ServiceTagTheme {
+                InstalledComponentRowSheet(
+                    sheet = sheet.value, supplies = catalog, offersWrites = true, onOpenSupply = {}, onInstallInside = {},
+                    onReplace = {}, onRemove = {}, onEdit = {}, onDismiss = {},
+                    composition = {
+                        CompositionLines(entries = sheet.value.composition, supplies = catalog, onOpenSupply = { openedSupply = it })
+                    },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(COMPOSITION_SECTION.uppercase()).assertExists()
+        rule.onNodeWithText(compositionLine("4", "Example 12 V Battery")).assertExists()
+        rule.onNodeWithText(compositionLine("0.5 L", "Example Old Battery")).assertExists()
+        rule.onAllNodesWithText("ARCHIVED").assertCountEquals(1)
+        rule.onNodeWithText(compositionLine("4", "Example 12 V Battery")).performScrollTo().performClick()
+        assertEquals(cellId, openedSupply)
+
+        sheet.value = sheet.value.copy(composition = emptyList())
+        rule.waitForIdle()
+        rule.onAllNodesWithText(COMPOSITION_SECTION.uppercase()).assertCountEquals(0)
+    }
+
+    /**
+     * C26 (P47-23, P47-24, P15-13): the editor in the install sheet draws "Composition", each entry's SupplyItem (an
+     * archived one with its badge) with "Qty", "Unit" and the close glyph labelled P47-24, and "Add supply"; it reports
+     * an add and a tap on an entry's SupplyItem, and a removal takes that entry only.
+     */
+    @Test fun theCompositionEditorAddsAndRemovesEntries() {
+        var adds = 0
+        var picked: Int? = null
+        rule.setContent {
+            ServiceTagTheme {
+                var sheet by remember {
+                    mutableStateOf(
+                        form(ComponentFormTarget.Install(null), INSTALL_COMPONENT, name = "Example Battery Pack").copy(
+                            composition = listOf(
+                                CompositionInput(null, cellId, "4", ""),
+                                CompositionInput(null, SupplyId("si-old"), "2", "L"),
+                            ),
+                        ),
+                    )
+                }
+                ComponentFormSheet(
+                    form = sheet, supplies = catalog, onName = {}, onLink = {}, onUnlink = {}, onSerialOrLot = {},
+                    onDate = {}, onNotes = {}, onSave = {}, onDismiss = {},
+                    composition = {
+                        CompositionEditor(
+                            form = sheet,
+                            supplies = catalog,
+                            onQuantity = { _, _ -> },
+                            onUnit = { _, _ -> },
+                            onPickEntry = { picked = it },
+                            onRemove = { index -> sheet = sheet.copy(composition = sheet.composition.filterIndexed { i, _ -> i != index }) },
+                            onAdd = { adds += 1 },
+                        )
+                    },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(COMPOSITION_SECTION.uppercase()).performScrollTo().assertIsDisplayed()
+        rule.onAllNodes(hasSetTextAction() and hasText("Qty")).assertCountEquals(2)
+        rule.onAllNodes(hasSetTextAction() and hasText("Unit")).assertCountEquals(2)
+        rule.onAllNodesWithContentDescription(REMOVE_FROM_COMPOSITION).assertCountEquals(2)
+        rule.onNodeWithText("ARCHIVED").assertExists()
+
+        rule.onNodeWithText(ADD_SUPPLY).performScrollTo().performClick()
+        assertEquals(1, adds)
+        rule.onNodeWithText("Example 12 V Battery").performScrollTo().performClick()
+        assertEquals(0, picked)
+
+        rule.onAllNodesWithContentDescription(REMOVE_FROM_COMPOSITION)[0].performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onAllNodesWithContentDescription(REMOVE_FROM_COMPOSITION).assertCountEquals(1)
+        rule.onAllNodesWithText("Example 12 V Battery").assertCountEquals(0)
+        rule.onNodeWithText("Example Old Battery").assertExists()
+    }
+
+    /**
+     * C26, C-1: after a refused replace the editor draws P47-25 under the rows with the bad quantity's field in the
+     * error state, and P15-20 under the archived draft entry, which wears its badge; "Replace" stays offered.
+     */
+    @Test fun aRefusedCompositionDrawsP47_25AndTheArchivedEntrysSentence() {
+        val sheet = form(
+            ComponentFormTarget.Replace(InstalledComponentId("ic-pack")), replaceTitle("Example Battery Pack"),
+            name = "Example Battery Pack",
+        ).copy(
+            date = "2026-02-10",
+            composition = listOf(CompositionInput(null, cellId, "0", ""), CompositionInput(null, SupplyId("si-old"), "2", "")),
+            compositionProblem = COMPOSITION_QUANTITY_REQUIRED,
+            markedEntries = setOf(0),
+            entryProblems = mapOf(1 to SUPPLY_ITEM_GONE),
+        )
+        rule.setContent {
+            ServiceTagTheme {
+                ComponentFormSheet(
+                    form = sheet, supplies = catalog, onName = {}, onLink = {}, onUnlink = {}, onSerialOrLot = {},
+                    onDate = {}, onNotes = {}, onSave = {}, onDismiss = {},
+                    composition = {
+                        CompositionEditor(
+                            form = sheet, supplies = catalog, onQuantity = { _, _ -> }, onUnit = { _, _ -> },
+                            onPickEntry = {}, onRemove = {}, onAdd = {},
+                        )
+                    },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(COMPOSITION_QUANTITY_REQUIRED).performScrollTo().assertIsDisplayed()
+        rule.onAllNodes(hasSetTextAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.Error)).assertCountEquals(1)
+        rule.onNodeWithText(SUPPLY_ITEM_GONE).assertExists()
+        rule.onNodeWithText("ARCHIVED").assertExists()
+        rule.onNodeWithText(REPLACE_COMPONENT).performScrollTo().assertIsEnabled()
     }
 
     private fun left(text: String) = rule.onNodeWithText(text, useUnmergedTree = true).getUnclippedBoundsInRoot().left

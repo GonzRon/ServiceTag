@@ -42,10 +42,10 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * #47 (C25–C27; rows 50 and 51): the asset detail's Installed components section, its read state — the tree, the quiet
- * lines, the removed rows behind the toggle, the two SupplyItem sets and the read-only flag — and its sheets: the row
- * sheet's facts and history, and the install, edit, replace and remove writes through the four use cases, each refusal
- * as its sentence. All against the Room-backed `FakeGraph`, so the flows and the use cases are the production ones. Every sentence is
+ * #47 (C25–C27; rows 50, 51 and 52): the asset detail's Installed components section, its read state — the tree, the
+ * quiet lines, the removed rows behind the toggle, the two SupplyItem sets and the read-only flag — and its sheets: the
+ * row sheet's facts and history, the install, edit, replace and remove writes through the four use cases, each refusal
+ * as its sentence, and the composition editor's draft (a pick's entry and unit, the replace prefill, removal, marks). All against the Room-backed `FakeGraph`, so the flows and the use cases are the production ones. Every sentence is
  * asserted through its one home (`InstalledComponentStrings.kt`, `LINKED_TO`), so a re-worded string moves this test
  * with it. Fixtures are fictional (the Global constraints); every date is on or before the graph's today, 2026-02-10.
  *
@@ -700,6 +700,229 @@ class InstalledComponentsSectionViewModelTest {
         assertNull(opened.form)
         assertNull(opened.removing)
         assertEquals("Example Battery Tray", opened.rowSheet!!.name)
+        clearModels()
+    }
+
+    /**
+     * Row 52 (the counted RED: a pick overwrites a typed unit). C26, #15 C34: "Add supply" opens the picker for a new
+     * entry, and a pick appends it with no id, an empty quantity and the SupplyItem's preferred unit; a pick on an
+     * entry swaps its SupplyItem in place and fills its unit only while that is blank, so a typed unit stays. Nothing
+     * is written by any of it.
+     */
+    @Test fun aPickAppendsAnEntryAndFillsOnlyABlankUnit() = runTest {
+        val ups = asset("Example UPS")
+        val coolant = item("Example Coolant", unit = "L")
+        val oil = item("Example Oil", unit = "L")
+        val cell = item("Example 12 V Battery")
+        val vm = model(ups.id)
+        val choices = vm.state.first { it.choices.size == 3 }.choices.associateBy { it.id }
+
+        vm.startInstall()
+        vm.state.first { it.form != null }
+        vm.startAddEntry()
+        val picking = vm.state.first { it.form?.picking != null }.form!!
+        assertEquals(PickFor.ENTRY, picking.picking)
+        assertNull(picking.pickingEntry)
+        vm.pick(choices.getValue(coolant.id))
+        val appended = vm.state.first { it.form?.composition?.size == 1 }.form!!
+        assertEquals(listOf(CompositionInput(null, coolant.id, "", "L")), appended.composition)
+        assertNull(appended.picking)
+
+        vm.onEntryUnit(0, "ml")
+        vm.startEntryPick(0)
+        assertEquals(0, vm.state.first { it.form?.picking != null }.form!!.pickingEntry)
+        vm.pick(choices.getValue(oil.id))
+        assertEquals(
+            listOf(CompositionInput(null, oil.id, "", "ml")),
+            vm.state.first { it.form?.composition?.singleOrNull()?.supplyId == oil.id }.form!!.composition,
+        )
+
+        vm.onEntryUnit(0, " ")
+        vm.startEntryPick(0)
+        vm.pick(choices.getValue(coolant.id))
+        assertEquals(
+            listOf(CompositionInput(null, coolant.id, "", "L")),
+            vm.state.first { it.form?.composition?.singleOrNull()?.supplyId == coolant.id }.form!!.composition,
+        )
+
+        vm.startAddEntry()
+        vm.pick(choices.getValue(cell.id))
+        assertEquals(
+            listOf(CompositionInput(null, coolant.id, "", "L"), CompositionInput(null, cell.id, "", "")),
+            vm.state.first { it.form?.composition?.size == 2 }.form!!.composition,
+        )
+        assertTrue(graph.installedComponents.forAsset(ups.id).isEmpty())
+        clearModels()
+    }
+
+    /**
+     * Row 52, R47-17b: the replace draft holds the predecessor's composition as editable entries with no ids, the
+     * quantities as `formatNumber` draws them; nothing is written before Save, which sends exactly the rows shown — the
+     * successor's entries minted fresh while the closed row keeps its own — and an emptied editor sends none.
+     */
+    @Test fun replacePrefillsTheEntriesAsADraft() = runTest {
+        val ups = asset("Example UPS")
+        val cell = item("Example 12 V Battery")
+        val coolant = item("Example Coolant", unit = "L")
+        val pack = install(ups, "Example Battery Pack", composition = listOf(entry(cell, "4"), entry(coolant, "0.5", "L")))
+        val spare = install(ups, "Example Spare Pack", composition = listOf(entry(cell, "2")))
+        val vm = model(ups.id)
+        vm.state.first { it.rows.size == 2 }
+
+        vm.startReplace(pack.id)
+        val draft = vm.state.first { it.form != null }.form!!
+        assertEquals(
+            listOf(CompositionInput(null, cell.id, "4", ""), CompositionInput(null, coolant.id, "0.5", "L")),
+            draft.composition,
+        )
+        assertTrue(graph.installedComponents.forAsset(ups.id).all { it.isCurrent })
+        vm.onEntryQuantity(0, "3")
+        vm.save()
+        vm.state.first { s -> s.form == null && s.components.any { it.replacesId == pack.id } }
+
+        val successor = graph.installedComponents.forAsset(ups.id).single { it.replacesId == pack.id }
+        assertEquals(
+            listOf(Triple(cell.id, 3.0, ""), Triple(coolant.id, 0.5, "L")),
+            successor.composition.map { Triple(it.supplyId, it.quantity, it.unit) },
+        )
+        assertTrue(successor.composition.none { entry -> pack.composition.any { it.id == entry.id } })
+        assertEquals(pack.composition, graph.installedComponents.get(pack.id)!!.composition)
+
+        vm.startReplace(spare.id)
+        assertEquals(1, vm.state.first { it.form != null }.form!!.composition.size)
+        vm.removeEntry(0)
+        vm.state.first { it.form?.composition?.isEmpty() == true }
+        vm.save()
+        vm.state.first { s -> s.form == null && s.components.any { it.replacesId == spare.id } }
+        assertTrue(graph.installedComponents.forAsset(ups.id).single { it.replacesId == spare.id }.composition.isEmpty())
+        assertEquals(spare.composition, graph.installedComponents.get(spare.id)!!.composition)
+        clearModels()
+    }
+
+    /**
+     * Row 52, C-1: a replace draft whose link and an entry name archived SupplyItems keeps both, drawn from the
+     * every-item map with their mark and never offered by the picker; Save is refused with P15-20 under the link, and
+     * once the link is removed, under that entry — writing nothing — until the entry is removed too.
+     */
+    @Test fun replacePrefillShowsAnArchivedLinkAndEntryWithTheBadgeAndSaveIsRefusedUntilRemoved() = runTest {
+        val ups = asset("Example UPS")
+        val tray = item("Example Battery Tray")
+        val cell = item("Example 12 V Battery")
+        val old = item("Example Old Battery")
+        val pack = install(ups, "Example Battery Pack", supplyId = tray.id, composition = listOf(entry(cell, "2"), entry(old, "2")))
+        graph.archiveSupplyItem.run(tray.id, archived = true)
+        graph.archiveSupplyItem.run(old.id, archived = true)
+        val vm = model(ups.id)
+        vm.state.first { s -> s.rows.size == 1 && s.supplies[old.id]?.archived == true && s.supplies[tray.id]?.archived == true }
+
+        vm.startReplace(pack.id)
+        val draft = vm.state.first { it.form != null }
+        assertEquals(tray.id, draft.form!!.supplyId)
+        assertEquals(listOf(cell.id, old.id), draft.form.composition.map { it.supplyId })
+        assertTrue(draft.supplies.getValue(tray.id).archived)
+        assertTrue(draft.supplies.getValue(old.id).archived)
+        assertEquals(listOf(cell.id), draft.choices.map { it.id })
+
+        vm.save()
+        assertEquals(SUPPLY_ITEM_GONE, vm.state.first { it.form?.linkProblem != null }.form!!.linkProblem)
+        vm.unlink()
+        vm.save()
+        val refused = vm.state.first { it.form?.entryProblems?.isNotEmpty() == true }.form!!
+        assertEquals(mapOf(1 to SUPPLY_ITEM_GONE), refused.entryProblems)
+        assertNull(refused.linkProblem)
+        assertEquals(listOf(pack.id), graph.installedComponents.forAsset(ups.id).map { it.id })
+        assertTrue(graph.installedComponents.get(pack.id)!!.isCurrent)
+
+        vm.removeEntry(1)
+        assertTrue(vm.state.first { it.form?.composition?.size == 1 }.form!!.entryProblems.isEmpty())
+        vm.save()
+        vm.state.first { s -> s.form == null && s.components.any { it.replacesId == pack.id } }
+        val successor = graph.installedComponents.forAsset(ups.id).single { it.replacesId == pack.id }
+        assertNull(successor.supplyId)
+        assertEquals(listOf(cell.id), successor.composition.map { it.supplyId })
+        clearModels()
+    }
+
+    /**
+     * Row 52, C26: an entry's close glyph (P47-24) removes that entry only. On edit the others keep their stored ids,
+     * which Save sends, so the row keeps them; an entry added again is new (no id, minted fresh); and a stored entry
+     * whose SupplyItem was archived since may stay — only a new archived entry is refused.
+     */
+    @Test fun removingAnEntryRemovesOnlyIt() = runTest {
+        val ups = asset("Example UPS")
+        val cell = item("Example 12 V Battery")
+        val coolant = item("Example Coolant", unit = "L")
+        val fuse = item("Example Fuse")
+        val pack = install(
+            ups, "Example Battery Pack", composition = listOf(entry(cell, "4"), entry(coolant, "0.5", "L"), entry(fuse, "1")),
+        )
+        graph.archiveSupplyItem.run(fuse.id, archived = true)
+        val vm = model(ups.id)
+        val choices = vm.state.first { s -> s.rows.size == 1 && s.supplies[fuse.id]?.archived == true }.choices.associateBy { it.id }
+        val ids = pack.composition.map { it.id }
+
+        vm.startEdit(pack.id)
+        assertEquals(ids, vm.state.first { it.form != null }.form!!.composition.map { it.id })
+        vm.removeEntry(1)
+        assertEquals(
+            listOf(CompositionInput(ids[0], cell.id, "4", ""), CompositionInput(ids[2], fuse.id, "1", "")),
+            vm.state.first { it.form?.composition?.size == 2 }.form!!.composition,
+        )
+        vm.startAddEntry()
+        vm.pick(choices.getValue(coolant.id))
+        vm.onEntryQuantity(2, "0.5")
+        assertEquals(
+            CompositionInput(null, coolant.id, "0.5", "L"),
+            vm.state.first { it.form?.composition?.getOrNull(2)?.quantity == "0.5" }.form!!.composition[2],
+        )
+        vm.save()
+        vm.state.first { it.form == null }
+
+        val edited = graph.installedComponents.get(pack.id)!!.composition
+        assertEquals(listOf(cell.id, fuse.id, coolant.id), edited.map { it.supplyId })
+        assertEquals(listOf(ids[0], ids[2]), edited.take(2).map { it.id })
+        assertFalse(edited[2].id in ids)
+        clearModels()
+    }
+
+    /**
+     * Row 52, C26: Save with an entry's quantity empty or not above zero is refused with P47-25 under the rows and those
+     * entries marked, writing nothing; removing a marked entry moves the later marks up with their entries, and typing
+     * the last marked entry's quantity clears its mark and the sentence.
+     */
+    @Test fun aBadQuantityMarksItsEntryWithP47_25() = runTest {
+        val ups = asset("Example UPS")
+        val cell = item("Example 12 V Battery")
+        val coolant = item("Example Coolant", unit = "L")
+        val fuse = item("Example Fuse")
+        val vm = model(ups.id)
+        val choices = vm.state.first { it.choices.size == 3 }.choices.associateBy { it.id }
+
+        vm.startInstall()
+        vm.state.first { it.form != null }
+        vm.onName("Example Battery Pack")
+        listOf(cell, coolant, fuse).forEach { vm.startAddEntry(); vm.pick(choices.getValue(it.id)) }
+        vm.state.first { it.form?.composition?.size == 3 }
+        vm.onEntryQuantity(0, "4")
+        vm.onEntryQuantity(1, "0")
+        vm.save()
+        val refused = vm.state.first { it.form?.compositionProblem != null }.form!!
+        assertEquals(COMPOSITION_QUANTITY_REQUIRED, refused.compositionProblem)
+        assertEquals(setOf(1, 2), refused.markedEntries)
+        assertTrue(graph.installedComponents.forAsset(ups.id).isEmpty())
+
+        vm.removeEntry(1)
+        val moved = vm.state.first { it.form?.composition?.size == 2 }.form!!
+        assertEquals(setOf(1), moved.markedEntries)
+        assertEquals(COMPOSITION_QUANTITY_REQUIRED, moved.compositionProblem)
+        vm.onEntryQuantity(1, "2")
+        assertNull(vm.state.first { it.form?.markedEntries?.isEmpty() == true }.form!!.compositionProblem)
+        vm.save()
+        vm.state.first { it.form == null }
+        assertEquals(
+            listOf(cell.id to 4.0, fuse.id to 2.0),
+            graph.installedComponents.forAsset(ups.id).single().composition.map { it.supplyId to it.quantity },
+        )
         clearModels()
     }
 }
