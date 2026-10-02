@@ -130,6 +130,7 @@ import com.loosecannon.servicetag.ui.health.HealthBadge
 import com.loosecannon.servicetag.ui.health.HealthPlurals
 import com.loosecannon.servicetag.ui.health.healthColors
 import com.loosecannon.servicetag.ui.health.healthGlyph
+import com.loosecannon.servicetag.ui.installed.InstalledComponentsSection
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.journal.eventDetailLine
 import com.loosecannon.servicetag.ui.journal.formatTarget
@@ -443,8 +444,17 @@ fun AssetDetailScreen(
             )
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 // #15 (C33, R15-8): which SupplyItems this asset takes, and in what role — first in this column,
-                // directly above the child assets. A held asset draws its rows and offers no write.
+                // directly above the installed components. A held asset draws its rows and offers no write.
                 AssetSuppliesSection(
+                    assetId = current.asset.id,
+                    graph = graph,
+                    snackbars = snackbars,
+                    onOpenSupply = onOpenSupply,
+                    readOnly = !current.offersWrites,
+                )
+                // #47 (C27): what is fitted inside this asset, as a tree, between Supplies and the child assets. A held
+                // asset draws its rows and history and offers no write.
+                InstalledComponentsSection(
                     assetId = current.asset.id,
                     graph = graph,
                     snackbars = snackbars,
