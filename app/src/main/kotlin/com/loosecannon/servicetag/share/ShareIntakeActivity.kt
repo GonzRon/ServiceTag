@@ -76,6 +76,7 @@ class ShareIntakeActivity : ComponentActivity() {
                         heldIds = { graph.transferRecords.heldIds() },
                         packInbox = graph.transferPackInbox,
                         supplyItems = { graph.supplyItems.all() },
+                        installedComponents = { graph.installedComponents.all() },
                     )
                 }
                 val state by model.state.collectAsStateWithLifecycle()
@@ -104,7 +105,8 @@ class ShareIntakeActivity : ComponentActivity() {
                 } else {
                     // #93 (C9): the picker is the Assets tab's own list model, switched to offer only the assets maintained
                     // here (C2; #69 C30, R69-3). It outlives the two steps, so the query and the controls survive a Change
-                    // (R93-12).
+                    // (R93-12). Its query is the one query: the installed-component and supply lists filter by it too
+                    // (#69 C30 step 3).
                     val picker = viewModel(key = "share-asset-picker") { AssetsViewModel(graph, activeOnly = true) }
                     val pickerState by picker.state.collectAsStateWithLifecycle()
                     // The box draws from the model's own query holder, never `pickerState.query` (F3, the tab's shape).
@@ -126,6 +128,7 @@ class ShareIntakeActivity : ComponentActivity() {
                         onPickType = picker::pickType,
                         onToggleComponents = picker::toggleComponents,
                         onToggleArchived = picker::toggleArchived,
+                        onChooseType = model::chooseType,
                         onChoose = model::choose,
                         onChangeAsset = model::changeAsset,
                         onName = model::name,

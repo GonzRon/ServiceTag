@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHAR
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.usecase.AddAssetSupplyCommand
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AssetCommand
@@ -32,6 +33,8 @@ import com.loosecannon.servicetag.core.usecase.InstallComponentCommand
 import com.loosecannon.servicetag.core.usecase.InstalledComponentResult
 import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.ui.asset.AssetsViewModel
+import com.loosecannon.servicetag.ui.asset.EmptyReason
 import com.loosecannon.servicetag.testing.assetRow
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -41,6 +44,8 @@ import java.util.Collections
 import kotlin.properties.Delegates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -118,9 +123,10 @@ class ShareIntakeViewModelTest {
                     today = { "2026-09-23" },
                     zoneId = { "UTC" },
                     io = StandardTestDispatcher(scheduler),
-                    // #69 (C30, C-5): the held set and the supplies, as the activity passes them.
+                    // #69 (C30, C-5): the held set, the supplies and the components, as the activity passes them.
                     heldIds = { graph.transferRecords.heldIds() },
                     supplyItems = { graph.supplyItems.all() },
+                    installedComponents = { graph.installedComponents.all() },
                 )
             }
         }
@@ -1230,6 +1236,134 @@ class ShareIntakeViewModelTest {
             assertTrue(state.picking)
         }
         assertEquals("prose still needs an asset", IntakeStrings.NO_ASSETS, model(prose).state.value.deadEnd)
+    }
+
+    // --- #69 (B7c2; C30 steps 1–4, row 53b): the type control, the one query and the direct lists, wired ----------
+
+    /** The hosted Assets list, built as the activity builds it (`activeOnly`); its query is the one query (C30). */
+    private fun TestScope.hostedPicker() = AssetsViewModel(
+        graph.assets, graph.categories, graph.seasonActivations, graph.tags, graph.assetHealthReadModel,
+        graph.todayPort, loans = graph.loans, transfers = graph.transferRecords, activeOnly = true,
+    ).also { vm -> backgroundScope.launch { vm.state.collect() } }
+
+    private fun <T> ShareTargetList<T>.rows(): List<T> = (this as ShareTargetList.Rows).rows
+
+    /** The type control's three labels are the shipped words, imported; P69-24/-25 are the ratified hints. */
+    @Test fun theTypeLabelsAndTheSearchHintsAreTheRatifiedWords() {
+        assertEquals(listOf("Assets", "Installed components", "Supplies"), ShareTargetType.entries.map { it.label })
+        assertEquals("Search installed components", IntakeStrings.SEARCH_INSTALLED_COMPONENTS)
+        assertEquals("Search supplies", IntakeStrings.SEARCH_SUPPLIES)
+        assertEquals("Assets is the default", ShareTargetType.ASSETS, ShareIntakeState().type)
+    }
+
+    /** A component row and a supply row are each the final selection: the form opens on it, and nothing is written. */
+    @Test fun aComponentOrSupplyPickOpensTheFormDirectly() = runTest(scheduler) {
+        mower()
+        val tray = tray()
+        val item = battery()
+        val vm = model(link(manualUrl))
+        assertTrue(vm.state.value.typeOffered)
+        assertEquals(ShareTargetType.ASSETS, vm.state.value.type)
+
+        vm.chooseType(ShareTargetType.INSTALLED_COMPONENTS)
+        val component = vm.state.value.componentRows("").rows().single()
+        vm.choose(component.destination)
+        assertFalse(vm.state.value.picking)
+        assertEquals(componentOf(tray), vm.state.value.destination)
+        assertEquals("$mowerName › Example Battery Tray", vm.state.value.destination?.label)
+
+        vm.changeAsset()
+        assertTrue(vm.state.value.picking)
+        assertEquals("Change keeps the list", ShareTargetType.INSTALLED_COMPONENTS, vm.state.value.type)
+
+        vm.chooseType(ShareTargetType.SUPPLIES)
+        val supply = vm.state.value.supplyRows("").rows().single()
+        vm.choose(supply.destination)
+        assertFalse(vm.state.value.picking)
+        assertEquals(supplyOf(item), vm.state.value.destination)
+        assertEquals(0, linksOn(componentOf(tray).owner) + linksOn(supplyOf(item).owner) + references())
+    }
+
+    /**
+     * C-5 (the counted RED): a link share with no asset maintained here and one unarchived supply reaches the picker —
+     * Assets chosen and empty for P69-26's reason, no installed component, and the supply selectable under Supplies.
+     */
+    @Test fun aLinkShareWithNoActiveAssetAndOneUnarchivedSupplyReachesThePicker() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("ladder", name = "Sample Ladder", status = AssetStatus.ARCHIVED))
+        val item = battery()
+        val picker = hostedPicker()
+        val vm = model(link(manualUrl))
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.deadEnd)
+        assertTrue(vm.state.value.picking)
+        assertEquals(ShareTargetType.ASSETS, vm.state.value.type)
+        assertEquals("P69-26's slot", EmptyReason.NO_ASSETS, picker.state.value.emptyReason)
+        assertEquals(ShareTargetList.NoneEligible, vm.state.value.componentRows(""))
+
+        vm.chooseType(ShareTargetType.SUPPLIES)
+        vm.choose(vm.state.value.supplyRows("").rows().single().destination)
+        assertEquals(supplyOf(item), vm.state.value.destination)
+        assertTrue(vm.state.value.saveEnabled)
+    }
+
+    /** Prose is an asset's note: no type control, and a type choice is not taken; a link and a file offer it. */
+    @Test fun aProseShareHasNoTypeControl() = runTest(scheduler) {
+        mower()
+        tray()
+        battery()
+        val prose = model(ShareContent.PlainText("Checked the anode"))
+        assertFalse(prose.state.value.typeOffered)
+        prose.chooseType(ShareTargetType.SUPPLIES)
+        assertEquals(ShareTargetType.ASSETS, prose.state.value.type)
+
+        assertTrue(model(bytes(), source = { "pdf".byteInputStream() }).state.value.typeOffered)
+        assertTrue(model(link(manualUrl)).state.value.typeOffered)
+    }
+
+    /** C-6, C-7: one query — the hosted Assets list's — narrows each list, and a type switch leaves it as it was. */
+    @Test fun theOneQueryNarrowsEachListAndSurvivesATypeSwitch() = runTest(scheduler) {
+        mower()
+        val tray = tray()
+        val item = battery()
+        val picker = hostedPicker()
+        val vm = model(link(manualUrl))
+
+        picker.onQueryChange("tray")
+        vm.chooseType(ShareTargetType.INSTALLED_COMPONENTS)
+        assertEquals(listOf(tray.id), vm.state.value.componentRows(picker.query.value).rows().map { it.componentId })
+        vm.chooseType(ShareTargetType.SUPPLIES)
+        assertEquals("the switch leaves the query", "tray", picker.query.value)
+        assertEquals(ShareTargetList.NothingMatches, vm.state.value.supplyRows(picker.query.value))
+
+        picker.onQueryChange("power co")
+        assertEquals(listOf(item.id), vm.state.value.supplyRows(picker.query.value).rows().map { it.supplyId })
+        assertEquals(ShareTargetList.NothingMatches, vm.state.value.componentRows(picker.query.value))
+        vm.chooseType(ShareTargetType.ASSETS)
+        assertEquals("power co", picker.query.value)
+    }
+
+    /**
+     * The lists read what the dead end reads: a held asset's component is not offered, nor an archived supply; a supply
+     * taken by an asset and one taken by none are both offered (Supplies holds every unarchived SupplyItem).
+     */
+    @Test fun theListsOfferCurrentComponentsOfActiveAssetsAndEveryUnarchivedSupply() = runTest(scheduler) {
+        mower()
+        val tray = tray()
+        val heater = graph.createAsset.run(AssetCommand(name = "Example Water Heater"))
+        graph.installComponent.run(
+            InstallComponentCommand(heater.id, null, "Example Anode Rod", null, emptyList(), "", "2026-01-05", "", null),
+        )
+        graph.transferRecords.append(heldOut(heater.id))
+        val taken = battery()
+        val loose = battery(name = "Example Alternator Belt")
+        graph.archiveSupplyItem.run(battery(name = "Example Old Belt").id, archived = true)
+        graph.addAssetSupply.run(AddAssetSupplyCommand(assetId, taken.id, "Battery"))
+
+        val state = model(bytes(), source = { "pdf".byteInputStream() }).state.value
+
+        assertEquals(listOf(tray.id), state.componentRows("").rows().map { it.componentId })
+        assertEquals(listOf(taken.id, loose.id), state.supplyRows("").rows().map { it.supplyId })
     }
 
     // --- #77 (B3; C16, row 25): a shared Transfer Pack, and a held asset --------------------------------------
