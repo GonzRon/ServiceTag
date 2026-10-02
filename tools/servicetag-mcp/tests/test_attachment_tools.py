@@ -24,6 +24,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import httpx
 import pytest
@@ -134,19 +135,25 @@ def test_the_signatures_are_c27s() -> None:
     def names(tool) -> list[str]:
         return list(inspect.signature(tool).parameters)
 
-    assert names(server_module.list_attachments) == ["asset_id"]
+    owners = ["asset_id", "supply_item_id", "installed_component_id"]
+    assert names(server_module.list_attachments) == owners
     assert names(server_module.get_attachment) == ["attachment_id"]
     assert names(server_module.update_attachment) == [
         "attachment_id", "display_name", "kind", "captured_on", "notes", "role", "clear_fields",
     ]
     assert names(server_module.add_attachment) == [
-        "asset_id", "file_path", "display_name", "mime_type", "kind", "role", "captured_on", "notes",
+        *owners, "file_path", "display_name", "mime_type", "kind", "role", "captured_on", "notes",
         "operation_key",
     ]
     # R92-3: ids only, never a URL. #91 (R91-2): `clear_fields` clears the copied role.
     assert names(server_module.materialize_reference) == [
-        "asset_id", "reference_id", "display_name", "kind", "role", "notes", "clear_fields",
+        *owners, "reference_id", "display_name", "kind", "role", "notes", "clear_fields",
     ]
+    # #69 (C23): the owner is exactly one of three keyword arguments, each `None` unless given.
+    for tool in (server_module.list_attachments, server_module.add_attachment, server_module.materialize_reference):
+        for owner in owners:
+            parameter = inspect.signature(tool).parameters[owner]
+            assert parameter.kind is inspect.Parameter.KEYWORD_ONLY and parameter.default is None, (tool, owner)
 
 
 # --- row 36: the gates ---------------------------------------------------------------------------
@@ -733,3 +740,289 @@ def test_the_materialize_docstring_carries_the_confirmation_and_identical_rules(
         "sensitive",
     ):
         assert words in doc, words
+
+
+# --- #69: files on a supply item or an installed component (rows 46–48) -----------------------------
+
+
+class Owner(NamedTuple):
+    """One resource owner as a caller names it (`argument`), its own route, its rows' wire key, its upload's
+    `ownerKind` and the words a message names it by."""
+
+    argument: str
+    owner_id: str
+    base: str
+    key: str
+    kind: str
+    noun: str
+
+
+SUPPLY_ITEM = Owner(
+    "supply_item_id", ASSET, f"/v1/supply-items/{ASSET}", "supplyItemId", "supply-item", "supply item"
+)
+"""Deliberately the asset's id string: one id under two owner kinds still reaches two routes and derives two ids."""
+
+INSTALLED_COMPONENT = Owner(
+    "installed_component_id", "8e1f4a27-0c6b-4d93-a5e2-1b7c9d0f3e58",
+    "/v1/installed-components/8e1f4a27-0c6b-4d93-a5e2-1b7c9d0f3e58", "installedComponentId", "installed-component",
+    "installed component",
+)
+
+NEW_OWNERS = [pytest.param(SUPPLY_ITEM, id="supply-item"), pytest.param(INSTALLED_COMPONENT, id="installed-component")]
+
+OWNER_KEYS = ("assetId", "eventId", "supplyItemId", "installedComponentId")
+
+STATUS_19: dict = dict(STATUS_16, schemaVersion=19, backupFormatVersion=19)
+STATUS_20: dict = dict(STATUS_16, schemaVersion=20, backupFormatVersion=20)
+
+NO_SUCH_ATTACHMENT = {"error": {"code": "NO_SUCH_ATTACHMENT"}}
+
+
+def owned(owner: Owner) -> dict[str, str]:
+    """The one owner argument a call names."""
+    return {owner.argument: owner.owner_id}
+
+
+def owned_attachment(owner: Owner, **overrides) -> dict:
+    """A schema-20 attachment row: its one owner key set, the other three `null`."""
+    row = attachment_row(**{key: None for key in OWNER_KEYS})
+    row[owner.key] = owner.owner_id
+    row.update(overrides)
+    return row
+
+
+def owner_default_key(owner: Owner, file: Path) -> str:
+    sha256, size = digest_of(file)
+    return hashlib.sha256(f"{owner.owner_id}\n{sha256}\n{size}".encode("utf-8")).hexdigest()
+
+
+def owner_derived(owner: Owner, key: str) -> str:
+    return server_module._owner_attachment_operation_id(INSTALLATION, owner.kind, owner.owner_id, key)
+
+
+@pytest.fixture
+def phone20(paired):
+    paired.reply("GET", "/v1/status", 200, STATUS_20)
+    for owner in (SUPPLY_ITEM, INSTALLED_COMPONENT):
+        paired.reply("GET", f"{owner.base}/attachments", 200, {"attachments": [], "folder": "READY"})
+    return paired
+
+
+def test_the_python_v3_derivation_equals_the_golden_owner_vectors() -> None:
+    """C23: the twin of the phone's v3 derivation, held to the golden file's `ownerPrefix` and `ownerVectors`; the
+    asset's v2 `prefix` and `vectors` are read by the shipped test above, unchanged."""
+    golden = golden_ids()
+    assert golden["ownerPrefix"] == server_module._OWNER_OPERATION_ID_PREFIX == "servicetag:attachment-upload:v3"
+    assert server_module._OPERATION_ID_PREFIX == golden["prefix"] == "servicetag:attachment-upload:v2"
+    assert {vector["ownerKind"] for vector in golden["ownerVectors"]} == {"supply-item", "installed-component"}
+    for vector in golden["ownerVectors"]:
+        assert server_module._owner_attachment_operation_id(
+            vector["installationId"], vector["ownerKind"], vector["ownerId"], vector["operationKey"]
+        ) == vector["attachmentId"], vector
+    shipped = golden["vectors"][0]
+    assert server_module._owner_attachment_operation_id(
+        shipped["installationId"], "supply-item", shipped["assetId"], shipped["operationKey"]
+    ) != shipped["attachmentId"], "one id string as an asset and as a supply item derives two ids"
+
+
+@pytest.mark.parametrize("owner", NEW_OWNERS)
+def test_list_attachments_reads_the_owners_own_route(phone20, owner) -> None:
+    listing = {"attachments": [owned_attachment(owner)], "folder": "READY"}
+    phone20.reply("GET", f"{owner.base}/attachments", 200, listing)
+    assert server_module.list_attachments(**owned(owner)) == listing
+    assert paths(phone20) == [("GET", "/v1/status"), ("GET", f"{owner.base}/attachments")]
+
+
+@pytest.mark.parametrize("owner", NEW_OWNERS)
+def test_an_upload_to_a_new_owner_posts_to_its_route_under_the_v3_id(phone20, manual, owner) -> None:
+    """The asset upload's sequence on the owner's own route: the owner's listing, then the v3 id, then the file."""
+    sha256, size = digest_of(manual)
+    key = owner_default_key(owner, manual)
+    expected = owner_derived(owner, key)
+    assert expected != derived(key), "never the v2 id"
+    phone20.reply("GET", f"/v1/attachments/{expected}", 404, NO_SUCH_ATTACHMENT)
+    created = owned_attachment(owner, id=expected, sha256=sha256, sizeBytes=size, displayName="manual.pdf")
+    phone20.reply("POST", f"{owner.base}/attachments", 201, {"attachment": created})
+
+    result = server_module.add_attachment(**owned(owner), file_path=str(manual), role="USER_MANUAL")
+
+    assert result == {"decision": "CREATED", "attachment": created}
+    assert paths(phone20) == [
+        ("GET", "/v1/status"),
+        ("GET", f"{owner.base}/attachments"),
+        ("GET", f"/v1/attachments/{expected}"),
+        ("POST", f"{owner.base}/attachments"),
+    ]
+    post = phone20.last()
+    assert headers_of(post)["content-length"] == str(size)
+    assert post.body == manual.read_bytes()
+    assert decoded_metadata(post) == {
+        "operationKey": key, "displayName": "manual.pdf", "sha256": sha256, "kind": "DOCUMENT", "role": "USER_MANUAL",
+    }
+
+
+@pytest.mark.parametrize("owner", NEW_OWNERS)
+def test_a_new_owners_replay_compares_its_own_owner_key(phone20, manual, owner) -> None:
+    """The strict fingerprint's owner is the call's: the owner's own row is REPLAYED; a row with the same id string
+    under another owner key is another owner's file, `OPERATION_KEY_REUSED`, with no POST either way."""
+    sha256, size = digest_of(manual)
+    expected = owner_derived(owner, owner_default_key(owner, manual))
+    mine = owned_attachment(owner, id=expected, sha256=sha256, sizeBytes=size, displayName="manual.pdf")
+    phone20.reply("GET", f"/v1/attachments/{expected}", 200, {"attachment": mine})
+    assert server_module.add_attachment(**owned(owner), file_path=str(manual)) == {
+        "decision": "REPLAYED", "attachment": mine,
+    }
+
+    another = dict(mine, **{owner.key: None, "assetId": owner.owner_id})
+    phone20.reply("GET", f"/v1/attachments/{expected}", 200, {"attachment": another})
+    with pytest.raises(ToolError, match="OPERATION_KEY_REUSED"):
+        server_module.add_attachment(**owned(owner), file_path=str(manual))
+    assert all(r.method == "GET" for r in phone20.requests)
+
+
+@pytest.mark.parametrize("owner", NEW_OWNERS)
+def test_materialize_reads_and_recovers_through_the_owners_routes(phone20, owner) -> None:
+    """C23: the reference is found among the owner's links and the saved row among the owner's files — `/v1` has no
+    `GET /v1/references/{id}` — and the save is the one unchanged `POST /v1/references/{id}/materialize`."""
+    reference = reference_row(**{"assetId": None, owner.key: owner.owner_id})
+    phone20.reply("GET", f"{owner.base}/references", 200, {"references": [reference]})
+    saved = owned_attachment(owner, id="att-8", sourceUri=LINK, mimeType="application/pdf", sizeBytes=4096)
+    phone20.reply("POST", "/v1/references/r1/materialize", 201, {"attachment": saved})
+
+    result = server_module.materialize_reference(**owned(owner), reference_id="r1")
+
+    assert (result["decision"], result["attachment"]) == ("CREATED", saved)
+    assert paths(phone20) == [
+        ("GET", "/v1/status"),
+        ("GET", f"{owner.base}/references"),
+        ("GET", f"{owner.base}/attachments"),
+        ("POST", "/v1/references/r1/materialize"),
+    ]
+    assert json.loads(phone20.last().body) == {}
+
+    phone20.reply("GET", f"{owner.base}/attachments", 200, {"attachments": [saved], "folder": "READY"})
+    again = server_module.materialize_reference(**owned(owner), reference_id="r1")
+    assert (again["decision"], again["attachment"]) == ("IDENTICAL", saved)
+
+    with pytest.raises(ToolError, match=f"404 NO_SUCH_REFERENCE: no reference 'r404' on that {owner.noun}"):
+        server_module.materialize_reference(**owned(owner), reference_id="r404")
+    assert [r.method for r in phone20.requests].count("POST") == 1
+
+
+def test_an_unknown_save_names_the_owners_own_files(phone20, monkeypatch) -> None:
+    owner = INSTALLED_COMPONENT
+    reference = reference_row(**{"assetId": None, owner.key: owner.owner_id})
+    phone20.reply("GET", f"{owner.base}/references", 200, {"references": [reference]})
+    real = httpx.request
+
+    def lost(method, url, **kwargs):
+        if method == "POST":
+            raise httpx.ReadTimeout("no answer", request=httpx.Request(method, url))
+        return real(method, url, **kwargs)
+
+    monkeypatch.setattr(httpx, "request", lost)
+    result = server_module.materialize_reference(**owned(owner), reference_id="r1")
+    assert result["decision"] == "UNKNOWN"
+    assert "read list_attachments for this installed component" in result["next"]
+
+
+@pytest.mark.parametrize(
+    "owners",
+    [
+        pytest.param({}, id="none"),
+        pytest.param({"asset_id": ASSET, "supply_item_id": ASSET}, id="asset-and-supply-item"),
+        pytest.param({"asset_id": ASSET, "installed_component_id": INSTALLED_COMPONENT.owner_id}, id="asset-and-component"),
+        pytest.param(
+            {"asset_id": ASSET, "supply_item_id": ASSET, "installed_component_id": INSTALLED_COMPONENT.owner_id},
+            id="all-three",
+        ),
+    ],
+)
+def test_an_attachment_tool_given_no_owner_or_several_refuses_with_nothing_sent(
+    paired, manual, monkeypatch: pytest.MonkeyPatch, owners
+) -> None:
+    """C23: exactly one of the three, checked before the status read, any other request or the file."""
+    _no_open(monkeypatch)
+    for call in (
+        lambda: server_module.list_attachments(**owners),
+        lambda: server_module.add_attachment(**owners, file_path=str(manual)),
+        lambda: server_module.materialize_reference(**owners, reference_id="r1"),
+    ):
+        with pytest.raises(ToolError, match="exactly one owner") as raised:
+            call()
+        assert "asset_id, supply_item_id or installed_component_id" in str(raised.value)
+    assert paired.requests == []
+
+
+RESOURCE_TOOL_CALLS = {
+    "list_references": lambda owner, file: server_module.list_references(**owner),
+    "add_reference": lambda owner, file: server_module.add_reference(**owner, uri=LINK, display_name="Data sheet"),
+    "list_attachments": lambda owner, file: server_module.list_attachments(**owner),
+    "add_attachment": lambda owner, file: server_module.add_attachment(**owner, file_path=str(file)),
+    "materialize_reference": lambda owner, file: server_module.materialize_reference(**owner, reference_id="r1"),
+}
+"""C23's five widened tools, each called as a caller would name one owner."""
+
+
+@pytest.mark.parametrize("schema", [15, 19])
+@pytest.mark.parametrize("owner", NEW_OWNERS)
+@pytest.mark.parametrize("tool", list(RESOURCE_TOOL_CALLS))
+def test_each_resource_tool_refuses_a_new_owner_below_schema_20_with_nothing_sent(
+    paired, manual, tool, owner, schema
+) -> None:
+    """C24: a supply item or installed component owner on a phone below schema 20 is refused here with the shipped
+    `APP_SCHEMA_TOO_OLD` shape naming G3's feature — below 16 too, where an asset's call names 16 — with nothing sent
+    but the pairing's one `/v1/status` read."""
+    paired.reply("GET", "/v1/status", 200, dict(STATUS_19, schemaVersion=schema))
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as raised:
+        RESOURCE_TOOL_CALLS[tool](owned(owner), manual)
+    text = str(raised.value)
+    assert f"reports schema {schema}; {tool} needs schema 20" in text, text
+    assert "(supply item and installed component resources)" in text, text
+    assert paths(paired) == [("GET", "/v1/status")]
+
+
+def test_an_asset_call_keeps_todays_gates(paired, manual) -> None:
+    """C24: an `asset_id` call is gated exactly as before — `list_references` reads with no status check at all, and
+    the other four reach a schema-16 phone; schema 20 is never asked of an asset."""
+    paired.reply("GET", f"/v1/assets/{ASSET}/references", 200, {"references": [reference_row()]})
+    server_module.list_references(asset_id=ASSET)
+    assert paths(paired) == [("GET", f"/v1/assets/{ASSET}/references")], "no status read for an asset's links"
+
+    paired.reply("GET", "/v1/status", 200, STATUS_16)
+    paired.reply("GET", f"/v1/assets/{ASSET}/attachments", 200, {"attachments": [], "folder": "READY"})
+    paired.reply("GET", f"/v1/attachments/{derived(default_key(manual))}", 404, NO_SUCH_ATTACHMENT)
+    paired.reply("POST", f"/v1/assets/{ASSET}/attachments", 201, {"attachment": attachment_row()})
+    paired.reply("POST", "/v1/references/r1/materialize", 201, {"attachment": attachment_row(sourceUri=LINK)})
+    for tool in ("add_reference", "list_attachments", "add_attachment", "materialize_reference"):
+        RESOURCE_TOOL_CALLS[tool]({"asset_id": ASSET}, manual)
+    assert paths(paired)[1:] == [
+        ("GET", "/v1/status"),
+        ("POST", "/v1/references"),
+        ("GET", f"/v1/assets/{ASSET}/attachments"),
+        ("GET", f"/v1/assets/{ASSET}/attachments"),
+        ("GET", f"/v1/attachments/{derived(default_key(manual))}"),
+        ("POST", f"/v1/assets/{ASSET}/attachments"),
+        ("GET", f"/v1/assets/{ASSET}/references"),
+        ("GET", f"/v1/assets/{ASSET}/attachments"),
+        ("POST", "/v1/references/r1/materialize"),
+    ]
+
+
+def test_the_owner_minimum_is_20_beside_the_others() -> None:
+    assert server_module._MIN_RESOURCE_OWNER_SCHEMA_VERSION == 20
+    assert server_module._MIN_ATTACHMENT_SCHEMA_VERSION == 16
+    assert server_module._MIN_REFERENCE_ROLE_SCHEMA_VERSION == 17
+
+
+def test_the_attachment_docstrings_name_the_three_owners_and_a_role_on_any_but_an_entrys_file() -> None:
+    """C23: the three owners, exactly one, and the schema-20 gate, where a caller reads them; never the child-asset
+    tool. R69-6: a document role goes on an asset's, a supply item's or an installed component's file."""
+    for tool in (server_module.list_attachments, server_module.add_attachment, server_module.materialize_reference):
+        doc = " ".join(inspect.getdoc(tool).split())
+        for words in ("`asset_id`", "`supply_item_id`", "`installed_component_id`", "exactly one", "schema 20"):
+            assert words in doc, (tool.__name__, words)
+        assert "create_component" not in doc, tool.__name__
+    update = " ".join(inspect.getdoc(server_module.update_attachment).split())
+    assert "asset's attachment only" not in update
+    assert "`ATTACHMENT_ROLE_NOT_ALLOWED` on a journal entry's" in update
