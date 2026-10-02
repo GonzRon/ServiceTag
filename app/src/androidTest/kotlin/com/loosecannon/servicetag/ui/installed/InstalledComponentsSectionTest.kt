@@ -244,9 +244,10 @@ class InstalledComponentsSectionTest {
         supplyId: SupplyId? = null,
         subtreeToo: Boolean = false,
         linkProblem: String? = null,
+        date: String = "",
     ) = ComponentFormState(
         target = target, title = title, inside = inside, name = name, supplyId = supplyId, composition = emptyList(),
-        serialOrLot = "", date = "", notes = "", subtreeToo = subtreeToo, linkProblem = linkProblem,
+        serialOrLot = "", date = date, notes = "", subtreeToo = subtreeToo, linkProblem = linkProblem,
     )
 
     /**
@@ -372,6 +373,7 @@ class InstalledComponentsSectionTest {
                     form = form(
                         ComponentFormTarget.Replace(InstalledComponentId("ic-one")), replaceTitle("Position 1"),
                         name = "Position 1", supplyId = SupplyId("si-old"), subtreeToo = true, linkProblem = SUPPLY_ITEM_GONE,
+                        date = "2026-02-10",
                     ),
                     supplies = catalog, onName = {}, onLink = {}, onUnlink = { unlinks += 1 }, onSerialOrLot = {},
                     onDate = {}, onNotes = {}, onSave = { saves += 1 }, onDismiss = {},

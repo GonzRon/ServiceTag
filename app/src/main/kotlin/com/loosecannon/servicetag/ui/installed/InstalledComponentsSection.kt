@@ -102,33 +102,35 @@ fun InstalledComponentsSection(
         )
     }
     state.form?.let { form ->
-        ComponentFormSheet(
-            form = form,
-            supplies = state.supplies,
-            onName = model::onName,
-            onLink = model::startLinkPick,
-            onUnlink = model::unlink,
-            onSerialOrLot = model::onSerialOrLot,
-            onDate = model::onDate,
-            onNotes = model::onNotes,
-            onSave = model::save,
-            onDismiss = model::dismissForm,
-            composition = {
-                CompositionEditor(
-                    form = form,
-                    supplies = state.supplies,
-                    onQuantity = model::onEntryQuantity,
-                    onUnit = model::onEntryUnit,
-                    onPickEntry = model::startEntryPick,
-                    onRemove = model::removeEntry,
-                    onAdd = model::startAddEntry,
-                )
-            },
-        )
-        // The picker, for the link or an entry, is handed the unarchived SupplyItems only (R47-3); the lines above get
-        // every one (C-1).
+        // One sheet at a time, the Supplies section's shape: the form gives way to the picker and comes back with the
+        // pick applied, its fields kept by the view model. The picker, for the link or an entry, is handed the
+        // unarchived SupplyItems only (R47-3); the form's lines get every one (C-1).
         if (form.picking != null) {
             SupplyItemPickerSheet(rows = state.choices, onPick = model::pick, onDismiss = model::dismissPicker)
+        } else {
+            ComponentFormSheet(
+                form = form,
+                supplies = state.supplies,
+                onName = model::onName,
+                onLink = model::startLinkPick,
+                onUnlink = model::unlink,
+                onSerialOrLot = model::onSerialOrLot,
+                onDate = model::onDate,
+                onNotes = model::onNotes,
+                onSave = model::save,
+                onDismiss = model::dismissForm,
+                composition = {
+                    CompositionEditor(
+                        form = form,
+                        supplies = state.supplies,
+                        onQuantity = model::onEntryQuantity,
+                        onUnit = model::onEntryUnit,
+                        onPickEntry = model::startEntryPick,
+                        onRemove = model::removeEntry,
+                        onAdd = model::startAddEntry,
+                    )
+                },
+            )
         }
     }
     state.removing?.let { sheet ->

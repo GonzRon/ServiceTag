@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.usecase.ReplaceInstalledComponent
 import com.loosecannon.servicetag.core.usecase.UpdateInstalledComponent
 import com.loosecannon.servicetag.core.usecase.UpdateInstalledComponentCommand
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.asset.ENTER_A_DATE_AS_YYYY_MM_DD
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
@@ -594,15 +595,16 @@ internal data class Refusal(
 )
 
 /**
- * One ratified sentence per problem (§5), under the field it names: a date problem under the date, a SupplyItem gone
- * or archived under the link or its entry (P15-20 — an archived draft link is refused here until it is removed, C-1),
- * a quantity under the composition rows (P47-25), and a gone or closed row or parent as P47-19. Never an API message.
+ * One ratified sentence per problem (§5), under the field it names: a date problem under the date — a malformed day
+ * typed into the field says what every shipped date field says, "Enter a date as YYYY-MM-DD" — a SupplyItem gone or
+ * archived under the link or its entry (P15-20 — an archived draft link is refused here until it is removed, C-1), a
+ * quantity under the composition rows (P47-25), and a gone or closed row or parent as P47-19. Never an API message.
  */
 internal fun refusalOf(problems: List<InstalledComponentProblem>): Refusal = problems.fold(Refusal()) { r, problem ->
     when (problem) {
         // Unreachable from a sheet: Save is disabled while the name is blank, and P47 has no sentence for it.
         InstalledComponentProblem.NameRequired -> r
-        is InstalledComponentProblem.BadDate -> r.copy(date = COMPONENT_CHANGED)
+        is InstalledComponentProblem.BadDate -> r.copy(date = ENTER_A_DATE_AS_YYYY_MM_DD)
         is InstalledComponentProblem.AfterToday -> r.copy(date = DATE_NOT_LATER_THAN_TODAY)
         is InstalledComponentProblem.RemovedBeforeInstalled -> r.copy(date = REMOVAL_BEFORE_INSTALL)
         is InstalledComponentProblem.QuantityInvalid ->

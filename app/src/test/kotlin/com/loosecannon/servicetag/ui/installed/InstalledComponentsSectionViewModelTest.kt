@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.usecase.InstalledComponentResult
 import com.loosecannon.servicetag.core.usecase.ReplaceComponentCommand
 import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.ui.asset.ENTER_A_DATE_AS_YYYY_MM_DD
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.supplies.LINKED_TO
@@ -509,7 +510,7 @@ class InstalledComponentsSectionViewModelTest {
         vm.onDate("2026-1-5")
         assertNull(vm.state.first { it.form?.date == "2026-1-5" }.form!!.dateProblem)
         vm.save()
-        assertEquals(COMPONENT_CHANGED, vm.state.first { it.form?.dateProblem != null }.form!!.dateProblem)
+        assertEquals(ENTER_A_DATE_AS_YYYY_MM_DD, vm.state.first { it.form?.dateProblem != null }.form!!.dateProblem)
         vm.onDate("")
         vm.startLinkPick()
         vm.pick(vm.state.value.choices.single())
