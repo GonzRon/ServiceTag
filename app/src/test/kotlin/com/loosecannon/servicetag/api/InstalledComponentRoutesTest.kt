@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,7 +23,8 @@ import org.junit.Test
  * #47 (B4; C2, C3, C20–C22; rows 40–44, 46) — the installed-component routes over the production router, the
  * production handlers and the Room-backed [FakeGraph]: install and read, the asset sub-resource, the PATCH overlay and
  * its clearing rule, remove and replace (an omitted link or composition is none, R47-17b), every new code (each read
- * off a live route, and the mapper called directly), the two status counts, and a held asset.
+ * off a live route, and the mapper called directly), the two status counts, a held asset, and `docs/api/v1.md`
+ * agreeing with the mapper (B4b, row 45).
  *
  * Every rule is the use cases'; what is proved here is the wire. The fake graph's today is 2026-02-10. Fixtures are
  * fictional: "Example UPS", "Example Battery Tray", "Example 12 V Battery", "Example Power Co.".
@@ -671,5 +673,73 @@ class InstalledComponentRoutesTest {
         // A held asset reads as any other.
         assertEquals(200, call("GET", "/v1/assets/$ups/installed-components").status)
         assertEquals(200, call("GET", "/v1/installed-components/${pack.row.id}").status)
+    }
+
+    // --- row 45: the document agrees -------------------------------------------------------------------
+
+    /** The C2 codes' row in `v1.md`: exactly one, in the table's `| status | code | when |` shape. */
+    private fun codeRow(text: String, code: String): String {
+        val rows = Regex("""^\| (404|409|422) \| `$code` \|.*$""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("docs/api/v1.md must carry exactly one $code row", 1, rows.size)
+        return rows.single().value
+    }
+
+    @Test fun everyNewCodeIsInV1md() {
+        val text = repoFile("docs/api/v1.md").readText()
+        // Every new code as the mapper answers it: its status, its sentence and its field, on its one row.
+        val failures = listOf(
+            InstalledComponentProblem.NoSuchInstalledComponent, InstalledComponentProblem.ParentMissing,
+            InstalledComponentProblem.NameRequired, InstalledComponentProblem.BadDate("installedOn"),
+            InstalledComponentProblem.BadDate("removedOn"), InstalledComponentProblem.BadDate("replacedOn"),
+            InstalledComponentProblem.AfterToday("installedOn"), InstalledComponentProblem.AfterToday("removedOn"),
+            InstalledComponentProblem.AfterToday("replacedOn"), InstalledComponentProblem.RemovedBeforeInstalled("removedOn"),
+            InstalledComponentProblem.RemovedBeforeInstalled("replacedOn"),
+            InstalledComponentProblem.RemovedBeforeInstalled("installedOn"), InstalledComponentProblem.ParentOnAnotherAsset,
+            InstalledComponentProblem.ParentRemoved, InstalledComponentProblem.AlreadyRemoved,
+            InstalledComponentProblem.QuantityInvalid(0),
+        ).map { installedComponentRefusal(listOf(it)) } + installedComponentRefusal(emptyList())
+        val codes = failures.map { it.code }.toSet()
+        assertEquals(10, codes.size)
+        for (failure in failures) {
+            val row = codeRow(text, failure.code)
+            assertTrue("${failure.code}'s row must say ${failure.status}: $row", row.startsWith("| ${failure.status} |"))
+            assertTrue("${failure.code}'s row must carry its sentence: $row", "`message` `${failure.message}`" in row)
+            failure.field?.let { assertTrue("${failure.code}'s row must name `$it`: $row", "`$it`" in row) }
+        }
+        // The routes, the row's keys, the status keys and the merge reason.
+        for (name in listOf(
+            "/v1/assets/{id}/installed-components", "/v1/installed-components", "/v1/installed-components/{id}",
+            "/v1/installed-components/{id}/remove", "/v1/installed-components/{id}/replace", "installedComponents",
+            "compositionEntries", "composition", "serialOrLot", "installedOn", "removedOn", "replacesId", "replacedOn",
+            "INSTALLED_COMPONENT_REPLACEMENT_TAKEN",
+        )) {
+            assertTrue("docs/api/v1.md does not name $name", "`$name`" in text)
+        }
+        assertFalse("the import range reads 1–19 now", "1–18" in text)
+        assertEquals(
+            "both status lines say 19 since #47",
+            2,
+            text.lines().count { "19 since #47 (installed components)" in it },
+        )
+        // No command-shapes entry: the PATCH is an overlay, so no client rebuilds a whole command.
+        assertFalse("installedComponent" in repoFile("docs/api/command-shapes.json").readText())
+    }
+
+    @Test fun theReusedSupplyCodesNameTheComponentRoutes() {
+        val text = repoFile("docs/api/v1.md").readText()
+        // C-8: the two shipped rows, widened to the #47 routes with both fields, their sentences unchanged.
+        for (problem in listOf(
+            InstalledComponentProblem.SupplyItemMissing, InstalledComponentProblem.EntrySupplyItemMissing(0),
+            InstalledComponentProblem.SupplyItemArchived, InstalledComponentProblem.EntrySupplyItemArchived(0),
+        )) {
+            val failure = installedComponentRefusal(listOf(problem))
+            val rows = Regex("""^\| ${failure.status} \| `${failure.code}` \|.*$""", RegexOption.MULTILINE)
+                .findAll(text).toList()
+            assertEquals("docs/api/v1.md must carry exactly one ${failure.code} row", 1, rows.size)
+            val row = rows.single().value
+            assertTrue("$problem: the row must name the #47 routes: $row", "`/v1/installed-components`" in row)
+            assertTrue("$problem: the row must name `field` `${failure.field}`: $row", "`field` `${failure.field}`" in row)
+            assertTrue("$problem: the row must keep its sentence: $row", "`message` `${failure.message}`" in row)
+        }
     }
 }
