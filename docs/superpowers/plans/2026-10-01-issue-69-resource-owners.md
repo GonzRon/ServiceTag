@@ -1,5 +1,19 @@
 # #69 — resources owned by SupplyItems and installed components, and Share intake to all three owners: plan and briefs (rev 1.1, 2026-10-01)
 
+> **Rev 1.2 (2026-10-02, the owner's rulings — mechanical reconciliation, no review round):** R69-0 the scope sentence
+> APPROVED (one existing resource system extended to Asset, SupplyItem and InstalledComponent ownership; event-owned
+> attachments stay supported); R69-2 OPTION C — ordinary SupplyItem-owned references, no preferred marker, no URL
+> column; AC11 is satisfied by an owner-labelled vendor reference and there is no machine-readable preference; R69-3
+> APPROVED (Attach to → Asset / Supply / Installed component, Asset first; shared prose Asset-only); R69-4 APPROVED
+> (navigation-only from the Asset detail; the component screen shows its own resources and clearly separated,
+> open-only SupplyItem groups). §5 RATIFIED as one block with "installed component" used consistently in P69-12/-14/-16;
+> the row sheet's action reads "Documents and references" (C27, R69-9). The controller defaults ACCEPTED (schema 20 /
+> format 20; the existing role vocabulary; owner-scoped materialization; the eighteen bounded briefs); version 1.6.0 /
+> code 19 unchanged; emulator validation only; the carrying release's upgrade proof stays separate. **The Transfer Pack
+> limitations are explicitly accepted** (a conflicting edit to a global SupplyItem resource can block the return; a
+> resource deleted locally can be reintroduced by the returning pack) — documented and behaviourally pinned, rows and
+> bytes. F-1: proceed and measure the ordinary merged-tip gate once (elapsed and device time separately).
+
 > **Rev 1.1 (2026-10-01)** folds in the independent plan review (`.superpowers/sdd/2026-10-01-issue-69/plan-review.md`,
 > APPROVE WITH CONDITIONS; the seam split R69-14 upheld) under the controller's rulings. **Conditions:** C-1 (the
 > migration tests measure the latest schema) → C8, §3's B1a pins, "Briefs — common"'s confirm grep, B1a; C-2
@@ -567,7 +581,7 @@ merge of duplicate resources across owners; the schedules loader and the bundle 
   (`A/ui/installed/InstalledComponentSheets.kt:71-90`) and the sections open their own sheets (#47 E-30: one sheet
   at a time), so the smallest honest surface is **a route and a screen**: `Route.InstalledComponentDetail(val id:
   String)` beside `Route.SupplyDetail` (`A/ui/nav/Route.kt:168`), its `entry` in `A/ui/nav/ServiceTagRoot.kt` beside
-  `:580-589`. Reached from the row sheet by a **"Documents" action (P69-1)** offered on **every** row — current,
+  `:580-589`. Reached from the row sheet by a **"Documents and references" action (P69-1)** offered on **every** row — current,
   removed, and on a held asset (where it opens read-only) — through a new `onOpenDocuments(id)` from
   `InstalledComponentsSection` (`InstalledComponentsSection.kt:58-64`) via `AssetDetailScreen` to the root. **The
   action closes the row sheet, then navigates** (`model.closeRow()` first, as `onOpenSupply` does,
@@ -856,7 +870,7 @@ B7), each closed by its row:
 
 ## 5. Strings
 
-**PROPOSED — to be RATIFIED by the owner as one block.** Each new string is declared once as a `const val` (or a
+**RATIFIED by the owner as one block (2026-10-02): P69-1…16 as written here, the reused words, G1–G3.** Each new string is declared once as a `const val` (or a
 one-line function for a format) at the home named, and imported, never copied.
 
 | id | proposed wording | home · where (contract) |
@@ -872,11 +886,11 @@ one-line function for a format) at the home named, and imported, never copied.
 | P69-9 | "Choose an installed component" | same · the component step's title (C30; "Choose a supply"'s shape) |
 | P69-10 | "%1$s · %2$s" — the asset's name, then the component's | same · the chosen component's line on the form and in "Saved to %s" (C29) |
 | P69-11 | "That link is already on this supply" | `A/ui/references/ReferencesSectionViewModel.kt` beside `:283` (declared by B6a; `IntakeStrings` imports it in B7) (C28) |
-| P69-12 | "That link is already on this component" — P69-12, -14 and -16 follow the owner's P69-2 choice ("…this installed component…" with the recommendation, N-17) | as P69-11 (C28) |
+| P69-12 | "That link is already on this installed component" | as P69-11 (C28) |
 | P69-13 | "The link is removed from this supply. Nothing in the other app is changed." | `ReferenceSheets.kt` (C28) |
-| P69-14 | "The link is removed from this component. Nothing in the other app is changed." | as P69-13 (C28) |
+| P69-14 | "The link is removed from this installed component. Nothing in the other app is changed." | as P69-13 (C28) |
 | P69-15 | "This supply already has this file: %s." | `MaterializeStrings.kt` (C28; P85-17's shape) |
-| P69-16 | "This component already has this file: %s." | as P69-15 (C28) |
+| P69-16 | "This installed component already has this file: %s." | as P69-15 (C28) |
 
 **Reused verbatim from their one home:** "Documents", "No documents yet", "Add file", "Take photo"
 (`A/ui/attachments/DocumentsSection.kt:93`, `:100`, `:108-109`); "References", "No references yet", "Add link", "Open"
@@ -919,22 +933,22 @@ on the Asset detail (R69-4); a "preferred" badge (R69-2); a held-asset dead end 
 
 | ruling | whose | the question · the recommendation | where it lands |
 |---|---|---|---|
-| **R69-0** | **owner — OPEN** | **The scope sentence** (header): ratify as written, or amend. | every brief's must-nots |
+| **R69-0** | **owner — DECIDED 2026-10-02** | **The scope sentence** (header): ratify as written, or amend. | every brief's must-nots |
 | R69-1 | controller default | **The owner shape (a):** nullable owner FK columns, each CASCADE, exactly one set, enforced on the Room write and the backup read; the sealed `AttachmentOwner` gains two members; `asset_reference` rebuilt with one unique `(owner, uri)` index per owner. (b) loses referential safety exactly where #47 made rows leave only by CASCADE; (c) forks the use cases, views and #85 (§4's table). | C4–C13 |
-| **R69-2** | **owner — OPEN** | **The vendor URL (AC11 against #15's "no URL"):** recommend **C — reference rows owned by the SupplyItem, no marker**; **D** (a soft `preferred_reference_id`) only if one link must be marked preferred (+1 brief B2d, a C12-style exception, a PATCH key and a `clear_fields` entry); **never A** (a second link system). §4's table costs all four. | C20, C31, §4 |
-| **R69-3** | **owner — OPEN** | **Share's first step:** recommend a three-way **"Attach to: Asset / Supply / Installed component"**, Asset first, then the owner's own picker (#93's asset list; the shipped `SupplyItemPicker`; the chosen asset's current component tree); a prose share offers Asset only. The alternative — two entries (an asset picker that also lists each asset's components, plus Supply) — grows #93's picker and its tests. | C29–C30, P69-5…10 |
-| **R69-4** | **owner — OPEN** | **The Asset detail:** recommend it **reaches** its components' and SupplyItems' resources by navigation only (a component row → its screen; a Supplies row → the SupplyItem detail) and never lists them (AC12: nothing reads as Asset-owned; the busiest screen does not grow). | C27, §1 out |
+| **R69-2** | **owner — DECIDED 2026-10-02** | **The vendor URL (AC11 against #15's "no URL"):** recommend **C — reference rows owned by the SupplyItem, no marker**; **D** (a soft `preferred_reference_id`) only if one link must be marked preferred (+1 brief B2d, a C12-style exception, a PATCH key and a `clear_fields` entry); **never A** (a second link system). §4's table costs all four. | C20, C31, §4 |
+| **R69-3** | **owner — DECIDED 2026-10-02** | **Share's first step:** recommend a three-way **"Attach to: Asset / Supply / Installed component"**, Asset first, then the owner's own picker (#93's asset list; the shipped `SupplyItemPicker`; the chosen asset's current component tree); a prose share offers Asset only. The alternative — two entries (an asset picker that also lists each asset's components, plus Supply) — grows #93's picker and its tests. | C29–C30, P69-5…10 |
+| **R69-4** | **owner — DECIDED 2026-10-02** | **The Asset detail:** recommend it **reaches** its components' and SupplyItems' resources by navigation only (a component row → its screen; a Supplies row → the SupplyItem detail) and never lists them (AC12: nothing reads as Asset-owned; the busiest screen does not grow). | C27, §1 out |
 | R69-5 | controller default | **Schema 20 / format 20, a normal bump.** Never amend the unreleased 19 in place: emulator databases and format-19 exports exist, and Room refuses a hash mismatch with no migration. ~40 mechanical sites (§3). | C6–C10 |
 | R69-6 | controller default | **Document roles on SupplyItem- and component-owned files too** (R67-11 widened to "anything but an entry's file"; `DocumentRole.kt:9-11` anticipates it); **no new `AttachmentKind`** — SPECIFICATION and DIAGRAM stay `DOCUMENT` (§5's table). Load-bearing for AC13: #85 carries the reference's role into its saved file. | C4, C5, C17, C25 |
 | R69-7 | controller default | **The Transfer Pack:** a SupplyItem's resources, bytes included, travel with it as `GLOBAL_IN_USE` and are never held; a component's travel with its asset. Costs stated: pack size (limit 3); an edit while a pack is out refuses the return (limit 2, H5). | C15, C5, C13 |
 | R69-8 | controller default | **The component screen shows** its own resources **and** the resources of every SupplyItem its direct link and its composition entries name, one open-only group per distinct SupplyItem, as two ownerships. | C27 |
-| R69-9 | controller default | **The smallest honest component surface** is a route and a screen reached from the row sheet's "Documents" action on every row (a held asset's read-only); no section on the row sheet (sheets would stack, #47 E-30). No product choice remains beyond §5's words. | C27 |
+| R69-9 | controller default | **The smallest honest component surface** is a route and a screen reached from the row sheet's "Documents and references" action on every row (a held asset's read-only); no section on the row sheet (sheets would stack, #47 E-30). No product choice remains beyond §5's words. | C27 |
 | R69-10 | controller default | **Archived and removed owners:** an archived SupplyItem and a removed component keep their resources and may gain more from their screens and over the API/MCP; Share offers unarchived SupplyItems and current components only. | C5, C13, C26, C30 |
 | R69-11 | controller default | **Bytes follow each owner's life** (C16a's table): kept with an archived SupplyItem and a removed component; swept with a deleted asset's components and a returning asset's. | C5, C16a |
 | R69-12 | controller default | **API/MCP shape:** owner keys on the create (exactly one), +4 shapes / +6 rows, five MCP tools widened (89 stays, six new tools rejected), the v3 upload derivation for the new owners with v2 byte-identical for assets. | C19–C24 |
 | R69-13 | controller default | **Owner-worded sentences:** per-owner twins for the four asset-worded sentences, the asset wording unchanged (no shipped pin moves), rather than one owner-neutral rewrite. | C28, P69-11…16 |
 | R69-14 | controller default | **The brief split** (§4's order) replaces the audit's §13: substrate, two seams, then semantics — the sealed extension is compile-atomic. | §4, briefs |
-| **F-1** | **owner — a flag, not a ruling (C-8)** | **#90 and the gate time:** at #15's measured ~2.47 s per test the base is already ~13.1 min and #69's tip ~13.9–14.1 min — at the 14-minute warning line, under 15. #47's base was never timed in a clean run; the #69 merged-tip gate records the first clean single-run time. Whether #90 (the gate's split or speed-up) moves ahead of the next feature is the owner's call once that number exists. | §3, §4, §7 |
+| **F-1** | **owner — DECIDED 2026-10-02: proceed; measure the ordinary merged-tip gate once, total elapsed and device time recorded separately; at 14 min report the warning; above 15 min #90 comes before further feature work** | **#90 and the gate time:** at #15's measured ~2.47 s per test the base is already ~13.1 min and #69's tip ~13.9–14.1 min — at the 14-minute warning line, under 15. #47's base was never timed in a clean run; the #69 merged-tip gate records the first clean single-run time. Whether #90 (the gate's split or speed-up) moves ahead of the next feature is the owner's call once that number exists. | §3, §4, §7 |
 
 ## 7. Proofs
 
