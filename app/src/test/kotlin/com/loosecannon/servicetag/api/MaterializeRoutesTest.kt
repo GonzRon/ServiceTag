@@ -115,6 +115,7 @@ class MaterializeRoutesTest {
             ),
             replaceHandlersFor(graph),
             supplyHandlersFor(graph),
+            installedComponentHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

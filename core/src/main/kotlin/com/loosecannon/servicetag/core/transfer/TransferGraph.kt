@@ -62,6 +62,7 @@ object TransferTables {
         // #15 (C13): a SupplyItem travels when a carried row names it, an applicability row with its asset.
         "supplyItems" to TransferTableClass.GLOBAL_IN_USE,
         "assetSupplies" to TransferTableClass.ASSET_OWNED,
+        "installedComponents" to TransferTableClass.ASSET_OWNED,
     )
 
     /** Whether any row of [table] can be in a pack. An unclassified list never travels. */
@@ -148,8 +149,10 @@ object TransferGraph {
      * C2 (AC 1–3; R77-6 to R77-10): [rootIds] plus every descendant (forced); their asset-owned rows (#15's
      * applicability rows among them); each group wholly in the selection with its schedules and closures; the
      * custom categories the selection uses, and (#15, C13) every supply item a carried row names — an applicability
-     * row or a quick action's or an event's material line, archived or not; soft links as they are. Loans, 2.6
-     * links and the tags on them never travel.
+     * row or a quick action's or an event's material line, archived or not, and (#47, C13) an installed component's
+     * direct link or composition entry; soft links as they are. Every installed component of a carried asset travels,
+     * current and removed, with its composition: the history whole (R47-4). Loans, 2.6 links and the tags on them
+     * never travel.
      *
      * Refused, every reason collected: a group with a row naming a selected asset that is not wholly in
      * the selection ([TransferRefusal.MixedGroup], removed rows counted); a root whose parent is not
@@ -233,9 +236,14 @@ object TransferGraph {
         // #15 (C13): the applicability rows go with their asset; a SupplyItem goes only when a carried row names it —
         // by naming row, as the categories go, so a later table that names one only adds itself here.
         val assetSupplies = carry("assetSupplies", data.assetSupplies) { it.assetId in selected }
+        // #47 (C13; R47-4): every installed component of a carried asset, current and removed, each with its
+        // composition, so its history travels whole; it names SupplyItems by its direct link and by each entry.
+        val installedComponents = carry("installedComponents", data.installedComponents) { it.assetId in selected }
         val supplyIdsInUse = assetSupplies.map { it.supplyId }.toSet() +
             profiles.flatMap { p -> p.consumables.mapNotNull { it.supplyId } } +
-            events.flatMap { e -> e.consumables.mapNotNull { it.supplyId } }
+            events.flatMap { e -> e.consumables.mapNotNull { it.supplyId } } +
+            installedComponents.mapNotNull { it.supplyId } +
+            installedComponents.flatMap { row -> row.composition.map { it.supplyId } }
         val pack = BackupData(
             assets = carry("assets", data.assets) { it.id in selected },
             // Only tags on a pack asset; a link's tag is a tombstone like the link (C1).
@@ -261,6 +269,7 @@ object TransferGraph {
             assetSuccessions = carry("assetSuccessions", data.assetSuccessions) { false },
             supplyItems = carry("supplyItems", data.supplyItems) { it.id in supplyIdsInUse },
             assetSupplies = assetSupplies,
+            installedComponents = installedComponents,
         ).sorted()
         return TransferSelection.Selected(
             rootIds = roots.map(::AssetId),
@@ -270,13 +279,13 @@ object TransferGraph {
     }
 
     /**
-     * C3 — the archive without [held]: the held assets and their asset-owned rows (#15's applicability rows
-     * among them), each group wholly in [held] with its schedules and closures, and every tag, loan, succession
-     * (#86, either end) and 2.6 link naming a held asset (with the tags on those links). The categories and (#15,
-     * C13) the supply items are global and stay whole, an item only a held row names included. Exactly the held
-     * set: no descendant or group member is added to it. A row that stays and names a dropped row makes the whole
-     * answer [TransferRetention.Entangled], naming every such reference — a later archive of what stays must still
-     * decode.
+     * C3 — the archive without [held]: the held assets and their asset-owned rows (#15's applicability rows and
+     * #47's installed components, current and removed, among them), each group wholly in [held] with its schedules
+     * and closures, and every tag, loan, succession (#86, either end) and 2.6 link naming a held asset (with the tags
+     * on those links). The categories and (#15, C13) the supply items are global and stay whole, an item only a held
+     * row names included. Exactly the held set: no descendant or group member is added to it. A row that stays and
+     * names a dropped row makes the whole answer [TransferRetention.Entangled], naming every such reference — a later
+     * archive of what stays must still decode.
      */
     fun retain(data: BackupData, held: Set<AssetId>): TransferRetention {
         val dropped = droppedBy(data, held)
@@ -312,6 +321,10 @@ object TransferGraph {
             // #15 (C13): an applicability row goes with its asset; `supplyItems` is not named, so the copy keeps every
             // one — a SupplyItem is global and never dropped, so nothing here can entangle on it.
             assetSupplies = data.assetSupplies.filterNot { it.assetId in heldIds },
+            // #47 (C13): an installed component goes with its asset, current and removed, its composition with it. It
+            // names only its asset and rows of that asset, which leave with it, and SupplyItems, which never leave — so
+            // it never entangles.
+            installedComponents = data.installedComponents.filterNot { it.assetId in heldIds },
         )
 
         val refs = entangledRefs(kept, dropped)
@@ -401,7 +414,8 @@ object TransferGraph {
 
     /**
      * Every list by id (categories by key), so equal selections are equal whatever the input order. A supply item's
-     * specifications stay in the order the archive holds them, `(sortOrder, id)`.
+     * specifications and an installed component's composition stay in the order the archive holds them,
+     * `(sortOrder, id)`.
      */
     private fun BackupData.sorted() = BackupData(
         assets = assets.sortedBy { it.id },
@@ -426,5 +440,6 @@ object TransferGraph {
         assetSuccessions = assetSuccessions.sortedBy { it.id },
         supplyItems = supplyItems.sortedBy { it.id },
         assetSupplies = assetSupplies.sortedBy { it.id },
+        installedComponents = installedComponents.sortedBy { it.id },
     )
 }

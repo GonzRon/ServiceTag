@@ -51,11 +51,11 @@ class BackupFormat13Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(18, decoded.manifest.formatVersion)
+        assertEquals(19, decoded.manifest.formatVersion)
         assertEquals(listOf("l0", "l1", "l2"), decoded.data.assetLoans.map { it.id }, "sorted by id")
         assertEquals(listOf(nameOnly, returned, open), decoded.data.assetLoans.map { it.toDomain() }, "field for field, the link null and set")
         val tree = dataTreeOf(bytes)
-        assertEquals("assetLoans", tree.keys.toList().dropLast(4).last(), "the list follows the case lists; format 14's records, format 15's successions and format 18's two lists follow it")
+        assertEquals("assetLoans", tree.keys.toList().dropLast(5).last(), "the list follows the case lists; format 14's records, format 15's successions, format 18's two lists and format 19's one follow it")
         val row = tree.getValue("assetLoans").jsonArray.first().jsonObject
         assertTrue("contactLookupUri" in row && "dueOn" in row && "returnedOn" in row, "an unset field is written, not left out: $row")
     }
@@ -65,7 +65,7 @@ class BackupFormat13Test {
         val manifest = BackupCodec.decode(archiveOf(data(listOf(open, returned, nameOnly)))).manifest
 
         assertEquals(3, manifest.counts["assetLoans"])
-        assertEquals(29, manifest.counts.size, "twenty-three through format 12, the loans, format 14's records, format 15's successions and format 18's three")
+        assertEquals(31, manifest.counts.size, "twenty-three through format 12, the loans, format 14's records, format 15's successions, format 18's three and format 19's two")
         assertEquals(0, BackupCodec.decode(archiveOf(data())).manifest.counts["assetLoans"], "present at zero")
     }
 

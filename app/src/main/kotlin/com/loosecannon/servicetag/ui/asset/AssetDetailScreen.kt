@@ -130,6 +130,7 @@ import com.loosecannon.servicetag.ui.health.HealthBadge
 import com.loosecannon.servicetag.ui.health.HealthPlurals
 import com.loosecannon.servicetag.ui.health.healthColors
 import com.loosecannon.servicetag.ui.health.healthGlyph
+import com.loosecannon.servicetag.ui.installed.InstalledComponentsSection
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.journal.eventDetailLine
 import com.loosecannon.servicetag.ui.journal.formatTarget
@@ -443,8 +444,17 @@ fun AssetDetailScreen(
             )
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 // #15 (C33, R15-8): which SupplyItems this asset takes, and in what role — first in this column,
-                // directly above the child assets. A held asset draws its rows and offers no write.
+                // directly above the installed components. A held asset draws its rows and offers no write.
                 AssetSuppliesSection(
+                    assetId = current.asset.id,
+                    graph = graph,
+                    snackbars = snackbars,
+                    onOpenSupply = onOpenSupply,
+                    readOnly = !current.offersWrites,
+                )
+                // #47 (C27): what is fitted inside this asset, as a tree, between Supplies and the child assets. A held
+                // asset draws its rows and history and offers no write.
+                InstalledComponentsSection(
                     assetId = current.asset.id,
                     graph = graph,
                     snackbars = snackbars,
@@ -726,7 +736,7 @@ private fun DetailPrompts(
         )
         is DetailPrompt.DeleteRefused -> AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Components first") },
+            title = { Text("Child assets first") },
             text = {
                 Text(
                     "$assetName still has ${prompt.children.joinToString(", ")}. Move or delete " +
@@ -984,8 +994,8 @@ private fun priceLine(asset: Asset): String? {
 }
 
 /**
- * The asset's children (spec §9). Always present, because "+ Add component" is how the first child
- * gets made and an action nobody can reach is no action at all; empty reads "No components" rather
+ * The asset's children (spec §9). Always present, because "+ Add child asset" is how the first child
+ * gets made and an action nobody can reach is no action at all; empty reads "No child assets" rather
  * than vanishing. Each row says how many of the child's *own* readings are out of range and never
  * what they read: 2B-2 rolls nothing up, so a parent that looks fine is not a claim about its
  * components, only an invitation to open one.
@@ -996,9 +1006,9 @@ private fun ComponentsSection(
     onOpenAsset: (String) -> Unit,
     onAddComponent: (() -> Unit)?,
 ) {
-    SectionHeader(title = "Components")
+    SectionHeader(title = "Child assets")
     Column {
-        if (components.isEmpty()) QuietLine("No components")
+        if (components.isEmpty()) QuietLine("No child assets")
         components.forEach { child ->
             Column(
                 modifier = Modifier
@@ -1017,7 +1027,7 @@ private fun ComponentsSection(
                 ConditionBadge(child.condition, Modifier.padding(top = 4.dp))
             }
         }
-        onAddComponent?.let { add -> TextButton(onClick = add) { Text("+ Add component") } }
+        onAddComponent?.let { add -> TextButton(onClick = add) { Text("+ Add child asset") } }
     }
 }
 

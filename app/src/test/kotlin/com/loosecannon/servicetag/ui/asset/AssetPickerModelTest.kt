@@ -292,7 +292,7 @@ class AssetPickerModelTest {
             return state.emptyReason
         }
 
-        assertEquals("only Components hides it; the held match is gone", EmptyReason.COMPONENTS_HIDDEN, reasonFor("filter"))
+        assertEquals("only Child assets hides it; the held match is gone", EmptyReason.COMPONENTS_HIDDEN, reasonFor("filter"))
         assertEquals(EmptyReason.ARCHIVED_HIDDEN, reasonFor("hose"))
         assertEquals(EmptyReason.BOTH_HIDDEN, reasonFor("cover"))
         vm.pickType("hot tub")

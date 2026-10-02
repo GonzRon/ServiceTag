@@ -20,6 +20,8 @@ import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -388,6 +390,35 @@ interface AssetSupplyRepository {
 
     /** An Asset's rows, live, by `(role, id)`. */
     fun observeForAsset(assetId: AssetId): Flow<List<AssetSupply>>
+}
+
+/**
+ * #47 (C4; R47-2, R47-3, R47-17a). Installed components, an aggregate as [SupplyItemRepository]'s is: a row is
+ * saved and loaded with its composition, whose entry ids come from the caller, so an entry that survives an edit
+ * keeps its identity. Every list carries each row's composition in `(sortOrder, id)` order.
+ *
+ * **No delete of any kind:** a row leaves only by its Asset's CASCADE (the Asset delete, the replace import's
+ * wipe, a returning pack's removal), and an entry only with its row or by its row's [update]. Every rule — the
+ * name, the dates, the parent, the SupplyItems, the one successor per row — lives in the use cases and the
+ * schema, so nothing here decides anything. The write guard wraps this port (C14), not this file.
+ */
+interface InstalledComponentRepository {
+    suspend fun get(id: InstalledComponentId): InstalledComponent?
+
+    /** An Asset's rows, current and removed, by id. */
+    suspend fun forAsset(assetId: AssetId): List<InstalledComponent>
+
+    /** Every row, by id. */
+    suspend fun all(): List<InstalledComponent>
+
+    /** Writes the row and its composition. */
+    suspend fun insert(row: InstalledComponent)
+
+    /** Writes the row whole and replaces its composition with [row]'s. */
+    suspend fun update(row: InstalledComponent)
+
+    /** An Asset's rows, current and removed, live, by id. */
+    fun observeForAsset(assetId: AssetId): Flow<List<InstalledComponent>>
 }
 
 /**

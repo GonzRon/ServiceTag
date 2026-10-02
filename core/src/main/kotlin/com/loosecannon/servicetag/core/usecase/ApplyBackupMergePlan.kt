@@ -44,6 +44,7 @@ import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -135,6 +136,8 @@ class ApplyBackupMergePlan(
     /** #15 — the SupplyItems with their specifications, and the applicability rows (format 18). */
     private val supplyItems: SupplyItemRepository,
     private val assetSupplies: AssetSupplyRepository,
+    /** #47 — the installed components, each with its composition (format 19). */
+    private val installedComponents: InstalledComponentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -170,7 +173,7 @@ class ApplyBackupMergePlan(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
                     categories, serviceCases, caseEntries, loans, transfers, successions, supplyItems, assetSupplies,
-                    stored, configured,
+                    installedComponents, stored, configured,
                 ),
                 returning,
             )
@@ -201,6 +204,10 @@ class ApplyBackupMergePlan(
             // though a link is soft and needs no order. The applicability rows after both their owners.
             fresh.writes.supplyItems.forEach { supplyItems.upsert(it) }
             fresh.writes.assetSupplies.forEach { assetSupplies.insert(it) }
+            // #47 (C12): the installed components, each with its composition, straight after the applicability rows —
+            // after their asset and every SupplyItem they name (`supply_id` RESTRICT, on the row and on each entry), and
+            // parents first, as the plan lists them (`parent_id`).
+            fresh.writes.installedComponents.forEach { installedComponents.insert(it) }
             fresh.writes.groups.forEach { groups.upsert(it) }
             fresh.writes.definitions.forEach { definitions.upsert(it) }
             fresh.writes.profiles.forEach { profiles.upsert(it) }
@@ -314,6 +321,10 @@ internal class ReturnScope private constructor(
                 // #15 (C13, C-4): the applicability rows go with their asset — the delete's cascade takes them, and the
                 // pack's rows plan as inserts. `supplyItems` is not named: global, the copy keeps every one.
                 assetSupplies = full.assetSupplies.filterNot { it.assetId in returning },
+                // #47 (C13): the installed components go with their asset, current and removed — the delete's cascade
+                // takes them and their entries, and the pack's rows plan as inserts, so a row closed, replaced or
+                // recomposed on the borrowing phone lands instead of refusing the return.
+                installedComponents = full.installedComponents.filterNot { it.assetId in returning },
             )
             val dropped = DroppedRows(
                 assets = returning.mapTo(HashSet()) { it.value },

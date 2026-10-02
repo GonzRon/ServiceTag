@@ -267,18 +267,18 @@ class BackupFormat8Test {
     // --- direction -------------------------------------------------------------------------------
 
     /**
-     * Hazard: a newer archive half-read. A manifest one format past this build's (19, since #15 made
-     * the build's own 18) over a `data.json` that no format could read is refused as **newer**, not as
+     * Hazard: a newer archive half-read. A manifest one format past this build's (20, since #47 made
+     * the build's own 19) over a `data.json` that no format could read is refused as **newer**, not as
      * corrupt — so the gate ran before a single row was parsed.
      */
     @Test
     fun aFormatPastThisBuildsIsRefusedBeforeAnyRow() {
         val unreadable = dataTreeOf(archiveOf(fixture())).editRows("healthSubjects") { it.with("weight", JsonPrimitive("heavy")) }
-        val bytes = sealed(unreadable, formatVersion = 19)
+        val bytes = sealed(unreadable, formatVersion = 20)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
-        assertEquals(19, refusal.found)
-        assertEquals(18, refusal.supported)
+        assertEquals(20, refusal.found)
+        assertEquals(19, refusal.supported)
         // The same tree at a format this build reads *is* parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 8)) }
     }
@@ -306,8 +306,8 @@ class BackupFormat8Test {
         assertEquals(3, counts["assetConditions"])
         assertEquals(1, counts["healthSubjects"])
         // Twenty through format 8, format 9's `assetCategories`, format 12's two case lists, format 13's
-        // `assetLoans`, format 14's `transferRecords`, format 15's `assetSuccessions` and format 18's three (#15).
-        assertEquals(29, counts.size)
+        // `assetLoans`, format 14's `transferRecords`, format 15's `assetSuccessions`, format 18's three (#15) and format 19's two (#47).
+        assertEquals(31, counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

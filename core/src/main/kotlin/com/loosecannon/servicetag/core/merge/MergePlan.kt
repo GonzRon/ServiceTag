@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
@@ -27,7 +28,7 @@ import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The twenty-two canonical tables. The first fourteen are **in the order a merge must write them**:
+ * The twenty-three canonical tables. The first fourteen are **in the order a merge must write them**:
  * every reference a row makes points at a table declared before it (assets first, attachment rows
  * last, when every owner is in). The ordinal is also the first key decisions and conflicts are
  * sorted by, which is what makes a report deterministic.
@@ -76,11 +77,17 @@ import java.security.MessageDigest
  * after them, once both owners — the asset and the SupplyItem — are known. [MergeWrites] writes the SupplyItems,
  * each with its specifications, before the applicability rows that name them (`asset_supply.supply_id` RESTRICT),
  * and both after the assets.
+ *
+ * #47 appended [INSTALLED_COMPONENTS] after [ASSET_SUPPLIES], so no shipped ordinal moves. Its rows are decided after
+ * the applicability rows and before the profiles, once every owner a row can name — its asset, its SupplyItems and
+ * its parent — is decided, and parents first; nothing decided later names one. [MergeWrites] writes them straight
+ * after the applicability rows. A composition has no table of its own: its entries are decided, written and tallied
+ * with their row, as a SupplyItem's specifications are with theirs.
  */
 enum class MergeTable {
     ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
     REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS, CATEGORIES,
-    SERVICE_CASES, CASE_ENTRIES, LOANS, TRANSFERS, SUCCESSIONS, SUPPLY_ITEMS, ASSET_SUPPLIES,
+    SERVICE_CASES, CASE_ENTRIES, LOANS, TRANSFERS, SUCCESSIONS, SUPPLY_ITEMS, ASSET_SUPPLIES, INSTALLED_COMPONENTS,
 }
 
 /**
@@ -364,6 +371,13 @@ enum class MergeReason {
      * stays exactly as it was. [MergeDecision.detail] is the local row's id.
      */
     ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW,
+
+    /**
+     * #47 (C12). An inserted installed component whose `replacesId` another row already names — this phone's, or one
+     * earlier in the plan: a row is replaced at most once, and the schema's unique index would refuse the second.
+     * [MergeDecision.detail] is the holder's row id.
+     */
+    INSTALLED_COMPONENT_REPLACEMENT_TAKEN,
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -406,7 +420,7 @@ data class MergeTally(val insert: Int, val identical: Int, val conflict: Int, va
 
 /**
  * The rows to insert. **The field order is the write order**, and each list is ordered within
- * itself — categories by key, assets parents-first, definitions ENTERED-before-DERIVED. Empty in
+ * itself — categories by key, assets and installed components parents-first, definitions ENTERED-before-DERIVED. Empty in
  * every field when the plan holds a conflict, so "no partial merge" is a property of this value
  * rather than a discipline the apply has to remember.
  *
@@ -425,6 +439,8 @@ data class MergeWrites(
     val supplyItems: List<SupplyItem> = emptyList(),
     /** #15 — the applicability rows, after both their owners. */
     val assetSupplies: List<AssetSupply> = emptyList(),
+    /** #47 — the installed components, each with its composition, parents first, after their asset and SupplyItems. */
+    val installedComponents: List<InstalledComponent> = emptyList(),
     val groups: List<MaintenanceGroup> = emptyList(),
     val definitions: List<MeasurementDefinition> = emptyList(),
     val profiles: List<EventProfile> = emptyList(),
@@ -487,6 +503,8 @@ data class MergeSnapshot(
     /** #15 — the SupplyItems, archived included, and the applicability rows. */
     val supplyItems: List<SupplyItem> = emptyList(),
     val assetSupplies: List<AssetSupply> = emptyList(),
+    /** #47 — the installed components, current and removed, each with its composition. */
+    val installedComponents: List<InstalledComponent> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -529,9 +547,11 @@ data class MergeReport(
     val transfers: MergeTally,
     /** #86 — the successions. */
     val successions: MergeTally,
-    /** #15 — the SupplyItems, then their applicability: the report is twenty-two tables. */
+    /** #15 — the SupplyItems, then their applicability. */
     val supplyItems: MergeTally,
     val assetSupplies: MergeTally,
+    /** #47 — the installed components, their composition counted with them: the report is twenty-three tables. */
+    val installedComponents: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -610,6 +630,7 @@ class MergePlan internal constructor(
         successions = tally(MergeTable.SUCCESSIONS),
         supplyItems = tally(MergeTable.SUPPLY_ITEMS),
         assetSupplies = tally(MergeTable.ASSET_SUPPLIES),
+        installedComponents = tally(MergeTable.INSTALLED_COMPONENTS),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )

@@ -71,7 +71,7 @@ class BackupFormat18Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(18, decoded.manifest.formatVersion)
+        assertEquals(19, decoded.manifest.formatVersion)
         assertEquals(listOf(SupplyEstate.prefilter, SupplyEstate.membrane), decoded.data.supplyItems.map { it.toDomain() })
         assertEquals(
             listOf(SupplyEstate.prefilterOnSystem, SupplyEstate.membraneOnSoftener),
@@ -123,7 +123,7 @@ class BackupFormat18Test {
         }
         assertEquals(listOf("id", "name", "defaultQuantity", "unit", "sortOrder", "supplyId"), ProfileConsumableDto.serializer().descriptor.names)
         assertEquals(listOf("id", "name", "quantity", "unit", "sortOrder", "supplyId"), ConsumableUsageDto.serializer().descriptor.names)
-        assertEquals(listOf("supplyItems", "assetSupplies"), BackupData.serializer().descriptor.names.takeLast(2))
+        assertEquals(listOf("supplyItems", "assetSupplies"), BackupData.serializer().descriptor.names.dropLast(1).takeLast(2))
     }
 
     // --- row 8: the format ≤ 17 gate -------------------------------------------------------------
@@ -323,7 +323,7 @@ class BackupFormat18Test {
         assertEquals(listOf("as1", "as2"), tree.getValue("assetSupplies").jsonArray.map { it.jsonObject.getValue("id").jsonPrimitive.content })
     }
 
-    /** Both lists are counted, and the specifications beside them exactly as group members are: three keys, 29 in all. */
+    /** Both lists are counted, and the specifications beside them exactly as group members are: three keys, 31 in all with format 19's two. */
     @Test
     fun theManifestCountsBothLists() {
         val counts = BackupCodec.decode(archiveOf(estate)).manifest.counts
@@ -331,7 +331,7 @@ class BackupFormat18Test {
         assertEquals(2, counts["supplyItems"])
         assertEquals(3, counts["supplySpecifications"])
         assertEquals(2, counts["assetSupplies"])
-        assertEquals(29, counts.size)
+        assertEquals(31, counts.size)
         val none = BackupCodec.decode(archiveOf(unlinked)).manifest.counts
         assertEquals(listOf(0, 0, 0), listOf("supplyItems", "supplySpecifications", "assetSupplies").map { none[it] }, "present at zero")
     }
@@ -340,13 +340,13 @@ class BackupFormat18Test {
 
     /** One format past this build's, over a tree no format could read: refused as newer before a row is parsed. */
     @Test
-    fun aFormat19ArchiveIsRefusedAsNewer() {
+    fun aFormat20ArchiveIsRefusedAsNewer() {
         val unreadable = dataTreeOf(archiveOf(estate)).editRows("supplyItems") { it.with("name", JsonNull) }
-        val bytes = sealed(unreadable, formatVersion = 19)
+        val bytes = sealed(unreadable, formatVersion = 20)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
 
-        assertEquals(19, refusal.found)
-        assertEquals(18, refusal.supported)
+        assertEquals(20, refusal.found)
+        assertEquals(19, refusal.supported)
     }
 }

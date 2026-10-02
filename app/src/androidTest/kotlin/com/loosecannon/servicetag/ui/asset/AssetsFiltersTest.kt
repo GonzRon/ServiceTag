@@ -97,7 +97,7 @@ class AssetsFiltersTest {
             assertInside(CHIPS[i], b, row)
         }
         assertTrue(
-            "Type, Components, Archived from left to right, was ${chips.map { it.left }}",
+            "Type, Child assets, Archived from left to right, was ${chips.map { it.left }}",
             chips[0].left < chips[1].left && chips[1].left < chips[2].left,
         )
         CHIPS.forEach { assertOneWholeLine(it) }
@@ -152,11 +152,11 @@ class AssetsFiltersTest {
 
         rule.awaitText("Hot tub")
         rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
-        rule.onNode(hasText("Components") and hasClickAction()).assertIsNotSelected()
+        rule.onNode(hasText("Child assets") and hasClickAction()).assertIsNotSelected()
 
-        rule.onNode(hasText("Components") and hasClickAction()).performClick()
+        rule.onNode(hasText("Child assets") and hasClickAction()).performClick()
         rule.awaitText("Circulation pump")
-        rule.onNode(hasText("Components") and hasClickAction()).assertIsSelected()
+        rule.onNode(hasText("Child assets") and hasClickAction()).assertIsSelected()
         rule.onNode(hasText("Circulation pump") and hasText("Part of Hot tub")).assertIsDisplayed()
         rule.onNodeWithText("Hot tub").assertIsDisplayed()
     }
@@ -312,6 +312,6 @@ class AssetsFiltersTest {
 
         val PHONE_412 = 380.dp // a 412dp phone after its 16dp gutters
 
-        val CHIPS = listOf("Type", "Components", "Archived")
+        val CHIPS = listOf("Type", "Child assets", "Archived")
     }
 }

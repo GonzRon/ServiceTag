@@ -20,6 +20,9 @@ import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.SupplyEstate
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
+import com.loosecannon.servicetag.core.testing.compositionEntryOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import kotlin.test.assertEquals
@@ -45,7 +48,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(18, decoded.manifest.formatVersion)   // this build's export: format 18 since #15
+        assertEquals(19, decoded.manifest.formatVersion)   // this build's export: format 19 since #47
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }
@@ -354,6 +357,68 @@ class ExportBackupSetTest {
         assertEquals(listOf(SupplyEstate.quickAction), decoded.data.eventProfiles.map { it.toDomain() })
         assertEquals(listOf(SupplyEstate.change), decoded.data.assetEvents.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetSupplies"])
+    }
+
+    /**
+     * #47 (C11, row 17): the export carries every installed component, current and removed, each with its composition
+     * in `(sortOrder, id)` order and every pointer and date as stored — an archived SupplyItem a row or an entry names
+     * included — and counts the rows and the entries.
+     */
+    @Test
+    fun anExportCarriesRowsAndEntries() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(plainAssetOf("x1", "Example UPS"))
+        listOf(supplyItemOf("s1", "Example 12 V Battery"), supplyItemOf("s2", "Example Terminal Strap", archivedAt = 3_000L))
+            .forEach { install.supplyItems.upsert(it) }
+        val tray = installedComponentOf("c1", name = "Example Battery Tray", installedOn = "2026-01-10")
+        val removed = installedComponentOf(
+            "c2", name = "Position 1", parentId = "c1", supplyId = "s1", installedOn = "2026-01-10", removedOn = "2026-06-01",
+        )
+        val position = installedComponentOf(
+            "c3", name = "Position 1", parentId = "c1", supplyId = "s1", serialOrLot = "LOT-EX-0002",
+            installedOn = "2026-06-01", replacesId = "c2",
+        )
+        val pack = installedComponentOf(
+            "c4", name = "Example Battery Pack", sortOrder = 1, notes = "Example note",
+            composition = listOf(compositionEntryOf("e2", "s1", 4.0, "ea", 0), compositionEntryOf("e1", "s2", 2.0, "ea", 1)),
+        )
+        listOf(tray, removed, position, pack).forEach { install.installedComponents.insert(it) }
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(listOf(tray, removed, position, pack), decoded.data.installedComponents.map { it.toDomain() })
+        assertEquals(listOf("e2", "e1"), decoded.data.installedComponents.last().composition.map { it.id })
+        assertEquals(4, decoded.manifest.counts["installedComponents"])
+        assertEquals(2, decoded.manifest.counts["compositionEntries"])
+    }
+
+    /**
+     * #47 (C13; R47-4): an export taken after the heater and its anode are transferred out carries none of their
+     * installed components — current or removed, nor their entries — and what leaves decodes; the compressor's row
+     * leaves as always, every SupplyItem stays (s1, named only by a held row's entry, included), and the rows stay here.
+     */
+    @Test
+    fun aHeldAssetsInstalledComponentsAreNotExportedAndTheArchiveDecodes() = runBlocking<Unit> {
+        val install = heldEstate()
+        listOf(supplyItemOf("s1", "Example 12 V Battery"), supplyItemOf("s2", "Example Intake Housing"))
+            .forEach { install.supplyItems.upsert(it) }
+        val staying = installedComponentOf("cx", assetId = TransferFixtures.COMPRESSOR, name = "Example Intake Housing", supplyId = "s2")
+        listOf(
+            installedComponentOf("c1", assetId = TransferFixtures.HEATER, name = "Example Battery Tray"),
+            installedComponentOf(
+                "c2", assetId = TransferFixtures.HEATER, name = "Example Battery Pack", parentId = "c1", installedOn = "2026-01-10",
+                removedOn = "2026-06-01", composition = listOf(compositionEntryOf("k1", "s1", 4.0)),
+            ),
+            installedComponentOf("c3", assetId = TransferFixtures.ANODE, name = "Example Anode Sleeve"),
+            staying,
+        ).forEach { install.installedComponents.insert(it) }
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(listOf(staying), decoded.data.installedComponents.map { it.toDomain() })
+        assertEquals(1 to 0, decoded.manifest.counts["installedComponents"] to decoded.manifest.counts["compositionEntries"])
+        assertEquals(listOf("s1", "s2"), decoded.data.supplyItems.map { it.id }, "every item stays")
+        assertEquals(4, install.installedComponents.all().size, "the rows stay here; only the export leaves them out")
     }
 
     private companion object {

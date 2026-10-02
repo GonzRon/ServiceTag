@@ -41,8 +41,8 @@ SUPPLY_TOOLS = (
     "set_asset_supply",
     "remove_asset_supply",
 )
-"""C26's eight, named exactly as it names them (R15-5: the removal tool stays). The registered total is **84**
-since #15, which `test_argument_guard.py` pins."""
+"""C26's eight, named exactly as it names them (R15-5: the removal tool stays). The registered total was **84**
+after #15 and is **89** since #47's five installed-component tools, which `test_argument_guard.py` pins."""
 
 C2_CODES = (
     "SUPPLY_ITEM_NAME_REQUIRED",
@@ -122,7 +122,8 @@ def test_the_eight_supply_tools_are_registered_and_guarded() -> None:
         tool = server_module.mcp._tool_manager.get_tool(name)
         assert tool is not None, name
         assert tool.parameters.get("additionalProperties") is False, name
-    assert server_module.TOOL_NAMES[-len(SUPPLY_TOOLS):] == SUPPLY_TOOLS
+    # #47's five installed-component tools follow them, last.
+    assert server_module.TOOL_NAMES[-len(SUPPLY_TOOLS) - 5:-5] == SUPPLY_TOOLS
 
 
 def test_nothing_deletes_a_supply_item_and_the_overlay_has_no_clear_fields() -> None:

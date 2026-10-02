@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceId
@@ -20,6 +21,8 @@ import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.testing.activationOf
 import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.compositionEntryOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import com.loosecannon.servicetag.core.testing.specificationOf
 import com.loosecannon.servicetag.core.testing.supplyItemOf
@@ -237,6 +240,66 @@ class ImportTransferPackTest {
         assertEquals("Spare anode kit", s.raw.assetSupplies.get("as1")!!.role)
         assertEquals(listOf("as1", "as2", "as3"), back.map { it.id }, "no row lost; the compressor's untouched")
         assertEquals(items, s.raw.supplyItems.all(), "every item here stays, s3 included")
+    }
+
+    /**
+     * #47 (C13, row 30; #15's C-4 lesson): the heater comes back after the borrowing phone replaced its position 1 (the
+     * row closed, a successor naming it inserted) and recomposed its pack (one entry's quantity changed, the other
+     * dropped). The return plans the pack's rows on a snapshot without the heater's stale ones, so the apply succeeds:
+     * the delete takes the old rows and entries, and every row lands as the pack carries it — the closed one included —
+     * while the compressor's row, its entry and every SupplyItem here stay.
+     */
+    @Test
+    fun aReturningPackWithARowReplacedAndAPackRecomposedOnTheBorrowingPhoneLands() = runTest {
+        val s = fittedSender()
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        val r = TransferInstall("set-recipient")
+        assertIs<TransferImportResult.Imported>(r.import(q1.bytes))
+        val position = r.raw.installedComponents.get(InstalledComponentId("c2"))!!
+        r.raw.installedComponents.update(position.copy(removedOn = "2026-09-20", updatedAt = IMPORT_NOW + 1))
+        r.raw.installedComponents.insert(
+            position.copy(
+                id = InstalledComponentId("c5"), serialOrLot = "LOT-EX-0005", installedOn = "2026-09-20", removedOn = null,
+                replacesId = position.id, createdAt = IMPORT_NOW + 1, updatedAt = IMPORT_NOW + 1,
+            ),
+        )
+        val batteryPack = r.raw.installedComponents.get(InstalledComponentId("c3"))!!
+        r.raw.installedComponents.update(
+            batteryPack.copy(composition = listOf(batteryPack.composition.first().copy(quantity = 3.0)), updatedAt = IMPORT_NOW + 1),
+        )
+        val q2 = r.pack("pack-q2", HEATER)
+        val items = s.raw.supplyItems.all()
+
+        val ready = s.ready(q2.bytes)
+        assertEquals(TransferImportOutcome.READY, ready.outcome, "${ready.plan.conflicts}")
+        assertIs<TransferImportResult.Imported>(s.importer.import(ready) { q2.bytes.inputStream() })
+
+        val back = s.raw.installedComponents.all()
+        assertEquals(r.raw.installedComponents.all(), back.filter { it.assetId.value == HEATER }, "every row as the pack carries it")
+        assertEquals(listOf("c1", "c2", "c3", "c5", "cx"), back.map { it.id.value }, "no row lost; the compressor's untouched")
+        assertEquals("2026-09-20", s.raw.installedComponents.get(InstalledComponentId("c2"))!!.removedOn, "the closed row lands closed")
+        assertEquals(setOf("k1", "kx"), s.raw.installedComponents.entries.keys, "the dropped entry went with the delete")
+        assertEquals(items, s.raw.supplyItems.all(), "every item here stays")
+    }
+
+    /**
+     * The sender, seeded, with two SupplyItems (fictional) and installed components: on the heater a tray (c1) holding
+     * position 1 (c2, an s1) and a pack (c3) composed of 4 × s1 and 2 × s2; on the compressor a housing (cx) composed of
+     * one s2.
+     */
+    private suspend fun fittedSender(): TransferInstall = sender().also { s ->
+        s.raw.supplyItems.upsert(supplyItemOf("s1", "Example 12 V Battery"))
+        s.raw.supplyItems.upsert(supplyItemOf("s2", "Example Terminal Strap"))
+        listOf(
+            installedComponentOf("c1", assetId = HEATER, name = "Example Battery Tray", installedOn = "2026-01-10"),
+            installedComponentOf("c2", assetId = HEATER, name = "Position 1", parentId = "c1", supplyId = "s1", installedOn = "2026-01-10"),
+            installedComponentOf(
+                "c3", assetId = HEATER, name = "Example Battery Pack", parentId = "c1", sortOrder = 1,
+                composition = listOf(compositionEntryOf("k1", "s1", 4.0, sortOrder = 0), compositionEntryOf("k2", "s2", 2.0, sortOrder = 1)),
+            ),
+            installedComponentOf("cx", assetId = "x1", name = "Example Intake Housing", composition = listOf(compositionEntryOf("kx", "s2", 1.0))),
+        ).forEach { s.raw.installedComponents.insert(it) }
     }
 
     /**

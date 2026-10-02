@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -146,13 +147,15 @@ class ImportBackupMergeTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, transfers, successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, transfers, successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {
@@ -240,7 +243,8 @@ class ImportBackupMergeTest {
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.categories, f.serviceCases, f.caseEntries, f.loans, f.transfers,
-            f.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
+            f.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()),
+            f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
     }
@@ -771,7 +775,8 @@ class ImportBackupMergeTest {
             target.closures, events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             target.categories, cases, entries, target.loans, target.transfers,
-            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), target.storage, target.uow, rebuildAll = { log += "rebuild" },
+            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), target.storage, target.uow, rebuildAll = { log += "rebuild" },
         )
 
         apply.run(target.build.run(archive))
@@ -805,7 +810,8 @@ class ImportBackupMergeTest {
             target.closures, target.events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             target.categories, target.serviceCases, target.caseEntries, loans, target.transfers,
-            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), target.storage, target.uow,
+            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), target.storage, target.uow,
             rebuildAll = { log += "rebuild" },
         )
 
@@ -847,7 +853,8 @@ class ImportBackupMergeTest {
             target.closures, target.events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             target.categories, target.serviceCases, target.caseEntries, loans, transfers,
-            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), target.storage, target.uow,
+            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), target.storage, target.uow,
             rebuildAll = { log += "rebuild" },
         )
 

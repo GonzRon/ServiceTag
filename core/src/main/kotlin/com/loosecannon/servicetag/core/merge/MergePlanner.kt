@@ -27,6 +27,7 @@ import com.loosecannon.servicetag.core.backup.AttachmentDto
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.EventProfileDto
+import com.loosecannon.servicetag.core.backup.InstalledComponentDto
 import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
 import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.core.backup.SupplyItemDto
@@ -47,6 +48,8 @@ import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentTree
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
@@ -80,6 +83,7 @@ import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
@@ -253,9 +257,23 @@ import java.security.MessageDigest
  * field, and SKIPPED `ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW` otherwise, nothing written either way; else INSERT. An
  * applicability row is its asset's (M2); a SupplyItem is global and never is.
  *
+ * ### Installed components (#47, C12)
+ *
+ * Decided after the applicability rows and before the profiles, though listed last: by then its asset, every
+ * SupplyItem it can name and — parents first, [InstalledComponentTree.parentsFirst] — its parent are decided. A row by
+ * its id, every field compared and its composition in `(sortOrder, id)` with it: IDENTICAL, or CONFLICT
+ * `CONTENT_DIFFERS` — **no UPDATE**, so a row removed, replaced or recomposed here since the export conflicts (limit
+ * 5). One this phone lacks is `CHILD_ROW_ID_TAKEN` when an entry id is held by another row here or claimed earlier in
+ * this plan; `OWNER_NOT_AVAILABLE` naming its asset, then the first SupplyItem — the direct link's or an entry's —
+ * then its parent, when that is neither here nor accepted earlier in this pass (a parent this plan refused included);
+ * `INSTALLED_COMPONENT_REPLACEMENT_TAKEN` when another row here, or one accepted earlier, already names the row it
+ * replaces; else INSERT. A row is its asset's (M2). An archive older than format 19 names no installed component, so
+ * no local row is decided and every other row compares as before.
+ *
  * ### Not total, and only for a hand-built [Backup]
  *
- * This propagates `IllegalStateException` from [AssetTree.parentsFirst] on a cyclic asset set,
+ * This propagates `IllegalStateException` from [AssetTree.parentsFirst] on a cyclic asset set (and from
+ * [InstalledComponentTree.parentsFirst] on a cyclic installed-component set),
  * `BackupCorrupt` from a `toDomain()` that cannot name a value, and an NPE from the attachment
  * pass's `eventId!!` if a row names neither owner. `BackupCodec.decode` refuses all three before a
  * plan exists, so no caller of `BuildBackupMergePlan` can reach them — only a test constructing a
@@ -566,7 +584,10 @@ internal fun mergePlanOf(
     /** True when a SupplyItem id resolves — to a local row, archived included (R15-6), or to one this plan inserts. */
     fun supplyItemAvailable(id: String) = id in localSupplyItems || id in acceptedSupplyItems
 
-    /** R15-6: the first link of a profile's or event's material lines that resolves to nothing; null when all do. */
+    /**
+     * R15-6: the first link of a profile's or event's material lines — or #47's, an installed component's direct link
+     * and its entries — that resolves to nothing; null when all do.
+     */
     fun firstUnresolvedSupply(links: List<String?>): String? = links.filterNotNull().firstOrNull { !supplyItemAvailable(it) }
 
     // --- applicability (#15, C11) ---------------------------------------------------------------
@@ -622,6 +643,56 @@ internal fun mergePlanOf(
     fun sameEvent(incoming: AssetEventDto, here: AssetEventDto): Boolean = when {
         supplyLinksCompared || here.consumables.none { it.supplyId != null } -> incoming.ordered() == here.ordered()
         else -> incoming.ordered() == here.withoutLinks().copy(updatedAt = incoming.updatedAt).ordered()
+    }
+
+    // --- installed components (#47, C12) --------------------------------------------------------------
+    // After the assets and the SupplyItems, so every owner a row can name is decided, and parents first, so a child
+    // meets its parent decided — the asset loop's shape; the codec holds the file acyclic. By id, every field and the
+    // ordered composition compared, no UPDATE. An entry id is an aggregate child-row key, as a specification's is.
+    // The parent arm reads only "here or accepted": a parent this plan refused refuses its children by name.
+    val localInstalledComponents = snapshot.installedComponents.associateBy { it.id.value }
+    val claimedCompositionEntryIds = snapshot.installedComponents
+        .flatMap { c -> c.composition.map { it.id to c.id.value } }.toMap(mutableMapOf())
+    // `installed_component.replaces_id` is unique: value = the row that names it.
+    val claimedReplacedIds = snapshot.installedComponents
+        .mapNotNull { c -> c.replacesId?.let { it.value to c.id.value } }.toMap(mutableMapOf())
+    val installedComponentDtos = data.installedComponents.associateBy { it.id }
+    val installedComponentWrites = mutableListOf<InstalledComponent>()
+    val acceptedInstalledComponents = mutableSetOf<String>()
+    for (row in InstalledComponentTree.parentsFirst(data.installedComponents.map { it.toDomain() })) {
+        val id = row.id.value
+        val dto = installedComponentDtos.getValue(id)
+        val local = localInstalledComponents[id]
+        val parent = dto.parentId
+        val takenEntry = firstTaken(dto.composition.map { it.id }, claimedCompositionEntryIds)
+        val missingSupply = firstUnresolvedSupply(listOf(dto.supplyId) + dto.composition.map { it.supplyId })
+        val replacementHolder = dto.replacesId?.let { claimedReplacedIds[it] }
+        decisions += when {
+            local != null && dto.ordered() == local.toDto().ordered() ->
+                MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            takenEntry != null ->
+                MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.CHILD_ROW_ID_TAKEN, takenEntry)
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            missingSupply != null ->
+                MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingSupply)
+            parent != null && parent !in localInstalledComponents && parent !in acceptedInstalledComponents ->
+                MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, parent)
+            replacementHolder != null ->
+                MergeDecision(
+                    MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.CONFLICT,
+                    MergeReason.INSTALLED_COMPONENT_REPLACEMENT_TAKEN, replacementHolder,
+                )
+            else -> {
+                installedComponentWrites += row
+                acceptedInstalledComponents += id
+                dto.composition.forEach { claimedCompositionEntryIds[it.id] = id }
+                dto.replacesId?.let { claimedReplacedIds[it] = id }
+                MergeDecision(MergeTable.INSTALLED_COMPONENTS, id, MergeVerdict.INSERT)
+            }
+        }
     }
 
     // --- profiles ---------------------------------------------------------------------------
@@ -1346,7 +1417,11 @@ internal fun mergePlanOf(
                 loanWrites.map { Triple(MergeTable.LOANS, it.id.value, TransferOwnership.of(it)) } +
                 successionWrites.map { Triple(MergeTable.SUCCESSIONS, it.id, TransferOwnership.of(it)) } +
                 // #15 (C11): an applicability row is its asset's; a SupplyItem is global and is never held.
-                assetSupplyWrites.map { Triple(MergeTable.ASSET_SUPPLIES, it.id, TransferOwnership.of(it)) }
+                assetSupplyWrites.map { Triple(MergeTable.ASSET_SUPPLIES, it.id, TransferOwnership.of(it)) } +
+                // #47 (C12): an installed component is its asset's, as every row owned by its own `assetId` is.
+                installedComponentWrites.map {
+                    Triple(MergeTable.INSTALLED_COMPONENTS, it.id.value, TransferOwnership.of(it))
+                }
         for ((table, id, refs) in owned) heldOwner(refs)?.let { refuseInsert(table, id, it) }
 
         // M3 — the phone as this plan would leave it, cut by what it would hold.
@@ -1414,6 +1489,7 @@ internal fun mergePlanOf(
                 assets = canonicalAssetWrites,
                 supplyItems = supplyItemWrites,
                 assetSupplies = assetSupplyWrites,
+                installedComponents = installedComponentWrites,
                 groups = groupWrites,
                 definitions = definitionWrites,
                 profiles = profileWrites,
@@ -1506,6 +1582,11 @@ private fun SupplyItemDto.ordered() = copy(
     specifications = specifications.sortedWith(compareBy({ it.sortOrder }, { it.id })),
 )
 
+/** #47: an installed component's composition, in the same `(sortOrder, id)` the encoder writes it in. */
+private fun InstalledComponentDto.ordered() = copy(
+    composition = composition.sortedWith(compareBy({ it.sortOrder }, { it.id })),
+)
+
 /** A group's members, in the same `(sortOrder, id)` the encoder writes them in. */
 private fun MaintenanceGroupDto.ordered() = copy(
     members = members.sortedWith(compareBy({ it.sortOrder }, { it.id })),
@@ -1581,7 +1662,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Twenty-two reads. **The caller owns the transaction** — see each use case for which one.
+ * Twenty-three reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -1611,6 +1692,8 @@ internal suspend fun mergeSnapshotOf(
     /** #15 — the SupplyItems and their applicability. */
     supplyItems: SupplyItemRepository,
     assetSupplies: AssetSupplyRepository,
+    /** #47 — the installed components, each with its composition. */
+    installedComponents: InstalledComponentRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -1636,6 +1719,7 @@ internal suspend fun mergeSnapshotOf(
     successions = successions.all(),
     supplyItems = supplyItems.all(),
     assetSupplies = assetSupplies.all(),
+    installedComponents = installedComponents.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

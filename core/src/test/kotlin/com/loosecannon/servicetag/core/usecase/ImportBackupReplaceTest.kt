@@ -10,12 +10,18 @@ import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.transfer.TransferFixtures
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting
 import kotlin.test.assertFailsWith
+import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.CaseStatus
+import com.loosecannon.servicetag.core.model.InstalledComponentTree
 import com.loosecannon.servicetag.core.testing.BackupInstall
+import com.loosecannon.servicetag.core.testing.RiggedFailure
+import com.loosecannon.servicetag.core.testing.compositionEntryOf
+import com.loosecannon.servicetag.core.testing.groupOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.testing.SupplyEstate
 import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.dataTreeOf
@@ -411,5 +417,118 @@ class ImportBackupReplaceTest {
         for (list in listOf("supplyItems", "assetSupplies", "eventProfiles", "assetEvents")) {
             assertEquals(written.getValue(list).toString(), again.getValue(list).toString(), "$list byte-equal")
         }
+    }
+
+    // --- #47 (C11, row 17): the installed components ------------------------------------------------------
+
+    /**
+     * A fictional UPS whose ids run against its tree: every child's id sorts before its parent's, so the file's own
+     * order (rows by id) is children first. A 3-deep tray with position 1 replaced in place and a monitor fitted in the
+     * new position (the instance-level form), and a pack made of `4 ×` a battery and `2 ×` an archived strap (the
+     * aggregate form), its entries' ids against their order too.
+     */
+    private object Ups {
+        val asset = plainAssetOf("x1", "Example UPS")
+        val battery = supplyItemOf("s1", "Example 12 V Battery")
+        val strap = supplyItemOf("s2", "Example Terminal Strap", archivedAt = 3_000L)
+        val tray = installedComponentOf("c9", name = "Example Battery Tray", installedOn = "2026-01-10")
+        val removed = installedComponentOf(
+            "c7", name = "Position 1", parentId = "c9", supplyId = "s1", installedOn = "2026-01-10", removedOn = "2026-06-01",
+        )
+        val position = installedComponentOf(
+            "c5", name = "Position 1", parentId = "c9", supplyId = "s1", serialOrLot = "LOT-EX-0001",
+            installedOn = "2026-06-01", replacesId = "c7",
+        )
+        val monitor = installedComponentOf("c1", name = "Example Cell Monitor", parentId = "c5", installedOn = "2026-06-01")
+        val pack = installedComponentOf(
+            "c3", name = "Example Battery Pack", sortOrder = 1, notes = "Example note",
+            composition = listOf(compositionEntryOf("e2", "s1", 4.0, "ea", 0), compositionEntryOf("e1", "s2", 2.0, "ea", 1)),
+        )
+        val rows = listOf(tray, removed, position, monitor, pack)
+    }
+
+    private fun upsData(): BackupData = data(listOf(Ups.asset)).copy(
+        supplyItems = listOf(Ups.battery, Ups.strap).map { it.toDto() },
+        installedComponents = Ups.rows.map { it.toDto() },
+    )
+
+    /**
+     * A file holding every child before its parent restores parents first — the core double refuses a child whose
+     * parent is not stored, as the `parent_id` FK does — every row, entry, pointer and date as the file holds it, and
+     * this install's export of it writes the list back byte-equal.
+     */
+    @Test
+    fun aShuffledTreeRestoresParentsFirstByteEqual() = runBlocking<Unit> {
+        val install = BackupInstall()
+        val bytes = archiveOf(upsData())
+        assertEquals(
+            listOf("c1", "c3", "c5", "c7", "c9"),
+            BackupCodec.decode(bytes).data.installedComponents.map { it.id },
+            "the file's own order puts every child before its parent",
+        )
+
+        install.replace.run(bytes)
+
+        assertEquals(Ups.rows.sortedBy { it.id.value }, install.installedComponents.all())
+        assertEquals(setOf("e1", "e2"), install.installedComponents.entries.keys)
+        assertEquals(1, install.uow.commits)
+        val written = dataTreeOf(bytes)
+        val again = dataTreeOf(install.export.run().data)
+        assertEquals(
+            written.getValue("installedComponents").toString(), again.getValue("installedComponents").toString(),
+            "installedComponents byte-equal",
+        )
+    }
+
+    /**
+     * Over the core double, whose `asset_id` CASCADE `BackupInstall` registers: this install already holds the same
+     * tree under the same row and entry ids, and a row on an asset the file does not carry. The wipe's
+     * `assets.deleteAll()` takes them all with their entries, so the file's rows land — no id is refused as held
+     * twice — and none of this install's own survives.
+     */
+    @Test
+    fun replacingAnInstallHoldingATreeSucceeds() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(Ups.asset)
+        install.assets.upsert(plainAssetOf("x2", "Example RO System"))
+        listOf(Ups.battery, Ups.strap).forEach { install.supplyItems.upsert(it) }
+        val held = Ups.rows.map { it.copy(notes = "Example earlier note", updatedAt = 9_000L) }
+        InstalledComponentTree.parentsFirst(held).forEach { install.installedComponents.insert(it) }
+        install.installedComponents.insert(
+            installedComponentOf(
+                "c0", assetId = "x2", name = "Example Membrane Housing", composition = listOf(compositionEntryOf("e0", "s1")),
+            ),
+        )
+
+        install.replace.run(archiveOf(upsData()))
+
+        assertEquals(Ups.rows.sortedBy { it.id.value }, install.installedComponents.all())
+        assertEquals(setOf("e1", "e2"), install.installedComponents.entries.keys)
+        assertEquals(1, install.uow.commits)
+    }
+
+    /**
+     * The twin of `BackupUseCasesTest`'s "a failed insert rolls the whole import back", for the installed components:
+     * a restore that fails after their write — at the file's maintenance group, the next write — leaves this
+     * install's rows and entries exactly as they were. The rollback takes back both the CASCADE that wiped them and
+     * the file's rows written in their place.
+     */
+    @Test
+    fun aRestoreFailingAfterTheComponentWriteRollsTheRowsBack() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(Ups.asset)
+        listOf(Ups.battery, Ups.strap).forEach { install.supplyItems.upsert(it) }
+        install.installedComponents.insert(Ups.tray.copy(notes = "Example earlier note"))
+        install.installedComponents.insert(Ups.pack.copy(composition = listOf(compositionEntryOf("e-held", "s1", 2.0))))
+        val before = install.installedComponents.all()
+        val archive = upsData().copy(maintenanceGroups = listOf(groupOf("g1", name = "Example Service Run").toDto()))
+        install.groups.failOnUpsert = 1
+
+        assertFailsWith<RiggedFailure> { install.replace.run(archiveOf(archive)) }
+
+        assertEquals(before, install.installedComponents.all())
+        assertEquals(setOf("e-held"), install.installedComponents.entries.keys)
+        assertEquals(1, install.uow.rollbacks)
+        assertEquals(0, install.uow.commits)
     }
 }

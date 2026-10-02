@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
+import com.loosecannon.servicetag.core.model.InstalledComponentTree
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SuccessionProblem
@@ -156,6 +157,20 @@ import kotlinx.serialization.json.JsonObject
  * definition slug rule or taken within its SupplyItem, a role blank or not in its stored form, and a duplicate
  * `(asset, SupplyItem, role)` — is the content check's. The merge's rule for an older archive is the planner's.
  *
+ * **Format 19 (#47, C9, C10) adds one list, and no upgrade.** `installedComponents` — one row per fitted instance,
+ * current and removed, sorted by id, each with its `composition` nested in `(sortOrder, id)` order as a SupplyItem's
+ * specifications are — defaults to empty, so a format ≤18 archive decodes through the same strict decode with none;
+ * `LAST_LEGACY_FORMAT` stays 7. No shipped writer put a row into a format ≤18 archive, so one that carries a row is a
+ * hand-built file and is refused ([FIRST_INSTALLED_COMPONENT_FORMAT]); an empty list is accepted. No existing row
+ * changes, so an older archive needs no merge exception. Row ids are unique, and an entry's id across every row; a
+ * row's asset, its parent (on the same asset), its direct SupplyItem and every entry's SupplyItem must be in the file
+ * — an archived SupplyItem included; the row it replaces must be in the file, on the same asset under the same
+ * parent, removed, and replaced by no other row; a current row's parent is current; and neither the parents nor the
+ * replacements come back round — cross-row rules, the graph check's, beside the duplicate ids: the schema's foreign
+ * keys and unique index would otherwise abort a replace with the owner's data already wiped. What a row says about
+ * itself — a blank name, a date that is not ISO, a removal before the install, an entry's quantity not a finite
+ * number above zero — is the content check's, asked with no today.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -163,7 +178,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 18
+    const val FORMAT_VERSION = 19
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -208,6 +223,12 @@ object BackupCodec {
      * the same reason as [FIRST_ROLE_FORMAT]: an older archive's lines are compared without the link.
      */
     internal const val FIRST_SUPPLY_FORMAT = 18
+
+    /**
+     * The first format that can carry an installed component (#47): an archive below it that carries a row was built
+     * by hand, and the decode refuses it.
+     */
+    internal const val FIRST_INSTALLED_COMPONENT_FORMAT = 19
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -286,6 +307,10 @@ object BackupCodec {
                 item.copy(specifications = item.specifications.sortedWith(compareBy({ it.sortOrder }, { it.id })))
             },
             assetSupplies = data.assetSupplies.sortedBy { it.id },
+            // Format 19: a composition's entries tie-break on `id`, as specifications do and for the same reason.
+            installedComponents = data.installedComponents.sortedBy { it.id }.map { row ->
+                row.copy(composition = row.composition.sortedWith(compareBy({ it.sortOrder }, { it.id })))
+            },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -326,6 +351,8 @@ object BackupCodec {
                 "supplyItems" to sorted.supplyItems.size,
                 "supplySpecifications" to sorted.supplyItems.sumOf { it.specifications.size },
                 "assetSupplies" to sorted.assetSupplies.size,
+                "installedComponents" to sorted.installedComponents.size,
+                "compositionEntries" to sorted.installedComponents.sumOf { it.composition.size },
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -489,6 +516,14 @@ object BackupCodec {
             }
         }
 
+        // #47, the same rule for the installed components: the list did not exist before format 19, so a row in an
+        // older archive was put there by hand. An empty list is accepted.
+        if (manifest.formatVersion < FIRST_INSTALLED_COMPONENT_FORMAT && data.installedComponents.isNotEmpty()) {
+            throw BackupCorrupt(
+                "installedComponents: a format ${manifest.formatVersion} archive cannot carry installed components",
+            )
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -513,6 +548,7 @@ object BackupCodec {
         data.assetSuccessions.forEach { it.toDomain() }
         data.supplyItems.forEach { it.toDomain() }
         data.assetSupplies.forEach { it.toDomain() }
+        data.installedComponents.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -528,7 +564,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 18 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 19 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -949,6 +985,71 @@ object BackupCodec {
                     )
                 }
             }
+        }
+
+        // --- installed components (format 19) ----------------------------------------------------
+        // Row ids are unique, and an entry's id across every row (a child row id, as a specification's). The asset,
+        // the parent and every SupplyItem are real foreign keys; the parent must also be on the row's own asset, and
+        // a current row's parent current. A replacement names a removed row of the same asset under the same parent
+        // (one position: the replace writes it so), no row is replaced twice — the schema's unique index — and
+        // neither the parents nor the replacements come back round (#47, C10).
+
+        val componentIds = uniqueIds("installedComponents", data.installedComponents.map { it.id })
+        uniqueIds("compositionEntries", data.installedComponents.flatMap { row -> row.composition.map { it.id } })
+        val componentsById = data.installedComponents.associateBy { it.id }
+        val replacedBy = HashMap<String, String>()
+        data.installedComponents.forEach { row ->
+            fun refuse(problem: String): Nothing =
+                throw BackupCorrupt("installedComponents: installed component ${row.id} $problem")
+            if (row.assetId !in assetIds) refuse("points at asset ${row.assetId}, which is not in assets")
+            if (row.parentId != null) {
+                val parent = componentsById[row.parentId]
+                    ?: refuse("points at parent ${row.parentId}, which is not in installedComponents")
+                if (parent.assetId != row.assetId) refuse("points at parent ${row.parentId}, which is on another asset")
+                if (row.removedOn == null && parent.removedOn != null) {
+                    refuse("is current inside parent ${row.parentId}, which is removed")
+                }
+            }
+            if (row.supplyId != null && row.supplyId !in supplyIds) {
+                refuse("names supply item ${row.supplyId}, which is not in supplyItems")
+            }
+            row.composition.forEach { entry ->
+                if (entry.supplyId !in supplyIds) {
+                    refuse("entry ${entry.id} names supply item ${entry.supplyId}, which is not in supplyItems")
+                }
+            }
+            if (row.replacesId != null) {
+                if (row.replacesId == row.id) refuse("replaces itself")
+                val replaced = componentsById[row.replacesId]
+                    ?: refuse("replaces ${row.replacesId}, which is not in installedComponents")
+                if (replaced.assetId != row.assetId) refuse("replaces ${row.replacesId}, which is on another asset")
+                if (replaced.removedOn == null) refuse("replaces ${row.replacesId}, which is not removed")
+                if (replaced.parentId != row.parentId) refuse("replaces ${row.replacesId}, which is inside another parent")
+                replacedBy.put(row.replacesId, row.id)?.let { first ->
+                    refuse("replaces ${row.replacesId}, which installed component $first already replaces")
+                }
+            }
+        }
+        // Every row was already proven nameable above, so toDomain() cannot throw here; it is only how the tree's
+        // own cycle detection is reached.
+        try {
+            InstalledComponentTree.parentsFirst(data.installedComponents.map { it.toDomain() })
+        } catch (e: IllegalStateException) {
+            throw BackupCorrupt("installedComponents: cycle in installed component parents")
+        }
+        // Its own walk, each row walked once: a chain that meets a row this walk already passed is a cycle, and one that
+        // ends, or meets a row an earlier walk settled, is not.
+        val settled = HashSet<String>(componentIds.size)
+        componentIds.forEach { start ->
+            val path = LinkedHashSet<String>()
+            var next: String? = start
+            while (next != null && next !in settled) {
+                if (!path.add(next)) {
+                    throw BackupCorrupt("installedComponents: installed components ${path.joinToString()} form a replacement cycle")
+                }
+                next = componentsById[next]?.replacesId
+            }
+            settled += path
         }
 
         // --- events ------------------------------------------------------------------------------

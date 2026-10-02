@@ -89,4 +89,5 @@ def test_the_succession_surface_is_one_read() -> None:
     assert named == {"get_asset_succession"}
     assert list(inspect.signature(server_module.get_asset_succession).parameters) == ["asset_id"]
     replacing = {name for name in server_module.TOOL_NAMES if "replace" in name}
-    assert replacing == {"get_replace_offer", "replace_asset"}
+    # #47's replace closes one installed component and fits its successor; it records no asset succession.
+    assert replacing == {"get_replace_offer", "replace_asset", "replace_installed_component"}

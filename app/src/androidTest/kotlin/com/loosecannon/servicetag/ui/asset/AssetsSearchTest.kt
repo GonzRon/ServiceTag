@@ -67,12 +67,12 @@ class AssetsSearchTest {
         // One keystroke away, the only match is the hidden component: the list says which control
         // is in the way, and the search turns nothing on by itself.
         rule.onNode(hasSetTextAction()).performTextInput("circ")
-        rule.awaitText("Matching assets are components. Turn on Components to see them.")
+        rule.awaitText("Matching assets are child assets. Turn on Child assets to see them.")
         rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
 
         // Components on: the hit is listed, naming its system, and the system it does not name
         // stays out — which is what proves the list is filtered and not merely reordered.
-        rule.onNodeWithText("Components").performClick()
+        rule.onNodeWithText("Child assets").performClick()
         rule.awaitText("Circulation pump")
         rule.awaitText("Part of Hot tub")
         rule.onAllNodesWithText("Hot tub").assertCountEquals(0)

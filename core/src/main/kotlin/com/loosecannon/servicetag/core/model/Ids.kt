@@ -35,3 +35,6 @@ value class HealthSubjectId(val value: String)
 
 @JvmInline
 value class SupplyId(val value: String)
+
+@JvmInline
+value class InstalledComponentId(val value: String)

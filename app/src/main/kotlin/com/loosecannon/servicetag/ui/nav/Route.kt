@@ -21,7 +21,7 @@ sealed interface Route : NavKey {
     @Serializable data class AssetDetail(val id: String, val section: String? = null) : Route
     /**
      * New when [id] is null. [parentId] is the "Part of" a new asset opens with, which is how
-     * "+ Add component" on a parent's screen makes a child (spec §9); it is ignored on an edit,
+     * "+ Add child asset" on a parent's screen makes a child (spec §9); it is ignored on an edit,
      * whose stored parent always wins.
      */
     @Serializable data class AssetEdit(val id: String?, val parentId: String? = null) : Route

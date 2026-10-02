@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
@@ -73,6 +74,7 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportTransferPack
 import com.loosecannon.servicetag.ui.transfer.`import`.CacheTransferPackInbox
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
+import com.loosecannon.servicetag.core.usecase.InstallComponent
 import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.OpenServiceCase
@@ -85,6 +87,7 @@ import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RemoveAssetSupply
+import com.loosecannon.servicetag.core.usecase.RemoveInstalledComponent
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
@@ -99,6 +102,7 @@ import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ReplaceAsset
+import com.loosecannon.servicetag.core.usecase.ReplaceInstalledComponent
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SaveSupplyItem
@@ -110,6 +114,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAssetSupply
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
+import com.loosecannon.servicetag.core.usecase.UpdateInstalledComponent
 import com.loosecannon.servicetag.core.usecase.UpdateLoan
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
@@ -128,6 +133,7 @@ import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
+import com.loosecannon.servicetag.data.room.RoomInstalledComponentRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
@@ -217,7 +223,7 @@ class FakeGraph(
     /** #77's transfer records, mirroring `AppGraph`'s field by name; before the ports, which its guard reads. */
     val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
 
-    // #77 (C12): the write guard over the seventeen asset-owned ports, wired exactly as `AppGraph` wires it, so a
+    // #77 (C12): the write guard over the eighteen asset-owned ports, wired exactly as `AppGraph` wires it, so a
     // view-model or route test writes through the same refusal the app does.
     private val roomEvents = RoomEventRepository(db.eventDao())
     private val roomDefinitions = RoomDefinitionRepository(db.definitionDao())
@@ -261,6 +267,9 @@ class FakeGraph(
     val supplyItems: SupplyItemRepository = RoomSupplyItemRepository(db.supplyItemDao())
     val assetSupplies: AssetSupplyRepository =
         heldWriteGuard.assetSupplies(RoomAssetSupplyRepository(db.assetSupplyDao()))
+    /** #47 — installed components behind the guard (C14), the merge apply's included, as `AppGraph`'s. */
+    val installedComponents: InstalledComponentRepository =
+        heldWriteGuard.installedComponents(RoomInstalledComponentRepository(db.installedComponentDao()))
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -471,13 +480,13 @@ class FakeGraph(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords,
-        assetSuccessions, supplyItems, assetSupplies, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        assetSuccessions, supplyItems, assetSupplies, installedComponents, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, supplyItems, assetSupplies,
-        attachmentStorage, uow,
+        installedComponents, attachmentStorage, uow,
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },
@@ -486,7 +495,7 @@ class FakeGraph(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, supplyItems, assetSupplies,
-        attachmentStorage, uow,
+        installedComponents, attachmentStorage, uow,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -496,7 +505,7 @@ class FakeGraph(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords, roomAssetSuccessions, supplyItems, assetSupplies,
-        attachmentStorage, uow,
+        installedComponents, attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importBackupMerge: ImportBackupMerge =
@@ -506,7 +515,7 @@ class FakeGraph(
     val backupRepositories = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
-        transferRecords, assetSuccessions, supplyItems, assetSupplies,
+        transferRecords, assetSuccessions, supplyItems, assetSupplies, installedComponents,
     )
     val createTransferPack: CreateTransferPack = CreateTransferPack(
         backupRepositories, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
@@ -579,6 +588,18 @@ class FakeGraph(
     val addAssetSupply: AddAssetSupply = AddAssetSupply(assets, supplyItems, assetSupplies, uow, ids, clock)
     val updateAssetSupply: UpdateAssetSupply = UpdateAssetSupply(assetSupplies, uow, clock)
     val removeAssetSupply: RemoveAssetSupply = RemoveAssetSupply(assetSupplies, uow)
+
+    /** #47 (C16, C17): install and remove, from exactly the members `AppGraph` builds them from. */
+    val installComponent: InstallComponent =
+        InstallComponent(assets, supplyItems, installedComponents, uow, ids, clock, todayPort)
+    val removeInstalledComponent: RemoveInstalledComponent =
+        RemoveInstalledComponent(installedComponents, uow, clock, todayPort)
+
+    /** #47 (C18, C19): replace and edit, from exactly the members `AppGraph` builds them from. */
+    val replaceInstalledComponent: ReplaceInstalledComponent =
+        ReplaceInstalledComponent(supplyItems, installedComponents, uow, ids, clock, todayPort)
+    val updateInstalledComponent: UpdateInstalledComponent =
+        UpdateInstalledComponent(supplyItems, installedComponents, uow, ids, clock, todayPort)
 
     /**
      * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,

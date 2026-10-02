@@ -42,11 +42,13 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val assetSupplies = InMemoryAssetSupplyRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
     /** #15's catalog; its wipe is refused while applicability remains, as the schema's RESTRICT is. */
     val supplyItems = InMemorySupplyItemRepository(assetSupplies)
+    /** #47's installed components; the asset double's delete takes them and their entries, as the schema's CASCADE does. */
+    val installedComponents = InMemoryInstalledComponentRepository(supplyItems).also { assets.cascadesTo(it::cascadeFromAsset) }
     val storage = FakeAttachmentStorage()
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies,
+        successions, supplyItems, assetSupplies, installedComponents,
     )
 
     var rebuilds = 0
@@ -54,24 +56,24 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val export = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies,
+        successions, supplyItems, assetSupplies, installedComponents,
         uow, IdGenerator { setId }, Clock { now }, appVersion = "1.4.1", schemaVersion = 9,
     )
     val replace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies, storage, uow,
+        successions, supplyItems, assetSupplies, installedComponents, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies, storage, uow,
+        successions, supplyItems, assetSupplies, installedComponents, storage, uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies, storage, uow,
+        successions, supplyItems, assetSupplies, installedComponents, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
 }

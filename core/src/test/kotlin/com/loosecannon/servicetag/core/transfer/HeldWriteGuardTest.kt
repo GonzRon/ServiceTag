@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
@@ -60,9 +61,11 @@ import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.compositionEntryOf
 import com.loosecannon.servicetag.core.testing.conditionOf
 import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.groupOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.measurementOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
@@ -197,7 +200,8 @@ class HeldWriteGuardTest {
         install.serviceCases, install.links,
     )
 
-    // The seventeen guarded ports, as AppGraph hands them to every use case (#15's applicability the seventeenth).
+    // The eighteen guarded ports, as AppGraph hands them to every use case (#15's applicability the seventeenth, #47's
+    // installed components the eighteenth).
     private val assets = guard.assets(install.assets)
     private val tags = guard.tags(install.tags)
     private val definitions = guard.definitions(install.definitions)
@@ -215,6 +219,7 @@ class HeldWriteGuardTest {
     private val entries = guard.entries(install.caseEntries)
     private val loans = guard.loans(install.loans)
     private val assetSupplies = guard.assetSupplies(install.assetSupplies)
+    private val installedComponents = guard.installedComponents(install.installedComponents)
 
     private val uow = install.uow
     private val states = InMemoryScheduleStateRepository()
@@ -632,7 +637,7 @@ class HeldWriteGuardTest {
         assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held: the records are the custody facts")
     }
 
-    /** Derived state is rebuilt for a held asset like any other: schedule state is not one of the seventeen ports. */
+    /** Derived state is rebuilt for a held asset like any other: schedule state is not one of the eighteen ports. */
     @Test
     fun derivedStateIsUnguarded() = runTest {
         seed()
@@ -958,5 +963,72 @@ class HeldWriteGuardTest {
         assertNotNull(install.supplyItems.get(SupplyId("s1"))!!.archivedAt, "the item a held row names archives")
         assertEquals(held, install.assetSupplies.get("as1"), "and the held row is still as it was")
         assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held")
+    }
+
+    // ---- #47 (C14, row 31): an installed component is its asset's; its composition rides the row --------------------
+
+    /**
+     * One SupplyItem (fictional) and two rows laid down raw: a tray on the held heater (c1, composed of 4 × s1) and a
+     * housing on the staying compressor (cx).
+     */
+    private suspend fun seedComponents() {
+        install.supplyItems.upsert(supplyItemOf("s1", "Example 12 V Battery"))
+        install.installedComponents.insert(
+            installedComponentOf("c1", assetId = "h1", name = "Example Battery Tray", composition = listOf(compositionEntryOf("k1", "s1", 4.0))),
+        )
+        install.installedComponents.insert(installedComponentOf("cx", assetId = "x1", name = "Example Intake Housing"))
+    }
+
+    /** A new row on a held asset — top-level, inside its held row, or on its child asset — is a write on it. */
+    @Test
+    fun installingOnAHeldAssetThrows() = runTest {
+        seed()
+        seedComponents()
+        val before = install.installedComponents.all()
+
+        refused(
+            heater,
+            "install on h1" to { uow.write { installedComponents.insert(installedComponentOf("c2", assetId = "h1", name = "Example Fuse")) } },
+            "install inside h1's tray" to {
+                uow.write { installedComponents.insert(installedComponentOf("c3", assetId = "h1", parentId = "c1", name = "Position 1", supplyId = "s1")) }
+            },
+        )
+        refused(
+            anode,
+            "install on h2, a child asset" to { uow.write { installedComponents.insert(installedComponentOf("c4", assetId = "h2", name = "Example Sleeve")) } },
+        )
+        assertEquals(before, install.installedComponents.all(), "nothing was written")
+
+        uow.write { installedComponents.insert(installedComponentOf("c5", assetId = "x1", parentId = "cx", name = "Example Filter Seat")) }
+        assertEquals(listOf("c1", "c5", "cx"), install.installedComponents.all().map { it.id.value }, "a staying asset's row writes as before")
+    }
+
+    /**
+     * An edit, a recomposition and a removal date on a held asset's row, and a row moved across in either direction:
+     * the row written **and** the stored row it replaces each count, since `update` writes the row whole with its
+     * composition — a row moved off a held asset is a write on it.
+     */
+    @Test
+    fun updatingAHeldAssetsRowThrows() = runTest {
+        seed()
+        seedComponents()
+        val held = install.installedComponents.get(InstalledComponentId("c1"))!!
+        val staying = install.installedComponents.get(InstalledComponentId("cx"))!!
+
+        refused(
+            heater,
+            "rename h1's row" to { uow.write { installedComponents.update(held.copy(name = "Example Spare Tray", updatedAt = 3_000L)) } },
+            "recompose h1's row" to {
+                uow.write { installedComponents.update(held.copy(composition = listOf(compositionEntryOf("k2", "s1", 2.0)), updatedAt = 3_000L)) }
+            },
+            "remove h1's row" to { uow.write { installedComponents.update(held.copy(removedOn = "2026-09-20", updatedAt = 3_000L)) } },
+            "move h1's row onto x1" to { uow.write { installedComponents.update(held.copy(assetId = compressor, updatedAt = 3_000L)) } },
+            "move x1's row onto h1" to { uow.write { installedComponents.update(staying.copy(assetId = heater, updatedAt = 3_000L)) } },
+        )
+        assertEquals(listOf(held, staying), install.installedComponents.all(), "nothing was written")
+        assertEquals(setOf("k1"), install.installedComponents.entries.keys, "the held row's entry is as it was")
+
+        uow.write { installedComponents.update(staying.copy(notes = "Example note", updatedAt = 3_000L)) }
+        assertEquals("Example note", install.installedComponents.get(InstalledComponentId("cx"))!!.notes, "a staying asset's row updates as before")
     }
 }

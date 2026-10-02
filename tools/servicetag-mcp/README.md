@@ -22,8 +22,8 @@ the one body key it is about, then the `problems` in parentheses.
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
   later**, the five service-case tools one at **12 or later**, the five loan tools one at **13 or
   later**, `get_asset_succession` one at **15 or later**, #92's five attachment tools and two replace
-  tools one at **16 or later**, and #15's eight supply tools one at **18 or later**; each checks it itself
-  (below).
+  tools one at **16 or later**, #15's eight supply tools one at **18 or later**, and #47's five installed
+  component tools one at **19 or later**; each checks it itself (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -33,9 +33,9 @@ the one body key it is about, then the `problems` in parentheses.
 - **The warranty tools need schema 11.** `get_warranty` and `set_warranty_reminder` — the read as well
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
-  five service-case tools, the five loan tools, the succession tool, #92's seven tools and #15's eight
-  supply tools below keeps the minimum of 8 — and a line tool that sends `supplyId` needs 18 for that
-  call.
+  five service-case tools, the five loan tools, the succession tool, #92's seven tools, #15's eight
+  supply tools and #47's five installed component tools below keeps the minimum of 8 — and a line tool
+  that sends `supplyId` needs 18 for that call.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
@@ -54,9 +54,13 @@ the one body key it is about, then the `problems` in parentheses.
   `remove_asset_supply` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 18 the
   same way, from the same read. `save_profile`, `log_event`, `update_event` and `complete_schedule` refuse it
   **only when a material line they will send carries a `supplyId` key at all** (`null` included, which an older
-  app's strict decoder answers 400 for too); without one they reach any phone they always did. The minima are
-  therefore 8 for every write, 11 for the warranty tools, 12 for the case tools, 13 for the loan tools, 15 for
-  the succession tool, 16 for the #92 tools and 18 for the supply tools and a linked line.
+  app's strict decoder answers 400 for too); without one they reach any phone they always did.
+- **The installed component tools need schema 19.** `list_installed_components`, `add_installed_component`,
+  `update_installed_component`, `remove_installed_component` and `replace_installed_component` — the read as
+  well as the writes — refuse an app whose `schemaVersion` is below 19 the same way, from the same read, naming
+  the feature "installed components". The minima are therefore 8 for every write, 11 for the warranty tools, 12
+  for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the supply
+  tools and a linked line, and 19 for the installed component tools.
 
 ## Using it
 
@@ -99,7 +103,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Eighty-four: `pair` plus one per API operation.
+Eighty-nine: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -275,6 +279,28 @@ key at all needs schema 18 (`APP_SCHEMA_TOO_OLD` below it), and a link travels o
 each line's `supplyId` exactly as it read it. `docs/api/v1.md`'s **Supply items (#15)** and **Asset supplies
 (#15)** sections are the contract.
 
+**Installed components (#47; needs schema 19)** — `list_installed_components`, `add_installed_component`,
+`update_installed_component`, `remove_installed_component`, `replace_installed_component`: `GET
+/v1/assets/{id}/installed-components`, `POST /v1/installed-components`, `PATCH /v1/installed-components/{id}`,
+`POST /v1/installed-components/{id}/remove` and `POST /v1/installed-components/{id}/replace`. An **installed
+component** is one fitted instance — a battery tray, the pack in it, a membrane in its housing — inside an asset
+or inside another installed component of the same asset, one row per instance: current while it has no removal
+date, history once it has one. It may name one supply item directly (`supply_id`: this unit is one of these) and
+carry an ordered **composition** of `{supplyId, quantity, unit}` entries (this unit is made of these), a
+quantity being how many of that SupplyItem one unit is made of — a pack of four of one battery is one entry with
+`quantity` 4. It is not a child asset: `create_component` still makes one of those, and the `components` keys
+still list them. `update_installed_component` sends only the arguments given, because the phone's `PATCH` is the
+overlay: `""` clears the direct link, the install date, the serial or lot or the notes, a given `composition` is
+the whole ordered list — each kept entry passed with its `id`, once — and `[]` empties it, `name` is never blank,
+and there is no `clear_fields`. An entry's `sortOrder`, as a read answers it, is left off what any tool sends:
+the list's order is the order. A remove, and a replace, closes the row and **every current installed component
+inside it on the same date, in the same write**, and deletes nothing. `replace_installed_component` gives the new
+unit the replaced row's parent and place, and only the link and the composition the call sends — an omitted
+`supply_id` or `composition` is none, never the replaced row's; to keep them, read them with
+`list_installed_components` and pass them. Nothing is inferred: an installed component names a supply item only
+by the id a caller sends, and adding one writes no applicability row and no event. `docs/api/v1.md`'s
+**Installed components (#47)** section is the contract.
+
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
@@ -360,6 +386,7 @@ provenance.
 | | `range_low`, `range_high`, `formula`, `source_a_id`, `source_b_id` | `null` | |
 | `save_profile` | — (its fields are text or lists, where `""` and `[]` already clear) | | |
 | `update_supply_item` | — (the phone's `PATCH` is the overlay: `""` clears a text field, `[]` the specifications) | | `name` |
+| `update_installed_component` | — (the phone's `PATCH` is the overlay: `""` clears `supply_id`, `installed_on`, `serial_or_lot` or `notes`, `[]` the composition) | | `name` |
 | `update_group` | `description` | `""` | `name` |
 | | `members` | `[]` — **every open membership is closed** | |
 | `update_schedule` | `description` | `""` | `title`; `time_basis`, `service_policy`, `season_behavior`, `completion_mode` (pass the new value); `lead_days`, `reminders_enabled` (pass `0`/`false`); `postponed_due_on` and `status`, which have their own tools |
@@ -394,12 +421,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–18** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–19** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -413,11 +440,11 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty-two**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty-three**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
 `categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`, `successions`, `supplyItems`,
-`assetSupplies`. A season activation, a condition and a case's timeline
+`assetSupplies`, `installedComponents`. A season activation, a condition and a case's timeline
 entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
 either: one returned, re-dated or relinked on one phone after the other received it conflicts, and an
 open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`. A
@@ -443,6 +470,12 @@ that a row on the phone under another id already holds is not inserted twice: it
 (`ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`) when the two agree field for field and SKIPPED
 (`ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW`) when only their stamps differ.
 
+An installed component (format 19) is matched by its id, every field and its composition compared: one removed,
+replaced, edited or recomposed on one phone since the export conflicts, and is never updated. One that is not
+here conflicts as `CHILD_ROW_ID_TAKEN` when an entry's id is held by another installed component, and as
+`INSTALLED_COMPONENT_REPLACEMENT_TAKEN` when another installed component already names the row it replaced; the
+rows are written parents first, after the assets and the supply items.
+
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
 `plan_only=True` to stop after the plan. Either way the result has `applicable` and, when it is
 false, a `conflicts` list naming each one by table, id and a stable reason code, in a deterministic
@@ -465,7 +498,8 @@ record** or lists the records: each is the phone's alone. Since #86 there is no 
 removes a succession**: one is recorded only by a replacement (the phone's Replace asset or, since #92,
 `replace_asset`), `import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
 Since #15 there is no tool that **deletes a supply item** — one is archived — and none that links a material
-line to a supply item by its name.
+line to a supply item by its name. Since #47 there is no tool that **deletes an installed component** — a remove
+closes it and keeps it as history — and none that copies a replaced row's link or composition into the new one.
 
 ## Tests
 

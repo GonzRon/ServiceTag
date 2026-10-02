@@ -102,6 +102,7 @@ class MaintenanceRoutesTest {
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
             supplyHandlersFor(graph),
+            installedComponentHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -1193,7 +1194,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(18, report.formatVersion)
+        assertEquals(19, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1248,6 +1249,8 @@ class MaintenanceRoutesTest {
                 "successions",
                 // #15 (format 18): tables 21 and 22, the supply items and their applicability.
                 "supplyItems", "assetSupplies",
+                // #47 (format 19): table 23, the installed components.
+                "installedComponents",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1318,9 +1321,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
         assertEquals(
-            "after categories, in table order, before #72's loans, #77's transfers, #86's successions and #15's two",
+            "after categories, in table order, before #72's loans, #77's transfers, #86's successions, #15's two and #47's",
             listOf("serviceCases", "caseEntries", "loans"),
-            wire.keys.toList().dropLast(6).takeLast(3),
+            wire.keys.toList().dropLast(7).takeLast(3),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1371,9 +1374,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("assets"))
         assertEquals(5, inserts("loans"))
         assertEquals(
-            "after the case entries, before #77's transfers, #86's successions and #15's two",
+            "after the case entries, before #77's transfers, #86's successions, #15's two and #47's",
             "loans",
-            wire.keys.toList().dropLast(6).last(),
+            wire.keys.toList().dropLast(7).last(),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1528,7 +1531,7 @@ class MaintenanceRoutesTest {
      * (the succession table and the archive that carries the successions), and its B4 adds the `assetSuccessions`
      * count — none here; `SuccessionRoutesTest` counts appended ones.
      */
-    @Test fun statusReports18And18AndTheNewCounts() {
+    @Test fun statusReports19And19AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1545,8 +1548,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(18, status.schemaVersion)
-        assertEquals(18, status.backupFormatVersion)
+        assertEquals(19, status.schemaVersion)
+        assertEquals(19, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1577,11 +1580,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-18** archive (this build's export) and reports **twenty-two** tables: the donor's
+     * Import-merge reads a **format-19** archive (this build's export) and reports **twenty-three** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat18AndReportsTwentyTwoTables() {
+    @Test fun importMergeReadsFormat19AndReportsTwentyThreeTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1591,9 +1594,9 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(22, tallies.size)
+        assertEquals(23, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(18, report.formatVersion)
+        assertEquals(19, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)
@@ -1603,6 +1606,8 @@ class MaintenanceRoutesTest {
         // #15 (format 18): the two new tables are on the report, empty for a donor with no supply items.
         val none = MergeTallyDto(insert = 0, identical = 0, conflict = 0, skipped = 0)
         assertEquals(listOf(none, none), listOf(report.supplyItems, report.assetSupplies))
+        // #47 (format 19): the installed components are on the report, empty for a donor with none.
+        assertEquals(none, report.installedComponents)
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {

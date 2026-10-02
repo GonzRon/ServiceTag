@@ -159,7 +159,7 @@ fun DashboardScreen(
                 // new string, and the Dashboard has nowhere left to send that "Search".
                 if (state.hiddenComponents > 0) {
                     QuietLine(
-                        text = "Components are listed on the asset they belong to.",
+                        text = "Child assets are listed on the asset they belong to.",
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }

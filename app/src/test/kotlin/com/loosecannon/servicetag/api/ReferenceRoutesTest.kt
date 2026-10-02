@@ -64,6 +64,7 @@ class ReferenceRoutesTest {
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
             supplyHandlersFor(graph),
+            installedComponentHandlersFor(graph),
             appVersion = "1.3.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -668,6 +669,8 @@ class ReferenceRoutesTest {
                 "assetSuccessions",
                 // #15's two, under the archive's own list names (format 18).
                 "supplyItems", "assetSupplies",
+                // #47's two, under the archive's own manifest keys (format 19).
+                "installedComponents", "compositionEntries",
             ),
             counts.keys,
         )
@@ -731,40 +734,41 @@ class ReferenceRoutesTest {
         // moved the range to 1–16 (no route, no table); #92's attachment list and the replace offer, plan and apply
         // made the sub-resources twenty-five (no table), and #91's format 17 moved the range to 1–17 (no route,
         // no table); #15's format 18 made the report twenty-two tables, the range 1–18 and its asset supply list
-        // the twenty-sixth sub-resource. These pins moved with the document.
+        // the twenty-sixth sub-resource, and #47's format 19 made the report twenty-three tables, the range 1–19
+        // and its installed component list the twenty-seventh. These pins moved with the document.
         assertFalse(
-            "the merge report is twenty-two tables now",
-            listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen", "twenty").any {
+            "the merge report is twenty-three tables now",
+            listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-two").any {
                 "$it tables" in text
             },
         )
-        assertTrue("the merge report must say twenty-two tables", "twenty-two tables" in text)
+        assertTrue("the merge report must say twenty-three tables", "twenty-three tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–18 now", "1–7" in text || "1–8" in text || "1–9" in text)
-        // "1–10" … "1–16" only in their two emphasis spellings, because a bare "1–10" is also the
+        assertFalse("the import endpoints read format 1–19 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        // "1–10" … "1–18" only in their two emphasis spellings, because a bare "1–10" is also the
         // health weight's range.
         assertFalse(
-            "the import endpoints read format 1–18 now",
-            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17").any {
+            "the import endpoints read format 1–19 now",
+            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17", "1–18").any {
                 "format **$it**" in text || "**format $it**" in text
             },
         )
         // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–18",
-            "format **1–18**" in text && "**format 1–18**" in text,
+            "the import endpoints must say 1–19",
+            "format **1–19**" in text && "**format 1–19**" in text,
         )
 
         assertFalse(
-            "there are twenty-six asset sub-resources now",
-            listOf("nine", "sixteen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-five").any {
+            "there are twenty-seven asset sub-resources now",
+            listOf("nine", "sixteen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-five", "twenty-six").any {
                 "$it `/v1/assets/{id}/…` sub-resources" in text
             },
         )
         assertTrue(
-            "the 405 row must name twenty-six asset sub-resources",
-            "twenty-six `/v1/assets/{id}/…` sub-resources" in text,
+            "the 405 row must name twenty-seven asset sub-resources",
+            "twenty-seven `/v1/assets/{id}/…` sub-resources" in text,
         )
 
         // The one code the mapper can spell and no route can return. The 1.2 subsection documents

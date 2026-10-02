@@ -5,8 +5,11 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetSupply
+import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.SupplyId
@@ -69,6 +72,7 @@ class ApiRouterTest {
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
             supplyHandlersFor(graph),
+            installedComponentHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -744,6 +748,7 @@ class ApiRouterTest {
                 attachmentHandlersFor(graph),
                 replaceHandlersFor(graph),
                 supplyHandlersFor(graph),
+                installedComponentHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),
@@ -894,6 +899,75 @@ class ApiRouterTest {
         assertEquals(200, again.status)
         assertEquals(MergeTallyDto(insert = 0, identical = 2, conflict = 0, skipped = 0), reportIn(again).supplyItems)
         assertEquals(MergeTallyDto(insert = 0, identical = 1, conflict = 0, skipped = 0), reportIn(again).assetSupplies)
+    }
+
+    /**
+     * #47 (C12, row 24) — a merge inserting a tree of installed components, a pack with its composition, and the
+     * SupplyItems they name commits on Room. The apply writes the rows straight after the applicability rows: after
+     * their asset and every SupplyItem a row or an entry names (`supply_id` RESTRICT on both tables), and parents first
+     * (`parent_id`). Four rows and two items, so a report mirror wired to the wrong table fails on its value; the second
+     * apply is all IDENTICAL. The names are fictional.
+     */
+    @Test fun aMergeInsertingATreeWithEntriesAndItsSupplyItemsCommits() {
+        val donor = FakeGraph()
+        val (archive, rows) = try {
+            var n = 0
+            val disjoint = IdGenerator { "00000000-0000-4000-8000-9200%08d".format(++n) }
+            val createAsset = CreateAsset(
+                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory,
+            )
+            runBlocking {
+                val ups = createAsset.run("Example UPS", "Power")
+                fun itemOf(id: String, name: String) = SupplyItem(
+                    id = SupplyId(id), name = name, category = "Battery", manufacturer = "Example Power Co.",
+                    model = "EP-12", partNumber = "EP-12-7", preferredUnit = "ea", notes = "",
+                    archivedAt = null, createdAt = 1_000L, updatedAt = 2_000L, specifications = emptyList(),
+                )
+                fun rowOf(
+                    id: String,
+                    name: String,
+                    parentId: String? = null,
+                    supplyId: String? = null,
+                    composition: List<CompositionEntry> = emptyList(),
+                    sortOrder: Int = 0,
+                ) = InstalledComponent(
+                    id = InstalledComponentId(id), assetId = ups.id, parentId = parentId?.let(::InstalledComponentId),
+                    name = name, supplyId = supplyId?.let(::SupplyId), composition = composition, serialOrLot = "",
+                    installedOn = "2026-01-10", removedOn = null, replacesId = null, sortOrder = sortOrder, notes = "",
+                    createdAt = 1_000L, updatedAt = 2_000L,
+                )
+                donor.supplyItems.upsert(itemOf("supply-battery", "Example 12 V Battery"))
+                donor.supplyItems.upsert(itemOf("supply-pack", "Example Battery Pack"))
+                donor.installedComponents.insert(rowOf("installed-tray", "Example Battery Tray"))
+                donor.installedComponents.insert(
+                    rowOf("installed-position-1", "Position 1", "installed-tray", "supply-battery", sortOrder = 1),
+                )
+                donor.installedComponents.insert(
+                    rowOf("installed-position-2", "Position 2", "installed-tray", "supply-battery", sortOrder = 2),
+                )
+                donor.installedComponents.insert(
+                    rowOf(
+                        "installed-pack", "Example Battery Pack", supplyId = "supply-pack",
+                        composition = listOf(CompositionEntry("entry-batteries", SupplyId("supply-battery"), 4.0, "ea", 0)),
+                    ),
+                )
+                donor.exportBackupSet.run().data to donor.installedComponents.all()
+            }
+        } finally {
+            donor.close()
+        }
+        createHotTub()
+
+        val applied = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+
+        assertEquals(applied.text(), 200, applied.status)
+        assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), reportIn(applied).supplyItems)
+        assertEquals(MergeTallyDto(insert = 4, identical = 0, conflict = 0, skipped = 0), reportIn(applied).installedComponents)
+        runBlocking { assertEquals(rows, graph.installedComponents.all()) }
+
+        val again = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+        assertEquals(200, again.status)
+        assertEquals(MergeTallyDto(insert = 0, identical = 4, conflict = 0, skipped = 0), reportIn(again).installedComponents)
     }
 
     /**

@@ -447,7 +447,7 @@ private const val TYPE = "Type"
 private const val ALL_TYPES = "All"
 
 /** P73-3: the Components chip. */
-private const val COMPONENTS = "Components"
+private const val COMPONENTS = "Child assets"
 
 /** P73-4: the Archived chip, and the word the list's badge draws (upper-cased) on an archived row. */
 private const val ARCHIVED = "Archived"
@@ -456,13 +456,13 @@ private const val ARCHIVED = "Archived"
 private const val ARCHIVED_HIDDEN_LINE = "Matching assets are archived. Turn on Archived to see them."
 
 /** P73-6: every match of the chosen type is hidden by Components alone. */
-private const val COMPONENTS_HIDDEN_LINE = "Matching assets are components. Turn on Components to see them."
+private const val COMPONENTS_HIDDEN_LINE = "Matching assets are child assets. Turn on Child assets to see them."
 
 /** P73-7: the matches are hidden by both controls, together or one row each. */
-private const val BOTH_HIDDEN_LINE = "Matching assets are hidden. Turn on Components and Archived to see them."
+private const val BOTH_HIDDEN_LINE = "Matching assets are hidden. Turn on Child assets and Archived to see them."
 
 /** P73-9: a blank query, Type All, and every asset Archived admits is a component. */
-private const val ONLY_COMPONENTS_LINE = "Only components here. Turn on Components to see them."
+private const val ONLY_COMPONENTS_LINE = "Only child assets here. Turn on Child assets to see them."
 
 /** P73-10: the query has matches, all of another type. */
 private const val TYPE_HIDDEN_LINE = "Matching assets have another type. Set Type to All."

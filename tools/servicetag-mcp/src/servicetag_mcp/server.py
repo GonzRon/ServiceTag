@@ -172,6 +172,12 @@ TOOL_NAMES: tuple[str, ...] = (
     "list_asset_supplies",
     "set_asset_supply",
     "remove_asset_supply",
+    # #47 — the installed components, each at a schema-19 minimum. Five, taking the total to 89.
+    "list_installed_components",
+    "add_installed_component",
+    "update_installed_component",
+    "remove_installed_component",
+    "replace_installed_component",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -231,6 +237,12 @@ line they will send carries a `supplyId` key at all** — `null` included, which
 
 _SUPPLY_LINK_FEATURE = "a supply link on a material line"
 """The feature a line tool names when it refuses a `supplyId` to a phone below schema 18 (G3)."""
+
+_MIN_INSTALLED_COMPONENT_SCHEMA_VERSION = 19
+"""The Room schema that carries the installed components and their compositions (#47). The five installed-component
+tools speak routes an older app does not have, so each refuses — the read too — a phone below it, with nothing sent:
+a per-tool minimum on the supply tools' pattern, applied by all five before any request. The global write minimum
+stays 8."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
@@ -332,6 +344,11 @@ def _require_supply_schema(tool: str, feature: str = "supply items") -> None:
     """One of #15's eight supply tools, or a line tool sending a `supplyId` (`feature` then names the link), on a
     phone below schema 18."""
     _require_tool_schema(tool, _MIN_SUPPLY_SCHEMA_VERSION, feature)
+
+
+def _require_installed_component_schema(tool: str) -> None:
+    """One of #47's five installed-component tools, the read included, on a phone below schema 19 (G3)."""
+    _require_tool_schema(tool, _MIN_INSTALLED_COMPONENT_SCHEMA_VERSION, "installed components")
 
 
 def _carries_supply_id(lines: Any) -> bool:
@@ -1245,7 +1262,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–18 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–19 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1279,7 +1296,12 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     material line's `supplyId` (#15): a supply item is matched by its id, so the same id with different content
     conflicts, an asset supply that a phone's row under another id already holds is IDENTICAL or SKIPPED rather
     than inserted twice, and an older archive's quick actions and events are compared without the link and,
-    while a line on the phone carries one, without the `updatedAt` that giving it moved).
+    while a line on the phone carries one, without the `updatedAt` that giving it moved; format 19 adds the
+    installed components, each with its composition nested (#47): one is matched by its id, every field and its
+    composition compared, so a row removed, replaced, edited or recomposed on one phone since the export
+    conflicts, never an update; an entry id another installed component holds conflicts as `CHILD_ROW_ID_TAKEN`,
+    and a row whose replaced row another installed component already names as
+    `INSTALLED_COMPONENT_REPLACEMENT_TAKEN`).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1289,8 +1311,8 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of twenty-two tables, `transfers`, `successions`, then `supplyItems` and `assetSupplies`
-    last.
+    skipped}` for each of twenty-three tables, `transfers`, `successions`, `supplyItems` and `assetSupplies`, then
+    `installedComponents` last.
 
     A Transfer Pack is not a data archive, and the phone refuses one here: packs are made, imported,
     marked and withdrawn on the phone only, and no tool does any of it. The `data.zip` inside a pack is
@@ -3824,6 +3846,219 @@ def remove_asset_supply(asset_supply_id: str) -> dict[str, Any]:
     path = f"/v1/asset-supplies/{_path_id(asset_supply_id, field='asset_supply_id')}"
     _require_supply_schema("remove_asset_supply")
     return _call("DELETE", path)
+
+
+# --- #47, the installed components (docs/api/v1.md, **Installed components (#47)**) --------------------------------
+#
+# Five tools over five of the six installed-component routes, each refusing a phone below schema 19 by name before
+# anything is sent. An installed component is one fitted instance — a battery tray, the pack in it, a membrane in its
+# housing — inside an asset, or inside another installed component of the same asset: one row per fitted instance,
+# current while it has no removal date and history once it has one. It may name one supply item directly (this unit
+# is one of these) and carry an ordered composition of supply items with quantities (this unit is made of these). It
+# is not a child asset: `create_component` makes one of those, and keeps doing so. The PATCH is the phone's own
+# overlay, so `update_installed_component` sends only what it was given and clears by value (`""`, `[]`) — there is
+# no `clear_fields` here. A replace gives the new unit exactly the link and the composition it is sent. Nothing
+# deletes an installed component: a remove closes it and keeps it as history.
+
+
+def _composition_body(composition: list[dict[str, Any]] | None) -> list[Any] | None:
+    """The entries as given, in the order given, each without the `sortOrder` key a row read carries: the phone sets
+    an entry's order from its place in the list and answers 400 for the key, so a composition read with
+    `list_installed_components` can be passed back as it came. No other key is added, dropped or changed, so a
+    quantity travels as the JSON number it was given; the caller's own list is left as it was."""
+    if composition is None:
+        return None
+    return [
+        {key: value for key, value in entry.items() if key != "sortOrder"} if isinstance(entry, dict) else entry
+        for entry in composition
+    ]
+
+
+@mcp.tool()
+def list_installed_components(asset_id: str) -> dict[str, Any]:
+    """Every installed component of one asset, current and removed: `GET /v1/assets/{id}/installed-components` →
+    `{installedComponents, supplyItems}`. The rows come by id, each `{id, assetId, parentId, name, supplyId,
+    composition, serialOrLot, installedOn, removedOn, replacesId, sortOrder, notes, createdAt, updatedAt}` with its
+    composition entries `{id, supplyId, quantity, unit, sortOrder}` in order, and each supply item a row or an entry
+    names comes once, a removed row's included. A row is current while its `removedOn` is `null`; `parentId` names
+    the installed component it sits inside (`null`: straight in the asset), and `replacesId` the row it replaced.
+
+    An installed component is a fitted instance inside its asset — not `create_component`, which makes a child
+    asset, and not the `components` a child asset is listed under. An unknown asset is `no_such_asset`. Needs a
+    phone at schema 19 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/installed-components"
+    _require_installed_component_schema("list_installed_components")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def add_installed_component(
+    asset_id: str,
+    name: str,
+    parent_id: str | None = None,
+    supply_id: str | None = None,
+    composition: list[dict[str, Any]] | None = None,
+    serial_or_lot: str | None = None,
+    installed_on: str | None = None,
+    notes: str | None = None,
+    sort_order: int | None = None,
+) -> dict[str, Any]:
+    """Fit an installed component into an asset, or inside another installed component of it: `POST
+    /v1/installed-components` → `{installedComponent}`, the new row current, its entries under fresh ids. A create
+    sent as given: only the arguments passed are sent. This is not `create_component`, which makes a child asset —
+    an asset in its own right, with its own tags and schedules; an installed component is a row inside its asset.
+
+    `asset_id` and `name` are needed, and a blank name is `INSTALLED_COMPONENT_NAME_REQUIRED`. An omitted `parent_id`
+    fits the row straight into the asset; a given one names a current installed component of the same asset — one
+    that is not there, `""` included, is `NO_SUCH_INSTALLED_COMPONENT` with `[field=parentId]`, one on another asset
+    `INSTALLED_COMPONENT_PARENT_ON_ANOTHER_ASSET`, and a removed one `INSTALLED_COMPONENT_PARENT_REMOVED`.
+    `supply_id` names the one supply item this unit is (omitted: none). `composition` is what one unit is made of, an
+    ordered list of `{"supplyId", "quantity", "unit"?}`: a quantity is how many of that SupplyItem one unit is made
+    of, a JSON number above zero (`COMPOSITION_QUANTITY_INVALID` otherwise; a quoted one is the phone's 400), so a
+    pack of four of one battery is one entry with `quantity` 4, and one supply item may appear in more than one
+    entry. An entry's `sortOrder`, as `list_installed_components` answers it, is left off what is sent: the list's
+    order is the order. An unknown or archived supply item, direct or in an entry, is `NO_SUCH_SUPPLY_ITEM` or
+    `SUPPLY_ITEM_ARCHIVED`, with `[field=supplyId]` or `[field=composition]`. `installed_on` is a `YYYY-MM-DD` day no
+    later than the phone's today (`INSTALLED_COMPONENT_DATE_INVALID`, `INSTALLED_COMPONENT_DATE_AFTER_TODAY`;
+    omitted or `""`: no install date recorded); `serial_or_lot` is free text; an omitted `sort_order` puts the row
+    after its current siblings, and a given one is a whole number from 0 to 1,000,000. An unknown asset is
+    `no_such_asset`, and one
+    transferred out from the phone `asset_transferred_out`; `INSTALLED_COMPONENT_INVALID` is the documented fallback
+    and never expected. The call writes the one row and its entries: no supply item, applicability row or event.
+    Needs a phone at schema 19 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    _require_installed_component_schema("add_installed_component")
+    return _call(
+        "POST",
+        "/v1/installed-components",
+        json_body=_body(
+            assetId=asset_id,
+            parentId=parent_id,
+            name=name,
+            supplyId=supply_id,
+            composition=_composition_body(composition),
+            serialOrLot=serial_or_lot,
+            installedOn=installed_on,
+            notes=notes,
+            sortOrder=sort_order,
+        ),
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def update_installed_component(
+    installed_component_id: str,
+    name: str | None = None,
+    supply_id: str | None = None,
+    composition: list[dict[str, Any]] | None = None,
+    serial_or_lot: str | None = None,
+    installed_on: str | None = None,
+    notes: str | None = None,
+    sort_order: int | None = None,
+) -> dict[str, Any]:
+    """Edit an installed component, current or removed: `PATCH /v1/installed-components/{id}` →
+    `{installedComponent}`. **The phone's PATCH is the overlay**, so this tool reads nothing first and sends only the
+    arguments given; an omitted argument and one sent as `null` both leave the stored value alone. It edits a row
+    inside its asset, not `create_component`'s child asset.
+
+    **Clearing is by value, so there is no `clear_fields`.** `""` clears `supply_id` (the row then names no supply
+    item), `installed_on` (no install date recorded), `serial_or_lot` or `notes`; `name` is never blank — `""` is
+    `INSTALLED_COMPONENT_NAME_REQUIRED`. `composition`, when given, is **the whole ordered list** of what one unit is
+    made of, a quantity being how many of that SupplyItem one unit is made of, and `[]` empties it. **Pass each kept
+    entry with its `id`, once,** as `list_installed_components` answered it, with its `supplyId`, `quantity` and
+    `unit`; its `sortOrder` is left off what is sent, because the list's order is the order. An entry without an
+    `id`, or whose `id` came earlier in the list or is not one of this row's, is a new entry with a fresh id. An
+    archived supply item is `SUPPLY_ITEM_ARCHIVED` unless the row already holds it in the same place: as
+    `supply_id` only when it is the row's stored direct link, and in an entry only when the row's stored
+    composition already names it. A changed `installed_on` may not be later than the phone's today, nor after the
+    row's removal date (`INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED`); `sort_order` places the row among its
+    siblings. The asset, the
+    parent, the removal date and the replaced row are not edited here: a row moves only by
+    `remove_installed_component` and a new `add_installed_component`, and closes only by a remove or a replace. An
+    unknown id is `NO_SUCH_INSTALLED_COMPONENT`, and a row of an asset transferred out from the phone is
+    `asset_transferred_out`. An edit that changes nothing answers the stored row and writes nothing. Needs a phone at
+    schema 19 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/installed-components/{_path_id(installed_component_id, field='installed_component_id')}"
+    _require_installed_component_schema("update_installed_component")
+    body = _body(
+        name=name,
+        supplyId=supply_id,
+        composition=_composition_body(composition),
+        serialOrLot=serial_or_lot,
+        installedOn=installed_on,
+        notes=notes,
+        sortOrder=sort_order,
+    )
+    return _call("PATCH", path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def remove_installed_component(installed_component_id: str, removed_on: str) -> dict[str, Any]:
+    """Remove an installed component on a day: `POST /v1/installed-components/{id}/remove` with `{"removedOn"}` →
+    `{installedComponent, closed}`. The row closes on `removed_on`, and **every current installed component inside
+    it, at any depth, closes with it, on the same date, in the same write** — `closed` lists those, by id. Nothing is
+    deleted: each closed row keeps its composition and stays as history. It closes a row inside its asset, not
+    `create_component`'s child asset.
+
+    `removed_on` is a `YYYY-MM-DD` day no later than the phone's today (`INSTALLED_COMPONENT_DATE_INVALID`,
+    `INSTALLED_COMPONENT_DATE_AFTER_TODAY`), and not before the row's install date or that of any current row inside
+    it (`INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED`). A removed row is `INSTALLED_COMPONENT_REMOVED`, an unknown id
+    `NO_SUCH_INSTALLED_COMPONENT`, and a row of an asset transferred out from the phone `asset_transferred_out`. To
+    put a new unit in its place in the same write, use `replace_installed_component`. Needs a phone at schema 19 or
+    later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/installed-components/{_path_id(installed_component_id, field='installed_component_id')}/remove"
+    _require_installed_component_schema("remove_installed_component")
+    return _call("POST", path, json_body={"removedOn": removed_on}, content_type="application/json")
+
+
+@mcp.tool()
+def replace_installed_component(
+    installed_component_id: str,
+    replaced_on: str,
+    name: str | None = None,
+    supply_id: str | None = None,
+    composition: list[dict[str, Any]] | None = None,
+    serial_or_lot: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Replace an installed component on a day, in one write: `POST /v1/installed-components/{id}/replace` →
+    `{installedComponent, replaced, closed}` — the new row, the row it replaced (now removed on `replaced_on`), and
+    every current installed component that was inside the replaced one, which **closes with it, on the same date, in
+    the same write**, so the new unit starts with nothing inside it. The new row takes the replaced row's asset,
+    parent and `sortOrder`, `installedOn` = `replaced_on`, and a `replacesId` naming it; nothing else moves. It
+    replaces a row inside its asset — not `create_component`'s child asset, and not `replace_asset`, which replaces a
+    whole asset.
+
+    **The new unit gets only what this call sends.** An omitted `name` is the replaced row's (a label), and a given
+    blank one is `INSTALLED_COMPONENT_NAME_REQUIRED`. An omitted `supply_id` or `composition` gives the new unit
+    **none**: the tool never copies the replaced row's link or
+    composition. To keep them, read them with `list_installed_components` and pass them here; `""` and `[]` are none
+    too. A composition is the new unit's own ordered list, a quantity being how many of that SupplyItem one unit is
+    made of; every entry gets a fresh id whatever `id` it is sent with, and an entry's `sortOrder`, as read, is left
+    off what is sent. An archived supply item, direct or in an entry, is `SUPPLY_ITEM_ARCHIVED` here even when the
+    replaced row names it, and an unknown one `NO_SUCH_SUPPLY_ITEM`. An omitted `serial_or_lot` or `notes` is `""`.
+    `replaced_on` is a `YYYY-MM-DD` day (`INSTALLED_COMPONENT_DATE_INVALID`) no later than the phone's today
+    (`INSTALLED_COMPONENT_DATE_AFTER_TODAY`) and not before the replaced row's install date or that of any current
+    row inside it (`INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED`). A removed row is
+    `INSTALLED_COMPONENT_REMOVED`, an unknown id `NO_SUCH_INSTALLED_COMPONENT`, and a row of an asset transferred out
+    from the phone `asset_transferred_out`. Needs a phone at schema 19 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/installed-components/{_path_id(installed_component_id, field='installed_component_id')}/replace"
+    _require_installed_component_schema("replace_installed_component")
+    body = _body(
+        replacedOn=replaced_on,
+        name=name,
+        supplyId=supply_id,
+        composition=_composition_body(composition),
+        serialOrLot=serial_or_lot,
+        notes=notes,
+    )
+    return _call("POST", path, json_body=body, content_type="application/json")
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

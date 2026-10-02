@@ -13,7 +13,9 @@ import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.breakProblems
 import com.loosecannon.servicetag.core.usecase.caseEntryProblems
+import com.loosecannon.servicetag.core.usecase.compositionProblems
 import com.loosecannon.servicetag.core.usecase.conditionFactProblems
+import com.loosecannon.servicetag.core.usecase.installedComponentProblems
 import com.loosecannon.servicetag.core.usecase.loanProblems
 import com.loosecannon.servicetag.core.usecase.parseDate
 import com.loosecannon.servicetag.core.usecase.policyProblems
@@ -74,12 +76,17 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  *   slug rule or taken within its SupplyItem; an applicability row with a blank or uncleaned role, or holding the
  *   `(asset, SupplyItem, role)` another row holds. A missing target is the graph check's.
  *
+ * - an installed component (#47, C10) that its commands would refuse about the row itself — a blank name, an
+ *   install or removal date that is not ISO, a removal before the install (`installedComponentProblems`, asked with
+ *   no today) — or a composition entry whose quantity is not a finite number above zero, named by its index
+ *   (`compositionProblems`). A missing or misplaced parent, SupplyItem or replaced row is the graph check's.
+ *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
  * primary that is gone (S138's fallback), a PRE_SERVICE schedule on a boundary-less asset, two subjects
  * on one schedule (the merge planner's own reason), a fact, a case or an entry dated after the importing
- * device's today, a case's Incident or repair link (soft, R79-4), or a loan lent or returned after the
- * importing device's today.
+ * device's today, a case's Incident or repair link (soft, R79-4), a loan lent or returned after the
+ * importing device's today, or an installed component fitted or removed after it.
  *
  * Every refusal is [BackupCorrupt] naming the table, the row and the problem.
  */
@@ -139,6 +146,22 @@ internal object BackupContentCheck {
         checkTransferRecords(data)
         checkSuccessions(data)
         checkSupplies(data)
+        checkInstalledComponents(data)
+    }
+
+    /**
+     * #47 (C10): each installed component by the shape its commands ask — [installedComponentProblems] with no today,
+     * so a row is never judged by the importing phone's date — and its composition by [compositionProblems], whose
+     * problem names the entry by its index; both through [refuse], which names the list and the row.
+     */
+    private fun checkInstalledComponents(data: BackupData) {
+        data.installedComponents.forEach { dto ->
+            val row = dto.toDomain()
+            refuse(
+                "installedComponents", "installed component", row.id.value,
+                installedComponentProblems(row.name, row.installedOn, row.removedOn) + compositionProblems(row.composition),
+            )
+        }
     }
 
     /**

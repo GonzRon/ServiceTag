@@ -255,7 +255,7 @@ const val CATEGORY_FIELD = "Category"
  * PURCHASE, WARRANTY, NOTES, and on a new asset only, TEMPLATE. Save sits in the app bar and
  * again at the bottom so it is reachable with the keyboard open (G1 §1.3).
  *
- * [parentId] is the "Part of" a new asset opens with, which is how "+ Add component" on a
+ * [parentId] is the "Part of" a new asset opens with, which is how "+ Add child asset" on a
  * parent's screen makes a child. Every rule belongs to the use cases; the screen only draws what
  * they refused — a line under each bad field, and the refused reparent on the snackbar, because
  * "that asset is inside this one" is about a pair and not about any single input.
@@ -289,7 +289,7 @@ fun AssetEditScreen(
     // #67, R67-13: the Key documents block's status card, with no attachment folder configured.
     onOpenSettings: () -> Unit = {},
 ) {
-    // The key carries the parent as well as the id: "+ Add component" on two different parents
+    // The key carries the parent as well as the id: "+ Add child asset" on two different parents
     // must not share one half-filled form, and neither must a plain "Add asset" and a component.
     val model: AssetEditViewModel = viewModel(key = assetId ?: "new-${parentId ?: "root"}") {
         AssetEditViewModel(graph, assetId, parentId)

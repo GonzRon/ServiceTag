@@ -810,6 +810,65 @@ val MIGRATION_17_18: Migration = object : Migration(17, 18) {
 }
 
 /**
+ * Schema v18 -> v19 (#47, C7; R47-2, R47-3, R47-5): installed components — two new tables and their indices.
+ * Nothing existing moves: no column on an existing table, no row, no timestamp and no recreate, so a pre-upgrade
+ * export still re-plans IDENTICAL. A v18 install arrives with no installed component, and nothing is read off an
+ * asset, a SupplyItem or an applicability row to make one.
+ *
+ *  1. `installed_component`, one row per fitted instance: owned by the asset (CASCADE), inside another row of it
+ *     (`parent_id`, CASCADE — H1: a RESTRICT could refuse a parent the asset's cascade reaches before its child),
+ *     naming a SupplyItem (RESTRICT); `replaces_id` soft (no foreign key) and unique; `asset_id`, `parent_id` and
+ *     `supply_id` indexed for their keys.
+ *  2. `installed_component_composition`, each row's ordered entries: owned by the row (`component_id`, CASCADE),
+ *     naming a SupplyItem (RESTRICT); both keys indexed.
+ *
+ * Each `CREATE` is copied verbatim from the exported `19.json`, so Room validates the result on open.
+ */
+val MIGRATION_18_19: Migration = object : Migration(18, 19) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `installed_component` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, " +
+                "`parent_id` TEXT, `name` TEXT NOT NULL, `supply_id` TEXT, `serial_or_lot` TEXT NOT NULL, " +
+                "`installed_on` TEXT, `removed_on` TEXT, `replaces_id` TEXT, `sort_order` INTEGER NOT NULL, " +
+                "`notes` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`parent_id`) REFERENCES `installed_component`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`supply_id`) REFERENCES `supply_item`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_installed_component_asset_id` ON `installed_component` (`asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_installed_component_parent_id` ON `installed_component` (`parent_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_installed_component_supply_id` ON `installed_component` (`supply_id`)",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_installed_component_replaces_id` " +
+                "ON `installed_component` (`replaces_id`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `installed_component_composition` (`id` TEXT NOT NULL, " +
+                "`component_id` TEXT NOT NULL, `supply_id` TEXT NOT NULL, `quantity` REAL NOT NULL, " +
+                "`unit` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`component_id`) REFERENCES `installed_component`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`supply_id`) REFERENCES `supply_item`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_installed_component_composition_component_id` " +
+                "ON `installed_component_composition` (`component_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_installed_component_composition_supply_id` " +
+                "ON `installed_component_composition` (`supply_id`)",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

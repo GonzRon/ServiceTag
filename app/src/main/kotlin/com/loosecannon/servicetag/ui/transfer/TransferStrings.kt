@@ -24,7 +24,7 @@ internal object TransferStrings {
     const val SELECT_WHAT_LEAVES = "Select what is leaving this ServiceTag"
 
     /** P77-3 — the selection's QuietLine. */
-    const val COMPONENTS_GO_WITH = "Components go with the asset they belong to."
+    const val COMPONENTS_GO_WITH = "Child assets go with the asset they belong to."
 
     /** P77-4 — the selection's button. */
     const val REVIEW = "Review"
@@ -45,7 +45,7 @@ internal object TransferStrings {
     fun mixedGroup(group: String, staying: String): String = "$group also covers $staying, which stay here. A group transfers only with every asset it has ever covered."
 
     /** P77-16 — a component without its parent. */
-    fun parentNotSelected(child: String, parent: String): String = "$child is a component of $parent. Select $parent too."
+    fun parentNotSelected(child: String, parent: String): String = "$child is a child asset of $parent. Select $parent too."
 
     /** P77-17 — an open loan (also the marking refusal). */
     fun lentOut(asset: String): String = "$asset is lent out. Mark it returned first."
