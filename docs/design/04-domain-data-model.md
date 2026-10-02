@@ -437,7 +437,7 @@ every schedule edit, every import, and in the daily job.
 
 ## 9. Supplies and stock (Phase 6)
 
-> **Amended 2026-10-01 (#15, Room schema 18).** What shipped of this section is a supply item's identity, its generic specifications and `asset_supply` applicability (no `notes`); `vendor_url` is #69's; every other column and table here is #95's and is not built. (As shipped, `asset_supply.supply_id` is FK RESTRICT — a SupplyItem is archived, never deleted — not the CASCADE drafted below.)
+> **Amended 2026-10-01 (#15, Room schema 18).** What shipped of this section is a supply item's identity, its generic specifications and `asset_supply` applicability (no `notes`); #69 keeps a SupplyItem's vendor and product links as ordinary references the SupplyItem owns, and there is no `vendor_url` column ([14-asset-model.md](14-asset-model.md) §6); every other column and table here is #95's and is not built. (As shipped, `asset_supply.supply_id` is FK RESTRICT — a SupplyItem is archived, never deleted — not the CASCADE drafted below.)
 > A supply item is archived, never deleted (R15-5), so §13's "Delete supply" row is superseded. The current model is [14-asset-model.md](14-asset-model.md).
 
 ### `supply_item`
@@ -449,7 +449,7 @@ every schedule edit, every import, and in the daily job.
 | `preferred_unit` | `oz`, `qt`, `ea`, … |
 | `track_stock` INTEGER | 0 = reference only |
 | `low_stock_threshold` REAL, `reorder_quantity` REAL | optional |
-| `vendor_url`, `notes` | |
+| `notes` | shipped with #15. There is no `vendor_url` column: a SupplyItem's vendor and product links are references the SupplyItem owns, like any of its links (#69) |
 | `qty_on_hand_cache` REAL, `qty_as_of_at` | **derived** from the ledger |
 | `archived_at`, `created_at`, `updated_at` | |
 
@@ -523,12 +523,12 @@ WorkManager worker. This is what makes "delete a schedule" safe: the domain row 
 | Column | Notes |
 |---|---|
 | `id` PK | |
-| `asset_id` FK CASCADE, nullable / `event_id` FK CASCADE, nullable | exactly one — **no SQL `CHECK`**; enforced in the entity mapper and in the backup reader (4A, spec §11.5) |
+| `asset_id` FK CASCADE, nullable / `event_id` FK CASCADE, nullable / `supply_item_id` FK CASCADE, nullable / `installed_component_id` FK CASCADE, nullable | exactly one of the four: an asset, a journal entry, a supply item or an installed component (the last two since #69, schema 20, each with its own index; [14-asset-model.md](14-asset-model.md) §6) — **no SQL `CHECK`**; enforced in the entity mapper and in the backup reader (4A, spec §11.5) |
 | `kind` | `PHOTO` \| `LABEL_PHOTO` \| `RECEIPT` \| `MANUAL` \| `WARRANTY` \| `DOCUMENT` \| `OTHER` |
 | `mode` | `MANAGED` (bytes copied into the configured store; noteNFC owns lifecycle) \| `REFERENCE` (durable pointer to a document the user keeps elsewhere) |
 | `display_name`, `mime_type`, `size_bytes`, `sha256` | |
 | `storage_provider` | `SAF_TREE` \| `SAF_DOCUMENT` (reference, reserved for 4B). **No `LOCAL` member** — absent, not reserved, by the owner's ruling (4A, spec §11.8); `WEBDAV`, `S3`, `GDRIVE`, `ONEDRIVE`, `DROPBOX` are not in the enum either |
-| `storage_locator` | provider-relative: `SAF_TREE` uses `assets/<asset-id>/<attachment-id>.<ext>` or `events/<event-id>/<attachment-id>.<ext>` relative to the store root (the root itself is one setting, so switching trees does not touch rows); `SAF_DOCUMENT` will store the persisted `content://` URI in 4B |
+| `storage_locator` | provider-relative: `SAF_TREE` uses `assets/<asset-id>/<attachment-id>.<ext>`, `events/<event-id>/<attachment-id>.<ext>`, `supply-items/<supply-id>/<attachment-id>.<ext>` or `installed-components/<component-id>/<attachment-id>.<ext>` (the last two since #69) relative to the store root (the root itself is one setting, so switching trees does not touch rows); `SAF_DOCUMENT` will store the persisted `content://` URI in 4B |
 | `captured_on`, `notes`, `created_at`, `updated_at` | |
 
 Indexes: `asset_id`, `event_id`, and **unique** `(storage_provider, storage_locator)` — two rows

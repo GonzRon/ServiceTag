@@ -164,7 +164,100 @@ composition. Nothing more."):
 - a parent picker or a move (a move is a remove and an install), a removal-date correction, and a "where
   fitted" list on a SupplyItem's detail are not built.
 
-## 6. Choosing the shape for a new thing
+## 6. What #69 built, and what it did not
+
+**Built (Room schema 20, backup format 20):** one resource system with **three owners**. The shipped files (an
+`attachment` row, its bytes in the attachment folder) and links (an `asset_reference` row, no bytes) — with their
+kinds, roles, source details and "Save as document" — may belong to an **Asset**, a **SupplyItem** or an
+**installed component**; a journal entry's files stay its own, as before. `attachment` gained two owner columns
+and `asset_reference` was rebuilt with a nullable asset column and the same two; each owner column goes with its
+owner. The archive carries `supplyItemId` and `installedComponentId` beside `assetId` on the same two lists, and
+nothing else changed shape: no new table, list, count, kind or role.
+
+**Ownership follows what the resource is about.** What a product is — its manual, data sheet, product photo, the
+maker's product page — belongs to its SupplyItem. What one fitted unit is — its installation photo, its label or
+serial photo, its wiring photo, its setup record — belongs to that installed component. What the equipment as a
+whole is belongs to the Asset, as before. A vendor or product page is one of the SupplyItem's links like any other,
+named as the owner chooses; nothing marks one preferred. Nothing assigns an owner by itself — not a name, a kind, a
+role or an address — and installing, replacing or removing an installed component, or archiving a SupplyItem,
+creates, moves or deletes no file or link. An owner is there because a person chose it (on the phone, through Share,
+`/v1` or the MCP) or because a row carrying it was copied verbatim (a backup, a merge, a Transfer Pack).
+
+**The rules.**
+
+1. **One owner each:** a file names exactly one of an Asset, a journal entry, a SupplyItem and an installed
+   component; a link exactly one of an Asset, a SupplyItem and an installed component. No SQL check carries it: the
+   database write and the backup read enforce it.
+2. **Fixed for life:** an edit never changes the owner; a move is a remove and an add.
+3. **One URI once per owner:** the same URI on a SupplyItem and on an Asset is two links; twice on one owner is
+   refused.
+4. **A file's place follows its owner:** `assets/<id>/`, `events/<id>/`, `supply-items/<id>/` or
+   `installed-components/<id>/`, then the file's own id and extension. The directory names are permanent.
+5. **Holds follow the asset:** an installed component's files and links count as its asset's for a Transfer Pack,
+   the held-write guard and the merge's transferred-out check; a SupplyItem's are no asset's and are never held.
+6. **No copies for visibility:** no row or byte is copied so that another screen can show it.
+
+**Visibility by navigation.** A SupplyItem's files and links are stored once, on the SupplyItem, and reached from
+wherever it is used. On the phone:
+
+- the **SupplyItem detail** (Maintenance › Supplies) draws its own **Documents** and **References** below
+  "Used by", writable for an archived item too;
+- an **Installed components** row's sheet offers **Documents and references** on every row — current, removed, or on
+  a held asset — and opens the **installed-component screen**: under "This installed component", the component's
+  own Documents and References (read-only while its asset is held); then one read-only group per distinct
+  SupplyItem that its direct link and its composition name, headed "From" and the SupplyItem's name, under "Open the
+  supply to add or change these.", whose heading opens that SupplyItem's detail. Two installed components naming one
+  SupplyItem show the same files, not copies;
+- the **asset detail** gains no list: it reaches its installed components' and SupplyItems' files and links through
+  its Installed components rows and its Supplies rows, and its own Documents and References show its own rows only.
+
+**Share** (#43's rules unchanged) reaches all three owners through one picker. For a link or a file, **Attach to**
+chooses the type — Assets (the default), Installed components or Supplies — a search box filters that type, and one
+list shows only that type. An installed component's row shows its asset and the installed components above it, and
+the search matches those names as well as its own; a SupplyItem's row shows its identifying product information. In
+the Installed components and Supplies lists a row is the destination: it opens the existing save form, with no extra
+confirmation. An asset row opens that asset's level instead, browsed one level at a time — "This asset", the
+unarchived SupplyItems the asset takes, its top installed components; an installed component's level offers "This
+installed component", the unarchived SupplyItems it names and its current children — with a breadcrumb and Back,
+which returns one level at a time and then to the list with its type and search kept. The Installed components list
+is in name order, path by path; a level follows the installed components' own sort order. Offered are the assets
+maintained here (not archived, retired or replaced, and not held by a Transfer Pack; Share hides the Archived
+control), the current installed components on those assets, and every unarchived SupplyItem, whether or not an asset
+takes it; the installed-component and SupplyItem lists are read once, when the share opens. A SupplyItem destination
+stores the file or link once, on the SupplyItem, and the save form says so before Save. Shared text that becomes a
+journal note still goes to an asset only.
+
+**Travel and life.** Every owner's files and links travel the same way: backup, replace restore (the links written
+after the SupplyItems and installed components they name), merge (a link is the same link only on the same owner
+and URI, and a row lands only when its owner is here or arrives in the same merge) and Transfer Packs (an installed
+component's with its asset; a SupplyItem's, bytes included, in every pack whose rows name it). "Save as document"
+puts the file on the link's owner. Bytes follow each owner's life: an archived SupplyItem keeps its files and links
+and may still gain more; a closed (removed or replaced) installed component keeps its own on its row and may still
+gain more, and a successor starts with none; deleting an asset takes its installed components' rows and bytes,
+never a SupplyItem's. Over `/v1`, `/v1/supply-items/{id}/` and `/v1/installed-components/{id}/` each have
+`attachments` (list and upload) and `references` (list), and `POST /v1/references` names exactly one owner; the
+MCP's five file-and-link tools take exactly one of `asset_id`, `supply_item_id` and `installed_component_id`.
+
+**A child Asset** is an Asset, so its files and links are ordinary Asset-owned rows; there is no owner of its own
+for it.
+
+**Recorded limits.** The names `asset_reference`, `assetReferences`, `AssetReference` and `/v1/references` stay
+while their rows may belong to a SupplyItem or an installed component (#98 may rename them). A SupplyItem's file or
+link edited here while a Transfer Pack naming the item is out refuses that pack's return; one removed here comes
+back with it; a large file on a SupplyItem rides every pack that names the item. A format-20 archive or pack is
+refused by every schema-19 build.
+
+**Not built, by the owner's scope** ("#69 = one resource system … with three explicit owners (Asset, SupplyItem,
+InstalledComponent) … Nothing more."):
+
+- a list of an asset's installed components' or SupplyItems' files and links on the asset detail;
+- a marker for a preferred link, or a URL column on the SupplyItem;
+- moving a file or link to another owner (it is a remove and an add);
+- a new file kind: a specification or a diagram is a `DOCUMENT` or a `PHOTO`;
+- files or links on a maintenance group, a schedule, a quick action or a service case;
+- an NFC tag, binding or scan route on a SupplyItem or an installed component.
+
+## 7. Choosing the shape for a new thing
 
 1. Is it equipment with its own identity, journal, documents or movement? It is an **Asset** (a child Asset
    when it sits inside another).
