@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -134,6 +135,11 @@ class InstalledComponentsSectionTest {
         rule.onNodeWithContentDescription(insideOf("Example Battery Tray")).assertIsDisplayed()
         rule.onNodeWithContentDescription(insideOf("Position 1")).assertIsDisplayed()
         rule.onAllNodesWithContentDescription("Inside", substring = true).assertCountEquals(2)
+        // What a screen reader receives is the unmerged tree, which leaves out a node with no area.
+        val indent = rule.onNode(hasContentDescription(insideOf("Example Battery Tray")), useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        assertTrue((indent.bottom - indent.top).value > 0f)
+        assertTrue((indent.right - indent.left).value > 0f)
     }
 
     /** The shipped "Archived" badge on the row whose direct SupplyItem is archived, and on no other. */

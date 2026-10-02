@@ -2,9 +2,12 @@ package com.loosecannon.servicetag.ui.installed
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -167,13 +170,16 @@ private fun InstalledComponentRow(row: InstalledComponentRowState, onOpen: () ->
             .fillMaxWidth()
             .clickable(onClick = onOpen)
             .heightIn(min = 56.dp)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 6.dp)
+            // The indent takes the row's height: a zero-area node never reaches TalkBack, and it carries P47-5.
+            .height(IntrinsicSize.Min),
     ) {
         if (row.depth > 0) {
             val inside = row.inside
             Spacer(
                 Modifier
                     .width(INDENT_STEP * row.depth)
+                    .fillMaxHeight()
                     .then(if (inside == null) Modifier else Modifier.semantics { contentDescription = inside }),
             )
         }

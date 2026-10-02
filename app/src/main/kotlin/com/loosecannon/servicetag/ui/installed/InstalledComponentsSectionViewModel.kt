@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 /** How long the repository flows stay hot after the last collector leaves (a rotation, typically). */
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
-/** The joiner of the quiet line's parts (C25), the Supplies list's detail joiner. */
+/** The joiner of the quiet line's pieces (C25), the Supplies list's detail joiner. */
 private const val QUIET_JOINER = " · "
 
 /** How many composition entries the quiet line names before P47-22 counts the rest (C25). */
