@@ -44,8 +44,8 @@ data class SupplyUseRow(val id: String, val assetId: AssetId, val assetName: Str
 /**
  * One SupplyItem, in full (C30): [facts] are the identity fields that are there, in Category, Manufacturer, Model,
  * Part number, Preferred unit, Notes order; [specifications] in the stored `(sortOrder, id)` order; [usedBy] by the
- * asset's name, then the role. Nothing else: #69's resources section later sits below "Used by" (§8), and nothing
- * here stands in for it.
+ * asset's name, then the role. Below "Used by" sit the item's own Documents and References (#69, C26): the shipped
+ * sections hold their own state, keyed by [id], and [resourcesReadOnly] is the one fact about them held here.
  */
 data class SupplyDetailState(
     val id: SupplyId,
@@ -54,6 +54,12 @@ data class SupplyDetailState(
     val facts: List<SupplyFact>,
     val specifications: List<SupplySpecLine>,
     val usedBy: List<SupplyUseRow>,
+    /**
+     * #69 (C26, R69-10): whether the two sections draw open-only. Never, an archived item included: a SupplyItem is
+     * never held, and an archived one keeps gaining files and links on this screen. A state field rather than a
+     * literal in the composable, so the JVM proves it (row 50).
+     */
+    val resourcesReadOnly: Boolean,
 )
 
 /**
@@ -129,6 +135,7 @@ class SupplyDetailViewModel(
             usedBy = assetSupplies.forSupply(item.id)
                 .map { SupplyUseRow(it.id, it.assetId, names[it.assetId].orEmpty(), it.role) }
                 .sortedWith(compareBy({ it.assetName.lowercase() }, { it.assetName }, { it.role }, { it.id })),
+            resourcesReadOnly = false,
         )
     }
 }

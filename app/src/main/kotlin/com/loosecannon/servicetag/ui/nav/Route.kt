@@ -167,6 +167,9 @@ sealed interface Route : NavKey {
     /** #15 (C30) — one SupplyItem: its identity, its specifications and the assets that take it. */
     @Serializable data class SupplyDetail(val id: String) : Route
 
+    /** #69 (C27) — one installed component's own files and links, and its SupplyItems' open only. */
+    @Serializable data class InstalledComponentDetail(val id: String) : Route
+
     /** #15 (C31) — the SupplyItem editor; new when [id] is null. */
     @Serializable data class SupplyEdit(val id: String?) : Route
 

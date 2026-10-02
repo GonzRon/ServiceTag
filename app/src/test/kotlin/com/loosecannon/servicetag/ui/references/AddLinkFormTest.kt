@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.RemoveReference
@@ -72,7 +73,7 @@ class AddLinkFormTest {
         val factory = viewModelFactory {
             initializer {
                 ReferencesSectionViewModel(
-                    AssetId("example-water-heater"),
+                    ReferenceOwner.OfAsset(AssetId("example-water-heater")),
                     graph.references,
                     AddReference(
                         graph.references, graph.assets, graph.supplyItems, graph.installedComponents, policy, graph.uow,

@@ -80,6 +80,7 @@ import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -231,6 +232,8 @@ fun AssetDetailScreen(
     onReplace: (assetId: String) -> Unit = {},
     /** #15 (C33, C-1): a Supplies row opens that SupplyItem's own detail. The tap writes nothing. */
     onOpenSupply: (supplyId: String) -> Unit = {},
+    /** #69 (C27): P69-1 on an installed component's row sheet opens that component's screen. The tap writes nothing. */
+    onOpenInstalledComponent: (componentId: String) -> Unit = {},
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -459,6 +462,7 @@ fun AssetDetailScreen(
                     graph = graph,
                     snackbars = snackbars,
                     onOpenSupply = onOpenSupply,
+                    onOpenDocuments = onOpenInstalledComponent,
                     readOnly = !current.offersWrites,
                 )
                 ComponentsSection(
@@ -486,7 +490,7 @@ fun AssetDetailScreen(
                 // `notify = false`: this surface has a snackbar host and draws the missing-handler
                 // line itself, so the launcher must not toast the same sentence over the top of it.
                 ReferencesSection(
-                    assetId = current.asset.id,
+                    owner = ReferenceOwner.OfAsset(current.asset.id),
                     graph = graph,
                     snackbars = snackbars,
                     onOpen = openLink,

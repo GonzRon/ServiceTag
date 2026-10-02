@@ -90,3 +90,20 @@ const val REMOVE_FROM_COMPOSITION = "Remove from composition"
 
 /** P47-25 — under the composition rows after a refused save (C26; P15-12's shape). */
 const val COMPOSITION_QUANTITY_REQUIRED = "Each supply needs a quantity above zero."
+
+/*
+ * #69 (§5, ratified 2026-10-02) — the installed-component screen's words (C27). The sections' own words stay at their
+ * homes (`DocumentsSection.kt`, `ReferencesSection.kt`) and "Back" at the top bars'.
+ */
+
+/** P69-1 — the row sheet's action opening the component's own screen, on every row (C27). */
+const val DOCUMENTS_AND_REFERENCES = "Documents and references"
+
+/** P69-2 — the heading over the component's own Documents and References (C27). */
+const val THIS_INSTALLED_COMPONENT = "This installed component"
+
+/** P69-3 — "From %s", [name] the SupplyItem's name: each open-only group's heading; a tap opens it (C27). */
+fun fromSupply(name: String): String = "From $name"
+
+/** P69-4 — the quiet line under each group's heading (C27). */
+const val OPEN_THE_SUPPLY_TO_CHANGE = "Open the supply to add or change these."

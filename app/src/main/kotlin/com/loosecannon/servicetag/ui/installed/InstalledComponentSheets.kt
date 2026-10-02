@@ -66,7 +66,8 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
  * [onOpenSupply]), the [composition] slot, the serial or lot (P47-6), the install day (P47-7, or P47-16), the removal
  * day (P47-8), and "History" (P47-14) — the position's instances newest first. With [offersWrites], a current row
  * offers "Install inside" (P47-4), "Replace" (P47-9), "Remove" and "Edit"; a removed row offers "Edit" only. A held
- * asset draws the facts and the history and no action.
+ * asset draws the facts and the history and no write. Every row, current, removed or held, offers P69-1 (#69, C27),
+ * which [onOpenDocuments] reports; it writes nothing, and the caller closes this sheet before it navigates.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +81,7 @@ internal fun InstalledComponentRowSheet(
     onRemove: () -> Unit,
     onEdit: () -> Unit,
     onDismiss: () -> Unit,
+    onOpenDocuments: () -> Unit = {},
     composition: @Composable ColumnScope.() -> Unit = {},
 ) {
     ModalBottomSheet(
@@ -102,6 +104,8 @@ internal fun InstalledComponentRowSheet(
             val installedDay = sheet.installedDay
             if (installedDay != null) Fact(INSTALLED_ON, installedDay) else QuietLine(INSTALL_DATE_NOT_RECORDED)
             sheet.removedDay?.let { Fact(REMOVED_ON, it) }
+            // #69 (C27): navigation only, so a held asset's row offers it too, and its screen opens read-only.
+            TextButton(onClick = onOpenDocuments) { Text(DOCUMENTS_AND_REFERENCES) }
             SectionHeader(title = COMPONENT_HISTORY)
             sheet.history.forEach { line ->
                 Column {

@@ -295,7 +295,7 @@ class InstalledComponentsSectionViewModel(
 
     /**
      * The screen's `!offersWrites` (#77): read-only closes the write sheets and the picker, and keeps the toggle and an
-     * open row sheet, which then offers no action.
+     * open row sheet, which then offers no write — only "Documents and references" (#69, P69-1), which navigates.
      */
     fun setReadOnly(readOnly: Boolean) {
         ui.update { if (readOnly) it.copy(offersWrites = false, form = null, removing = null) else it.copy(offersWrites = true) }

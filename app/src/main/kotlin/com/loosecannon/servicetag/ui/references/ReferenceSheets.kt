@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
 import com.loosecannon.servicetag.core.references.takesRole
@@ -125,18 +126,32 @@ internal fun AddLinkSheet(
     }
 }
 
+/** #69 P69-13 (C28): the remove confirmation's body, for a SupplyItem's link. */
+internal const val REMOVED_FROM_SUPPLY = "The link is removed from this supply. Nothing in the other app is changed."
+
+/** #69 P69-14 (C28): the remove confirmation's body, for an installed component's link. */
+internal const val REMOVED_FROM_INSTALLED_COMPONENT =
+    "The link is removed from this installed component. Nothing in the other app is changed."
+
+/** #69 (C28, R69-13): the remove confirmation's body by the owner's kind; an asset keeps its shipped wording. */
+internal fun removedFrom(owner: ReferenceOwner): String = when (owner) {
+    is ReferenceOwner.OfAsset -> "The link is removed from this asset. Nothing in the other app is changed."
+    is ReferenceOwner.OfSupplyItem -> REMOVED_FROM_SUPPLY
+    is ReferenceOwner.OfInstalledComponent -> REMOVED_FROM_INSTALLED_COMPONENT
+}
+
 /**
  * A plain confirm and then a hard delete: one metadata row, no bytes, nothing to orphan, so the
  * typed-REPLACE weight an asset carries would be out of all proportion here (D-9).
  */
 @Composable
-internal fun RemoveReferenceDialog(onRemove: () -> Unit, onDismiss: () -> Unit) {
+internal fun RemoveReferenceDialog(owner: ReferenceOwner, onRemove: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Remove this reference?") },
         text = {
             Text(
-                text = "The link is removed from this asset. Nothing in the other app is changed.",
+                text = removedFrom(owner),
                 style = MaterialTheme.typography.bodyMedium,
             )
         },

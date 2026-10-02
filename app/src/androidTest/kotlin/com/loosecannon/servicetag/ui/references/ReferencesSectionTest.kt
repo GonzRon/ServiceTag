@@ -22,8 +22,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.ReferenceKinds
 import com.loosecannon.servicetag.core.references.takesRole
@@ -311,7 +313,11 @@ class ReferencesSectionTest {
         var dismisses = 0
         rule.setContent {
             ServiceTagTheme {
-                RemoveReferenceDialog(onRemove = { removes += 1 }, onDismiss = { dismisses += 1 })
+                RemoveReferenceDialog(
+                    owner = ReferenceOwner.OfAsset(AssetId("example-pool-pump")),
+                    onRemove = { removes += 1 },
+                    onDismiss = { dismisses += 1 },
+                )
             }
         }
         rule.waitForIdle()
