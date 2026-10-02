@@ -3921,8 +3921,9 @@ def add_installed_component(
     order is the order. An unknown or archived supply item, direct or in an entry, is `NO_SUCH_SUPPLY_ITEM` or
     `SUPPLY_ITEM_ARCHIVED`, with `[field=supplyId]` or `[field=composition]`. `installed_on` is a `YYYY-MM-DD` day no
     later than the phone's today (`INSTALLED_COMPONENT_DATE_INVALID`, `INSTALLED_COMPONENT_DATE_AFTER_TODAY`;
-    omitted: not recorded); `serial_or_lot` is free text; an omitted `sort_order` puts the row after its current
-    siblings, and a given one is a whole number from 0 to 1,000,000. An unknown asset is `no_such_asset`, and one
+    omitted or `""`: no install date recorded); `serial_or_lot` is free text; an omitted `sort_order` puts the row
+    after its current siblings, and a given one is a whole number from 0 to 1,000,000. An unknown asset is
+    `no_such_asset`, and one
     transferred out from the phone `asset_transferred_out`; `INSTALLED_COMPONENT_INVALID` is the documented fallback
     and never expected. The call writes the one row and its entries: no supply item, applicability row or event.
     Needs a phone at schema 19 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
@@ -3968,10 +3969,12 @@ def update_installed_component(
     made of, a quantity being how many of that SupplyItem one unit is made of, and `[]` empties it. **Pass each kept
     entry with its `id`, once,** as `list_installed_components` answered it, with its `supplyId`, `quantity` and
     `unit`; its `sortOrder` is left off what is sent, because the list's order is the order. An entry without an
-    `id`, or whose `id` came earlier in the list or is not one of this row's, is a new entry with a fresh id. A newly
-    named archived supply item, direct or in an entry, is `SUPPLY_ITEM_ARCHIVED`; one the row already names stays
-    accepted. A changed `installed_on` may not be later than the phone's today, nor after the row's removal date
-    (`INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED`); `sort_order` places the row among its siblings. The asset, the
+    `id`, or whose `id` came earlier in the list or is not one of this row's, is a new entry with a fresh id. An
+    archived supply item is `SUPPLY_ITEM_ARCHIVED` unless the row already holds it in the same place: as
+    `supply_id` only when it is the row's stored direct link, and in an entry only when the row's stored
+    composition already names it. A changed `installed_on` may not be later than the phone's today, nor after the
+    row's removal date (`INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED`); `sort_order` places the row among its
+    siblings. The asset, the
     parent, the removal date and the replaced row are not edited here: a row moves only by
     `remove_installed_component` and a new `add_installed_component`, and closes only by a remove or a replace. An
     unknown id is `NO_SUCH_INSTALLED_COMPONENT`, and a row of an asset transferred out from the phone is
@@ -4030,15 +4033,17 @@ def replace_installed_component(
     replaces a row inside its asset — not `create_component`'s child asset, and not `replace_asset`, which replaces a
     whole asset.
 
-    **The new unit gets only what this call sends.** An omitted `name` is the replaced row's (a label). An omitted
-    `supply_id` or `composition` gives the new unit **none**: the tool never copies the replaced row's link or
+    **The new unit gets only what this call sends.** An omitted `name` is the replaced row's (a label), and a given
+    blank one is `INSTALLED_COMPONENT_NAME_REQUIRED`. An omitted `supply_id` or `composition` gives the new unit
+    **none**: the tool never copies the replaced row's link or
     composition. To keep them, read them with `list_installed_components` and pass them here; `""` and `[]` are none
     too. A composition is the new unit's own ordered list, a quantity being how many of that SupplyItem one unit is
     made of; every entry gets a fresh id whatever `id` it is sent with, and an entry's `sortOrder`, as read, is left
     off what is sent. An archived supply item, direct or in an entry, is `SUPPLY_ITEM_ARCHIVED` here even when the
     replaced row names it, and an unknown one `NO_SUCH_SUPPLY_ITEM`. An omitted `serial_or_lot` or `notes` is `""`.
-    `replaced_on` is a `YYYY-MM-DD` day no later than the phone's today and not before the replaced row's install
-    date or that of any current row inside it (`INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED`). A removed row is
+    `replaced_on` is a `YYYY-MM-DD` day (`INSTALLED_COMPONENT_DATE_INVALID`) no later than the phone's today
+    (`INSTALLED_COMPONENT_DATE_AFTER_TODAY`) and not before the replaced row's install date or that of any current
+    row inside it (`INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED`). A removed row is
     `INSTALLED_COMPONENT_REMOVED`, an unknown id `NO_SUCH_INSTALLED_COMPONENT`, and a row of an asset transferred out
     from the phone `asset_transferred_out`. Needs a phone at schema 19 or later: an older one is refused with
     `APP_SCHEMA_TOO_OLD` and nothing is sent.

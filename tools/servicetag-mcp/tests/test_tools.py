@@ -982,6 +982,7 @@ def test_import_merge_docs_say_formats_1_to_19_twenty_three_tables_and_the_four_
     doc = " ".join((server_module.import_merge.__doc__ or "").split())
     assert "format 1–19" in doc and "1–18" not in doc and "1–17" not in doc
     assert "twenty-three tables" in doc and "twenty-two tables" not in doc and "twenty tables" not in doc
+    assert "nineteen" not in doc
     for word in ("`transfers`", "`successions`", "`supplyItems`", "`assetSupplies`", "`installedComponents`",
                  "`ASSET_TRANSFERRED_OUT`",
                  "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
@@ -991,7 +992,7 @@ def test_import_merge_docs_say_formats_1_to_19_twenty_three_tables_and_the_four_
     section = readme.split("### `import_merge`", 1)[1].split("\n## ", 1)[0]
     flat = " ".join(section.split())
     assert "format **1–19**" in flat and "1–18" not in flat and "1–17" not in flat
-    assert "each of **twenty-three** tables" in flat and "twenty-two" not in flat
+    assert "each of **twenty-three** tables" in flat and "twenty-two" not in flat and "nineteen" not in flat
     for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
         assert word in flat, word
     listed = flat.split("each of **twenty-three** tables — ", 1)[1].split(".", 1)[0]
