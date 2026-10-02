@@ -42,7 +42,8 @@ three are one question asked of three scopes. The registered total was 21 + 17 =
 **41** after 1.3's three reference tools, **55** after 1.4's fourteen, **56** after 1.4.1's
 `repair_schedule_providers`, **58** after #79's two warranty tools, **63** after #79's five
 service-case tools, is 68 after #72's five loan tools, **69** after #86's `get_asset_succession`, **76** after
-#92's seven, and is **84** since #15's eight supply tools, which `test_argument_guard.py` pins."""
+#92's seven, **84** after #15's eight supply tools, and is **89** since #47's five installed-component tools,
+which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:
