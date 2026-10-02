@@ -17,6 +17,8 @@ import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.StoredBytes
@@ -590,6 +592,40 @@ class AttachmentsSectionViewModelTest {
 
         assertTrue(model().rolesOffered)
         assertFalse(model(AttachmentOwner.OfEvent(event.id)).rolesOffered)
+        clearModels()
+    }
+
+    /**
+     * #69 row 49 (R69-6, C25): the Role chips follow `accepts`, so a SupplyItem's and an installed component's files
+     * are offered them with no UI edit.
+     */
+    @Test fun rolesOfferedOnASupplyItemAndAComponent() = runTest {
+        hotTub()
+
+        assertTrue(model(AttachmentOwner.OfSupplyItem(SupplyId("example-battery"))).rolesOffered)
+        assertTrue(model(AttachmentOwner.OfInstalledComponent(InstalledComponentId("example-tray"))).rolesOffered)
+        clearModels()
+    }
+
+    /** #69 row 49 (R69-6): the widening stops at an entry's file — "anything but an entry's file". */
+    @Test fun notOnAnEntry() = runTest {
+        hotTub()
+        val entry = graph.logEvent.run(
+            EventCommand(
+                assetId = assetId,
+                profileId = null,
+                kind = EventKind.MAINTENANCE,
+                title = "Battery check",
+                occurredOn = "2026-09-14",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = emptyMap(),
+                consumables = emptyList(),
+            ),
+        )
+
+        assertFalse(model(AttachmentOwner.OfEvent(entry.id)).rolesOffered)
         clearModels()
     }
 

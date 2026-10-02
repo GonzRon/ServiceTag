@@ -34,8 +34,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.NO_HANDLER_MESSAGE
 import com.loosecannon.servicetag.ui.attachments.label
@@ -67,10 +69,13 @@ internal fun openRefusal(launchable: Boolean, uri: String, open: (String) -> Boo
  *
  * The wrapper owns the ViewModel and the three sheets; [ReferencesList] draws, and takes its own
  * [onOpen] so the whole open path can be driven without an activity behind it.
+ *
+ * #69 (C25): keyed by [owner] — an asset, a SupplyItem or an installed component — so one model and one
+ * set of sentences serve all three, each owner's links and saved marks its own.
  */
 @Composable
 fun ReferencesSection(
-    assetId: AssetId,
+    owner: ReferenceOwner,
     graph: AppGraph,
     snackbars: SnackbarHostState,
     /** Hands the URI to `LinkLauncher`, the one place `ACTION_VIEW` runs; false is no handler. */
@@ -78,9 +83,10 @@ fun ReferencesSection(
     /** #77 (C19, R77-4): a transferred-out asset's references open, and none is added, edited or removed. */
     readOnly: Boolean = false,
 ) {
-    val model: ReferencesSectionViewModel = viewModel(key = "references-${assetId.value}") {
-        ReferencesSectionViewModel(graph, assetId)
-    }
+    val model: ReferencesSectionViewModel =
+        viewModel(key = "references-" + AttachmentLocator.dirFor(owner.asAttachmentOwner())) {
+            ReferencesSectionViewModel(graph, owner)
+        }
     val state by model.state.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<String?>(null) }
     var removing by remember { mutableStateOf<String?>(null) }
@@ -106,7 +112,7 @@ fun ReferencesSection(
     )
     materializing?.let { row ->
         MaterializeSheet(
-            assetId = assetId,
+            owner = owner,
             row = row,
             graph = graph,
             // The snackbar runs in this section's scope: the sheet is already leaving composition.
@@ -128,6 +134,7 @@ fun ReferencesSection(
     }
     state.rows.firstOrNull { it.id == removing }?.let { row ->
         RemoveReferenceDialog(
+            owner = owner,
             onRemove = { removing = null; model.remove(row.id) },
             onDismiss = { removing = null },
         )
@@ -231,7 +238,7 @@ private fun ReferenceRow(
             QuietLine(row.kind.label())
             // #91 C24 (R91-8): the role's own label on a line of its own; a row with none draws nothing.
             if (row.role != null) QuietLine(row.role.label())
-            // #85 C24 (R85-1): derived from this asset's files, never stored; the reference stays.
+            // #85 C24 (R85-1): derived from its owner's own files, never stored; the reference stays.
             if (row.savedAsDocument) QuietLine(MaterializeStrings.SAVED_AS_DOCUMENT)
             if (row.description.isNotEmpty()) {
                 QuietLine(row.description, maxLines = 1, overflow = TextOverflow.Ellipsis)

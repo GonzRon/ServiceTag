@@ -80,6 +80,7 @@ import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -486,7 +487,7 @@ fun AssetDetailScreen(
                 // `notify = false`: this surface has a snackbar host and draws the missing-handler
                 // line itself, so the launcher must not toast the same sentence over the top of it.
                 ReferencesSection(
-                    assetId = current.asset.id,
+                    owner = ReferenceOwner.OfAsset(current.asset.id),
                     graph = graph,
                     snackbars = snackbars,
                     onOpen = openLink,

@@ -35,6 +35,8 @@ import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.references.DUPLICATE_URI_ON_INSTALLED_COMPONENT
+import com.loosecannon.servicetag.ui.references.DUPLICATE_URI_ON_SUPPLY
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportViewModel
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackInbox
@@ -81,6 +83,13 @@ internal object IntakeStrings {
     const val URI_TOO_LONG = "That link is too long to save."
     const val SCHEME_BLOCKED = "ServiceTag will not save that kind of link."
     const val DUPLICATE_URI = "That link is already on this asset"
+
+    /** #69 (C28, R69-13): the duplicate by the owner's kind — P69-11/-12 from their one home; an asset's stays. */
+    fun duplicateUri(owner: ReferenceOwner): String = when (owner) {
+        is ReferenceOwner.OfAsset -> DUPLICATE_URI
+        is ReferenceOwner.OfSupplyItem -> DUPLICATE_URI_ON_SUPPLY
+        is ReferenceOwner.OfInstalledComponent -> DUPLICATE_URI_ON_INSTALLED_COMPONENT
+    }
     const val EMPTY_FILE = "That file is empty"
     const val TOO_LARGE = "That file is larger than 256 MB"
     const val BLANK_FILE_NAME = "Give the file a name"
