@@ -589,7 +589,7 @@ class AppGraph(private val context: Context) {
         setOf(BuildConfig.APPLICATION_ID, "${BuildConfig.APPLICATION_ID}.files"),
     )
     val addReference: AddReference =
-        AddReference(references, assets, linkLaunchPolicy, uow, ids, clock)
+        AddReference(references, assets, supplyItems, installedComponents, linkLaunchPolicy, uow, ids, clock)
     val updateReference: UpdateReference = UpdateReference(references, uow, clock)
     val removeReference: RemoveReference = RemoveReference(references, uow)
 

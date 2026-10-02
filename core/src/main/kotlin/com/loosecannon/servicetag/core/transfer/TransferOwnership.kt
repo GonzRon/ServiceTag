@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonActivation
@@ -110,7 +111,12 @@ object TransferOwnership {
     }
 
     fun of(closure: OccurrenceClosure): List<OwnerRef> = listOf(OwnerRef.OfSchedule(closure.scheduleId))
-    fun of(reference: AssetReference): List<OwnerRef> = listOf(OwnerRef.OfAsset(reference.assetId))
+    /** #69 (C13, as C5): a SupplyItem's link is no asset's; a component's resolves to its asset. */
+    fun of(reference: AssetReference): List<OwnerRef> = when (val owner = reference.owner) {
+        is ReferenceOwner.OfAsset -> listOf(OwnerRef.OfAsset(owner.assetId))
+        is ReferenceOwner.OfSupplyItem -> emptyList()
+        is ReferenceOwner.OfInstalledComponent -> listOf(OwnerRef.OfInstalledComponent(owner.componentId))
+    }
     fun of(activation: SeasonActivation): List<OwnerRef> = listOf(OwnerRef.OfAsset(activation.assetId))
     fun of(condition: AssetCondition): List<OwnerRef> = listOf(OwnerRef.OfAsset(condition.assetId))
     fun of(subject: HealthSubject): List<OwnerRef> = listOf(OwnerRef.OfAsset(subject.assetId))

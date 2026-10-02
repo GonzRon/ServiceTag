@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
@@ -189,7 +190,7 @@ class BackupFormat7Test {
         assertEquals("https", reference.scheme)
         assertEquals(1_000L, reference.createdAt)
         assertEquals(2_000L, reference.updatedAt)
-        assertEquals(AssetId("a1"), reference.assetId)
+        assertEquals(ReferenceOwner.OfAsset(AssetId("a1")), reference.owner)
         assertEquals("joplin", decoded.data.assetReferences.single { it.id == "r2" }.toDomain().scheme)
 
         // the 2.6 tombstone travelled beside it, byte for byte, and was not re-purposed
@@ -456,7 +457,7 @@ class BackupFormat7Test {
                 outgoing.assetReferences.sortedBy { it.id },
                 target.references.all().map { it.toDto() }.sortedBy { it.id },
             )
-            assertNotNull(target.references.findByUri(AssetId("a2"), onSecond.uri))
+            assertNotNull(target.references.findByUri(ReferenceOwner.OfAsset(AssetId("a2")), onSecond.uri))
         }
     }
 
@@ -490,8 +491,8 @@ class BackupFormat7Test {
         private val owners: () -> Set<String>,
     ) : InMemoryReferenceRepository() {
         override suspend fun upsert(reference: AssetReference) {
-            check(reference.assetId.value in owners()) {
-                "reference ${reference.id.value} names asset ${reference.assetId.value}, " +
+            check((reference.owner as? ReferenceOwner.OfAsset)?.assetId?.value in owners()) {
+                "reference ${reference.id.value} names asset ${(reference.owner as? ReferenceOwner.OfAsset)?.assetId?.value}, " +
                     "which is not inserted yet"
             }
             super.upsert(reference)

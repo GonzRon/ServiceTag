@@ -74,7 +74,10 @@ class AddLinkFormTest {
                 ReferencesSectionViewModel(
                     AssetId("example-water-heater"),
                     graph.references,
-                    AddReference(graph.references, graph.assets, policy, graph.uow, graph.ids, graph.clock),
+                    AddReference(
+                        graph.references, graph.assets, graph.supplyItems, graph.installedComponents, policy, graph.uow,
+                        graph.ids, graph.clock,
+                    ),
                     UpdateReference(graph.references, graph.uow, graph.clock),
                     RemoveReference(graph.references, graph.uow),
                     policy,

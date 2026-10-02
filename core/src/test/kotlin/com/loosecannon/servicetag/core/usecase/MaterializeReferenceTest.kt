@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -89,7 +90,7 @@ class MaterializeReferenceTest {
         name: String = "Example Pool Pump manual",
         role: DocumentRole? = null,
     ) = AssetReference(
-        id = ReferenceId(id), assetId = assetId, kind = kind, uri = uri, displayName = name,
+        id = ReferenceId(id), owner = ReferenceOwner.OfAsset(assetId), kind = kind, uri = uri, displayName = name,
         description = "Installation and care", scheme = uri.substringBefore(':').lowercase(),
         createdAt = 1L, updatedAt = 1L, role = role,
     )

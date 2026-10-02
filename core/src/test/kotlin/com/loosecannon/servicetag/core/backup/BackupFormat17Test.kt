@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.dataTreeOf
 import com.loosecannon.servicetag.core.testing.editRows
@@ -42,7 +43,7 @@ class BackupFormat17Test {
         role: DocumentRole? = null,
         name: String = "Example Water Heater link $id",
     ) = AssetReference(
-        id = ReferenceId(id), assetId = AssetId("x1"), kind = kind, uri = uri, displayName = name,
+        id = ReferenceId(id), owner = ReferenceOwner.OfAsset(AssetId("x1")), kind = kind, uri = uri, displayName = name,
         description = "", scheme = scheme, createdAt = 1_000L, updatedAt = 2_000L, role = role,
     )
 

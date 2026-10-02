@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -373,7 +374,7 @@ internal class ShareIntakeViewModel(
             ?: return refuse(IntakeStrings.UNREADABLE)
         val result = try {
             addReference.run(
-                AssetId(choice.id),
+                ReferenceOwner.OfAsset(AssetId(choice.id)),
                 AddReferenceCommand(
                     uri = uri,
                     displayName = current.name,

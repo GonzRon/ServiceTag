@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.MimeTypes
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -279,7 +280,10 @@ internal class AttachmentHandlers(
         if (given.displayName?.isBlank() == true) throw nameRequired()
         val reference = references.get(ReferenceId(referenceId))
             ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
-        val assetId = reference.assetId
+        // #69 (B2b, interim until C17/C21): the save stays asset-keyed, so a link of another owner is no such
+        // reference here.
+        val assetId = (reference.owner as? ReferenceOwner.OfAsset)?.assetId
+            ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
         if (assetId in transfers.heldIds()) throw AssetTransferredOut(assetId)
 
         val download = Job(generation)

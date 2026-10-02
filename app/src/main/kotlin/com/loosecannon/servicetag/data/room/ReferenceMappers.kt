@@ -3,8 +3,11 @@ package com.loosecannon.servicetag.data.room
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.data.room.entities.AssetReferenceEntity
 
 // Schema v7's half of the mapping layer. Same rules as [MaintenanceMappers.kt]: each enum — the kind,
@@ -27,9 +30,13 @@ fun AssetReferenceEntity.requireExactlyOneOwner(): AssetReferenceEntity = apply 
 
 fun AssetReferenceEntity.toDomain(): AssetReference = AssetReference(
     id = ReferenceId(id),
-    // Interim (#69 B1a), replaced by B2b (row 27): the domain still knows only an asset owner, so a
-    // row owned otherwise is refused here until the owner type replaces this read.
-    assetId = AssetId(requireNotNull(assetId) { "reference '$id' has no asset owner" }),
+    owner = requireExactlyOneOwner().let {
+        when {
+            assetId != null -> ReferenceOwner.OfAsset(AssetId(assetId))
+            supplyItemId != null -> ReferenceOwner.OfSupplyItem(SupplyId(supplyItemId))
+            else -> ReferenceOwner.OfInstalledComponent(InstalledComponentId(checkNotNull(installedComponentId)))
+        }
+    },
     kind = ReferenceKind.valueOf(kind),
     uri = uri,
     displayName = displayName,
@@ -42,7 +49,7 @@ fun AssetReferenceEntity.toDomain(): AssetReference = AssetReference(
 
 fun AssetReference.toEntity(): AssetReferenceEntity = AssetReferenceEntity(
     id = id.value,
-    assetId = assetId.value,
+    assetId = (owner as? ReferenceOwner.OfAsset)?.assetId?.value,
     kind = kind.name,
     uri = uri,
     displayName = displayName,
@@ -51,6 +58,6 @@ fun AssetReference.toEntity(): AssetReferenceEntity = AssetReferenceEntity(
     createdAt = createdAt,
     updatedAt = updatedAt,
     documentRole = role?.name,
-    supplyItemId = null,
-    installedComponentId = null,
+    supplyItemId = (owner as? ReferenceOwner.OfSupplyItem)?.supplyId?.value,
+    installedComponentId = (owner as? ReferenceOwner.OfInstalledComponent)?.componentId?.value,
 ).requireExactlyOneOwner()

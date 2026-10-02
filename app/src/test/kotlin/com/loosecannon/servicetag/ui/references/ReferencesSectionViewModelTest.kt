@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.takesRole
@@ -89,7 +90,10 @@ class ReferencesSectionViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
         addReference =
-            AddReference(graph.references, graph.assets, policy, graph.uow, graph.ids, graph.clock)
+            AddReference(
+                graph.references, graph.assets, graph.supplyItems, graph.installedComponents, policy, graph.uow, graph.ids,
+                graph.clock,
+            )
         updateReference = UpdateReference(graph.references, graph.uow, graph.clock)
         removeReference = RemoveReference(graph.references, graph.uow)
     }
@@ -152,7 +156,7 @@ class ReferencesSectionViewModelTest {
             graph.references.upsert(
                 AssetReference(
                     id = ReferenceId(id),
-                    assetId = assetId,
+                    owner = ReferenceOwner.OfAsset(assetId),
                     kind = kind,
                     uri = uri,
                     displayName = name,
@@ -332,7 +336,7 @@ class ReferencesSectionViewModelTest {
         expected.forEach { (text, offered) ->
             assertEquals("roleOffered('$text')", offered, vm.roleOffered(text))
             val saved = addReference.run(
-                assetId,
+                ReferenceOwner.OfAsset(assetId),
                 AddReferenceCommand(uri = text, displayName = "Example link", confirmedUnknownScheme = true),
             )
             assertEquals(
@@ -397,7 +401,7 @@ class ReferencesSectionViewModelTest {
 
         // The share path, called directly: the same command object, the same use case.
         val shared = addReference.run(
-            other.id,
+            ReferenceOwner.OfAsset(other.id),
             AddReferenceCommand(
                 uri = "https://example-mower.invalid/manual",
                 displayName = "Deck manual",
@@ -416,7 +420,7 @@ class ReferencesSectionViewModelTest {
             "only the id, the owner and the timestamps may differ",
             sharedRow.copy(
                 id = addedRow.id,
-                assetId = addedRow.assetId,
+                owner = addedRow.owner,
                 createdAt = addedRow.createdAt,
                 updatedAt = addedRow.updatedAt,
             ),
@@ -438,7 +442,7 @@ class ReferencesSectionViewModelTest {
 
         vm.addLink("zotero://select/items/0", "Pump teardown", "", role = null)
         assertEquals("zotero", vm.state.first { it.pendingConfirmation != null }.pendingConfirmation)
-        assertTrue(graph.references.forAsset(assetId).isEmpty())
+        assertTrue(graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).isEmpty())
 
         vm.confirmUnknownScheme()
         val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
@@ -459,7 +463,7 @@ class ReferencesSectionViewModelTest {
         vm.addLink("javascript:alert(1)", "Not happening", "", role = null)
 
         assertEquals("ServiceTag will not save that kind of link.", said.await())
-        assertTrue(graph.references.forAsset(assetId).isEmpty())
+        assertTrue(graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).isEmpty())
         assertNull(vm.state.value.pendingConfirmation)
 
         clearModels()
@@ -477,7 +481,7 @@ class ReferencesSectionViewModelTest {
         vm.addLink("https://example-mower.invalid/manual", "Deck manual again", "", role = null)
 
         assertEquals("That link is already on this asset", said.await())
-        assertEquals(1, graph.references.forAsset(assetId).size)
+        assertEquals(1, graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).size)
 
         clearModels()
     }

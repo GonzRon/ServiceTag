@@ -58,6 +58,7 @@ import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
@@ -435,13 +436,13 @@ data class AttachmentDto(
  * [supplyItemId] and [installedComponentId] are format 20's (#69, C9), appended after [role]: the SupplyItem
  * or the installed component that owns the link, written as explicit nulls when unset, like [role]. They
  * default to null so a format ≤19 archive, which never had the keys, still decodes; `BackupCodec` refuses a
- * non-null one in such an archive, and [toDomain] refuses a row naming more than one owner. Interim (#69):
- * [assetId] stays required while the domain reference can name only an asset; replaced by B2b (row 23).
+ * non-null one in such an archive, and [toDomain] refuses a row naming no owner or more than one. [assetId] is
+ * null on a row another owner holds (#69, C13), with no default: every format writes the key.
  */
 @Serializable
 data class AssetReferenceDto(
     val id: String,
-    val assetId: String,
+    val assetId: String?,
     val kind: String,
     val uri: String,
     val displayName: String,
@@ -1343,7 +1344,7 @@ fun OccurrenceClosureDto.toDomain(): OccurrenceClosure = OccurrenceClosure(
 
 fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
     id = id.value,
-    assetId = assetId.value,
+    assetId = (owner as? ReferenceOwner.OfAsset)?.assetId?.value,
     kind = kind.name,
     uri = uri,
     displayName = displayName,
@@ -1352,10 +1353,8 @@ fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
     createdAt = createdAt,
     updatedAt = updatedAt,
     role = role?.name,
-    // Interim (#69): the domain owner is still an asset, so format 20's two keys are written as nulls;
-    // replaced by B2b (row 23).
-    supplyItemId = null,
-    installedComponentId = null,
+    supplyItemId = (owner as? ReferenceOwner.OfSupplyItem)?.supplyId?.value,
+    installedComponentId = (owner as? ReferenceOwner.OfInstalledComponent)?.componentId?.value,
 )
 
 /**
@@ -1367,9 +1366,13 @@ fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
  * before anything is written.
  */
 fun AssetReferenceDto.toDomain(): AssetReference {
-    if (listOfNotNull(assetId, supplyItemId, installedComponentId).size != 1) {
-        throw BackupCorrupt("reference $id must name exactly one owner, an asset, a supply item or an installed component")
-    }
+    val owner = when {
+        listOfNotNull(assetId, supplyItemId, installedComponentId).size != 1 -> null
+        assetId != null -> ReferenceOwner.OfAsset(AssetId(assetId))
+        supplyItemId != null -> ReferenceOwner.OfSupplyItem(SupplyId(supplyItemId))
+        installedComponentId != null -> ReferenceOwner.OfInstalledComponent(InstalledComponentId(installedComponentId))
+        else -> null
+    } ?: throw BackupCorrupt("reference $id must name exactly one owner, an asset, a supply item or an installed component")
     val referenceKind = enumOrCorrupt<ReferenceKind>(kind, "reference kind", "reference $id")
     val documentRole = role?.let { enumOrCorrupt<DocumentRole>(it, "document role", "reference $id") }
     if (!referenceKind.accepts(documentRole)) {
@@ -1377,7 +1380,7 @@ fun AssetReferenceDto.toDomain(): AssetReference {
     }
     return AssetReference(
         id = ReferenceId(id),
-        assetId = AssetId(assetId),
+        owner = owner,
         kind = referenceKind,
         uri = uri,
         displayName = displayName,

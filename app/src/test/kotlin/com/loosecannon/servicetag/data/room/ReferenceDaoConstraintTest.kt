@@ -4,13 +4,20 @@ import androidx.sqlite.SQLiteException
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetReferenceEntity
+import com.loosecannon.servicetag.data.room.entities.InstalledComponentEntity
+import com.loosecannon.servicetag.data.room.entities.SupplyItemEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -154,7 +161,7 @@ class ReferenceDaoConstraintTest {
             val written = (listOf(null) + DocumentRole.entries).mapIndexed { i, role ->
                 AssetReference(
                     id = ReferenceId("r$i"),
-                    assetId = AssetId("a1"),
+                    owner = ReferenceOwner.OfAsset(AssetId("a1")),
                     kind = ReferenceKind.WEB_URL,
                     uri = "https://manuals.example.invalid/water-heater/$i",
                     displayName = "Example Water Heater document $i",

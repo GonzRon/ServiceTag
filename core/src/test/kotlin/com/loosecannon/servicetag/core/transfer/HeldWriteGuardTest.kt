@@ -40,6 +40,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -275,7 +276,7 @@ class HeldWriteGuardTest {
         install.attachments.upsert(attachmentOf("at2", AttachmentOwner.OfEvent(EventId("e1"))))
         install.references.upsert(
             AssetReference(
-                id = ReferenceId("r1"), assetId = heater, kind = ReferenceKind.WEB_URL, uri = "https://example.com/heater",
+                id = ReferenceId("r1"), owner = ReferenceOwner.OfAsset(heater), kind = ReferenceKind.WEB_URL, uri = "https://example.com/heater",
                 displayName = "Example heater page", description = "", scheme = "https", createdAt = 100L, updatedAt = 100L,
             ),
         )
@@ -429,8 +430,8 @@ class HeldWriteGuardTest {
             },
             "DeleteAttachment" to { DeleteAttachment(attachments, install.storage, uow).run(AttachmentId("at2")) },
             "AddReference" to {
-                AddReference(references, assets, LinkLaunchPolicy(), uow, ids, clock)
-                    .run(heater, AddReferenceCommand("https://example.com/parts", "Example parts page"))
+                AddReference(references, assets, install.supplyItems, installedComponents, LinkLaunchPolicy(), uow, ids, clock)
+                    .run(ReferenceOwner.OfAsset(heater), AddReferenceCommand("https://example.com/parts", "Example parts page"))
             },
             "UpdateReference" to {
                 UpdateReference(references, uow, clock).run(ReferenceId("r1"), UpdateReferenceCommand("Example page", "", role = null))

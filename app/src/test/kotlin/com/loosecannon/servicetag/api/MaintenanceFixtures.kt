@@ -61,7 +61,8 @@ internal fun referenceHandlersFor(graph: FakeGraph): ReferenceHandlers {
         references = graph.references,
         assets = graph.assets,
         addReference = AddReference(
-            graph.references, graph.assets, policy, graph.uow, graph.ids, graph.clock,
+            graph.references, graph.assets, graph.supplyItems, graph.installedComponents, policy, graph.uow, graph.ids,
+            graph.clock,
         ),
         updateReference = UpdateReference(graph.references, graph.uow, graph.clock),
     )

@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -108,7 +109,7 @@ import java.security.MessageDigest
  * 2. **Its second identity**, where the table has one, and *independently of the row id* — #44's
  *    second identity rule. A local tag holding the same `(payloadFormat, payloadKey)` is the same
  *    logical tag, a local closure holding the same `(scheduleId, occurrenceOn)` is the same closed
- *    round, and a local reference holding the same `(assetId, uri)` is the same link: equivalent
+ *    round, and a local reference holding the same `(owner, uri)` is the same link: equivalent
  *    field for field → `IDENTICAL`; bound elsewhere or diverged → `CONFLICT`, **except for a
  *    reference, which is `SKIPPED` instead** (D-18 C — see
  *    [MergeReason.REFERENCE_HELD_BY_A_LOCAL_ROW] for why a conflict there could only refuse the
@@ -166,7 +167,7 @@ import java.security.MessageDigest
  * And the fifth (#91, R91-7: the third's rule, mirrored for references): an archive older than
  * format 17 has its references compared **without the document role**, and — when the row here
  * carries one — **without the last-modified stamp**, on **both** arms that compare a row: the row's
- * own id and the second identity `(asset_id, uri)`. So a role given on this phone since that export
+ * own id and the second identity `(owner, uri)`. So a role given on this phone since that export
  * keeps the row `IDENTICAL`, and an equivalent row under another id `IDENTICAL`
  * `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`. Every other field still counts — a rename here is still
  * a `CONFLICT`, or the diverged `SKIPPED` on the pair — and a row here with no role compares its stamp
@@ -307,9 +308,10 @@ internal fun mergePlanOf(
     val localEvents = snapshot.events.associateBy { it.id.value }
     val localAttachments = snapshot.attachments.associateBy { it.id.value }
     val localReferences = snapshot.references.associateBy { it.id.value }
-    // The reference's **second identity**, id-independent exactly as the closure's pair map is.
+    // The reference's **second identity**, id-independent exactly as the closure's pair map is. The owner is
+    // value-typed (#69, H3): an asset and a SupplyItem sharing an id string never share a pair.
     val localReferencesByPair = snapshot.references
-        .associateBy { it.assetId.value to it.uri }
+        .associateBy { it.owner to it.uri }
     val localActivations = snapshot.seasonActivations.associateBy { it.id }
     val localConditions = snapshot.conditions.associateBy { it.id }
     val localSubjects = snapshot.healthSubjects.associateBy { it.id.value }
@@ -363,7 +365,7 @@ internal fun mergePlanOf(
     // Reachable from the destination for the same reason the closure pair is: a reference's second
     // identity is independent of its row id, and two phones reach the same URL by construction.
     val claimedReferencePairs = snapshot.references
-        .associateTo(mutableMapOf()) { (it.assetId.value to it.uri) to it.id.value }
+        .associateTo(mutableMapOf()) { (it.owner to it.uri) to it.id.value }
     // A schedule drives at most one non-archived subject (inv. 120). Seeded from the destination's
     // non-archived subjects; an archived subject, local or incoming, claims nothing.
     val localSubjectsBySchedule = snapshot.healthSubjects
@@ -1059,7 +1061,15 @@ internal fun mergePlanOf(
     }
     for (dto in data.assetReferences) {
         val id = dto.id
-        val pair = dto.assetId to dto.uri
+        val incoming = dto.toDomain()
+        val pair = incoming.owner to dto.uri
+        // #69 (C13): each owner resolves here or in this plan — a component by "here or accepted", as its parent does.
+        val missingOwner = when (val owner = incoming.owner) {
+            is ReferenceOwner.OfAsset -> owner.assetId.value.takeUnless { assetAvailable(it) }
+            is ReferenceOwner.OfSupplyItem -> owner.supplyId.value.takeUnless { supplyItemAvailable(it) }
+            is ReferenceOwner.OfInstalledComponent -> owner.componentId.value
+                .takeUnless { it in localInstalledComponents || it in acceptedInstalledComponents }
+        }
         val local = localReferences[id]
         val samePair = localReferencesByPair[pair]
         val pairHolder = claimedReferencePairs[pair]
@@ -1085,10 +1095,10 @@ internal fun mergePlanOf(
                     MergeTable.REFERENCES, id, MergeVerdict.CONFLICT,
                     MergeReason.REFERENCE_DUPLICATED_IN_ARCHIVE, pairHolder,
                 )
-            !assetAvailable(dto.assetId) ->
-                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            missingOwner != null ->
+                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingOwner)
             else -> {
-                referenceWrites += dto.toDomain()
+                referenceWrites += incoming
                 claimedReferencePairs[pair] = id
                 MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.INSERT)
             }

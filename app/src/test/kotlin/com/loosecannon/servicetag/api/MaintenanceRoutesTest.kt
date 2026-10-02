@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.SeasonAction
@@ -1677,7 +1678,7 @@ class MaintenanceRoutesTest {
                 donor.references.upsert(
                     AssetReference(
                         id = ReferenceId("00000000-0000-4000-8000-900000008888"),
-                        assetId = asset.id,
+                        owner = ReferenceOwner.OfAsset(asset.id),
                         kind = ReferenceKind.WEB_URL,
                         uri = "https://example-mower.invalid/donor-manual",
                         displayName = "Donor manual",

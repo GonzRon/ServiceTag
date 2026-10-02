@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.attachmentSourceProblem
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -70,7 +71,7 @@ class MaterializeReference(
         onProgress: (done: Long, total: Long?) -> Unit = { _, _ -> },
     ): Prepared {
         val reference = references.get(referenceId)
-            ?.takeIf { it.assetId == assetId }
+            ?.takeIf { it.owner == ReferenceOwner.OfAsset(assetId) }
             ?: return refused(MaterializeRefusal.NoSuchReference)
         val uri = reference.uri
         // The last clause asks the source shape rule now, before any byte is fetched: a restored or merged

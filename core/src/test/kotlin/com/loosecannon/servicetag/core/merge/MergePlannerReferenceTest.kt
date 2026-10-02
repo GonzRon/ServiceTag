@@ -8,8 +8,15 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.testing.installedComponentOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -45,7 +52,7 @@ class MergePlannerReferenceTest {
         updatedAt: Long = 2_000L,
         role: DocumentRole? = null,
     ) = AssetReference(
-        id = ReferenceId(id), assetId = AssetId(assetId), kind = kind, uri = uri,
+        id = ReferenceId(id), owner = ReferenceOwner.OfAsset(AssetId(assetId)), kind = kind, uri = uri,
         displayName = displayName, description = description, scheme = scheme,
         createdAt = createdAt, updatedAt = updatedAt, role = role,
     )

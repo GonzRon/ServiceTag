@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
@@ -82,7 +83,10 @@ class ShareIntakeViewModelTest {
     }
 
     private val addReference: AddReference by lazy {
-        AddReference(graph.references, graph.assets, LinkLaunchPolicy(), graph.uow, graph.ids, graph.clock)
+        AddReference(
+            graph.references, graph.assets, graph.supplyItems, graph.installedComponents, LinkLaunchPolicy(), graph.uow,
+            graph.ids, graph.clock,
+        )
     }
 
     /** A unique key per model, so two models in one case do not share an instance. */
@@ -155,7 +159,7 @@ class ShareIntakeViewModelTest {
         scheduler.advanceUntilIdle()
     }
 
-    private suspend fun references() = graph.references.forAsset(assetId).size
+    private suspend fun references() = graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).size
     private suspend fun attachments() =
         graph.attachments.forOwner(AttachmentOwner.OfAsset(assetId)).size
     private suspend fun events() = graph.events.forAsset(assetId).size
@@ -182,7 +186,7 @@ class ShareIntakeViewModelTest {
 
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
         assertEquals(1, references())
-        assertEquals(manualUrl, graph.references.forAsset(assetId).single().uri)
+        assertEquals(manualUrl, graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).single().uri)
     }
 
     @Test fun aDuplicateLinkSaysSoAndWritesNothingMore() = runTest(scheduler) {
@@ -424,7 +428,7 @@ class ShareIntakeViewModelTest {
         vm.saveAndSettle()
 
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
-        assertEquals(DocumentRole.USER_MANUAL, graph.references.forAsset(assetId).single().role)
+        assertEquals(DocumentRole.USER_MANUAL, graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).single().role)
         assertEquals(0, attachments())
     }
 
@@ -458,7 +462,7 @@ class ShareIntakeViewModelTest {
         vm.saveAndSettle()
 
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
-        assertNull(graph.references.forAsset(assetId).single().role)
+        assertNull(graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).single().role)
         assertEquals(0, attachments())
 
         assertFalse(model(link("zotero://select/items/0")).state.value.roleOffered)
@@ -479,7 +483,7 @@ class ShareIntakeViewModelTest {
         vm.choose(id, mowerName)
         vm.saveAndSettle()
 
-        val row = graph.references.forAsset(assetId).single()
+        val row = graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).single()
         assertEquals("Service manual", row.displayName)
         assertNull(row.role)
     }
@@ -630,7 +634,7 @@ class ShareIntakeViewModelTest {
 
         assertEquals("Saved to Cub Cadet XT1 Ultimate", vm.state.value.saved)
         assertEquals(1, references())
-        assertEquals(manualUrl, graph.references.forAsset(assetId).single().uri)
+        assertEquals(manualUrl, graph.references.forOwner(ReferenceOwner.OfAsset(assetId)).single().uri)
     }
 
     /** Audit §0.1: an asset the read-time snapshot lacks is saved to, not refused with the no-assets sentence. */
@@ -644,7 +648,7 @@ class ShareIntakeViewModelTest {
 
         assertNull(vm.state.value.deadEnd)
         assertEquals("Saved to Example Snow Blower", vm.state.value.saved)
-        assertEquals(1, graph.references.forAsset(added.id).size)
+        assertEquals(1, graph.references.forOwner(ReferenceOwner.OfAsset(added.id)).size)
         assertEquals(0, references())
     }
 

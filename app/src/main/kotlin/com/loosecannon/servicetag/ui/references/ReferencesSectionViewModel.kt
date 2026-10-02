@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.references.LinkDecision
@@ -111,7 +112,7 @@ class ReferencesSectionViewModel(
     /** Already ordered by display name, then id, by the query itself. */
     val state: StateFlow<ReferencesSectionState> =
         combine(
-            references.observeForAsset(assetId),
+            references.observeForOwner(ReferenceOwner.OfAsset(assetId)),
             attachments.observeForOwner(AttachmentOwner.OfAsset(assetId)),
             pending,
         ) { rows, files, awaiting ->
@@ -222,7 +223,7 @@ class ReferencesSectionViewModel(
     private fun submit(cmd: AddReferenceCommand) {
         viewModelScope.launch(io) {
             val outcome = try {
-                addReference.run(assetId, cmd)
+                addReference.run(ReferenceOwner.OfAsset(assetId), cmd)
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {

@@ -124,8 +124,9 @@ class InMemoryInstalledComponentRepository(
 
     /**
      * #69 (C11): the schema's CASCADE from `installed_component` — the rows a removed component owns in another table
-     * go with it. [BackupInstall] registers [InMemoryAttachmentRepository.cascadeFromInstalledComponents]; a double that
-     * registers nothing removes the component rows alone, as before.
+     * go with it. [BackupInstall] registers [InMemoryAttachmentRepository.cascadeFromInstalledComponents] and its twin
+     * [InMemoryReferenceRepository.cascadeFromInstalledComponents]; a double that registers nothing removes the
+     * component rows alone, as before.
      */
     private val cascades = mutableListOf<(Set<InstalledComponentId>) -> Unit>()
 

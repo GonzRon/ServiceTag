@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.testing.RecordingReferenceRepository
 import com.loosecannon.servicetag.core.testing.RecordingUnitOfWork
 import kotlinx.coroutines.test.runTest
@@ -27,7 +28,7 @@ class RemoveReferenceTest {
         references.upsert(
             AssetReference(
                 id = id,
-                assetId = AssetId("a1"),
+                owner = ReferenceOwner.OfAsset(AssetId("a1")),
                 kind = ReferenceKind.WEB_URL,
                 uri = "https://example-mower.invalid/xt1",
                 displayName = "Deck belt",

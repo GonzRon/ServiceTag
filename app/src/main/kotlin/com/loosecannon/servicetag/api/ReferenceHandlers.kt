@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.usecase.AddReference
@@ -60,14 +61,14 @@ internal class ReferenceHandlers(
 
     /**
      * The ninth `/v1/assets/{id}/…` sub-resource. Ordered by `displayName` then `id`, which is
-     * `ReferenceRepository.forAsset`'s own documented order and the order the References section
+     * `ReferenceRepository.forOwner`'s own documented order and the order the References section
      * draws — one order, so a client's diff and the phone's screen cannot disagree.
      */
     suspend fun listForAsset(assetId: String): ApiResponse {
         asset(assetId)
         return ok(
             ReferenceListResponse.serializer(),
-            ReferenceListResponse(references.forAsset(AssetId(assetId)).map { it.toDto() }),
+            ReferenceListResponse(references.forOwner(ReferenceOwner.OfAsset(AssetId(assetId))).map { it.toDto() }),
         )
     }
 
@@ -80,7 +81,7 @@ internal class ReferenceHandlers(
     suspend fun create(request: ApiRequest): ApiResponse {
         val body = request.decode(CreateReferenceRequest.serializer())
         val saved = addReference.run(
-            AssetId(body.assetId),
+            ReferenceOwner.OfAsset(AssetId(body.assetId)),
             AddReferenceCommand(
                 uri = body.uri,
                 displayName = body.displayName,

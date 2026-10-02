@@ -18,6 +18,7 @@ import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.Attachment
@@ -191,7 +192,7 @@ class MaterializeViewModelTest {
         graph.uow.write {
             graph.references.upsert(
                 AssetReference(
-                    id = ReferenceId("ref-1"), assetId = assetId, kind = ReferenceKind.WEB_URL, uri = URI,
+                    id = ReferenceId("ref-1"), owner = ReferenceOwner.OfAsset(assetId), kind = ReferenceKind.WEB_URL, uri = URI,
                     displayName = name, description = description, scheme = "https", createdAt = 10L, updatedAt = 10L,
                     role = role,
                 ),

@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -319,7 +320,14 @@ internal class ReturnScope private constructor(
                 closures = full.closures.filterNot { it.scheduleId in schedules },
                 events = full.events.filterNot { it.id in events },
                 attachments = full.attachments - attachments.toSet(),
-                references = full.references.filterNot { it.assetId in returning },
+                // #69 (C13): a returning asset's links and its components' leave with it; a SupplyItem's stay.
+                references = full.references.filterNot { r ->
+                    when (val owner = r.owner) {
+                        is ReferenceOwner.OfAsset -> owner.assetId in returning
+                        is ReferenceOwner.OfSupplyItem -> false
+                        is ReferenceOwner.OfInstalledComponent -> owner.componentId in returningComponents
+                    }
+                },
                 seasonActivations = full.seasonActivations.filterNot { it.assetId in returning },
                 conditions = full.conditions.filterNot { it.assetId in returning },
                 healthSubjects = full.healthSubjects.filterNot { it.assetId in returning },
