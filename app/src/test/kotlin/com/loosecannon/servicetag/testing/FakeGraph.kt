@@ -403,7 +403,7 @@ class FakeGraph(
     val retireAsset: RetireAsset =
         RetireAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val deleteAsset: DeleteAsset =
-        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures)
+        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures, installedComponents)
 
     /** The same identity the app builds, read from the same BuildConfig fields (C9). */
     val tagIdentity: TagIdentity = TagIdentity(

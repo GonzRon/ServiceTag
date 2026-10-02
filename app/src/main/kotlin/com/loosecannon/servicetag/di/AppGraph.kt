@@ -861,7 +861,7 @@ class AppGraph(private val context: Context) {
     val retireAsset: RetireAsset =
         RetireAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val deleteAsset: DeleteAsset =
-        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures)
+        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures, installedComponents)
 
     // Phase 2A — the maintenance journal.
     val logEvent: LogEvent =

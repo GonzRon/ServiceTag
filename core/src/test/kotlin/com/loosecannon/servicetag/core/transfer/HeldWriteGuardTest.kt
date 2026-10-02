@@ -637,7 +637,7 @@ class HeldWriteGuardTest {
     @Test
     fun deleteAssetPassesAndKeepsRecords() = runTest {
         seed()
-        DeleteAsset(assets, events, attachments, install.storage, uow, groups, schedules, closures).run(anode)
+        DeleteAsset(assets, events, attachments, install.storage, uow, groups, schedules, closures, installedComponents).run(anode)
         assertNull(install.assets.get(anode))
         assertEquals(listOf("out-h2"), install.transfers.forAsset(anode).map { it.id })
         assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held: the records are the custody facts")
