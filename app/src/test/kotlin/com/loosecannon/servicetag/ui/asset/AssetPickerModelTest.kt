@@ -3,12 +3,16 @@ package com.loosecannon.servicetag.ui.asset
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.LoanStanding
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.loanRow
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -408,6 +412,121 @@ class AssetPickerModelTest {
         val state = settled(vm)
         assertEquals(listOf("anode"), state.ids)
         assertEquals("Example Water Heater", state.items.single().parentName)
+    }
+
+    // --- #69 (C30 step 4, row 53a; R69-3): the Share picker offers only assets maintained here ---------------------
+
+    /** One of each kind Share never offers, beside one it does: archived, retired, replaced, held. */
+    private suspend fun seedTheIneligible() {
+        seed(
+            assetRow("mower", name = "Example Mower"),
+            assetRow("ladder", name = "Sample Ladder", status = AssetStatus.ARCHIVED),
+            // Retired and never replaced: owner-approved as not active (R69-3).
+            assetRow("generator", name = "Example Generator", retiredOn = "2026-03-01"),
+            // #86 (R86-3): a replaced predecessor is retired; its successor is an ordinary active asset.
+            assetRow("oldPump", name = "Example Sump Pump (2019)", retiredOn = "2026-05-01"),
+            assetRow("newPump", name = "Example Sump Pump"),
+            assetRow("heater", name = "Example Water Heater"),
+        )
+        graph.assetSuccessions.append(AssetSuccession("s-pump", AssetId("oldPump"), AssetId("newPump"), "2026-05-01", 1L))
+        out("heater")
+    }
+
+    // Row 53a: counted RED — the filter left at `id !in held` (a retired asset offered).
+    @Test fun anArchivedARetiredNeverReplacedAReplacedAndAHeldAssetAreNeverOffered() = runTest(scheduler) {
+        seedTheIneligible()
+        val vm = pickerModel()
+        val never = setOf("ladder", "generator", "oldPump", "heater")
+
+        listOf(false to false, false to true, true to true, true to false).forEach { (components, archived) ->
+            val now = settled(vm).filters
+            if (now.showArchived != archived) vm.toggleArchived()
+            if (now.showComponents != components) vm.toggleComponents()
+            val state = settled(vm)
+            assertEquals("components $components, archived $archived", listOf("mower", "newPump"), state.ids)
+            assertTrue(state.ids.none { it in never })
+        }
+        vm.onQueryChange("example")
+        assertEquals("a query never widens it", listOf("mower", "newPump"), settled(vm).ids)
+    }
+
+    // Row 53a: season and condition play no part in what Share offers.
+    @Test fun anOutOfSeasonOrDownAssetIsOffered() = runTest(scheduler) {
+        seed(
+            assetRow("snow", name = "Example Snowblower", seasonMode = SeasonMode.CALENDAR, seasonStart = "11-01", seasonEnd = "03-31"),
+            assetRow("mower", name = "Example Mower"),
+        )
+        graph.conditions.insert(conditionRow("c-mower", "mower", OperationalCondition.DOWN, "2026-09-01"))
+
+        val state = settled(pickerModel())
+
+        assertEquals(listOf("mower", "snow"), state.ids)
+        assertTrue("out of season on 2026-09-28", state.items.single { it.asset.id.value == "snow" }.outOfSeason)
+        assertEquals(EmptyReason.NONE, state.emptyReason)
+    }
+
+    // Row 53a: nothing archived is ever behind a control in Share, so no reason names the Archived control.
+    @Test fun noArchivedReasonArisesInTheSharePicker() = runTest(scheduler) {
+        seed(
+            assetRow("spa", name = "Example Spa"),
+            assetRow("coverPart", name = "Spa Cover", parent = "spa"),
+            assetRow("coverOld", name = "Old Cover", status = AssetStatus.ARCHIVED),
+            assetRow("hose", name = "Old Hose", status = AssetStatus.ARCHIVED),
+            assetRow("generator", name = "Example Generator", retiredOn = "2026-03-01"),
+        )
+        val vm = pickerModel()
+        val archivedReasons = setOf(EmptyReason.NO_ACTIVE_ASSETS, EmptyReason.ARCHIVED_HIDDEN, EmptyReason.BOTH_HIDDEN)
+
+        fun reasonFor(query: String): EmptyReason {
+            vm.onQueryChange(query)
+            val state = settled(vm)
+            assertEquals("\"$query\" lists nothing", emptyList<String>(), state.ids)
+            assertEquals("\"$query\": nothing counted archived", 0, state.archivedCount)
+            assertFalse("\"$query\": ${state.emptyReason}", state.emptyReason in archivedReasons)
+            return state.emptyReason
+        }
+
+        assertEquals(0, settled(vm).archivedCount)
+        assertEquals(EmptyReason.NOTHING_MATCHES, reasonFor("hose"))
+        assertEquals(EmptyReason.NOTHING_MATCHES, reasonFor("generator"))
+        assertEquals("only the child asset is behind a control", EmptyReason.COMPONENTS_HIDDEN, reasonFor("cover"))
+    }
+
+    // Row 53a (C-4): zero eligible rows are NO_ASSETS, the slot P69-26 fills in Share; a search miss stays NOTHING_MATCHES.
+    @Test fun zeroEligibleRowsGiveNoAssetsAndAMissGivesNothingMatches() = runTest(scheduler) {
+        seed(
+            assetRow("ladder", name = "Sample Ladder", status = AssetStatus.ARCHIVED),
+            assetRow("generator", name = "Example Generator", retiredOn = "2026-03-01"),
+            assetRow("heater", name = "Example Water Heater"),
+        )
+        out("heater")
+        val vm = pickerModel()
+
+        val none = settled(vm)
+        assertEquals(emptyList<String>(), none.ids)
+        assertEquals(EmptyReason.NO_ASSETS, none.emptyReason)
+        assertEquals(0, none.archivedCount)
+
+        graph.assets.upsert(assetRow("mower", name = "Example Mower"))
+        assertEquals(listOf("mower"), settled(vm).ids)
+        vm.onQueryChange("zzz")
+        assertEquals(EmptyReason.NOTHING_MATCHES, settled(vm).emptyReason)
+    }
+
+    // Row 53a: the Assets tab is untouched — retired rows by default, archived and held ones behind Archived.
+    @Test fun theTabListsRetiredAndArchivedAsShipped() = runTest(scheduler) {
+        seedTheIneligible()
+        val vm = tabModel()
+
+        val shown = settled(vm)
+        assertEquals("active first, then retired", listOf("mower", "newPump", "generator", "oldPump"), shown.ids)
+        assertEquals("the archived row and the held one are behind the control", 2, shown.archivedCount)
+
+        vm.toggleArchived()
+        assertEquals(
+            listOf("mower", "newPump", "generator", "oldPump", "heater", "ladder"),
+            settled(vm).ids,
+        )
     }
 
     private companion object {
