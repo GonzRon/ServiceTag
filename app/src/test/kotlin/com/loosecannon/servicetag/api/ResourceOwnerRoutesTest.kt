@@ -454,6 +454,10 @@ class ResourceOwnerRoutesTest {
         assertRefused(refused, 409, "asset_transferred_out", null)
         assertEquals(listOf("AssetTransferredOut(assetId=${w.ups})"), refused.errorDetail().problems)
         assertTrue(runBlocking { graph.attachments.all() }.isEmpty())
+        // A new link on that component is the same 409, written by nobody.
+        val link = create("""{"installedComponentId":"${w.tray}","uri":"https://example.invalid/tray/a","displayName":"Tray link"}""")
+        assertRefused(link, 409, "asset_transferred_out", null)
+        assertTrue(runBlocking { graph.references.all() }.isEmpty())
         // A SupplyItem is never held, even while the asset whose component names it is.
         assertEquals(201, upload("/v1/supply-items/${w.battery}/attachments").status)
     }
