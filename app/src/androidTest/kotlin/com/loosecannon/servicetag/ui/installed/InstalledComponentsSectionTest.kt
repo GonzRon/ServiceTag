@@ -7,27 +7,43 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.InstalledComponentId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.ui.asset.NAME_FIELD
+import com.loosecannon.servicetag.ui.replace.ReplaceStrings
+import com.loosecannon.servicetag.ui.supplies.LINKED_TO
+import com.loosecannon.servicetag.ui.supplies.LINK_SUPPLY
+import com.loosecannon.servicetag.ui.supplies.REMOVE_LINK
+import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
+import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * #47 (C25, C27; row 53, the list cases): the asset's Installed components section drawn. [InstalledComponentsList] is
- * a pure function of its arguments, so every case renders it directly, as `SupplySurfacesTest` renders
- * `AssetSuppliesList`; the state it draws is proven on the JVM (row 50). What only a device shows is the indent, the
- * wording that reaches the semantics tree, the toggle, and which controls a read-only section leaves out. The sheet
- * cases are the later briefs'.
+ * #47 (C25–C27; row 53, the list and sheet cases): the asset's Installed components section drawn.
+ * [InstalledComponentsList] and the sheets are pure functions of their arguments, so every case renders one directly,
+ * as `SupplySurfacesTest` renders `AssetSuppliesList` and the role sheet; the state they draw is proven on the JVM
+ * (rows 50 and 51). What only a device shows is the indent, the wording that reaches the semantics tree, the toggle,
+ * a sheet's fields, sentences and buttons, and which controls a read-only section or sheet leaves out. The composition
+ * cases are the next brief's.
  *
  * Every sentence comes from its one home (`InstalledComponentStrings.kt`), so a re-worded constant moves this test with
  * it. A section header and a badge draw their words upper-case, so that is what the tree carries.
@@ -180,6 +196,218 @@ class InstalledComponentsSectionTest {
         drawSection(listOf(tray))
 
         rule.onAllNodesWithText("Removed", substring = true).assertCountEquals(0)
+    }
+
+    private val cellId = SupplyId("si-cell")
+    private val catalog = mapOf(
+        cellId to SupplyListRow(cellId, "Example 12 V Battery", "Example Power Co. · EX-12", false),
+        SupplyId("si-old") to SupplyListRow(SupplyId("si-old"), "Example Old Battery", "", true),
+    )
+
+    private fun rowSheet(current: Boolean) = RowSheetState(
+        id = InstalledComponentId("ic-c"),
+        name = "Position 1 C",
+        current = current,
+        supplyId = cellId,
+        composition = emptyList(),
+        serialOrLot = "SN-EXAMPLE-01",
+        installedDay = if (current) ReplaceStrings.day("2026-01-20") else null,
+        removedDay = if (current) null else ReplaceStrings.day("2026-02-01"),
+        history = listOf(
+            HistoryLineState(
+                InstalledComponentId("ic-c"), "Position 1 C", installedOnDay("2026-01-20"), null,
+                ReplaceStrings.replaces("Position 1 B"),
+            ),
+            HistoryLineState(
+                InstalledComponentId("ic-b"), "Position 1 B", installedOnDay("2025-09-01"),
+                ReplaceStrings.replacedBy("Position 1 C", "2026-01-20"), null,
+            ),
+        ),
+    )
+
+    private fun form(
+        target: ComponentFormTarget,
+        title: String,
+        name: String = "",
+        inside: String? = null,
+        supplyId: SupplyId? = null,
+        subtreeToo: Boolean = false,
+        linkProblem: String? = null,
+    ) = ComponentFormState(
+        target = target, title = title, inside = inside, name = name, supplyId = supplyId, composition = emptyList(),
+        serialOrLot = "", date = "", notes = "", subtreeToo = subtreeToo, linkProblem = linkProblem,
+    )
+
+    /**
+     * C26, N-12: the row sheet draws the stored facts — the link in P15-22's words (a tap opens it), the serial or lot,
+     * the install day — and "History" newest first with #86's words, then a current row's four actions.
+     */
+    @Test fun theRowSheetDrawsItsFactsHistoryAndActions() {
+        var openedSupply: SupplyId? = null
+        var insideTaps = 0
+        rule.setContent {
+            ServiceTagTheme {
+                InstalledComponentRowSheet(
+                    sheet = rowSheet(current = true), supplies = catalog, offersWrites = true,
+                    onOpenSupply = { openedSupply = it }, onInstallInside = { insideTaps += 1 }, onReplace = {},
+                    onRemove = {}, onEdit = {}, onDismiss = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onAllNodesWithText("Position 1 C").assertCountEquals(2)
+        rule.onNodeWithText(SERIAL_OR_LOT).assertExists()
+        rule.onNodeWithText("SN-EXAMPLE-01").assertExists()
+        rule.onNodeWithText(INSTALLED_ON).assertExists()
+        rule.onNodeWithText(ReplaceStrings.day("2026-01-20")).assertExists()
+        rule.onNodeWithText(COMPONENT_HISTORY.uppercase()).assertExists()
+        rule.onNodeWithText(listOf(installedOnDay("2026-01-20"), ReplaceStrings.replaces("Position 1 B")).joinToString(" · "))
+            .assertExists()
+        rule.onNodeWithText(
+            listOf(installedOnDay("2025-09-01"), ReplaceStrings.replacedBy("Position 1 C", "2026-01-20")).joinToString(" · "),
+        ).assertExists()
+        rule.onAllNodesWithText(INSTALL_DATE_NOT_RECORDED).assertCountEquals(0)
+        rule.onNodeWithText(REPLACE_COMPONENT).assertExists()
+        rule.onNodeWithText("Remove").assertExists()
+        rule.onNodeWithText("Edit").assertExists()
+
+        rule.onNodeWithText(LINKED_TO.format("Example 12 V Battery")).performClick()
+        assertEquals(cellId, openedSupply)
+        rule.onNodeWithText(INSTALL_INSIDE).performScrollTo().performClick()
+        assertEquals(1, insideTaps)
+    }
+
+    /** C26, #77: a removed row's sheet says P47-16 and its removal day and offers "Edit" only; a held asset's offers nothing. */
+    @Test fun aRemovedRowOffersEditOnlyAndAHeldOneNothing() {
+        val offers = mutableStateOf(true)
+        rule.setContent {
+            ServiceTagTheme {
+                InstalledComponentRowSheet(
+                    sheet = rowSheet(current = false), supplies = catalog, offersWrites = offers.value,
+                    onOpenSupply = {}, onInstallInside = {}, onReplace = {}, onRemove = {}, onEdit = {}, onDismiss = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(INSTALL_DATE_NOT_RECORDED).assertExists()
+        rule.onNodeWithText(REMOVED_ON).assertExists()
+        rule.onNodeWithText(ReplaceStrings.day("2026-02-01")).assertExists()
+        rule.onNodeWithText("Edit").assertExists()
+        rule.onAllNodesWithText(INSTALL_INSIDE).assertCountEquals(0)
+        rule.onAllNodesWithText(REPLACE_COMPONENT).assertCountEquals(0)
+        rule.onAllNodesWithText("Remove").assertCountEquals(0)
+
+        offers.value = false
+        rule.waitForIdle()
+        rule.onAllNodesWithText("Edit").assertCountEquals(0)
+        rule.onNodeWithText(COMPONENT_HISTORY.uppercase()).assertExists()
+    }
+
+    /**
+     * C26: the install sheet (P47-3) inside a row says P47-5, offers "Link supply", enables Save once the name has text,
+     * and Cancel closes it without a save.
+     */
+    @Test fun theInstallSheetEnablesSaveForANameAndCancelWritesNothing() {
+        var saves = 0
+        var dismissed = false
+        var linkTaps = 0
+        rule.setContent {
+            ServiceTagTheme {
+                var sheet by remember {
+                    mutableStateOf(
+                        form(
+                            ComponentFormTarget.Install(InstalledComponentId("ic-tray")), INSTALL_COMPONENT,
+                            inside = insideOf("Example Battery Tray"),
+                        ),
+                    )
+                }
+                ComponentFormSheet(
+                    form = sheet, supplies = catalog, onName = { sheet = sheet.copy(name = it) },
+                    onLink = { linkTaps += 1 }, onUnlink = {}, onSerialOrLot = {}, onDate = {}, onNotes = {},
+                    onSave = { saves += 1 }, onDismiss = { dismissed = true },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(INSTALL_COMPONENT).assertIsDisplayed()
+        rule.onNodeWithText(insideOf("Example Battery Tray")).assertIsDisplayed()
+        rule.onNode(hasSetTextAction() and hasText(SERIAL_OR_LOT)).assertExists()
+        rule.onNode(hasSetTextAction() and hasText(INSTALLED_ON)).assertExists()
+        rule.onNodeWithText("Save").performScrollTo().assertIsNotEnabled()
+        rule.onNodeWithText(LINK_SUPPLY).performScrollTo().performClick()
+        assertEquals(1, linkTaps)
+
+        rule.onNode(hasSetTextAction() and hasText(NAME_FIELD)).performTextInput("Position 1")
+        rule.onNodeWithText("Save").performScrollTo().assertIsEnabled()
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitForIdle()
+        assertTrue(dismissed)
+        assertEquals(0, saves)
+    }
+
+    /**
+     * R47-17b, C-1: the replace sheet (P47-10) draws its draft — the name and an archived link with its badge and
+     * "Remove link" — P15-20 under the link after a refused save, P47-12, and the "Replace" button.
+     */
+    @Test fun theReplaceSheetDrawsTheDraftWithItsArchivedLinkAndSaysReplace() {
+        var unlinks = 0
+        var saves = 0
+        rule.setContent {
+            ServiceTagTheme {
+                ComponentFormSheet(
+                    form = form(
+                        ComponentFormTarget.Replace(InstalledComponentId("ic-one")), replaceTitle("Position 1"),
+                        name = "Position 1", supplyId = SupplyId("si-old"), subtreeToo = true, linkProblem = SUPPLY_ITEM_GONE,
+                    ),
+                    supplies = catalog, onName = {}, onLink = {}, onUnlink = { unlinks += 1 }, onSerialOrLot = {},
+                    onDate = {}, onNotes = {}, onSave = { saves += 1 }, onDismiss = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(replaceTitle("Position 1")).assertIsDisplayed()
+        rule.onNode(hasSetTextAction() and hasText("Position 1")).assertExists()
+        rule.onNodeWithText(LINKED_TO.format("Example Old Battery")).assertExists()
+        rule.onNodeWithText("ARCHIVED").assertExists()
+        rule.onNodeWithText(SUPPLY_ITEM_GONE).assertExists()
+        rule.onNodeWithText(SUBTREE_REMOVED_TOO).assertExists()
+        rule.onAllNodesWithText("Save").assertCountEquals(0)
+        rule.onNodeWithText(REMOVE_LINK).performScrollTo().performClick()
+        assertEquals(1, unlinks)
+        rule.onNodeWithText(REPLACE_COMPONENT).performScrollTo().assertIsEnabled().performClick()
+        assertEquals(1, saves)
+    }
+
+    /**
+     * C26, R47-6: the remove sheet (P47-11) asks only for "Removed on" (no typed confirmation), says P47-12 for a row
+     * with current children and P47-20 under the date, and reports "Remove".
+     */
+    @Test fun theRemoveSheetDrawsP47_12AndItsDateProblem() {
+        var removes = 0
+        rule.setContent {
+            ServiceTagTheme {
+                RemoveComponentSheet(
+                    sheet = RemoveSheetState(
+                        rowId = InstalledComponentId("ic-tray"), title = removeTitle("Example Battery Tray"),
+                        removedOn = "2025-01-01", subtreeToo = true, dateProblem = REMOVAL_BEFORE_INSTALL,
+                    ),
+                    onRemovedOn = {}, onRemove = { removes += 1 }, onDismiss = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(removeTitle("Example Battery Tray")).assertIsDisplayed()
+        rule.onAllNodes(hasSetTextAction()).assertCountEquals(1)
+        rule.onNode(hasSetTextAction() and hasText(REMOVED_ON)).assertExists()
+        rule.onNodeWithText(REMOVAL_BEFORE_INSTALL).assertExists()
+        rule.onNodeWithText(SUBTREE_REMOVED_TOO).assertExists()
+        rule.onNodeWithText("Remove").performScrollTo().assertIsEnabled().performClick()
+        assertEquals(1, removes)
     }
 
     private fun left(text: String) = rule.onNodeWithText(text, useUnmergedTree = true).getUnclippedBoundsInRoot().left
