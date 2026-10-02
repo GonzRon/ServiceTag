@@ -631,7 +631,7 @@ class SupplyRoutesTest {
         )) {
             assertTrue("docs/api/v1.md does not name $name", "`$name`" in text)
         }
-        assertFalse("the import range reads 1–18 now", "1–17" in text)
+        assertFalse("the import range reads 1–19 now", "1–18" in text)
         assertEquals("both status lines say 18 since #15", 2, text.lines().count { "18 since #15 (supply items)" in it })
         // R15-12: no command-shapes entry — the PATCH is an overlay, so no client rebuilds a whole command.
         assertFalse("supplyItem" in repoFile("docs/api/command-shapes.json").readText())
