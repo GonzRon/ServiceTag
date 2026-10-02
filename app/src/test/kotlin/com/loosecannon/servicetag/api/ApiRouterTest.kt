@@ -1125,9 +1125,16 @@ class ApiRouterTest {
         assertEquals(404, call("POST", "/v1/import-merge/plan/", "{}").status)
     }
 
-    /** #92 (C9, row 7): the upload tier is `POST`'s alone, on `/v1/assets/<one segment>/attachments` alone. */
-    @Test fun theUploadTierIsPostOnTheOneShapeAlone() {
+    /**
+     * #92 (C9, row 7), #69 (C19): the upload tier is `POST`'s alone, on the three shapes
+     * `/v1/{assets|supply-items|installed-components}/<one segment>/attachments` alone.
+     */
+    @Test fun theUploadTierIsPostOnTheThreeShapesAlone() {
         assertEquals(MAX_UPLOAD_BYTES, router().bodyCapFor("POST", "/v1/assets/a1/attachments"))
+        for (shape in listOf("/v1/supply-items/s1/attachments", "/v1/installed-components/c1/attachments")) {
+            assertEquals(shape, MAX_UPLOAD_BYTES, router().bodyCapFor("POST", shape))
+            assertEquals(shape, MAX_BODY_BYTES, router().bodyCapFor("GET", shape))
+        }
         for (method in listOf("GET", "PATCH", "DELETE")) {
             assertEquals(method, MAX_BODY_BYTES, router().bodyCapFor(method, "/v1/assets/a1/attachments"))
         }

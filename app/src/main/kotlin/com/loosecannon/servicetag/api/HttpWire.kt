@@ -101,8 +101,8 @@ internal class MalformedRequest(val response: ApiResponse, val why: String) : Ex
  *
  * [bodyCapFor] is consulted with the method and the path *before* a single body byte is read, which
  * is what makes the 4 MiB import ceiling reachable at two paths and the 256 MiB upload ceiling at one
- * method on three shapes, one per owner, and nowhere else. On that shape ([isAttachmentUpload]) the body is **left on
- * the socket** behind [ApiRequest.stream], bounded to exactly `Content-Length` bytes.
+ * method on three shapes, one per owner, and nowhere else. On those shapes ([isAttachmentUpload]) the body is
+ * **left on the socket** behind [ApiRequest.stream], bounded to exactly `Content-Length` bytes.
  */
 internal fun parseRequest(input: InputStream, bodyCapFor: (String, String) -> Int): ApiRequest {
     val requestLine = readLine(input, MAX_REQUEST_LINE)
