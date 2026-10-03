@@ -44,6 +44,17 @@ class RecordSeasonActivation(
     private val recompute: RecomputeSchedules,
 ) {
     suspend fun run(assetId: AssetId, cmd: ActivationCommand): SeasonActivation = uow.write {
+        recordInTransaction(assetId, cmd)
+    }
+
+    /**
+     * #16 (C12) — the work itself, without opening its own transaction. [FakeUnitOfWork][com.loosecannon.servicetag.core.testing.FakeUnitOfWork]'s
+     * `write` is not safely re-entrant (a nested call double-counts commits and can reset the
+     * transaction witness before the outer block finishes), so
+     * [RecordSeasonSyncResult][com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult] — already inside its
+     * own `uow.write` — calls this directly instead of nesting through [run].
+     */
+    internal suspend fun recordInTransaction(assetId: AssetId, cmd: ActivationCommand): SeasonActivation {
         val asset = assets.get(assetId) ?: throw NoSuchAsset(assetId)
         val t = today.localDate()
         val manual = asset.seasonMode == SeasonMode.MANUAL
@@ -80,6 +91,6 @@ class RecordSeasonActivation(
         )
         activations.insert(row)
         recompute.forAsset(assetId)
-        row
+        return row
     }
 }
