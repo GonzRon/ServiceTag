@@ -47,8 +47,9 @@ class SeasonSyncWorkerBodyTest {
     private fun FakeGraph.runnerOver(
         bindings: SeasonSyncRepository = seasonSyncBindings,
         reader: HaStateReader = haStateReader,
+        work: SeasonSyncWork = seasonSyncWork,
     ) = SeasonSyncRunner(
-        bindings, haConnections, secretStore, assets, transferRecords, reader, recordSeasonSyncResult, seasonSyncWork,
+        bindings, haConnections, secretStore, assets, transferRecords, reader, recordSeasonSyncResult, work,
         seasonSyncBackgroundAllowed, seasonSyncScope, clock,
     )
 
@@ -292,6 +293,41 @@ class SeasonSyncWorkerBodyTest {
         graph.backgroundAllowed = false
         graph.start()
         assertNull("withdrawn: cancelled on the start", graph.seasonSyncWork.enqueued)
+    }
+
+    /** Fix round 1 (NOTE-1): the worker re-reads the grant **after** its pass, and a withdrawal cancels the work. */
+    @Test fun runAllChecksTheScheduleAfterItsPass() = runBlocking {
+        val graph = graph()
+        graph.backgroundAllowed = true
+        graph.connect(NetworkEligibility.HOME_NETWORK_ONLY, background = BackgroundChecks.ON)
+        graph.heater("a")
+        val enqueuedDuringTheRead = mutableListOf<Boolean>()
+        graph.haStateReader.answer = {
+            enqueuedDuringTheRead += graph.seasonSyncWork.isEnqueued()
+            HaReadOutcome.NoDecision(SyncErrorKind.UNREACHABLE, null)
+        }
+        graph.backgroundAllowed = false
+
+        graph.seasonSyncRunner.runAll()
+
+        assertEquals("the pass ran first, the work still pending", listOf(true), enqueuedDuringTheRead)
+        assertNull("then the withdrawn grant cancelled it", graph.seasonSyncWork.enqueued)
+    }
+
+    /** Fix round 1 (NOTE-1): a resume's failing schedule check comes after its stale read and never stops it. */
+    @Test fun aFailingScheduleCheckNeverStopsTheResumesStaleRead() = runBlocking {
+        val graph = graph()
+        graph.connect()
+        graph.heater("a")
+        val failing = object : SeasonSyncWork by graph.seasonSyncWork {
+            override fun isEnqueued(): Boolean = throw IllegalStateException("fictional: the work store is not ready")
+        }
+        val runner = graph.runnerOver(work = failing)
+
+        assertFailsWith<IllegalStateException> { runner.refreshIfStale(graph.now) }
+
+        assertEquals(listOf(entityOf("a")), graph.readEntities())
+        assertEquals(SyncErrorKind.UNREACHABLE, graph.binding("a").errorKind)
     }
 
     /**

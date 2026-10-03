@@ -215,6 +215,22 @@ class SeasonSyncRunnerTest {
         }
     }
 
+    /** Fix round 1 (NOTE-5): a success dated after now — the clock moved back — is stale, not fresh until then. */
+    @Test fun aClockMovedBackBeforeTheLastSuccessIsStale() = runBlocking {
+        val graph = graph()
+        graph.connect(cadence = SyncCadence.DAILY)
+        graph.heater("a")
+        graph.haStateReader.answer = { HaReadOutcome.Observed(HaSwitchState.OFF, null) }
+        graph.seasonSyncRunner.syncNow()
+        val success = checkNotNull(graph.binding("a").lastSuccessAt)
+        graph.haStateReader.reads.clear()
+
+        graph.seasonSyncRunner.refreshIfStale(success)
+        assertEquals("the same moment is fresh", emptyList<String>(), graph.readEntities())
+        graph.seasonSyncRunner.refreshIfStale(success - 1)
+        assertEquals(listOf(entityOf("a")), graph.readEntities())
+    }
+
     @Test fun inertBindingsAreNeitherReadNorWritten() = runBlocking {
         val graph = graph()
         val connection = graph.connect()

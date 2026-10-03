@@ -55,6 +55,9 @@ class SeasonSyncWorkerBody(
             log(KEY_STORE_FAILED)
             SeasonSyncWorkResult.SUCCESS
         } catch (_: Exception) {
+            // A recorded silent site (B6a review MINOR-1): a schedule check that failed after the pass, or a throw from
+            // the reader outside its transport. No line until a G-list line for it is ratified: letting it escape would
+            // hand the exception to WorkManager's log; the stale marker is the visible trace and the next period repeats.
             SeasonSyncWorkResult.SUCCESS
         }
     }

@@ -98,6 +98,9 @@ class SeasonSyncRunner(
 
     private val lock = Mutex()
 
+    /** Serializes every read-and-act on the periodic work; never held with [lock], so the two cannot deadlock. */
+    private val scheduleLock = Mutex()
+
     /** The store, each call's failure typed as the store's (a key store that cannot load is loud, B4). */
     private val secrets: SecretStore = KeyStoreSteps(secrets)
 
@@ -110,21 +113,30 @@ class SeasonSyncRunner(
     }
 
     /**
-     * The resume hook's refresh (C23): re-reads the grant and corrects the work if it drifted, then — unless a pass
-     * already holds the lock, which is fresh by definition — reads each active binding that is **stale**: no success
-     * yet, or the last one at least one cadence old ([HaConnection.cadence]). A failure never freshens. At most one
-     * attempt per resume; answers null when it skipped.
+     * The resume hook's refresh (C23): unless a pass already holds the lock, which is fresh by definition, it reads
+     * each active binding that is **stale** — no success yet, the last one at least one cadence old
+     * ([HaConnection.cadence]), or one dated after [now] (a clock moved back). A failure never freshens. Then, as
+     * [runAll] does, it re-reads the grant and corrects the work if it drifted, so a failing schedule check never
+     * stops the read. At most one attempt per resume; answers null when it skipped the read.
      */
     suspend fun refreshIfStale(now: Long): SeasonSyncPass? {
-        reconcile(onlyWhenDrifted = true)
-        if (!lock.tryLock()) return null
-        try {
-            val cadence = database { connections.get() }?.let { Duration.ofHours(it.cadence.hours).toMillis() }
-                ?: return SeasonSyncPass(emptyList())
-            return pass { binding -> binding.lastSuccessAt.let { it == null || now - it >= cadence } }
-        } finally {
-            lock.unlock()
+        val pass = if (lock.tryLock()) {
+            try {
+                staleOnes(now)
+            } finally {
+                lock.unlock()
+            }
+        } else {
+            null
         }
+        reconcile(onlyWhenDrifted = true)
+        return pass
+    }
+
+    private suspend fun staleOnes(now: Long): SeasonSyncPass {
+        val cadence = database { connections.get() }?.let { Duration.ofHours(it.cadence.hours).toMillis() }
+            ?: return SeasonSyncPass(emptyList())
+        return pass { binding -> binding.lastSuccessAt.let { it == null || now < it || now - it >= cadence } }
     }
 
     /**
@@ -147,7 +159,7 @@ class SeasonSyncRunner(
     }
 
     override suspend fun cancel() {
-        withContext(io) { work.cancel() }
+        scheduleLock.withLock { withContext(io) { work.cancel() } }
     }
 
     override suspend fun requestFreshRead(assetId: AssetId) {
@@ -179,7 +191,11 @@ class SeasonSyncRunner(
     private suspend fun state(binding: SeasonSyncBinding): SeasonSyncState =
         database { currentSeasonSyncState(binding, secrets, assets, transfers) }
 
-    private suspend fun reconcile(onlyWhenDrifted: Boolean): SeasonSyncSchedule {
+    /**
+     * Under [scheduleLock], so a resume's or a run's drift check that read the old row can never act after a command's
+     * own check (a stray work after Forget or the last Stop, a cancelled one after a switch to periodic).
+     */
+    private suspend fun reconcile(onlyWhenDrifted: Boolean): SeasonSyncSchedule = scheduleLock.withLock {
         val connection = database { connections.get() }
         val schedule = seasonSyncScheduleOf(connection, database { bindings.anyEnabled() }, backgroundAllowed())
         withContext(io) {
@@ -191,7 +207,7 @@ class SeasonSyncRunner(
                     if (!onlyWhenDrifted || work.isEnqueued()) work.cancel()
             }
         }
-        return schedule
+        schedule
     }
 
     /**

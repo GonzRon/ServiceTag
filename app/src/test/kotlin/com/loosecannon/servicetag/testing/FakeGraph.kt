@@ -736,7 +736,10 @@ class FakeGraph(
     val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
     val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
 
-    fun close() = db.close()
+    fun close() {
+        seasonSyncReads.cancel()
+        db.close()
+    }
 
     private companion object {
         const val APP_VERSION = "test"
