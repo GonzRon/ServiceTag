@@ -23,12 +23,14 @@ import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
 import com.loosecannon.servicetag.core.usecase.BreakCommand
+import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
 import com.loosecannon.servicetag.core.usecase.LegacyWriteCannotRepresent
 import com.loosecannon.servicetag.core.usecase.PromoteCategory
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
+import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
@@ -161,6 +163,30 @@ class SeasonSyncAuthorityTest {
         assertRefusedWithNothingWritten(h, "a rename that also moves to CALENDAR") {
             w.save.run(heater, settings(SeasonModeCommand(SeasonMode.CALENDAR, "11-01", "03-31"), name = "Example Heater 2"))
         }
+    }
+
+    /**
+     * The review's MINOR-1: before the strands 409. A break gives the MANUAL heater a BREAK boundary its PRE_SERVICE
+     * schedule counts back from; CALENDAR re-kinds it and YEAR_ROUND without the break removes it. Stopped, the same
+     * two commands answer the shipped strands 409s, so the fixture does strand.
+     */
+    @Test
+    fun aModeChangeAndASaveThatWouldStrandAScheduleAreRefusedFirstByTheGuard() = runTest {
+        val h = SeasonSyncHarness()
+        h.asset { it.copy(blackoutStartMmdd = "01-10", blackoutEndMmdd = "01-20") }
+        h.activation("a-start", START, "2026-03-01")
+        h.raw.schedules.rows["s-heater"] = SeasonFixtures.snowblowerSchedule(id = "s-heater", assetId = HEATER)
+        h.link()
+        val w = Writers(h)
+        val toCalendar = suspend { w.setMode.run(heater, SeasonModeCommand(SeasonMode.CALENDAR, "11-01", "03-31")) }
+        val toYearRound = suspend { w.save.run(heater, settings(SeasonModeCommand(SeasonMode.YEAR_ROUND))) }
+
+        assertRefusedWithNothingWritten(h, "a stranding mode change") { toCalendar() }
+        assertRefusedWithNothingWritten(h, "a stranding save to YEAR_ROUND") { toYearRound() }
+
+        h.raw.seasonSyncBindings.rows[HEATER] = h.binding().copy(enabled = false)
+        assertFailsWith<SeasonModeStrandsPolicy> { toCalendar() }
+        assertFailsWith<BreakStrandsPolicy> { toYearRound() }
     }
 
     @Test
