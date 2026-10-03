@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
@@ -794,13 +795,21 @@ class AppGraph(private val context: Context) {
     // the API and the offers refuse the same things; each season or break write rebuilds the asset's
     // schedules, and an activation writes its row and no asset column.
     val setSeasonMode: SetSeasonMode =
-        SetSeasonMode(assets, schedules, seasonActivations, uow, ids, clock, today, recomputeSchedules)
+        SetSeasonMode(
+            assets, schedules, seasonActivations, uow, ids, clock, today, recomputeSchedules,
+            SeasonSyncGuard(seasonSyncBindings),
+        )
     val setMaintenanceBreak: SetMaintenanceBreak =
         SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
     val recordSeasonActivation: RecordSeasonActivation =
-        RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, today, recomputeSchedules)
+        RecordSeasonActivation(
+            assets, events, seasonActivations, uow, ids, clock, today, recomputeSchedules,
+            SeasonSyncGuard(seasonSyncBindings),
+        )
     val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, today)
-    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, today)
+    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(
+        seasonActivations, recordSeasonActivation, uow, today, SeasonSyncGuard(seasonSyncBindings),
+    )
 
     // 1.4 — condition and health configuration (master plan §9, §10.1). A condition write inserts one
     // immutable row and nothing else; the offer writes only when accepted. The subject and policy
@@ -850,7 +859,7 @@ class AppGraph(private val context: Context) {
     ) { reason -> Log.w("PickedContact", reason) }
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
-        promoteCategory,
+        promoteCategory, SeasonSyncGuard(seasonSyncBindings),
     )
 
     val archiveAsset: ArchiveAsset =
@@ -1003,7 +1012,7 @@ class AppGraph(private val context: Context) {
      */
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, today),
-        SeasonOffers(assets, seasonActivations, acceptSeasonOffer, today),
+        SeasonOffers(assets, seasonActivations, acceptSeasonOffer, today, SeasonSyncGuard(seasonSyncBindings)),
         ImpairmentOffers(assets, conditions, acceptImpairmentOffer, today),
     )
 

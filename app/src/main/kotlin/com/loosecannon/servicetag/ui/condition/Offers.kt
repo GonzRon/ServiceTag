@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
@@ -222,16 +223,22 @@ class OperationalOffers(
  * The season offer (spec §3.3; inv. 93): after a SEASON_START or SEASON_END event on a MANUAL asset
  * in the opposite phase ([seasonOfferFor]), and accepting it through B04's [AcceptSeasonOffer], which
  * clamps the date — so the dialog shows no date of its own.
+ *
+ * #16 (C15; R16-16, N-11): never offered while an enabled Home Assistant binding owns the asset's season. This is
+ * the one recorded exception to re-checking a use case's rule here — the offer is a prompt, not a write — and
+ * [AcceptSeasonOffer]'s guard stays the backstop.
  */
 class SeasonOffers(
     private val assets: AssetRepository,
     private val activations: SeasonActivationRepository,
     private val accept: AcceptSeasonOffer,
     private val today: Today,
+    private val seasonSync: SeasonSyncGuard,
 ) {
-    /** The offer to make after [event], or null. An archived or retired asset is never asked. */
+    /** The offer to make after [event], or null. An archived or retired asset, or a synced one, is never asked. */
     suspend fun offerFor(event: AssetEvent): SeasonOfferPrompt? {
         val asset = assets.get(event.assetId)?.takeIf { it.inService } ?: return null
+        if (seasonSync.isSynced(asset.id)) return null
         val action = seasonOfferFor(asset, activations.forAsset(asset.id), event, today.localDate()) ?: return null
         return SeasonOfferPrompt(event, action)
     }

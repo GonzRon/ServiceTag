@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
@@ -61,6 +62,7 @@ class AssetSettingsFormTest {
         saveSettings = SaveAssetSettings(
             written, graph.schedules, graph.healthSubjects, graph.seasonActivations, graph.uow, graph.ids,
             graph.clock, graph.todayPort, graph.recomputeSchedules, graph.applyTemplate, graph.promoteCategory,
+            SeasonSyncGuard(graph.seasonSyncBindings),
         )
     }
 

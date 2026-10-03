@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -63,6 +64,7 @@ class AssetEditWarrantyReminderTest {
         saveSettings = SaveAssetSettings(
             written, graph.schedules, graph.healthSubjects, graph.seasonActivations, graph.uow, graph.ids,
             graph.clock, graph.todayPort, graph.recomputeSchedules, graph.applyTemplate, graph.promoteCategory,
+            SeasonSyncGuard(graph.seasonSyncBindings),
         )
     }
 
