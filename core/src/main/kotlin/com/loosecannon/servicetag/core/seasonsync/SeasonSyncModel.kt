@@ -14,9 +14,9 @@ import com.loosecannon.servicetag.core.model.SeasonAction
  *
  * [homeNetworkSsid] is the Wi-Fi network's name as Android reports it, without its quotes, compared exactly; null when
  * nothing is captured. It is never a BSSID, an address, a location or a time. A wired network has no name, so it is
- * never captured. Every stored row keeps two invariants, which C17's writers hold:
- * [NetworkEligibility.HOME_NETWORK_ONLY] exactly when [homeNetworkSsid] is not null, and an `http` [baseUrl] only with
- * [NetworkEligibility.HOME_NETWORK_ONLY].
+ * never captured. Every stored row keeps three invariants, which C17's writers hold:
+ * [NetworkEligibility.HOME_NETWORK_ONLY] exactly when [homeNetworkSsid] is not null; an `http` [baseUrl] only with
+ * [NetworkEligibility.HOME_NETWORK_ONLY]; and [homeNetworkSsid] never blank.
  *
  * Device-local configuration: never in a ServiceTag backup, export, merge or pack (R16-Q-E).
  */
@@ -81,14 +81,16 @@ sealed interface CurrentNetwork {
  * #16 (C4a, C19 step 1a, I10) — whether [connection]'s token may be sent from [current].
  * [NetworkEligibility.ANY_NETWORK] is true on every network. [NetworkEligibility.HOME_NETWORK_ONLY] is true only on a
  * Wi-Fi network whose name equals [HaConnection.homeNetworkSsid] exactly. A hidden name, a wired network and a
- * home-network connection with nothing captured are never eligible. A name match narrows where the token goes; it
- * cannot prove which network this is (limit 15).
+ * home-network connection with nothing captured are never eligible; a blank stored name counts as nothing captured,
+ * so it never matches a blank reported one. A name match narrows where the token goes; it cannot prove which network
+ * this is (limit 15).
  */
 fun eligibleNow(connection: HaConnection, current: CurrentNetwork): Boolean =
     when (connection.networkEligibility) {
         NetworkEligibility.ANY_NETWORK -> true
         NetworkEligibility.HOME_NETWORK_ONLY -> when (current) {
-            is CurrentNetwork.Wifi -> current.ssid == connection.homeNetworkSsid
+            is CurrentNetwork.Wifi ->
+                connection.homeNetworkSsid?.isNotBlank() == true && current.ssid == connection.homeNetworkSsid
             CurrentNetwork.WifiUnnamed, CurrentNetwork.Wired, CurrentNetwork.Other, CurrentNetwork.None -> false
         }
     }

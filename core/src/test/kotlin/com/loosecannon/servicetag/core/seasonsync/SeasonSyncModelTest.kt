@@ -109,8 +109,8 @@ class SeasonSyncModelTest {
         assertEquals(emptyList(), offenders, "no model type of $pkg holds a Secret")
     }
 
-    /** A `val` or `var` whose declared type names [Secret]: a property, a holder such as `List<Secret>`, or a local. */
-    private val secretDeclaration = Regex("""\b(?:val|var)\s+\w+\s*:\s*[^=\n]*\bSecret\b""")
+    /** A `val` or `var` declared as [Secret] or a holder of it such as `List<Secret>`: a property or a local. */
+    private val secretDeclaration = Regex("""\b(?:val|var)\s+\w+\s*:\s*(?:Secret\b|[\w.]+\s*<[^>=\n]*\bSecret\b)""")
 
     /**
      * What the reflection guard cannot see — a `private val` typed [Secret] has no getter, and a `List<Secret>`'s
@@ -123,6 +123,7 @@ class SeasonSyncModelTest {
             "    private val token: Secret,",
             "val tokens: List<Secret> = listOf()",
             "var maybe: Secret?",
+            "val byKey: Map<String, Secret>",
         )) {
             assertTrue(secretDeclaration.containsMatchIn(line), "the scan sees \"$line\"")
         }
@@ -130,6 +131,8 @@ class SeasonSyncModelTest {
             "    suspend fun put(key: String, secret: Secret)",
             "class SaveExample(private val store: SecretStore)",
             "value class Secret(val value: String) {",
+            "class SaveExample(val names: List<String>, token: Secret)",
+            "val onToken: (Secret) -> Unit",
         )) {
             assertFalse(secretDeclaration.containsMatchIn(line), "the scan passes \"$line\"")
         }
@@ -137,12 +140,12 @@ class SeasonSyncModelTest {
         val relative = "kotlin/com/loosecannon/servicetag/core/seasonsync"
         val dir = listOf(File("src/main/$relative"), File("core/src/main/$relative")).firstOrNull { it.isDirectory }
             ?: error("cannot find src/main/$relative from ${File(".").absolutePath}")
-        val sources = dir.listFiles { file -> file.extension == "kt" }.orEmpty().sortedBy { it.name }
+        val sources = dir.walkTopDown().filter { it.isFile && it.extension == "kt" }.sortedBy { it.path }.toList()
         assertTrue(sources.any { it.name == "SeasonSyncModel.kt" }, "the scan reads the model: $sources")
         val offenders = sources.flatMap { file ->
             file.readLines().withIndex()
                 .filter { (_, line) -> secretDeclaration.containsMatchIn(line) }
-                .map { (index, line) -> "${file.name}:${index + 1}: ${line.trim()}" }
+                .map { (index, line) -> "${file.relativeTo(dir)}:${index + 1}: ${line.trim()}" }
         }
         assertEquals(emptyList(), offenders, "no val or var in ${dir.path} is declared with a Secret type")
     }
@@ -209,18 +212,21 @@ class SeasonSyncModelTest {
     }
 
     @Test
-    fun backgroundChecksAreOffOrOnAndOffByDefault() = runTest {
+    fun backgroundChecksAreOffOrOnAndTheFixtureIsOff() = runTest {
         assertEquals(listOf("OFF", "ON"), BackgroundChecks.entries.map { it.name })
         assertEquals(BackgroundChecks.OFF, haConnectionOf().backgroundChecks, "the fixture's is a new connection's")
 
         val connections = InMemoryHaConnectionRepository(InMemorySeasonSyncRepository())
+        val homeOn = haConnectionOf(backgroundChecks = BackgroundChecks.ON)
+        connections.upsert(homeOn)
+        assertEquals(homeOn, connections.get(), "On is stored in the home-network mode")
         val anyNetworkOn = haConnectionOf(
             baseUrl = "https://ha.example:8123",
             networkEligibility = NetworkEligibility.ANY_NETWORK,
             backgroundChecks = BackgroundChecks.ON,
         )
         connections.upsert(anyNetworkOn)
-        assertEquals(anyNetworkOn, connections.get(), "stored whatever the eligibility")
+        assertEquals(anyNetworkOn, connections.get(), "and with any network: no invariant ties it to the eligibility")
     }
 
     @Test
@@ -250,18 +256,43 @@ class SeasonSyncModelTest {
             CurrentNetwork.Other,
             CurrentNetwork.None,
         )
-        val anyNetwork =
-            haConnectionOf(baseUrl = "https://ha.example:8123", networkEligibility = NetworkEligibility.ANY_NETWORK)
-        val onHomeWifi = haConnectionOf()
-        val nothingCaptured = haConnectionOf(homeNetworkSsid = null)
-
-        val expected = everyNetwork.map { Triple("any network", anyNetwork, it) to true } +
-            everyNetwork.map { Triple("the home Wi-Fi", onHomeWifi, it) to (it == homeWifi) } +
-            everyNetwork.map { Triple("nothing captured", nothingCaptured, it) to false }
+        // The table is the same whether background checks are Off or On: the setting decides when, never where.
+        val expected = BackgroundChecks.entries.flatMap { checks ->
+            val anyNetwork = haConnectionOf(
+                baseUrl = "https://ha.example:8123",
+                networkEligibility = NetworkEligibility.ANY_NETWORK,
+                backgroundChecks = checks,
+            )
+            val onHomeWifi = haConnectionOf(backgroundChecks = checks)
+            val nothingCaptured = haConnectionOf(homeNetworkSsid = null, backgroundChecks = checks)
+            everyNetwork.map { Triple("any network, $checks", anyNetwork, it) to true } +
+                everyNetwork.map { Triple("the home Wi-Fi, $checks", onHomeWifi, it) to (it == homeWifi) } +
+                everyNetwork.map { Triple("nothing captured, $checks", nothingCaptured, it) to false }
+        }
         val wrong = expected
             .filter { (case, eligible) -> eligibleNow(case.second, case.third) != eligible }
             .map { (case, eligible) -> "${case.first} × ${case.third}: expected $eligible" }
         assertEquals(emptyList(), wrong, "only the captured name, exactly, is home; a hidden name or wired never is")
+    }
+
+    @Test
+    fun aBlankCapturedNameIsNeverHome() {
+        for (blank in listOf("", "   ")) {
+            val connection = haConnectionOf(homeNetworkSsid = blank)
+            for (current in listOf(CurrentNetwork.Wifi(""), CurrentNetwork.Wifi("   "), CurrentNetwork.Wifi(blank))) {
+                assertFalse(eligibleNow(connection, current), "stored \"$blank\" × $current")
+            }
+        }
+    }
+
+    @Test
+    fun theDoubleRefusesABlankHomeNetworkName() = runTest {
+        val connections = InMemoryHaConnectionRepository(InMemorySeasonSyncRepository())
+        for (blank in listOf("", "   ", "\t")) {
+            val connection = haConnectionOf(homeNetworkSsid = blank)
+            assertFailsWith<AssertionError>("\"$blank\"") { connections.upsert(connection) }
+        }
+        assertEquals(null, connections.get(), "nothing refused was kept")
     }
 
     @Test

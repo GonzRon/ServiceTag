@@ -82,9 +82,9 @@ class InMemorySeasonSyncRepository : SeasonSyncRepository, Rollbackable, Witness
 
 /**
  * #16 (C7) — the one connection in memory. [get] fails loudly if a writer ever left two rows, which R16-10 rules
- * out. [upsert] refuses a row that breaks C4a's two invariants, which C17's writers keep: a home-network connection
- * exactly when a network is captured, and an http address only on the home network. [delete] hands the id to
- * [bindings], the schema's CASCADE from `ha_connection`.
+ * out. [upsert] refuses a row that breaks C4a's three invariants, which C17's writers keep: a home-network connection
+ * exactly when a network is captured, an http address only on the home network, and a captured name never blank.
+ * [delete] hands the id to [bindings], the schema's CASCADE from `ha_connection`.
  */
 class InMemoryHaConnectionRepository(
     private val bindings: InMemorySeasonSyncRepository,
@@ -112,6 +112,9 @@ class InMemoryHaConnectionRepository(
         }
         if (connection.baseUrl.startsWith("http://") && !home) {
             throw AssertionError("ha_connection: an http address with $eligibility")
+        }
+        if (connection.homeNetworkSsid?.isBlank() == true) {
+            throw AssertionError("ha_connection: a blank home network name")
         }
         rows[connection.id] = connection
     }
