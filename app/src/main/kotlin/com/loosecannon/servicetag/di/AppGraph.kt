@@ -71,6 +71,8 @@ import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
@@ -174,6 +176,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_16_17
 import com.loosecannon.servicetag.data.room.MIGRATION_17_18
 import com.loosecannon.servicetag.data.room.MIGRATION_18_19
 import com.loosecannon.servicetag.data.room.MIGRATION_19_20
+import com.loosecannon.servicetag.data.room.MIGRATION_20_21
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
@@ -187,6 +190,7 @@ import com.loosecannon.servicetag.data.room.RoomDeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
+import com.loosecannon.servicetag.data.room.RoomHaConnectionRepository
 import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
 import com.loosecannon.servicetag.data.room.RoomInstalledComponentRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
@@ -196,6 +200,7 @@ import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomSeasonActivationRepository
+import com.loosecannon.servicetag.data.room.RoomSeasonSyncRepository
 import com.loosecannon.servicetag.data.room.RoomServiceCaseEntryRepository
 import com.loosecannon.servicetag.data.room.RoomServiceCaseRepository
 import com.loosecannon.servicetag.data.room.RoomSupplyItemRepository
@@ -273,7 +278,7 @@ class AppGraph(private val context: Context) {
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
             MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
-            MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
+            MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
         )
         .build()
 
@@ -438,6 +443,13 @@ class AppGraph(private val context: Context) {
     /** #79 (C17): a deadline's device-local stamp; never exported, never merged, no foreign key. */
     val deadlineLocalDelivery: DeadlineLocalDeliveryRepository =
         RoomDeadlineLocalDeliveryRepository(db.deadlineLocalDeliveryDao())
+
+    /**
+     * #16 (C9, C11): the Home Assistant connection and the season bindings — device-local, never exported, merged or
+     * packed. Unguarded, one instance each: a held asset's binding is refused by the applier's `maintainedHere` (C13).
+     */
+    val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
+    val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
 
     /**
      * Derived state as a **read**, so the delivery path cannot reach the one write method the
@@ -1097,6 +1109,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 20
+        const val SCHEMA_VERSION = 21
     }
 }

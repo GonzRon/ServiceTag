@@ -12,6 +12,8 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
@@ -129,6 +131,8 @@ import com.loosecannon.servicetag.data.room.RoomCategoryRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDeadlineLocalDeliveryRepository
+import com.loosecannon.servicetag.data.room.RoomHaConnectionRepository
+import com.loosecannon.servicetag.data.room.RoomSeasonSyncRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
@@ -635,6 +639,10 @@ class FakeGraph(
     /** #79: the device-local deadline stamp, over the real table, as `AppGraph` builds it. */
     val deadlineLocalDelivery: DeadlineLocalDeliveryRepository =
         RoomDeadlineLocalDeliveryRepository(db.deadlineLocalDeliveryDao())
+
+    /** #16: the Home Assistant connection and the season bindings, over the real tables, as `AppGraph` builds them. */
+    val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
+    val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
     val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
     val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
 

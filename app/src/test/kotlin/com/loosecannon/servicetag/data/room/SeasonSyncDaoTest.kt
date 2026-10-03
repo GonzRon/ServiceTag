@@ -54,8 +54,8 @@ class SeasonSyncDaoTest {
         createdAt = 2_000L, updatedAt = 2_000L,
     )
 
-    private suspend fun seed(vararg ids: AssetId) {
-        for (id in ids) assets.upsert(Asset(id = id, name = "Example ${id.value}", createdAt = 500L, updatedAt = 500L))
+    private suspend fun seed(vararg ids: String) {
+        for (id in ids) assets.upsert(Asset(id = AssetId(id), name = "Example $id", createdAt = 500L, updatedAt = 500L))
         connections.upsert(connection())
     }
 
@@ -63,7 +63,7 @@ class SeasonSyncDaoTest {
 
     @Test
     fun deletingAnAssetTakesItsBinding() = runTest {
-        seed(heater, dehumidifier)
+        seed(heater.value, dehumidifier.value)
         bindings.insert(binding(heater))
         bindings.insert(binding(dehumidifier))
 
@@ -76,7 +76,7 @@ class SeasonSyncDaoTest {
 
     @Test
     fun deletingTheConnectionTakesItsBindings() = runTest {
-        seed(heater, dehumidifier)
+        seed(heater.value, dehumidifier.value)
         bindings.insert(binding(heater))
         bindings.insert(binding(dehumidifier))
 
@@ -89,7 +89,7 @@ class SeasonSyncDaoTest {
 
     @Test
     fun oneBindingPerAsset() = runTest {
-        seed(heater, dehumidifier)
+        seed(heater.value, dehumidifier.value)
         bindings.insert(binding(heater))
 
         val second = runCatching { bindings.insert(binding(heater, revision = 7)) }.exceptionOrNull()
@@ -105,7 +105,7 @@ class SeasonSyncDaoTest {
     /** An upsert is an `UPDATE` in place: a REPLACE would delete the row and, by the CASCADE, every binding on it. */
     @Test
     fun anUpsertChangesTheConnectionInPlaceAndKeepsItsBindings() = runTest {
-        seed(heater)
+        seed(heater.value)
         bindings.insert(binding(heater))
         val changed = connection().copy(
             baseUrl = "https://ha.example:8123", cadence = SyncCadence.WEEKLY,
@@ -132,7 +132,7 @@ class SeasonSyncDaoTest {
 
     @Test
     fun aBindingRoundTripsEveryField() = runTest {
-        seed(heater)
+        seed(heater.value)
         assertEquals(connection(), connections.get())
         val full = binding(heater).copy(
             mode = SyncMode.FORCE_IN, enabled = false, revision = 9, observedState = HaSwitchState.OFF,
@@ -175,7 +175,7 @@ class SeasonSyncDaoTest {
 
     @Test
     fun theConditionalUpdateAnswersFalseOnAStaleRevision() = runTest {
-        seed(heater)
+        seed(heater.value)
         bindings.insert(binding(heater, revision = 3))
         assertTrue(bindings.anyEnabled())
 
