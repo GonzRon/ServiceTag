@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
+import com.loosecannon.servicetag.core.seasonsync.LastAppliedSource
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
@@ -51,7 +52,7 @@ class SeasonSyncDaoTest {
         assetId = assetId, connectionId = connectionId, entityId = ENTITY, mode = SyncMode.FOLLOW, enabled = true,
         revision = revision, observedState = null, observedChangedAt = null, lastSuccessAt = null, lastAttemptAt = null,
         errorKind = null, errorDetail = null, errorAt = null, appliedAction = null, appliedOn = null, appliedAt = null,
-        createdAt = 2_000L, updatedAt = 2_000L,
+        lastAppliedSource = null, createdAt = 2_000L, updatedAt = 2_000L,
     )
 
     private suspend fun seed(vararg ids: String) {
@@ -138,7 +139,8 @@ class SeasonSyncDaoTest {
             mode = SyncMode.FORCE_IN, enabled = false, revision = 9, observedState = HaSwitchState.OFF,
             observedChangedAt = "2026-10-02T06:00:00+00:00", lastSuccessAt = 4_000L, lastAttemptAt = 5_000L,
             errorKind = SyncErrorKind.TIMED_OUT, errorDetail = "504", errorAt = 5_000L,
-            appliedAction = SeasonAction.END, appliedOn = "2026-10-02", appliedAt = 4_500L, updatedAt = 5_000L,
+            appliedAction = SeasonAction.END, appliedOn = "2026-10-02", appliedAt = 4_500L,
+            lastAppliedSource = LastAppliedSource.FORCED_OUT, updatedAt = 5_000L,
         )
 
         bindings.insert(full)
@@ -163,7 +165,7 @@ class SeasonSyncDaoTest {
             }
             val columns = withConnection(file) { c -> V21_TABLES.associateWith { c.columnNamesOf(it) } }
             assertEquals(8, columns.getValue("ha_connection").size)
-            assertEquals(18, columns.getValue("season_sync_binding").size)
+            assertEquals(19, columns.getValue("season_sync_binding").size)
             val credentialLike = Regex("token|secret|bearer|password|credential|auth", RegexOption.IGNORE_CASE)
             for ((table, names) in columns) {
                 assertEquals("$table holds no credential column", emptyList<String>(), names.filter { credentialLike.containsMatchIn(it) })
@@ -184,7 +186,8 @@ class SeasonSyncDaoTest {
             mode = SyncMode.FORCE_IN, enabled = false, observedState = HaSwitchState.ON,
             observedChangedAt = "2026-10-02T07:00:00+00:00", lastSuccessAt = 6_100L, lastAttemptAt = 6_200L,
             errorKind = SyncErrorKind.HTTP_ERROR, errorDetail = "503", errorAt = 6_300L,
-            appliedAction = SeasonAction.END, appliedOn = "2026-10-02", appliedAt = 6_400L, updatedAt = 6_500L,
+            appliedAction = SeasonAction.END, appliedOn = "2026-10-02", appliedAt = 6_400L,
+            lastAppliedSource = LastAppliedSource.HOME_ASSISTANT, updatedAt = 6_500L,
         )
         assertTrue("revision 3 -> 4 writes", bindings.update(next))
         assertEquals(next, bindings.get(heater))

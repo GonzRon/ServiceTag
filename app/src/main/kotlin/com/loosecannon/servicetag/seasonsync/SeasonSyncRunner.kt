@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.seasonsync
 
+import android.util.Log
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -80,6 +81,8 @@ data class SeasonSyncPass(val outcomes: List<HaReadOutcome>)
  * It is also the commands' [SeasonSyncScheduler] (B3c): [ensure] applies C22's rule, so a command that leaves a
  * binding enabled still cancels the work when the connection says foreground only; [requestFreshRead] launches one
  * asset's read on [scope] and returns.
+ *
+ * [log] takes G5's line when a launched pass fails (C33(6)); `AppGraph` keeps the default, a JVM test records it.
  */
 class SeasonSyncRunner(
     private val bindings: SeasonSyncRepository,
@@ -94,6 +97,7 @@ class SeasonSyncRunner(
     private val scope: CoroutineScope,
     private val clock: Clock,
     private val io: CoroutineContext = Dispatchers.IO,
+    private val log: (String) -> Unit = { Log.w("SeasonSyncRunner", it) },
 ) : SeasonSyncScheduler {
 
     private val lock = Mutex()
@@ -211,8 +215,9 @@ class SeasonSyncRunner(
     }
 
     /**
-     * A foreground pass, off the caller: [scope] carries no handler, so every failure stops here. The binding's status
-     * is what the owner sees, and the next resume, Sync now or period repeats the pass.
+     * A foreground pass, off the caller — a command's fresh read and the resume refresh: [scope] carries no handler,
+     * so every failure stops here, logged by G5's line alone. The binding's status is what the owner sees, and the
+     * next resume, Sync now or period repeats the pass.
      */
     private fun launchQuietly(block: suspend () -> Unit) {
         scope.launch {
@@ -221,7 +226,7 @@ class SeasonSyncRunner(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // nothing to add: G3 has no line for a foreground pass, and a failure leaves the status as it was
+                log(CHECK_NOT_RUN)
             }
         }
     }
@@ -240,7 +245,7 @@ fun storedHaConnection(connections: HaConnectionRepository): suspend () -> HaCon
  * lock and through a read, never a write** — link and resume ask the store inside their write, so a write here would
  * wait on theirs while holding the lock theirs waits for; and a save's token, put after its commit, waits for the
  * sweep and is never swept. A sweep failure is logged by G3's line without the exception; a failed schedule check is
- * repeated by the next start, resume or command.
+ * logged by G5's, also without it, and repeated by the next start, resume or command.
  */
 suspend fun startSeasonSync(
     store: KeystoreSecretStore,
@@ -261,12 +266,20 @@ suspend fun startSeasonSync(
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
-        // repeated by the next start, resume or command; G3 has no line for it
+        log(CHECK_NOT_RUN)
     }
 }
 
 /** G3: the start-up sweep's line. */
 const val KEY_SWEEP_FAILED = "the Home Assistant key sweep failed; the next start repeats it"
+
+/**
+ * G5 (R16-Q-J): the one line of a check that failed where nothing else would say so — a command's fresh read, the
+ * resume refresh, the start-up schedule check and the worker's other ends. The line alone: no address, host, entity,
+ * Wi-Fi name, token or exception.
+ */
+const val CHECK_NOT_RUN =
+    "a Home Assistant check could not run; it will retry on the next resume, scheduled run, or app start"
 
 private suspend fun <T> database(block: suspend () -> T): T = try {
     block()

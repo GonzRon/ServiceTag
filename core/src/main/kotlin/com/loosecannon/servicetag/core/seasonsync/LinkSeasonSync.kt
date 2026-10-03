@@ -104,6 +104,7 @@ class LinkSeasonSync(
                 appliedAction = null,
                 appliedOn = null,
                 appliedAt = null,
+                lastAppliedSource = null,
                 createdAt = now,
                 updatedAt = now,
             )

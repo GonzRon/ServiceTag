@@ -230,6 +230,7 @@ fun seasonSyncBindingOf(
     appliedAction = null,
     appliedOn = null,
     appliedAt = null,
+    lastAppliedSource = null,
     createdAt = at,
     updatedAt = at,
 )

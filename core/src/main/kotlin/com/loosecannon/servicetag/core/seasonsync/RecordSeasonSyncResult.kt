@@ -104,7 +104,8 @@ class RecordSeasonSyncResult(
      * Brings [asset]'s season today to [desired] inside the caller's write, and answers [binding] with what that
      * came to: unchanged when the season already agrees or a shipped refusal says it is already applied; with an
      * error when the asset is not maintained here, not MANUAL, or today is before its latest row; with the
-     * provenance when one row was written. The caller writes the binding.
+     * provenance when one row was written, its source that of [binding]'s mode (C33(3)): the stored mode for a read,
+     * the new one for a Force command. Without a row the provenance stays as it was. The caller writes the binding.
      */
     internal suspend fun applyIfChanged(asset: Asset, desired: SeasonPhase, binding: SeasonSyncBinding): SeasonSyncBinding {
         val now = clock.nowMillis()
@@ -121,7 +122,12 @@ class RecordSeasonSyncResult(
         }
         return try {
             record.recordInTransaction(asset.id, ActivationCommand(action, occurredOn = day.toString()), guarded = false)
-            binding.copy(appliedAction = action, appliedOn = day.toString(), appliedAt = now)
+            binding.copy(
+                appliedAction = action,
+                appliedOn = day.toString(),
+                appliedAt = now,
+                lastAppliedSource = appliedSourceOf(binding.mode),
+            )
         } catch (e: SeasonAlreadyStarted) {
             binding
         } catch (e: SeasonAlreadyEnded) {

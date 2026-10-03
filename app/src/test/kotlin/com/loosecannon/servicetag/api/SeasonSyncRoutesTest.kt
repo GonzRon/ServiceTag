@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
+import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.seasonsync.JdkAead
 import com.loosecannon.servicetag.seasonsync.KeyedAead
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
@@ -145,7 +146,7 @@ class SeasonSyncRoutesTest {
         assertEquals(linkedAt, binding.millis("lastAttemptAt"))
         assertTrue(binding.isNull("lastError"))
         val applied = binding.obj("lastApplied")
-        assertEquals(setOf("action", "occurredOn", "at"), applied.keys)
+        assertEquals(setOf("action", "occurredOn", "at", "source"), applied.keys)
         assertEquals("START", applied.text("action"))
         assertEquals("2026-02-10", applied.text("occurredOn"))
         assertEquals(linkedAt, applied.millis("at"))
@@ -171,6 +172,35 @@ class SeasonSyncRoutesTest {
         assertEquals("an unchanged answer is a fresh success", linkedAt + 120_000, fresh.millis("lastSuccessAt"))
         assertEquals("no new change, so the applied time stays", linkedAt, fresh.obj("lastApplied").millis("at"))
         assertTrue("a success clears the error", fresh.isNull("lastError"))
+    }
+
+    /**
+     * C33(5), row 79: `lastApplied.source` says who applied the change — a Force command's START reads `FORCED_IN`,
+     * and the END Home Assistant's next answer applies once the asset follows again reads `HOME_ASSISTANT`.
+     */
+    @Test fun aForcedApplicationReadsSourceForcedIn() {
+        val heater = api.asset("Example Heater")
+        manualOutOfSeason(heater)
+        connect()
+        graph.haStateReader.answer = { HaReadOutcome.Observed(HaSwitchState.OFF, null) }
+        link(heater)
+        assertTrue("off over out of season: nothing applied", seasonSync(heater).obj("binding").isNull("lastApplied"))
+
+        runBlocking { graph.setSeasonSyncMode.run(AssetId(heater), SyncMode.FORCE_IN) }
+
+        val forced = seasonSync(heater).obj("binding").obj("lastApplied")
+        assertEquals("START", forced.text("action"))
+        assertEquals("FORCED_IN", forced.text("source"))
+
+        graph.now += 60_000
+        runBlocking {
+            graph.setSeasonSyncMode.run(AssetId(heater), SyncMode.FOLLOW)
+            graph.awaitSeasonSyncReads()
+        }
+
+        val followed = seasonSync(heater).obj("binding").obj("lastApplied")
+        assertEquals("END", followed.text("action"))
+        assertEquals("HOME_ASSISTANT", followed.text("source"))
     }
 
     /** No binding is a 200 with `binding: null`, never a 404 — with no connection, and with one. */

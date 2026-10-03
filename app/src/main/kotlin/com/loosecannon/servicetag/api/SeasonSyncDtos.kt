@@ -70,9 +70,12 @@ internal data class SeasonSyncObservationDto(val state: String, val haLastChange
 @Serializable
 internal data class SeasonSyncErrorDto(val kind: String, val detail: String?, val at: Long)
 
-/** The last change the binding made (R16-11): `START` or `END`, the day it is dated, and when it was applied. */
+/**
+ * The last change the binding made (R16-11): `START` or `END`, the day it is dated, when it was applied, and its
+ * [source] (C33): `HOME_ASSISTANT`, or `FORCED_IN` / `FORCED_OUT` when the owner's forced season applied it.
+ */
 @Serializable
-internal data class SeasonSyncAppliedDto(val action: String, val occurredOn: String, val at: Long)
+internal data class SeasonSyncAppliedDto(val action: String, val occurredOn: String, val at: Long, val source: String)
 
 /** The settings of a configured connection; [hasToken] is `SecretStore.has`, [backgroundAllowed] Android's grant. */
 internal fun HaConnection.toSeasonSyncDto(hasToken: Boolean, backgroundAllowed: Boolean) = SeasonSyncConnectionDto(
@@ -96,6 +99,10 @@ internal fun SeasonSyncBinding.toDto(state: SeasonSyncState) = SeasonSyncBinding
     lastAttemptAt = lastAttemptAt,
     lastError = errorKind?.let { kind -> errorAt?.let { at -> SeasonSyncErrorDto(kind.name, errorDetail, at) } },
     lastApplied = appliedAction?.let { action ->
-        appliedOn?.let { on -> appliedAt?.let { at -> SeasonSyncAppliedDto(action.name, on, at) } }
+        appliedOn?.let { on ->
+            appliedAt?.let { at ->
+                lastAppliedSource?.let { source -> SeasonSyncAppliedDto(action.name, on, at, source.name) }
+            }
+        }
     },
 )

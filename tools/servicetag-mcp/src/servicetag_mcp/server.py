@@ -4321,6 +4321,7 @@ def get_season_sync(asset_id: str) -> dict[str, Any]:
     when the link last recorded an activation, its `occurredOn` the day it was applied. `haLastChanged` is Home
     Assistant's own text, information only: it never dates an activation. The effective season is
     `get_season`'s `seasonPhase`, not repeated here.
+    `lastApplied`'s `source` says who applied it: `HOME_ASSISTANT`, or the owner's forced `FORCED_IN` or `FORCED_OUT`.
 
     While a binding is enabled the phone refuses `start_season`, `end_season` and a `set_season_mode` change on
     that asset. An unknown asset is `no_such_asset`. Needs a phone at schema 21 or later: an older one is refused

@@ -11,9 +11,10 @@ import androidx.room3.PrimaryKey
  * exported, merged or packed** (R16-Q-E). The asset is the key, so an asset has at most one binding. Both foreign keys
  * CASCADE: deleting the asset (`DeleteAsset`, and the replace restore's wipe) takes its binding, and deleting the
  * connection takes every binding on it (R16-14); `connection_id` is indexed for its key. The columns are the model's
- * eighteen fields in its order; the enum columns hold the enum's name, `enabled` is 0 or 1, and `revision` moves by one
- * on every write (the conditional update, C11, C13). Whether a binding is active, stopped, waiting for the owner or
- * inert is derived when it is read (C17), never stored.
+ * nineteen fields in its order; the enum columns hold the enum's name, `enabled` is 0 or 1, and `revision` moves by one
+ * on every write (the conditional update, C11, C13). `last_applied_source` (C33, inside the unreleased v21) says
+ * whether Home Assistant or the owner's forced season applied the last change. Whether a binding is active, stopped,
+ * waiting for the owner or inert is derived when it is read (C17), never stored.
  */
 @Entity(
     tableName = "season_sync_binding",
@@ -50,6 +51,7 @@ data class SeasonSyncBindingEntity(
     @ColumnInfo(name = "applied_action") val appliedAction: String?,
     @ColumnInfo(name = "applied_on") val appliedOn: String?,
     @ColumnInfo(name = "applied_at") val appliedAt: Long?,
+    @ColumnInfo(name = "last_applied_source") val lastAppliedSource: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )

@@ -133,7 +133,8 @@ enum class SyncErrorKind {
  * The three times are three fields (R16-3): HA's own change text [observedChangedAt], information only and never
  * parsed into a date for a decision; the fetch time of the last valid answer [lastSuccessAt], which a failure never
  * moves; and the application time [appliedAt], dated [appliedOn] (ISO `YYYY-MM-DD`, the day it was applied).
- * [appliedAction], [appliedOn] and [appliedAt] are the provenance of the last change the binding made (R16-11).
+ * [appliedAction], [appliedOn], [appliedAt] and [lastAppliedSource] are the provenance of the last change the binding
+ * made (R16-11, C33): all four null until one is applied, then all four set, and only the applier sets them (I13).
  *
  * Whether the binding is ACTIVE, STOPPED, NEEDS_TOKEN or NOT_MAINTAINED_HERE is derived when it is read (C17),
  * never stored. No field holds a token.
@@ -155,9 +156,48 @@ data class SeasonSyncBinding(
     val appliedAction: SeasonAction?,
     val appliedOn: String?,
     val appliedAt: Long?,
+    val lastAppliedSource: LastAppliedSource?,
     val createdAt: Long,
     val updatedAt: Long,
 )
+
+/**
+ * #16 (C33, R16-Q-H) — who applied the binding's last change: Home Assistant's answer under [SyncMode.FOLLOW], or the
+ * owner's forced season. It is the image of the applying binding's mode ([appliedSourceOf]), so a forced application
+ * is never shown as one from Home Assistant; [FORCED_IN] only ever goes with a START and [FORCED_OUT] with an END.
+ */
+enum class LastAppliedSource { HOME_ASSISTANT, FORCED_IN, FORCED_OUT }
+
+/** #16 (C33(1)) — the source a change applied under [mode] records. */
+fun appliedSourceOf(mode: SyncMode): LastAppliedSource = when (mode) {
+    SyncMode.FOLLOW -> LastAppliedSource.HOME_ASSISTANT
+    SyncMode.FORCE_IN -> LastAppliedSource.FORCED_IN
+    SyncMode.FORCE_OUT -> LastAppliedSource.FORCED_OUT
+}
+
+/**
+ * #16 (C33(4)) — the phone's provenance line for a binding's last change, dated [SeasonSyncBinding.appliedOn]: from
+ * Home Assistant by its action (P16-34, P16-35), or forced in or out of season (P16-83, P16-84). The phone maps each
+ * to its sentence and never derives the line itself.
+ */
+enum class AppliedLine {
+    STARTED_FROM_HOME_ASSISTANT,
+    ENDED_FROM_HOME_ASSISTANT,
+    FORCED_IN_SEASON,
+    FORCED_OUT_OF_SEASON,
+}
+
+/** #16 (C33(4)) — [binding]'s provenance line, chosen by its source; no source, no line. */
+fun appliedLineOf(binding: SeasonSyncBinding): AppliedLine? = when (binding.lastAppliedSource) {
+    null -> null
+    LastAppliedSource.HOME_ASSISTANT -> when (binding.appliedAction) {
+        SeasonAction.START -> AppliedLine.STARTED_FROM_HOME_ASSISTANT
+        SeasonAction.END -> AppliedLine.ENDED_FROM_HOME_ASSISTANT
+        null -> null
+    }
+    LastAppliedSource.FORCED_IN -> AppliedLine.FORCED_IN_SEASON
+    LastAppliedSource.FORCED_OUT -> AppliedLine.FORCED_OUT_OF_SEASON
+}
 
 /** #16 (C4) — the longest entity id a link accepts. */
 const val MAX_ENTITY_ID_LENGTH = 255

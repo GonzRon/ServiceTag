@@ -56,7 +56,9 @@ def linked() -> dict:
             "state": "ACTIVE", "observation": {"state": "ON", "haLastChanged": "2026-02-09T18:00:00+00:00"},
             "lastSuccessAt": 1770724800000, "lastAttemptAt": 1770768000000,
             "lastError": {"kind": "UNREACHABLE", "detail": None, "at": 1770768000000},
-            "lastApplied": {"action": "START", "occurredOn": "2026-02-10", "at": 1770681600000},
+            "lastApplied": {
+                "action": "START", "occurredOn": "2026-02-10", "at": 1770681600000, "source": "HOME_ASSISTANT",
+            },
         },
     }
 
@@ -105,7 +107,7 @@ def test_the_answer_carries_c3s_keys_and_nothing_more(phone21) -> None:
     assert set(answer["binding"]) == BINDING_KEYS
     assert set(answer["binding"]["observation"]) == {"state", "haLastChanged"}
     assert set(answer["binding"]["lastError"]) == {"kind", "detail", "at"}
-    assert set(answer["binding"]["lastApplied"]) == {"action", "occurredOn", "at"}
+    assert set(answer["binding"]["lastApplied"]) == {"action", "occurredOn", "at", "source"}
 
     phone21.reply("GET", "/v1/assets/a2/season-sync", 200, UNCONFIGURED)
     assert server_module.get_season_sync(asset_id="a2") == UNCONFIGURED

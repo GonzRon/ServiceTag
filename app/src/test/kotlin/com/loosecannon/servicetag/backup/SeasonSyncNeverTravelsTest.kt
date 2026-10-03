@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
+import com.loosecannon.servicetag.core.seasonsync.LastAppliedSource
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
@@ -58,7 +59,7 @@ class SeasonSyncNeverTravelsTest {
         revision = 5, observedState = HaSwitchState.ON, observedChangedAt = "2026-10-01T05:00:00+00:00",
         lastSuccessAt = 3_000L, lastAttemptAt = 3_500L, errorKind = SyncErrorKind.UNREACHABLE, errorDetail = "fetch-detail-x",
         errorAt = 3_500L, appliedAction = SeasonAction.START, appliedOn = "2026-10-01", appliedAt = 3_000L,
-        createdAt = 2_500L, updatedAt = 3_500L,
+        lastAppliedSource = LastAppliedSource.HOME_ASSISTANT, createdAt = 2_500L, updatedAt = 3_500L,
     )
 
     private suspend fun link(into: FakeGraph) {

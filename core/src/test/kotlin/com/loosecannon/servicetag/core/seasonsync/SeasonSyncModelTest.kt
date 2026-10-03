@@ -1,9 +1,11 @@
 package com.loosecannon.servicetag.core.seasonsync
 
+import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.testing.InMemoryHaConnectionRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonSyncRepository
 import com.loosecannon.servicetag.core.testing.ScriptedHaStateReader
 import com.loosecannon.servicetag.core.testing.haConnectionOf
+import com.loosecannon.servicetag.core.testing.seasonSyncBindingOf
 import java.io.File
 import java.lang.reflect.Modifier
 import kotlinx.coroutines.test.runTest
@@ -11,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -181,7 +184,7 @@ class SeasonSyncModelTest {
         val columns = listOf(
             "asset_id", "connection_id", "entity_id", "mode", "enabled", "revision", "observed_state",
             "observed_changed_at", "last_success_at", "last_attempt_at", "error_kind", "error_detail", "error_at",
-            "applied_action", "applied_on", "applied_at", "created_at", "updated_at",
+            "applied_action", "applied_on", "applied_at", "last_applied_source", "created_at", "updated_at",
         )
         assertEquals(
             columns.map(::camel).sorted(),
@@ -321,5 +324,44 @@ class SeasonSyncModelTest {
             connections.upsert(connection)
             assertEquals(connection, connections.get())
         }
+    }
+
+    // ---- row 78: the source and the phone's line rule (C33(1), C33(4)) ----
+
+    @Test
+    fun appliedSourceOfMapsEachMode() {
+        assertEquals(listOf("HOME_ASSISTANT", "FORCED_IN", "FORCED_OUT"), LastAppliedSource.entries.map { it.name })
+        assertEquals(
+            listOf(LastAppliedSource.HOME_ASSISTANT, LastAppliedSource.FORCED_IN, LastAppliedSource.FORCED_OUT),
+            SyncMode.entries.map(::appliedSourceOf),
+        )
+    }
+
+    private fun appliedBy(action: SeasonAction, source: LastAppliedSource?) = seasonSyncBindingOf("heater").copy(
+        appliedAction = action, appliedOn = "2026-06-10", appliedAt = 1_000L, lastAppliedSource = source,
+    )
+
+    @Test
+    fun appliedLineFollowsTheSource() {
+        assertEquals(
+            listOf(
+                AppliedLine.STARTED_FROM_HOME_ASSISTANT,
+                AppliedLine.ENDED_FROM_HOME_ASSISTANT,
+                AppliedLine.FORCED_IN_SEASON,
+                AppliedLine.FORCED_OUT_OF_SEASON,
+            ),
+            listOf(
+                appliedBy(SeasonAction.START, LastAppliedSource.HOME_ASSISTANT),
+                appliedBy(SeasonAction.END, LastAppliedSource.HOME_ASSISTANT),
+                appliedBy(SeasonAction.START, LastAppliedSource.FORCED_IN),
+                appliedBy(SeasonAction.END, LastAppliedSource.FORCED_OUT),
+            ).map(::appliedLineOf),
+        )
+    }
+
+    @Test
+    fun noSourceNoLine() {
+        assertNull(appliedLineOf(seasonSyncBindingOf("heater")), "nothing applied")
+        assertNull(appliedLineOf(appliedBy(SeasonAction.START, null)), "an action without a source draws no line")
     }
 }
