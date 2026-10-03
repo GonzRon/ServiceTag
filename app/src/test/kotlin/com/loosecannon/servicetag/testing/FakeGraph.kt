@@ -208,6 +208,13 @@ import kotlinx.coroutines.sync.Mutex
 class FakeGraph(
     queryContext: CoroutineContext = Dispatchers.Default,
     val db: AppDatabase = inMemoryDb(queryContext),
+    /**
+     * #16 (C18): the token store as `AppGraph` builds it, over the JDK's AES-GCM and a temporary no-backup directory.
+     * A test passes the previous graph's store to model a restart (the key and the file stay), or a fresh one to model
+     * a platform restore (neither comes back).
+     */
+    val secretStore: KeystoreSecretStore =
+        KeystoreSecretStore(kotlin.io.path.createTempDirectory("no-backup").toFile(), JdkAead()),
 ) {
 
     /** Move this before a call to give the write a timestamp the test can assert on. */
@@ -648,10 +655,6 @@ class FakeGraph(
     /** #16: the Home Assistant connection and the season bindings, over the real tables, as `AppGraph` builds them. */
     val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
     val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
-
-    /** #16 (C18): the token store as `AppGraph` builds it, over the JDK's AES-GCM and a temporary no-backup directory. */
-    val secretStore: KeystoreSecretStore =
-        KeystoreSecretStore(kotlin.io.path.createTempDirectory("no-backup").toFile(), JdkAead())
 
     /**
      * #16 (C32): the network the Home Assistant client's home-network check reads, set by a test; by default the

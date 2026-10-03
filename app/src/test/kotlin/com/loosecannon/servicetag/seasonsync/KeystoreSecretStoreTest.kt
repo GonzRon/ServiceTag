@@ -3,7 +3,10 @@ package com.loosecannon.servicetag.seasonsync
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -167,7 +170,7 @@ class KeystoreSecretStoreTest {
         phone.aead.seal("another.alias", byteArrayOf(1)) // not this store's
         File(phone.dir, "conn-2.bin1234.tmp").writeBytes(byteArrayOf(1)) // an interrupted put
 
-        phone.store.sweepOrphans(setOf("conn-2"))
+        phone.store.sweepOrphans { setOf("conn-2") }
 
         assertEquals(listOf("conn-2.bin"), phone.dir.list()!!.toList())
         assertEquals(setOf("servicetag.ha.conn-2", "another.alias"), phone.aead.aliases())
@@ -177,13 +180,31 @@ class KeystoreSecretStoreTest {
 
     @Test fun aKnownOneIsKept() = runBlocking {
         val phone = Phone()
-        phone.store.sweepOrphans(setOf("conn-1")) // nothing stored yet: no directory, no failure
+        phone.store.sweepOrphans { setOf("conn-1") } // nothing stored yet: no directory, no failure
         phone.store.put("conn-1", token)
 
-        phone.store.sweepOrphans(setOf("conn-1"))
+        phone.store.sweepOrphans { setOf("conn-1") }
 
         assertEquals(token, phone.store.get("conn-1"))
         assertTrue(phone.store.has("conn-1"))
+    }
+
+    @Test fun aTokenPutWhileTheSweepReadsItsIdsWaitsAndIsKept() = runBlocking {
+        val phone = Phone()
+        val reading = CompletableDeferred<Unit>()
+        val staleIds = CompletableDeferred<Set<String>>()
+        val sweep = launch { phone.store.sweepOrphans { reading.complete(Unit); staleIds.await() } }
+        reading.await()
+
+        // A Save commits its row and puts its token while the sweep still holds ids read before that row.
+        val save = launch { phone.store.put("conn-1", token) }
+        yield()
+        assertFalse(save.isCompleted)
+        staleIds.complete(emptySet())
+        sweep.join()
+        save.join()
+
+        assertEquals(token, phone.store.get("conn-1"))
     }
 
     // Row 48 — a platform restore (H5).

@@ -29,8 +29,10 @@ import kotlinx.coroutines.withContext
  * without decrypting. [delete] removes the key first, so a file left behind can no longer be opened, and then the
  * file. [sweepOrphans] removes what names no known connection.
  *
- * Every call runs under one lock, off the caller's thread. The token is never logged, never in an exception message
- * and never in [toString]: nothing here logs at all.
+ * Every call runs under one lock, off the caller's thread. [has], [put], [delete], [keys] and [sweepOrphans] pass a
+ * Keystore failure through to the caller, loud by design (a missing key or file is never a throw), and a malformed id
+ * is an `IllegalArgumentException` on every call. The token is never logged, never in an exception message and never
+ * in [toString]: nothing here logs at all.
  */
 class KeystoreSecretStore(
     noBackupDir: File,
@@ -67,13 +69,19 @@ class KeystoreSecretStore(
      * Removes every file in the directory but a known connection's `<id>.bin` — an orphan's, or the temporary file an
      * interrupted [put] left — and every [ALIAS_PREFIX] key that names no known connection; another alias is left
      * alone. Run at start, off the main thread, guarded by the caller (C18): a failure is repeated at the next start.
+     *
+     * [knownIds] is read under the store's lock, so a token put after its row commits (C17) waits for the sweep and is
+     * never swept with a stale set. It must not call this store: the lock is not reentrant.
      */
-    suspend fun sweepOrphans(knownIds: Set<String>) = locked {
-        val kept = knownIds.mapTo(HashSet()) { it + SUFFIX }
-        dir.listFiles().orEmpty().filter { it.name !in kept }.forEach { it.delete() }
-        aead.aliases()
-            .filter { it.startsWith(ALIAS_PREFIX) && it.removePrefix(ALIAS_PREFIX) !in knownIds }
-            .forEach(aead::deleteKey)
+    suspend fun sweepOrphans(knownIds: suspend () -> Set<String>) = lock.withLock {
+        val known = knownIds()
+        withContext(io) {
+            val kept = known.mapTo(HashSet()) { it + SUFFIX }
+            dir.listFiles().orEmpty().filter { it.name !in kept }.forEach { it.delete() }
+            aead.aliases()
+                .filter { it.startsWith(ALIAS_PREFIX) && it.removePrefix(ALIAS_PREFIX) !in known }
+                .forEach(aead::deleteKey)
+        }
     }
 
     private fun read(key: String): Secret? {
