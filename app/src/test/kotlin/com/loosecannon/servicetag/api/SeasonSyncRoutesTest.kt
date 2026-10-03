@@ -163,6 +163,14 @@ class SeasonSyncRoutesTest {
         assertEquals("503", error.text("detail"))
         assertEquals(linkedAt + 60_000, error.millis("at"))
         assertEquals("the last change stays the binding's provenance", applied, failed.obj("lastApplied"))
+
+        graph.now = linkedAt + 120_000
+        graph.haStateReader.answer = { HaReadOutcome.Observed(HaSwitchState.ON, "2026-02-10T06:30:00+00:00") }
+        runBlocking { graph.seasonSyncRunner.syncNow(AssetId(heater)) }
+        val fresh = seasonSync(heater).obj("binding")
+        assertEquals("an unchanged answer is a fresh success", linkedAt + 120_000, fresh.millis("lastSuccessAt"))
+        assertEquals("no new change, so the applied time stays", linkedAt, fresh.obj("lastApplied").millis("at"))
+        assertTrue("a success clears the error", fresh.isNull("lastError"))
     }
 
     /** No binding is a 200 with `binding: null`, never a 404 — with no connection, and with one. */
@@ -246,7 +254,7 @@ class SeasonSyncRoutesTest {
         graph.backgroundAllowed = true
         connect(cadence = SyncCadence.WEEKLY, background = BackgroundChecks.ON)
 
-        val home = call("GET", "/v1/assets/$heater/season-sync").bodyText()
+        val home = seasonSync(heater).toString()
         assertFalse(home, "ExampleHomeWifi" in home)
         assertFalse(home, "192.168.0.10" in home)
         val atHome = Json.parseToJsonElement(home).jsonObject.obj("connection")
@@ -258,7 +266,7 @@ class SeasonSyncRoutesTest {
 
         graph.backgroundAllowed = false
         connect(address = "https://ha.example:8123", eligibility = NetworkEligibility.ANY_NETWORK, wifi = null)
-        val any = call("GET", "/v1/assets/$heater/season-sync").bodyText()
+        val any = seasonSync(heater).toString()
         assertFalse(any, "ha.example" in any)
         val anywhere = Json.parseToJsonElement(any).jsonObject.obj("connection")
         assertEquals("a kept cadence", "WEEKLY", anywhere.text("cadence"))

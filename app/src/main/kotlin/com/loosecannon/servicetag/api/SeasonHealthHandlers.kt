@@ -45,8 +45,8 @@ import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
  * no use case that could is a collaborator of this class.
  *
  * #16 adds one read, the asset's Home Assistant season sync (C24), over the binding and connection repositories and
- * the token store's `has`; it writes nothing, and a season write it does not own answers `SEASON_SYNC_ENABLED` from
- * the use case while a binding is enabled.
+ * the token store's `has`, and writes nothing. Its season writes answer `SEASON_SYNC_ENABLED` from their use cases'
+ * guard while a binding is enabled; nothing here re-checks it.
  *
  * A read that names an asset answers the shipped 404 `no_such_asset` when it is not there, before
  * any read model is asked: the health and season views of a vanished asset are empty rather than

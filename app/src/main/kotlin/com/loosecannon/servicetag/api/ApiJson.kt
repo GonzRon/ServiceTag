@@ -95,7 +95,9 @@ internal const val API_VERSION: Int = 1
  * `ignoreUnknownKeys = false` so a misspelled field is a 400 naming it, rather than an intent
  * silently dropped — on a `PATCH` that is the difference between an error and a lost edit.
  * `encodeDefaults = true` matches `BackupCodec`'s own `Json` (`BackupCodec.kt:54`–`57`), so every
- * field is present in every response and a client never distinguishes absent from default.
+ * field is present in every response and a client never distinguishes absent from default — with one exception:
+ * `SeasonSyncConnectionDto`, whose five settings keys `GET /v1/assets/{id}/season-sync` omits when `configured` is
+ * false (#16, C3).
  * `prettyPrint` is off: this goes over a socket, not into a file a person reads.
  */
 internal val ApiJson: Json = Json {
