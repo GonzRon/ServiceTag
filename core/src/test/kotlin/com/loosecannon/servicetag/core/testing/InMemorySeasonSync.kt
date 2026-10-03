@@ -1,12 +1,12 @@
 package com.loosecannon.servicetag.core.testing
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaStateReader
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
-import com.loosecannon.servicetag.core.seasonsync.HomeNetwork
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
@@ -107,8 +107,8 @@ class InMemoryHaConnectionRepository(
             NetworkEligibility.ANY_NETWORK -> false
             NetworkEligibility.HOME_NETWORK_ONLY -> true
         }
-        if (home != (connection.homeNetwork != null)) {
-            throw AssertionError("ha_connection: $eligibility with the captured network ${connection.homeNetwork}")
+        if (home != (connection.homeNetworkSsid != null)) {
+            throw AssertionError("ha_connection: $eligibility with the captured network ${connection.homeNetworkSsid}")
         }
         if (connection.baseUrl.startsWith("http://") && !home) {
             throw AssertionError("ha_connection: an http address with $eligibility")
@@ -177,23 +177,25 @@ class ScriptedHaStateReader : HaStateReader {
 }
 
 /**
- * A fictional connection: the canonical http fixture (C-7), checked daily, only on the fictional home Wi-Fi (C4a).
- * With [NetworkEligibility.ANY_NETWORK] the captured network defaults to none.
+ * A fictional connection: the canonical http fixture (C-7), checked daily, only on the fictional home Wi-Fi, with
+ * background checks off (C4a). With [NetworkEligibility.ANY_NETWORK] the captured network defaults to none.
  */
 fun haConnectionOf(
     id: String = "conn-1",
     baseUrl: String = "http://192.168.0.10:8123",
     cadence: SyncCadence = SyncCadence.DAILY,
     networkEligibility: NetworkEligibility = NetworkEligibility.HOME_NETWORK_ONLY,
-    homeNetwork: HomeNetwork? =
-        if (networkEligibility == NetworkEligibility.HOME_NETWORK_ONLY) HomeNetwork.Wifi("ExampleHomeWifi") else null,
+    homeNetworkSsid: String? =
+        if (networkEligibility == NetworkEligibility.HOME_NETWORK_ONLY) "ExampleHomeWifi" else null,
+    backgroundChecks: BackgroundChecks = BackgroundChecks.OFF,
     at: Long = 1_759_000_000_000L,
 ): HaConnection = HaConnection(
     id = id,
     baseUrl = baseUrl,
     cadence = cadence,
     networkEligibility = networkEligibility,
-    homeNetwork = homeNetwork,
+    homeNetworkSsid = homeNetworkSsid,
+    backgroundChecks = backgroundChecks,
     createdAt = at,
     updatedAt = at,
 )

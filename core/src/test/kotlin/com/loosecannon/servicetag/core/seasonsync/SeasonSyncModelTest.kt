@@ -187,13 +187,11 @@ class SeasonSyncModelTest {
         )
 
         val connectionColumns = listOf(
-            "id", "base_url", "cadence", "network_eligibility", "home_network_kind", "home_network_ssid", "created_at",
+            "id", "base_url", "cadence", "network_eligibility", "home_network_ssid", "background_checks", "created_at",
             "updated_at",
         )
-        // home_network_kind (WIFI | WIRED) and home_network_ssid are one field's two columns (C4a, C9).
-        val oneField = mapOf("home_network_kind" to "homeNetwork", "home_network_ssid" to "homeNetwork")
         assertEquals(
-            connectionColumns.map { oneField[it] ?: camel(it) }.distinct().sorted(),
+            connectionColumns.map(::camel).sorted(),
             instanceFieldsOf(HaConnection::class.java),
             "ha_connection (C9): its eight columns; no token, no display name, no secret marker",
         )
@@ -211,20 +209,32 @@ class SeasonSyncModelTest {
     }
 
     @Test
-    fun theHomeNetworkIsANameOrWiredAndNothingElse() {
-        assertEquals(listOf("ANY_NETWORK", "HOME_NETWORK_ONLY"), NetworkEligibility.entries.map { it.name })
-        assertEquals(listOf("Wifi", "Wired"), HomeNetwork::class.java.declaredClasses.map { it.simpleName }.sorted())
-        assertEquals(
-            listOf("ssid"),
-            instanceFieldsOf(HomeNetwork.Wifi::class.java),
-            "a name: never a BSSID, an address, a location or a time",
+    fun backgroundChecksAreOffOrOnAndOffByDefault() = runTest {
+        assertEquals(listOf("OFF", "ON"), BackgroundChecks.entries.map { it.name })
+        assertEquals(BackgroundChecks.OFF, haConnectionOf().backgroundChecks, "the fixture's is a new connection's")
+
+        val connections = InMemoryHaConnectionRepository(InMemorySeasonSyncRepository())
+        val anyNetworkOn = haConnectionOf(
+            baseUrl = "https://ha.example:8123",
+            networkEligibility = NetworkEligibility.ANY_NETWORK,
+            backgroundChecks = BackgroundChecks.ON,
         )
-        assertEquals(emptyList(), instanceFieldsOf(HomeNetwork.Wired::class.java), "Ethernet has no name")
+        connections.upsert(anyNetworkOn)
+        assertEquals(anyNetworkOn, connections.get(), "stored whatever the eligibility")
+    }
+
+    @Test
+    fun theEligibilityAndTheCurrentNetworkAreClosedSets() {
+        assertEquals(listOf("ANY_NETWORK", "HOME_NETWORK_ONLY"), NetworkEligibility.entries.map { it.name })
         assertEquals(
             listOf("None", "Other", "Wifi", "WifiUnnamed", "Wired"),
             CurrentNetwork::class.java.declaredClasses.map { it.simpleName }.sorted(),
         )
-        assertEquals(listOf("ssid"), instanceFieldsOf(CurrentNetwork.Wifi::class.java))
+        assertEquals(
+            listOf("ssid"),
+            instanceFieldsOf(CurrentNetwork.Wifi::class.java),
+            "a name: never a BSSID, an address, a location or a time",
+        )
     }
 
     @Test
@@ -243,17 +253,15 @@ class SeasonSyncModelTest {
         val anyNetwork =
             haConnectionOf(baseUrl = "https://ha.example:8123", networkEligibility = NetworkEligibility.ANY_NETWORK)
         val onHomeWifi = haConnectionOf()
-        val onWired = haConnectionOf(homeNetwork = HomeNetwork.Wired)
-        val nothingCaptured = haConnectionOf(homeNetwork = null)
+        val nothingCaptured = haConnectionOf(homeNetworkSsid = null)
 
         val expected = everyNetwork.map { Triple("any network", anyNetwork, it) to true } +
             everyNetwork.map { Triple("the home Wi-Fi", onHomeWifi, it) to (it == homeWifi) } +
-            everyNetwork.map { Triple("wired", onWired, it) to (it == CurrentNetwork.Wired) } +
             everyNetwork.map { Triple("nothing captured", nothingCaptured, it) to false }
         val wrong = expected
             .filter { (case, eligible) -> eligibleNow(case.second, case.third) != eligible }
             .map { (case, eligible) -> "${case.first} × ${case.third}: expected $eligible" }
-        assertEquals(emptyList(), wrong, "a hidden name, another name, a case variant or a quoted name is never home")
+        assertEquals(emptyList(), wrong, "only the captured name, exactly, is home; a hidden name or wired never is")
     }
 
     @Test
@@ -261,11 +269,11 @@ class SeasonSyncModelTest {
         val connections = InMemoryHaConnectionRepository(InMemorySeasonSyncRepository())
         val https = "https://ha.example:8123"
         val refused = listOf(
-            "the home network with nothing captured" to haConnectionOf(homeNetwork = null),
+            "the home network with nothing captured" to haConnectionOf(homeNetworkSsid = null),
             "any network with a captured network" to haConnectionOf(
                 baseUrl = https,
                 networkEligibility = NetworkEligibility.ANY_NETWORK,
-                homeNetwork = HomeNetwork.Wired,
+                homeNetworkSsid = "ExampleHomeWifi",
             ),
             "http with any network" to haConnectionOf(networkEligibility = NetworkEligibility.ANY_NETWORK),
         )
@@ -276,7 +284,6 @@ class SeasonSyncModelTest {
 
         for (connection in listOf(
             haConnectionOf(),
-            haConnectionOf(homeNetwork = HomeNetwork.Wired),
             haConnectionOf(baseUrl = https),
             haConnectionOf(baseUrl = https, networkEligibility = NetworkEligibility.ANY_NETWORK),
         )) {

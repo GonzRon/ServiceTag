@@ -8,10 +8,15 @@ import com.loosecannon.servicetag.core.model.SeasonAction
  * `scheme://host[:port]`: lowercase scheme and host, no path, no trailing slash. There is no token here and no
  * marker of one: whether a token exists is the [SecretStore]'s answer alone (C9, C18), keyed by [id].
  *
- * The connection's three settings (C4a, R16-Q-D) are the installation's, not a binding's: [cadence], how often it
- * is checked; [networkEligibility], where the token may be sent from; and [homeNetwork], the network captured at
- * setup (C32). Every stored row keeps two invariants, which C17's writers hold: [NetworkEligibility.HOME_NETWORK_ONLY]
- * exactly when [homeNetwork] is not null, and an `http` [baseUrl] only with [NetworkEligibility.HOME_NETWORK_ONLY].
+ * The connection's settings (C4a, R16-Q-D, R16-20) are the installation's, not a binding's: [cadence], how often it
+ * is checked; [networkEligibility], where the token may be sent from; [homeNetworkSsid], the home network captured at
+ * setup (C32, R16-21); and [backgroundChecks], whether the home-network mode also checks from background work.
+ *
+ * [homeNetworkSsid] is the Wi-Fi network's name as Android reports it, without its quotes, compared exactly; null when
+ * nothing is captured. It is never a BSSID, an address, a location or a time. A wired network has no name, so it is
+ * never captured. Every stored row keeps two invariants, which C17's writers hold:
+ * [NetworkEligibility.HOME_NETWORK_ONLY] exactly when [homeNetworkSsid] is not null, and an `http` [baseUrl] only with
+ * [NetworkEligibility.HOME_NETWORK_ONLY].
  *
  * Device-local configuration: never in a ServiceTag backup, export, merge or pack (R16-Q-E).
  */
@@ -20,7 +25,8 @@ data class HaConnection(
     val baseUrl: String,
     val cadence: SyncCadence,
     val networkEligibility: NetworkEligibility,
-    val homeNetwork: HomeNetwork?,
+    val homeNetworkSsid: String?,
+    val backgroundChecks: BackgroundChecks,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -40,25 +46,24 @@ enum class SyncCadence(val hours: Long) {
 /**
  * #16 (C4a, R16-Q-D) — where the token may be sent from. [ANY_NETWORK]: from any network, to an https origin the
  * owner made reachable themselves (limit 18). [HOME_NETWORK_ONLY]: only while this phone is on the network captured
- * at setup, [HaConnection.homeNetwork]; the one mode an http address is allowed in (C8, C19).
+ * at setup, [HaConnection.homeNetworkSsid]; the one mode an http address is allowed in (C8, C19).
  */
 enum class NetworkEligibility { ANY_NETWORK, HOME_NETWORK_ONLY }
 
 /**
- * #16 (C4a, C32, R16-21) — the home network's identity, captured at setup: the Wi-Fi network's name as Android
- * reports it, without its quotes, compared exactly; or [Wired] for Ethernet, which has no name. Never a BSSID, an
- * address, a location or a time.
+ * #16 (C4a, R16-20 as amended) — whether a [NetworkEligibility.HOME_NETWORK_ONLY] connection is also checked from
+ * background work. [OFF], what a new connection gets (C17): checks run only when the app is opened and on Sync now,
+ * and nothing more is asked of Android. [ON]: the app may ask for what Android needs to name the Wi-Fi network from
+ * the background, and the periodic work then checks only while the captured network matches; refused or withdrawn,
+ * it falls back to [OFF]'s behaviour. Stored whatever the eligibility; [NetworkEligibility.ANY_NETWORK] always checks
+ * in the background, so there it changes nothing.
  */
-sealed interface HomeNetwork {
-    data class Wifi(val ssid: String) : HomeNetwork
-
-    data object Wired : HomeNetwork
-}
+enum class BackgroundChecks { OFF, ON }
 
 /**
  * #16 (C4a, C32) — the network this phone is on as C32's reader saw it, once, just before a request: a Wi-Fi
- * network and its name; a Wi-Fi network whose name Android hid ([WifiUnnamed]); [Wired]; [Other], any other
- * transport; or [None], no network at all.
+ * network and its name; a Wi-Fi network whose name Android hid ([WifiUnnamed]); [Wired], a wired network, which
+ * has no name and so is never the home network; [Other], any other transport; or [None], no network at all.
  */
 sealed interface CurrentNetwork {
     data class Wifi(val ssid: String) : CurrentNetwork
@@ -75,17 +80,16 @@ sealed interface CurrentNetwork {
 /**
  * #16 (C4a, C19 step 1a, I10) — whether [connection]'s token may be sent from [current].
  * [NetworkEligibility.ANY_NETWORK] is true on every network. [NetworkEligibility.HOME_NETWORK_ONLY] is true only on a
- * Wi-Fi network whose name equals the captured one exactly, or on a wired network when the captured one is
- * [HomeNetwork.Wired]. A hidden name is never eligible, and neither is a home-network connection with nothing
- * captured. A name match narrows where the token goes; it cannot prove which network this is (limit 15).
+ * Wi-Fi network whose name equals [HaConnection.homeNetworkSsid] exactly. A hidden name, a wired network and a
+ * home-network connection with nothing captured are never eligible. A name match narrows where the token goes; it
+ * cannot prove which network this is (limit 15).
  */
 fun eligibleNow(connection: HaConnection, current: CurrentNetwork): Boolean =
     when (connection.networkEligibility) {
         NetworkEligibility.ANY_NETWORK -> true
         NetworkEligibility.HOME_NETWORK_ONLY -> when (current) {
-            is CurrentNetwork.Wifi -> connection.homeNetwork == HomeNetwork.Wifi(current.ssid)
-            CurrentNetwork.Wired -> connection.homeNetwork == HomeNetwork.Wired
-            CurrentNetwork.WifiUnnamed, CurrentNetwork.Other, CurrentNetwork.None -> false
+            is CurrentNetwork.Wifi -> current.ssid == connection.homeNetworkSsid
+            CurrentNetwork.WifiUnnamed, CurrentNetwork.Wired, CurrentNetwork.Other, CurrentNetwork.None -> false
         }
     }
 
