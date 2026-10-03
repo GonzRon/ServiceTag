@@ -9,6 +9,8 @@ import com.loosecannon.servicetag.reminders.QuickActionDispatch
 import com.loosecannon.servicetag.reminders.ReminderDispatch
 import com.loosecannon.servicetag.reminders.ReminderHealthDispatch
 import com.loosecannon.servicetag.reminders.ReminderRunDispatch
+import com.loosecannon.servicetag.seasonsync.SeasonSyncDispatch
+import com.loosecannon.servicetag.seasonsync.startSeasonSync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -38,6 +40,8 @@ class ServiceTagApp : Application() {
         // And #27's check, for the backstop worker, which is constructed by WorkManager and never
         // through the graph.
         ReminderHealthDispatch.run = graph.reminderHealth
+        // #16 (C22): and the season sync worker's runner, for the same reason — WorkManager builds that worker too.
+        SeasonSyncDispatch.runner = graph.seasonSyncRunner
         // Unique periodic work with KEEP, so every process start is safe and none of them restarts
         // the period (spec §5.3). The alarm is armed by the run itself, not from here: the four
         // platform receivers, the digest fire and this worker all arm it, and an arm on the launch
@@ -65,6 +69,14 @@ class ServiceTagApp : Application() {
                 graph.materializeStaging.sweepAtStart(startedAt)
             } catch (_: Exception) {
                 Log.w("ServiceTagApp", "the download cache sweep failed; the next start repeats it")
+            }
+        }
+        // #16 (C18, C22): the Home Assistant key sweep, then the season sync work from the stored connection — launched
+        // here, before any activity exists. The sweep reads its ids under the token store's lock, so a token saved
+        // meanwhile waits for it and is never swept; both steps are guarded inside, and the line names the step only.
+        graph.appScope.launch(Dispatchers.IO) {
+            startSeasonSync(graph.secretStore, graph.haConnections, graph.uow, graph.seasonSyncRunner) {
+                Log.w("ServiceTagApp", it)
             }
         }
         graph.appScope.launch {

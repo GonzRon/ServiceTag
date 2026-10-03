@@ -21,6 +21,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.seasonsync.ResumeRefresh
 import com.loosecannon.servicetag.ui.api.DeveloperApiScreen
 import com.loosecannon.servicetag.ui.asset.AssetDetailScreen
 import com.loosecannon.servicetag.ui.asset.AssetEditScreen
@@ -73,6 +74,7 @@ fun ServiceTagRoot(
     deepLinks: SharedFlow<Route>,
     snackbars: SharedFlow<String>,
     readerMode: ReaderMode = rememberReaderMode(),
+    resumeRefresh: ResumeRefresh = graph.resumeRefresh,
 ) {
     val backStack = rememberNavBackStack(Route.Dashboard)
     val snackbarHost = remember { SnackbarHostState() }
@@ -107,6 +109,13 @@ fun ServiceTagRoot(
     LifecycleResumeEffect(readerMode, readsTags) {
         readerMode.hold(readsTags)
         onPauseOrDispose { readerMode.hold(false) }
+    }
+
+    // #16 (C23): on every resume, the Home Assistant season sync refreshes what is stale, on the graph's scope; the
+    // hook returns at once and draws nothing. The only such hook: no network callback, no other screen's.
+    LifecycleResumeEffect(resumeRefresh) {
+        resumeRefresh.onResume()
+        onPauseOrDispose { }
     }
 
     Scaffold(

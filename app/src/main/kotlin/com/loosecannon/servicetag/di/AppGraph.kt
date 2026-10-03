@@ -72,7 +72,15 @@ import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.seasonsync.EditSeasonSyncEntity
+import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult
+import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.SaveHaConnection
+import com.loosecannon.servicetag.core.seasonsync.SetSeasonSyncMode
+import com.loosecannon.servicetag.core.seasonsync.StopSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
@@ -239,7 +247,13 @@ import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
 import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
 import com.loosecannon.servicetag.seasonsync.HomeAssistantStateClient
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
+import com.loosecannon.servicetag.seasonsync.NetworkPlatform
 import com.loosecannon.servicetag.seasonsync.PlatformNetworkReader
+import com.loosecannon.servicetag.seasonsync.ResumeRefresh
+import com.loosecannon.servicetag.seasonsync.SeasonSyncRunner
+import com.loosecannon.servicetag.seasonsync.SeasonSyncWork
+import com.loosecannon.servicetag.seasonsync.WorkManagerSeasonSync
+import com.loosecannon.servicetag.seasonsync.storedHaConnection
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
@@ -673,12 +687,13 @@ class AppGraph(private val context: Context) {
     /**
      * #16 (C19, C32) — the Home Assistant client and the network reader it asks first: one GET of one entity at the
      * stored address, whose network setting it reads at each request; an https name in the home-network mode is
-     * resolved through #85's resolver. Uncalled until the season sync runner is wired.
+     * resolved through #85's resolver. The season sync runner below is its one caller, through the port; the stored
+     * connection's lookup is a database read the worker retries (C22).
      */
-    val currentNetworkReader: CurrentNetworkReader =
-        PlatformNetworkReader(AndroidNetworkPlatform(context.applicationContext))
+    private val networkPlatform: NetworkPlatform = AndroidNetworkPlatform(context.applicationContext)
+    val currentNetworkReader: CurrentNetworkReader = PlatformNetworkReader(networkPlatform)
     val haStateClient: HomeAssistantStateClient = HomeAssistantStateClient(
-        settings = haConnections::get,
+        settings = storedHaConnection(haConnections),
         networkPermissionGranted = networkPermissionGranted,
         currentNetwork = currentNetworkReader,
         resolver = InetHostResolver(networkPermissionGranted),
@@ -844,6 +859,41 @@ class AppGraph(private val context: Context) {
     val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(
         seasonActivations, recordSeasonActivation, uow, today, SeasonSyncGuard(seasonSyncBindings),
     )
+
+    /**
+     * #16 (C13, C16, C17, C21–C23) — Home Assistant season sync. The applier records each read through the season
+     * body (guarded activations, as every season writer); the runner is the one poller, single flight, and the
+     * commands' scheduler: after each commit it applies C22's rule to the unique periodic work, re-reading the
+     * background grant ([seasonSyncBackgroundAllowed]: precise location, and background location on API 29+, C32).
+     * [resumeRefresh] is the nav shell's resume hook (C23). `ServiceTagApp` assigns the worker's dispatch and runs the
+     * start-up sweep and schedule.
+     */
+    val recordSeasonSyncResult: RecordSeasonSyncResult = RecordSeasonSyncResult(
+        seasonSyncBindings, assets, seasonActivations, transferRecords, recordSeasonActivation, uow, clock, today,
+    )
+    val seasonSyncWork: SeasonSyncWork = WorkManagerSeasonSync(context.applicationContext)
+    val seasonSyncBackgroundAllowed: () -> Boolean =
+        { networkPlatform.preciseLocationGranted() && networkPlatform.backgroundLocationGranted() }
+    val seasonSyncRunner: SeasonSyncRunner = SeasonSyncRunner(
+        seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateClient, recordSeasonSyncResult,
+        seasonSyncWork, seasonSyncBackgroundAllowed, appScope, clock,
+    )
+    val resumeRefresh: ResumeRefresh = ResumeRefresh { seasonSyncRunner.launchRefreshIfStale() }
+    val linkSeasonSync: LinkSeasonSync = LinkSeasonSync(
+        assets, seasonActivations, transferRecords, seasonSyncBindings, haConnections, secretStore, setSeasonMode,
+        seasonSyncRunner, uow, clock, today,
+    )
+    val setSeasonSyncMode: SetSeasonSyncMode =
+        SetSeasonSyncMode(seasonSyncBindings, assets, recordSeasonSyncResult, seasonSyncRunner, uow, clock)
+    val editSeasonSyncEntity: EditSeasonSyncEntity =
+        EditSeasonSyncEntity(seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val resumeSeasonSync: ResumeSeasonSync =
+        ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val saveHaConnection: SaveHaConnection =
+        SaveHaConnection(haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock)
+    val forgetHaConnection: ForgetHaConnection =
+        ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow)
 
     // 1.4 — condition and health configuration (master plan §9, §10.1). A condition write inserts one
     // immutable row and nothing else; the offer writes only when accepted. The subject and policy

@@ -13,7 +13,19 @@ import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
+import com.loosecannon.servicetag.core.seasonsync.EditSeasonSyncEntity
+import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
+import com.loosecannon.servicetag.core.seasonsync.HaStateReader
+import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult
+import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.SaveHaConnection
+import com.loosecannon.servicetag.core.seasonsync.Secret
+import com.loosecannon.servicetag.core.seasonsync.SetSeasonSyncMode
+import com.loosecannon.servicetag.core.seasonsync.StopSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
@@ -167,6 +179,13 @@ import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
 import com.loosecannon.servicetag.seasonsync.JdkAead
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
 import com.loosecannon.servicetag.seasonsync.NetworkReading
+import com.loosecannon.servicetag.seasonsync.ResumeRefresh
+import com.loosecannon.servicetag.seasonsync.SeasonSyncRunner
+import com.loosecannon.servicetag.seasonsync.SeasonSyncWork
+import com.loosecannon.servicetag.seasonsync.SeasonSyncWorkRequest
+import androidx.work.ExistingPeriodicWorkPolicy
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.journal.CaseLinks
@@ -375,24 +394,66 @@ class FakeGraph(
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)
     val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory)
 
+    /** #16: the Home Assistant connection and the season bindings, over the real tables, as `AppGraph` builds them; one
+     * instance each, ahead of the five season writers whose guard reads [seasonSyncBindings] (C15). */
+    val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
+    val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
+
     /** 1.4 — the season model's commands, mirroring `AppGraph`'s five fields by name (master plan §1). */
     val setSeasonMode: SetSeasonMode =
         SetSeasonMode(
             assets, schedules, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-            SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+            SeasonSyncGuard(seasonSyncBindings),
         )
     val setMaintenanceBreak: SetMaintenanceBreak =
         SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
     val recordSeasonActivation: RecordSeasonActivation =
         RecordSeasonActivation(
             assets, events, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-            SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+            SeasonSyncGuard(seasonSyncBindings),
         )
     val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, todayPort)
     val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(
         seasonActivations, recordSeasonActivation, uow, todayPort,
-        SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+        SeasonSyncGuard(seasonSyncBindings),
     )
+
+    /**
+     * #16 (C13, C16, C17, C21–C23) — Home Assistant season sync as `AppGraph` wires it, over the doubles: the HA reader
+     * is [haStateReader]'s script, the periodic work is [seasonSyncWork]'s record, the background grant is
+     * [backgroundAllowed], and a command's fresh read is launched on [seasonSyncScope] (on [queryContext]), which
+     * [awaitSeasonSyncReads] joins.
+     */
+    val haStateReader: ScriptedHaStateReader = ScriptedHaStateReader()
+    val seasonSyncWork: RecordingSeasonSyncWork = RecordingSeasonSyncWork()
+    @Volatile var backgroundAllowed: Boolean = false
+    val seasonSyncBackgroundAllowed: () -> Boolean = { backgroundAllowed }
+    private val seasonSyncReads = SupervisorJob()
+    val seasonSyncScope: CoroutineScope = CoroutineScope(seasonSyncReads + queryContext)
+    suspend fun awaitSeasonSyncReads() = seasonSyncReads.children.toList().forEach { it.join() }
+    val recordSeasonSyncResult: RecordSeasonSyncResult = RecordSeasonSyncResult(
+        seasonSyncBindings, assets, seasonActivations, transferRecords, recordSeasonActivation, uow, clock, todayPort,
+    )
+    val seasonSyncRunner: SeasonSyncRunner = SeasonSyncRunner(
+        seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateReader, recordSeasonSyncResult,
+        seasonSyncWork, seasonSyncBackgroundAllowed, seasonSyncScope, clock, io = queryContext,
+    )
+    val resumeRefresh: ResumeRefresh = ResumeRefresh { seasonSyncRunner.launchRefreshIfStale() }
+    val linkSeasonSync: LinkSeasonSync = LinkSeasonSync(
+        assets, seasonActivations, transferRecords, seasonSyncBindings, haConnections, secretStore, setSeasonMode,
+        seasonSyncRunner, uow, clock, todayPort,
+    )
+    val setSeasonSyncMode: SetSeasonSyncMode =
+        SetSeasonSyncMode(seasonSyncBindings, assets, recordSeasonSyncResult, seasonSyncRunner, uow, clock)
+    val editSeasonSyncEntity: EditSeasonSyncEntity =
+        EditSeasonSyncEntity(seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val resumeSeasonSync: ResumeSeasonSync =
+        ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val saveHaConnection: SaveHaConnection =
+        SaveHaConnection(haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock)
+    val forgetHaConnection: ForgetHaConnection =
+        ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow)
 
     /** 1.4 — condition and health configuration, mirroring `AppGraph`'s six fields by name (master plan §1). */
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
@@ -422,7 +483,7 @@ class FakeGraph(
     val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-        applyTemplate, promoteCategory, SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+        applyTemplate, promoteCategory, SeasonSyncGuard(seasonSyncBindings),
     )
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
@@ -640,7 +701,7 @@ class FakeGraph(
         OperationalOffers(assets, conditions, acceptOperationalOffer, todayPort),
         SeasonOffers(
             assets, seasonActivations, acceptSeasonOffer, todayPort,
-            SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+            SeasonSyncGuard(seasonSyncBindings),
         ),
         ImpairmentOffers(assets, conditions, acceptImpairmentOffer, todayPort),
     )
@@ -665,10 +726,6 @@ class FakeGraph(
     val deadlineLocalDelivery: DeadlineLocalDeliveryRepository =
         RoomDeadlineLocalDeliveryRepository(db.deadlineLocalDeliveryDao())
 
-    /** #16: the Home Assistant connection and the season bindings, over the real tables, as `AppGraph` builds them. */
-    val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
-    val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
-
     /**
      * #16 (C32): the network the Home Assistant client's home-network check reads, set by a test; by default the
      * fictional captured Wi-Fi `ExampleHomeWifi`. The real reader is a platform fact (B9's device class).
@@ -690,6 +747,53 @@ class FakeGraph(
          * and the archives these tests round-trip would describe a database that no longer exists.
          */
         const val SCHEMA_VERSION = AppGraph.SCHEMA_VERSION
+    }
+}
+
+/**
+ * #16 (C21) — the Home Assistant reader as a script: every read is recorded (address, entity, token as passed) and
+ * answered by [answer], by default an unreachable server, which writes no season row.
+ */
+class ScriptedHaStateReader : HaStateReader {
+    data class Read(val baseUrl: String, val entityId: String, val token: Secret)
+
+    val reads: MutableList<Read> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var answer: suspend (entityId: String) -> HaReadOutcome =
+        { HaReadOutcome.NoDecision(SyncErrorKind.UNREACHABLE, null) }
+
+    override suspend fun read(baseUrl: String, entityId: String, token: Secret): HaReadOutcome {
+        reads += Read(baseUrl, entityId, token)
+        return answer(entityId)
+    }
+}
+
+/**
+ * #16 (C22) — the unique periodic work as WorkManager keeps it, without WorkManager: every call in [calls], and the
+ * one pending request in [enqueued] — `KEEP` keeps a pending one, any other policy replaces it, and a cancel clears it.
+ */
+class RecordingSeasonSyncWork : SeasonSyncWork {
+    sealed interface Call {
+        data class Ensure(val request: SeasonSyncWorkRequest) : Call
+
+        data object Cancel : Call
+    }
+
+    val calls: MutableList<Call> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var enqueued: SeasonSyncWorkRequest? = null
+
+    override fun isEnqueued(): Boolean = enqueued != null
+
+    override fun ensure(request: SeasonSyncWorkRequest) {
+        calls += Call.Ensure(request)
+        val pending = enqueued
+        enqueued = if (request.existingPolicy == ExistingPeriodicWorkPolicy.KEEP && pending != null) pending else request
+    }
+
+    override fun cancel() {
+        calls += Call.Cancel
+        enqueued = null
     }
 }
 
