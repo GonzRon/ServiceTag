@@ -89,8 +89,11 @@ class HomeAssistantStateClient(
         return read(stored, entityId, token)
     }
 
-    /** One `GET <base>/api/states/<entityId>`, through C5's mapper. */
-    suspend fun read(connection: HaConnection, entityId: String, token: Secret): HaReadOutcome =
+    /**
+     * One `GET <base>/api/states/<entityId>`, through C5's mapper. `internal` (review MINOR-2): the port above is the
+     * one poll entry, so the stored-connection check cannot be skipped.
+     */
+    internal suspend fun read(connection: HaConnection, entityId: String, token: Secret): HaReadOutcome =
         when (val exchange = exchange(connection, STATES_PATH + entityId, token)) {
             is Exchange.Answered -> mapHaAnswer(exchange.answer, entityId)
             is Exchange.Failed -> exchange.outcome

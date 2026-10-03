@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import java.io.ByteArrayInputStream
+import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -24,10 +25,12 @@ import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import javax.net.ssl.SSLHandshakeException
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -172,14 +175,44 @@ class HomeAssistantStateClientTest {
         )
     }
 
+    /** Review NOTE-5: the cap bounds what is read, not only what is kept. */
+    @Test
+    fun neverReadsPastTheCapFromALargeBody() = runBlocking {
+        val consumed = AtomicLong()
+        val mebibyte = paddedStateJson(1024 * 1024)
+        val h = Harness().apply {
+            ha.answer = {
+                Script(200, stream = {
+                    object : FilterInputStream(ByteArrayInputStream(mebibyte)) {
+                        override fun read(): Int = super.read().also { if (it >= 0) consumed.incrementAndGet() }
+
+                        override fun read(b: ByteArray, off: Int, len: Int): Int =
+                            super.read(b, off, len).also { if (it > 0) consumed.addAndGet(it.toLong()) }
+                    }
+                })
+            }
+        }
+
+        assertEquals(NoDecision(SyncErrorKind.MALFORMED, null), h.client().read(HOME_HTTP, ENTITY, TOKEN))
+        assertTrue("read ${consumed.get()} bytes of a 1 MiB body", consumed.get() <= 64 * 1024 + 1)
+    }
+
+    /** Ordered, not raced (review MINOR-1): the head is held on an IO thread before virtual time moves. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun theWholeCallStopsAtThirtySeconds() = runTest {
         val h = Harness().apply { ha.answer = { Script(200, holdHead = true) } }
+        val client = h.client(io = Dispatchers.IO)
 
-        val outcome = h.client(io = Dispatchers.IO).read(HOME_HTTP, ENTITY, TOKEN)
+        val pending = async { client.read(HOME_HTTP, ENTITY, TOKEN) }
+        testScheduler.runCurrent()
+        assertTrue("the head is asked for", h.ha.headRequested.await(5, TimeUnit.SECONDS))
+        testScheduler.advanceTimeBy(29_999)
+        assertTrue("still waiting just before thirty seconds", pending.isActive)
+        testScheduler.advanceTimeBy(2)
+        val outcome = pending.await()
 
         assertEquals(NoDecision(SyncErrorKind.TIMED_OUT, null), outcome)
-        assertEquals("the deadline, in virtual time", 30_000L, testScheduler.currentTime)
         assertTrue("the deadline disconnects", h.ha.connections.single().disconnects.get() >= 1)
     }
 
@@ -459,6 +492,7 @@ private class Script(
     val headFailure: Throwable? = null,
     val bodyFailure: IOException? = null,
     val holdHead: Boolean = false,
+    val stream: (() -> InputStream)? = null,
 )
 
 /** The fake Home Assistant behind the `open` seam: every open recorded, a scripted connection answered. */
@@ -527,6 +561,7 @@ private class FakeConnection(url: URL, private val script: Script, private val h
 
     override fun getInputStream(): InputStream {
         followed?.let { return it.inputStream }
+        script.stream?.let { return it() }
         val failure = script.bodyFailure ?: return ByteArrayInputStream(script.body)
         return object : InputStream() {
             override fun read(): Int = throw failure
