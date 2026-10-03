@@ -39,14 +39,23 @@ class HaEndpointPolicyTest {
 
     private val privateEdges = listOf(
         "10.0.0.1", "10.255.255.254", "172.16.0.1", "172.31.255.254", "192.168.0.1", "192.168.255.254",
+        "10.0.0.0", "10.255.255.255", "172.16.0.0", "172.31.255.255", "192.168.0.0", "192.168.255.255",
     )
+
+    /** Each field on its own: a whole endpoint prints redacted, so a mismatch would read as two equal texts. */
+    private fun assertEndpoint(scheme: HaScheme, host: String, kind: HaHostKind, canonical: String, actual: HaEndpoint) {
+        assertEquals(scheme, actual.scheme, "scheme")
+        assertEquals(host, actual.host, "host")
+        assertEquals(kind, actual.hostKind, "host kind")
+        assertEquals(canonical, actual.canonical, "canonical")
+    }
 
     // Row 10 — http to an RFC 1918 literal.
 
     @Test
     fun theCanonicalHttpFixtureIsAllowed() {
         val endpoint = allowed("http://192.168.0.10:8123")
-        assertEquals(HaEndpoint(HaScheme.HTTP, "192.168.0.10", HaHostKind.PRIVATE_IPV4, "http://192.168.0.10:8123"), endpoint)
+        assertEndpoint(HaScheme.HTTP, "192.168.0.10", HaHostKind.PRIVATE_IPV4, "http://192.168.0.10:8123", endpoint)
         assertEquals("http://192.168.0.10:8123", HaEndpointPolicy.canonical("http://192.168.0.10:8123"))
         assertFalse("192.168" in endpoint.toString(), "an endpoint's text names no address: $endpoint")
     }
@@ -68,7 +77,8 @@ class HaEndpointPolicyTest {
         EndpointProblem.NOT_A_PRIVATE_IPV4,
         listOf(
             "192.0.2.10", "172.32.0.1", "172.15.255.254", "192.169.0.1", "11.0.0.1", "127.0.0.1", "169.254.1.1",
-            "100.64.0.1", "0.0.0.0", "255.255.255.255",
+            "100.64.0.1", "0.0.0.0", "255.255.255.255", "173.16.0.1", "171.31.0.1", "193.168.0.1", "191.168.0.1",
+            "192.167.255.254", "9.255.255.255",
         ).map { "http://$it:8123" },
     )
 
@@ -82,9 +92,9 @@ class HaEndpointPolicyTest {
 
     @Test
     fun httpsToANameOrAPrivateIpv4LiteralIsAllowed() {
-        assertEquals(HaEndpoint(HaScheme.HTTPS, "ha.example", HaHostKind.NAME, "https://ha.example:8123"), allowed("https://ha.example:8123"))
-        assertEquals(
-            HaEndpoint(HaScheme.HTTPS, "192.168.0.10", HaHostKind.PRIVATE_IPV4, "https://192.168.0.10:8123"),
+        assertEndpoint(HaScheme.HTTPS, "ha.example", HaHostKind.NAME, "https://ha.example:8123", allowed("https://ha.example:8123"))
+        assertEndpoint(
+            HaScheme.HTTPS, "192.168.0.10", HaHostKind.PRIVATE_IPV4, "https://192.168.0.10:8123",
             allowed("https://192.168.0.10:8123"),
         )
         assertEach(
@@ -111,14 +121,16 @@ class HaEndpointPolicyTest {
         val inside = listOf(
             v4(10, 0, 0, 1), v4(10, 255, 255, 254), v4(172, 16, 0, 1), v4(172, 31, 255, 254), v4(192, 168, 0, 1),
             v4(192, 168, 255, 254), v6(0xfd00, 0, 0, 0, 0, 0, 0, 1), v6(0xfc00, 0, 0, 0, 0, 0, 0, 1),
-            v6(0xfdff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff),
+            v6(0xfdff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff), v4(10, 0, 0, 0), v4(10, 255, 255, 255),
+            v4(172, 16, 0, 0), v4(172, 31, 255, 255), v4(192, 168, 0, 0), v4(192, 168, 255, 255),
         )
         val outside = listOf(
             v6(0xfe80, 0, 0, 0, 0, 0, 0, 1), v6(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1), v4(192, 0, 2, 10),
             v4(127, 0, 0, 1), v4(169, 254, 1, 1), v4(100, 64, 0, 1), v4(172, 32, 0, 1), v4(172, 15, 255, 254),
             v4(192, 169, 0, 1), v4(0, 0, 0, 0), v4(255, 255, 255, 255), v6(0, 0, 0, 0, 0, 0, 0, 1),
             v6(0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x000a), v6(0xfbff, 0, 0, 0, 0, 0, 0, 1), v6(0xfe00, 0, 0, 0, 0, 0, 0, 1),
-            ByteArray(0), byteArrayOf(10), byteArrayOf(10, 0, 0, 1, 0),
+            ByteArray(0), byteArrayOf(10), byteArrayOf(10, 0, 0, 1, 0), v4(173, 16, 0, 1), v4(171, 31, 0, 1),
+            v4(193, 168, 0, 1), v4(191, 168, 0, 1), v4(192, 167, 255, 254), v4(9, 255, 255, 255),
         )
         for (address in inside) assertTrue(isPrivateLanAddress(address), "in: ${address.map { it.toInt() and 0xff }}")
         for (address in outside) assertFalse(isPrivateLanAddress(address), "out: ${address.map { it.toInt() and 0xff }}")

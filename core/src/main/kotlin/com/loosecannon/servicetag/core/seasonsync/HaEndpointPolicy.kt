@@ -38,8 +38,17 @@ enum class HaScheme(val text: String) { HTTP("http"), HTTPS("https") }
 /** [NAME] is only ever https, and still needs C19 step 1b: every address it resolves to is [isPrivateLanAddress]. */
 enum class HaHostKind { NAME, PRIVATE_IPV4 }
 
-/** An accepted address: [host] ASCII-lowercased, [canonical] `scheme://authority` with no slash (C19 step 2). */
-data class HaEndpoint(val scheme: HaScheme, val host: String, val hostKind: HaHostKind, val canonical: String) {
+/**
+ * An accepted address: [host] ASCII-lowercased, [canonical] `scheme://authority` with no slash (C19 step 2). The
+ * constructor is `internal` so only [HaEndpointPolicy.classify] makes one: an endpoint nobody checked is not one.
+ */
+@ConsistentCopyVisibility
+data class HaEndpoint internal constructor(
+    val scheme: HaScheme,
+    val host: String,
+    val hostKind: HaHostKind,
+    val canonical: String,
+) {
     /** No host and no address: an endpoint is not a log line (C19). */
     override fun toString(): String = "HaEndpoint(scheme=$scheme, hostKind=$hostKind)"
 }
@@ -51,10 +60,12 @@ sealed interface EndpointCheck {
 
 /**
  * #16 (C8; R16-6, R16-Q-B (a) and (c)) — the owner's address rule, pure: no resolution, no network, no platform
- * type. In order: rule 1, the scheme is `http` or `https` (ASCII case-insensitive), no userinfo, nothing after the
+ * type. The rules: rule 1, the scheme is `http` or `https` (ASCII case-insensitive), no userinfo, nothing after the
  * authority but one `/`; rule 2, the authority passes [isAllowedAuthority], #85's allowlist, called as shipped;
  * rule 3, `localhost` and `*.localhost` are refused; rule 4, `http` only to an IPv4 literal in RFC 1918; rule 5,
- * `https` to a DNS name or an RFC 1918 IPv4 literal. Nothing is trimmed, decoded or IDN-mapped. #85's hop rule is
+ * `https` to a DNS name or an RFC 1918 IPv4 literal. Rules 1 and 2 run first; after them the code checks the IPv6
+ * and IPv4 literals before rule 3, which is safe because those steps are disjoint (a literal is never `localhost`).
+ * Nothing is trimmed, decoded or IDN-mapped. #85's hop rule is
  * neither called nor changed: the downloader stays https-only. The saved address (C17) and every request (C19)
  * ask this again.
  */
@@ -113,7 +124,11 @@ fun isPrivateLanAddress(address: ByteArray): Boolean {
     return a == 10 || (a == 172 && b in 16..31) || (a == 192 && b == 168)
 }
 
-/** A host the allowlist passed with an all-digit last label is a canonical dotted quad: its four bytes. */
+/**
+ * Called only after [isAllowedAuthority] passed: under that precondition a host of four 1–3-digit parts is a
+ * canonical dotted quad (the allowlist sends every all-digit last label through its quad rule), and this returns
+ * its four bytes; any other host is a name, and this returns null.
+ */
 private fun ipv4LiteralBytes(host: String): ByteArray? {
     val parts = host.split('.')
     if (parts.size != 4 || parts.any { part -> part.length !in 1..3 || part.any { it !in '0'..'9' } }) return null
