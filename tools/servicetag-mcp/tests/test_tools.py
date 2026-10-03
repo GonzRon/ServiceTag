@@ -110,6 +110,7 @@ EXPECTED_TOOLS = (
     "update_installed_component",
     "remove_installed_component",
     "replace_installed_component",
+    "get_season_sync",
 )
 
 
@@ -123,18 +124,18 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_eighty_nine() -> None:
+def test_tool_names_are_ninety() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
     repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
     tools to sixty-three, #72's five loan tools to sixty-eight, #86's succession read to sixty-nine,
     #92's five attachment tools to seventy-four and its two replace tools to seventy-six, #15's eight supply
-    tools to eighty-four, and #47's five installed-component tools take it to eighty-nine; `TOOL_NAMES`, the
-    registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 89
-    assert len(server_module.TOOL_NAMES) == 89
+    tools to eighty-four, #47's five installed-component tools to eighty-nine, and #16's season sync read takes it
+    to ninety; `TOOL_NAMES`, the registered tools and the guard's `expected_count` all agree."""
+    assert len(EXPECTED_TOOLS) == 90
+    assert len(server_module.TOOL_NAMES) == 90
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 89
+    assert len(registered) == 90
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -1003,11 +1004,11 @@ def test_import_merge_docs_say_formats_1_to_20_twenty_three_tables_and_the_four_
 
 
 def test_the_readme_names_every_tool_the_supply_gate_and_the_installed_component_gate() -> None:
-    """#15's C28 and #47's C24: the README's tool list counts eighty-nine and names each tool, the schema-18
+    """#15's C28, #47's C24 and #16's C25: the README's tool list counts ninety and names each tool, the schema-18
     gate and the line key, and the schema-19 gate."""
     readme = " ".join(README.read_text(encoding="utf-8").split())
     tools = readme.split("## The tools", 1)[1]
-    assert tools.lstrip().startswith("Eighty-nine:"), tools[:40]
+    assert tools.lstrip().startswith("Ninety:"), tools[:40]
     for name in EXPECTED_TOOLS:
         assert f"`{name}`" in readme, name
     assert "The supply tools need schema 18." in readme

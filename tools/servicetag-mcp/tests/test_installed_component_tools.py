@@ -42,7 +42,8 @@ INSTALLED_COMPONENT_TOOLS = (
     "replace_installed_component",
 )
 """C23's five, named exactly as it names them (C-4: the add verb is `add_installed_component`, beside the shipped
-`create_component`). The registered total is **89** since #47, which `test_argument_guard.py` pins."""
+`create_component`). The registered total was **89** after #47 and is **90** since #16's season sync read, which
+`test_argument_guard.py` pins."""
 
 SIGNATURES = {
     "list_installed_components": ["asset_id"],
@@ -131,7 +132,8 @@ def test_the_five_tools_are_registered_guarded_and_listed_last() -> None:
         tool = server_module.mcp._tool_manager.get_tool(name)
         assert tool is not None, name
         assert tool.parameters.get("additionalProperties") is False, name
-    assert server_module.TOOL_NAMES[-len(INSTALLED_COMPONENT_TOOLS):] == INSTALLED_COMPONENT_TOOLS
+    # #16's season sync read follows them, last.
+    assert server_module.TOOL_NAMES[-len(INSTALLED_COMPONENT_TOOLS) - 1:-1] == INSTALLED_COMPONENT_TOOLS
 
 
 def test_each_tool_takes_exactly_c23s_arguments() -> None:
