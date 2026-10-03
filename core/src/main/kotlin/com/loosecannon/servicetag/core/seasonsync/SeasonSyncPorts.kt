@@ -47,6 +47,10 @@ interface SecretStore {
 
     suspend fun get(key: String): Secret?
 
+    /**
+     * Whether a value is stored for [key], its file and its key both present, without decrypting it (C18): a stored
+     * value that cannot be decrypted answers `has` true while [get] answers null.
+     */
     suspend fun has(key: String): Boolean
 
     suspend fun delete(key: String)

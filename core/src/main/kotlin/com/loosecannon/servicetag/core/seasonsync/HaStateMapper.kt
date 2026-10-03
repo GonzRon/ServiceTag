@@ -61,11 +61,11 @@ fun mapHaAnswer(answer: HaHttpAnswer, requestedEntity: String): HaReadOutcome {
 }
 
 /** The media type alone, before any parameter; media types compare without regard to case (RFC 9110 §8.3.1). */
-private fun isJsonMediaType(contentType: String?): Boolean =
+fun isJsonMediaType(contentType: String?): Boolean =
     contentType != null && contentType.substringBefore(';').trim().lowercase() == "application/json"
 
 /** One JSON object, or null for anything else: an array, a scalar, or text that does not parse. */
-private fun parseObject(body: ByteArray): JsonObject? = try {
+fun parseObject(body: ByteArray): JsonObject? = try {
     Json.parseToJsonElement(body.decodeToString()) as? JsonObject
 } catch (e: IllegalArgumentException) {
     // kotlinx.serialization's SerializationException is an IllegalArgumentException.
