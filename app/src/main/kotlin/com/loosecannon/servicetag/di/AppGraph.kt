@@ -234,7 +234,11 @@ import com.loosecannon.servicetag.reminders.DeadlineDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
+import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
+import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
+import com.loosecannon.servicetag.seasonsync.HomeAssistantStateClient
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
+import com.loosecannon.servicetag.seasonsync.PlatformNetworkReader
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
@@ -663,6 +667,20 @@ class AppGraph(private val context: Context) {
         references, attachments, attachmentStorage, linkLaunchPolicy, hops,
         FetchDocument(UrlConnectionTransport(networkPermissionGranted), hops, materializeStaging),
         addAttachment, networkPermissionGranted, clock,
+    )
+
+    /**
+     * #16 (C19, C32) — the Home Assistant client and the network reader it asks first: one GET of one entity at the
+     * stored address, whose network setting it reads at each request; an https name in the home-network mode is
+     * resolved through #85's resolver. Uncalled until the season sync runner is wired.
+     */
+    val currentNetworkReader: CurrentNetworkReader =
+        PlatformNetworkReader(AndroidNetworkPlatform(context.applicationContext))
+    val haStateClient: HomeAssistantStateClient = HomeAssistantStateClient(
+        settings = haConnections::get,
+        networkPermissionGranted = networkPermissionGranted,
+        currentNetwork = currentNetworkReader,
+        resolver = InetHostResolver(networkPermissionGranted),
     )
 
     /** A cache file the camera can write into through the FileProvider (spec §9.3). */

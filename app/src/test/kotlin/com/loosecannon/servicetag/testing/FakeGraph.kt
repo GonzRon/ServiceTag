@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
@@ -161,8 +162,10 @@ import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
+import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
 import com.loosecannon.servicetag.seasonsync.JdkAead
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
+import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.journal.CaseLinks
@@ -649,6 +652,13 @@ class FakeGraph(
     /** #16 (C18): the token store as `AppGraph` builds it, over the JDK's AES-GCM and a temporary no-backup directory. */
     val secretStore: KeystoreSecretStore =
         KeystoreSecretStore(kotlin.io.path.createTempDirectory("no-backup").toFile(), JdkAead())
+
+    /**
+     * #16 (C32): the network the Home Assistant client's home-network check reads, set by a test; by default the
+     * fictional captured Wi-Fi `ExampleHomeWifi`. The real reader is a platform fact (B9's device class).
+     */
+    var currentNetwork: NetworkReading = NetworkReading(CurrentNetwork.Wifi("ExampleHomeWifi"), null)
+    val currentNetworkReader: CurrentNetworkReader = CurrentNetworkReader { currentNetwork }
 
     val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
     val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)

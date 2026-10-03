@@ -18,8 +18,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 /**
- * #85 C16 (R85-7, R85-8, R85-13, R85-15): the one GET behind Save as document, and the only class in the app that
- * opens an HTTP connection. Whether a URL may be fetched at all — https, the host and address rule, redirects,
+ * #85 C16 (R85-7, R85-8, R85-13, R85-15): the one GET behind Save as document, and one of the app's two classes that
+ * open an HTTP connection (the other is #16's `HomeAssistantStateClient`).
+ * Whether a URL may be fetched at all — https, the host and address rule, redirects,
  * statuses, types and sizes — is the core's `FetchDocument` and `HopPolicy`; this class does one hop, as told.
  *
  * **Per call, on this connection only** (no process-wide default is set): redirects are not followed, nothing is
