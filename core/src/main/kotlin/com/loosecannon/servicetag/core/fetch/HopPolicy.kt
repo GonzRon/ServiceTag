@@ -63,7 +63,7 @@ class HopPolicy(private val resolver: HostResolver) {
  * bracketed IPv6 literal equal to its RFC 5952 text. Anything else — a Unicode character, a `%` escape, a
  * `\`, whitespace or a control character, an empty label or host, a malformed port — is refused.
  */
-private fun isAllowedAuthority(authority: String): Boolean {
+internal fun isAllowedAuthority(authority: String): Boolean {
     val hostEnd = if (authority.startsWith("[")) authority.indexOf(']') + 1 else authority.indexOf(':')
     if (authority.startsWith("[") && hostEnd == 0) return false
     val host = if (hostEnd < 0) authority else authority.substring(0, hostEnd)
