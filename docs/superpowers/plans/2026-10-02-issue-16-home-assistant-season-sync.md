@@ -1,4 +1,12 @@
-# #16 — Home Assistant → ServiceTag operating-season sync over the LAN: plan and briefs (rev 1.1, 2026-10-02)
+# #16 — [PRE-1.0][FEATURE] Sync Asset operating season from Home Assistant over LAN: plan and briefs (rev 1.2, 2026-10-02)
+
+> **GATE PASSED 2026-10-02 — every ruling DECIDED; execution authorized from B1a.** Placement: #16 → #98 →
+> ServiceTag 1.0.0 (unreleased development work on 1.6.0 / code 19; schema 21 / format 20). **Rev 1.2** folds the
+> owner's rulings (`.superpowers/sdd/2026-10-02-issue-16/issue-16-after-rulings.md`): §6 every row DECIDED in the
+> owner's words, R16-Q-B (d) added; §5 RATIFIED with P16-3, 5, 12, 28, 29, 44, 45, 51 replaced verbatim; §7 the
+> end-to-end proof against the real HA (AC10, R16-Q-A); limit 17 (HA has no read-only token); AC10, limit 13, R16-12
+> and the briefs reworded so the fake HA is the device test and the real HA is the proof; "never travels" restated as
+> "never in a ServiceTag backup, export, merge or pack" (R16-Q-E/F).
 
 > **Rev 1.1 (2026-10-02)** folds the independent plan review (`.superpowers/sdd/2026-10-02-issue-16/plan-review.md`,
 > APPROVE WITH CONDITIONS) under the controller's rulings. **C-1** → R16-Q-F (§6), limit 4, the dispatch
@@ -14,10 +22,11 @@
 
 > **Rev 1 — status. Release line, unchanged:** no version bump and no release — **1.6.0 / 19**; the vehicle is the
 > owner's (the post-#98 fresh 1.0.0 on the train #69 → #16 → #98); #16 lands **Room schema 21 / backup format 20**
-> (R16-4) on master, emulator only; master builds never go on a phone. **R16-0 and every R16-Q question (A–G) are
-> open** (§6); nothing in a brief that depends on one is dispatched before it is ruled.
+> (R16-4) on master, emulator only; master builds never go on a phone. *(Rev 1 said the questions were open; all
+> are DECIDED since 2026-10-02, §6.)*
 
-> **Scope, PROPOSED for the owner's ratification (pending R16-0), binding on every brief once ruled:** *#16 = one
+> **Scope, RATIFIED by the owner 2026-10-02 (R16-0), binding on every brief; `GET /api/` for Test connection is also
+> in scope:** *#16 = one
 > bounded workflow — an owner-enabled binding from an existing Asset to one Home Assistant boolean entity on an
 > owner-configured LAN endpoint, read by authenticated outbound polling of `GET /api/states/<entity_id>`; exact
 > `on`/`off` applied through the shipped season operation only when the effective season changes; every other outcome
@@ -114,8 +123,8 @@ and the #47 plan's §20 errata as the shape and the freshest precedents; `docs/d
   **refused** http example `http://192.0.2.10:8123` (RFC 5737 documentation, not RFC 1918); the accepted name
   endpoint `https://ha.example:8123` (RFC 2606); RFC 1918 range edges only in the address-rule rows (C8); and the
   emulator's own guest address read at run time in the device row (C29). No real name, host, token, serial or e-mail address in code, tests, docs or commits; home paths `~`.
-- **Strings.** Every user-visible string is ratified before it ships (§5, one block, R16-Q-C). The plan proposes the
-  new ones (P16-1…) and names every reused one with its one home; developer-facing `message` texts are the G-list.
+- **Strings.** Every user-visible string is §5's, **RATIFIED 2026-10-02** (R16-Q-C) with its one home; reused ones
+  are named with theirs; developer-facing `message` texts are the G-list. No brief invents or rewords one.
 - **Tests.** JVM first (core over the core doubles through `BackupInstall`; app over the production router and the
   Room-backed `FakeGraph`; the HTTP client over a fake `HttpURLConnection` through the shipped `open` seam,
   `A/fetch/UrlConnectionTransport.kt:44`). Device rows only for genuine Android boundaries (R16-12): **one** platform
@@ -138,7 +147,7 @@ and the #47 plan's §20 errata as the shape and the freshest precedents; `docs/d
 
 ## 1. Scope
 
-**Scope (PROPOSED, pending R16-0):** the sentence in the header, verbatim.
+**Scope (RATIFIED 2026-10-02, R16-0):** the sentence in the header, verbatim, plus `GET /api/` for Test connection.
 
 **In scope — the acceptance criteria, each on its contracts** (AC1–AC10 as the issue lists them):
 
@@ -153,7 +162,7 @@ and the #47 plan's §20 errata as the shape and the freshest precedents; `docs/d
 | AC7 | in-service, continuous, re-entry and break behaviour stays canonical; no fabricated completion, health repair or missed-occurrence backlog | C12, C14 · rows 31, 32 |
 | AC8 | binding edits, disconnect, disposition and replacement cannot let an old request mutate an unintended asset | C13 (revision, `maintainedHere`), C16, C17, R16-18 · rows 25–27, 26a, 41, 43, 43a, 44 |
 | AC9 | credentials, restore/transfer reauthorization and normal offline use are proven | C9–C11, C17, C18, C19 · rows 8, 17, 20, 45–48, 53, 54, 71 |
-| AC10 | a bounded development-phone end-to-end proof | **R16-Q-A** (owner): recommended as the emulator proof C29 + the JVM scenario row 60, with the phone-only facts listed (§7) |
+| AC10 | (as amended 2026-10-02) a bounded end-to-end proof: deterministic JVM coverage, platform/device tests against an in-process fake HA, and an emulator-to-real-HA LAN proof with no private endpoint, entity or token committed | **R16-Q-A (DECIDED):** row 60 (JVM), row 71 (the device class's fake HA), and §7's real-HA proof run by the controller after the merge; the development phone is untouched (its check waits for the #98 / 1.0.0 smoke) |
 
 **Out of scope** (the proposed sentence's list, and): a network callback (an optimization the issue allows, R16-7);
 user-installed CAs (R16-Q-B); a URL path prefix on the HA endpoint (a reverse proxy at `https://ha.example/ha/`);
@@ -191,8 +200,9 @@ per-activation provenance column (R16-11); an API or MCP write; the base URL ove
     router's DNS.
 12. **A later `targetSdk` bump may meet a runtime local-network permission** (H11). Today the README records that
     Android 17 grants `ACCESS_LOCAL_NETWORK` implicitly to an app declaring INTERNET at API 36 (`README.md:84`).
-13. **What the emulator cannot observe** (R16-Q-A): real Wi-Fi reachability, a real HA's answers for a non-admin
-    token (`/api/states/<id>` and `/api/`), real TLS chains, the transport a VPN reports, OEM and Doze timing.
+13. **What #16's proofs do not observe** (R16-Q-A): the real HA is reached from the emulator through its NAT (§7), so
+    a phone's own Wi-Fi, its DNS under Private DNS or a VPN, the transport a VPN reports, and OEM and Doze timing wait
+    for the optional #98 / 1.0.0 phone smoke.
 14. **Linking or resuming a CALENDAR or YEAR_ROUND asset re-anchors its IN_SERVICE schedules** (C-2, R16-Q-G as
     recommended). The switch row is dated today (`C/usecase/SetSeasonMode.kt:23-26`), a MANUAL span starts at its
     first START (`C/schedule/SeasonContext.kt:84-88`, `:183-190`), and IN_SERVICE re-enters at `cycleStartAt(at)`
@@ -201,12 +211,15 @@ per-activation provenance column (R16-11); an API or MCP write; the base URL ove
     start 10-01, an AT_START schedule with offset 14, due 10-16; linked 10-20, it opens 11-03. This is the shipped
     editor switch's behaviour; the setup sheet discloses it (§5's flags), and row 40a pins it.
 15. **Cleartext on another network (C-8).** On cellular or someone else's Wi-Fi a private literal names a different
-    host. As recommended (R16-Q-B (b)), the client sends nothing over http unless the active network is Wi-Fi or
+    host. As ruled (R16-Q-B (b)), the client sends nothing over http unless the active network is Wi-Fi or
     Ethernet; this narrows the exposure but cannot remove it on a foreign Wi-Fi, where the same literal may answer.
     An https name is checked to resolve to private addresses only (R16-Q-B (c)); a DNS answer that changes between
     that check and the connection is caught only by TLS's name check.
 16. **Provenance is short-lived (N-13).** The binding keeps only the last change it applied (R16-11), and Disconnect
     deletes the binding with it (R16-14); the activation rows stay, with no mark of where they came from.
+17. **Home Assistant has no read-only tokens.** A non-admin user's long-lived token can call any service it is
+    allowed; ServiceTag only reads, by discipline (C19 sends one GET). The proof's token is a house-control credential
+    that never leaves the development machine (§7).
 
 ## 2. Contracts
 
@@ -243,9 +256,8 @@ per-activation provenance column (R16-11); an API or MCP write; the base URL ove
 | `binding.lastError` | `null`, or `{"kind": SyncErrorKind name, "detail": string\|null, "at": millis}` — `detail` is an HTTP status or HA's reported state, never a URL or token |
 | `binding.lastApplied` | `null`, or `{"action": "START"\|"END", "occurredOn": "YYYY-MM-DD", "at": millis}` — the provenance (R16-11) |
 
-  Times are epoch milliseconds, as `createdAt` is on the shipped activation (`C/model/SeasonModel.kt:21-29`). The
-  effective season is the shipped `GET /v1/assets/{id}/season`'s phase, which this route does not repeat. `GET
-  /v1/status` moves `schemaVersion` to 21; `backupFormatVersion` 20 and `counts` are unchanged (no new list).
+  Times are epoch milliseconds (`createdAt`'s shape, `C/model/SeasonModel.kt:21-29`); the effective season is
+  `GET …/season`'s phase, not repeated; `GET /v1/status` moves `schemaVersion` to 21, nothing else.
 
 ### B1a — the domain: model, outcome, effective season, ports (C4–C7)
 
@@ -309,7 +321,7 @@ per-activation provenance column (R16-11); an API or MCP write; the base URL ove
      documentation ranges, public addresses) are refused for http;
   5. `https` to a DNS name or an RFC 1918 IPv4 literal; system trust anchors only (C20). **A name must resolve, at
      each request, only to private addresses** — RFC 1918 IPv4 or IPv6 unique-local `fc00::/7` — else
-     `NAME_NOT_LOCAL` (C-9, R16-Q-B (c) as recommended): checked by C19 step 1b through the shipped `HostResolver`
+     `NAME_NOT_LOCAL` (C-9, R16-Q-B (c), DECIDED): checked by C19 step 1b through the shipped `HostResolver`
      port (`C/fetch/AddressPolicy.kt:12-17`; `InetHostResolver` in the app), with C8's pure predicate
      `isPrivateLanAddress(bytes)`. A public name — a cloud relay, a dynamic-DNS address — is therefore refused, so
      "LAN-only" is a property of the code, not of the configuration.
@@ -332,7 +344,8 @@ per-activation provenance column (R16-11); an API or MCP write; the base URL ove
     `applied_action TEXT`, `applied_on TEXT`, `applied_at INTEGER`; `created_at INTEGER NOT NULL`, `updated_at
     INTEGER NOT NULL`. Enum columns hold the enum name.
   - Neither table is named by `BackupCodec`, `BackupData`, the merge planner, `TransferTables.CLASSES` or any
-    export, so neither travels (the classification test reads `BackupData`'s lists only,
+    export, so neither is in any ServiceTag backup, export, merge or pack (R16-Q-E; Android Auto Backup may restore
+    the rows, inert, R16-Q-F — the classification test reads `BackupData`'s lists only,
     `CT/transfer/TransferTableClassificationTest.kt:19-25`, and stays green unchanged). `DeleteAsset`, the replace
     restore's `assets.deleteAll()` (`ImportBackupReplace.kt:196`) and a connection delete remove bindings by CASCADE.
 - **C10, the step and the pins.** `MIGRATION_20_21` in `A/data/room/Migrations.kt` after `MIGRATION_19_20`: two
@@ -380,12 +393,9 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
 
   A `false` from the conditional update (C11) throws inside the write, so the whole transaction — an activation
   row with it — rolls back; inside one Room transaction it is unreachable, and the double proves the rollback.
-  **A forced phase is re-asserted on every run (C-5):** a FORCE binding passes its phase through `applyIfChanged`
-  on each result, `Observed` or `NoDecision`, so a merge or pack that landed the other phase is corrected by the next
-  run with one row (idempotent through the compare; the provenance records it). A `NEEDS_TOKEN` binding is not read
-  (C21), so it is re-asserted once a token is entered. **The `enabled` check is defensive:** Stop bumps the revision
-  and the runner reads only ACTIVE bindings, so the revision compare drops every reachable stale result; a synthetic
-  case pins the check (row 25).
+  **A forced phase is re-asserted on every run (C-5):** on each result, `Observed` or `NoDecision`, at most one row
+  (a `NEEDS_TOKEN` binding is not read, C21). **The `enabled` check is defensive:** Stop bumps the revision, so the
+  revision compare drops every reachable stale result; a synthetic case pins the check (row 25).
 
   `applyIfChanged`: if `!asset.maintainedHere(transfers.heldIds())` → error `NOT_MAINTAINED_HERE`; else if
   `asset.seasonMode != MANUAL` → error `NOT_MANUAL`; else compare `desired` with `SeasonContext.of(asset.seasonInputs(
@@ -425,12 +435,9 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
 | `CreateAsset`, `ReplaceAsset` | not guarded: a new asset or successor has no binding (R16-8; `ReplaceAsset` never writes the predecessor's activations, `:177-180`) | — |
 
   Plus the phone: `SeasonOffers.offerFor` (`A/ui/condition/Offers.kt:233-237`) returns null for an asset whose
-  binding is enabled, so the offer is never made (the guard stays the backstop; this UI condition is R16-16's
-  recorded exception to "never re-check in the UI a rule the use case owns", N-11). A guard is a constructor
-  parameter **with no default** on each of the **four** guarded use cases and `SeasonOffers`; B3b owns every
-  construction site `git grep` names — **26** by the review's count (`RecordSeasonActivation` 5, `AcceptSeasonOffer`
-  5, `SetSeasonMode` 5, `SaveAssetSettings` 9, `SeasonOffers` 2; N-9), arguments only — and the `AppGraph`/`FakeGraph`
-  lines. **I7** therefore reads: four guarded writers, the offer withheld, and the legacy pair's shipped 422.
+  binding is enabled (the guard stays the backstop; R16-16's recorded exception, N-11). The guard is a constructor
+  parameter **with no default** on the **four** guarded use cases and `SeasonOffers`; B3b owns the **26**
+  construction sites (N-9; arguments only) and the `AppGraph`/`FakeGraph` lines.
 
 ### B3c — link, modes, stop, resume, disconnect (C16–C17)
 
@@ -445,13 +452,9 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
     not transition and "preserve the existing local season before the first read" holds (`SeasonCommands.kt:184-201`);
     the window is cleared as any switch into MANUAL clears it. **The strands refusal is surfaced and stops the link**
     (`SeasonModeStrandsPolicy`, `SeasonCommands.kt:256-263`; S55 on the phone): no binding, no row.
-  - **The cadence does move (C-2; R16-Q-G as recommended).** Because the switch row is dated today
-    (`SetSeasonMode.kt:23-26`, `:69-70`), the MANUAL span starts today and IN_SERVICE re-enters at
-    `cycleStartAt(today)` (`C/schedule/SeasonContext.kt:84-88`, `:183-190`; `C/schedule/ServicePolicyEngine.kt:108-123`):
-    an in-window CALENDAR asset's IN_SERVICE schedules re-anchor from the window's start to the link day, and a
-    YEAR_ROUND asset's gain a cycle start at today (limit 14). This is the shipped editor switch's behaviour; #16
-    does not fork `SetSeasonMode`. The setup sheet says so (§5's flags on P16-44/45); row 40a pins it. The
-    alternative is R16-Q-G's.
+  - **The cadence does move (C-2; R16-Q-G, DECIDED):** the switch row dated today re-anchors IN_SERVICE schedules
+    to the link day — limit 14's mechanism and example; the shipped editor switch's behaviour, not forked; disclosed
+    before the write by P16-44/45 and pinned by row 40a.
   - The phone shows the reconciliation sentence **before** the write (P16-44…46) and, for YEAR_ROUND with live
     CONTINUOUS schedules, #78's prompt **after** it, by #78's own rule lifted to core (C27) — never silently.
   - The switch runs **before** the binding row is inserted, in the same write, so B3b's guard (inside
@@ -485,12 +488,9 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   - **The derived state** (never stored): `NEEDS_TOKEN` when the connection exists but `SecretStore.has` is false;
     `STOPPED` when `!enabled`; `NOT_MAINTAINED_HERE` when the asset fails `maintainedHere`; else `ACTIVE`. Only
     `ACTIVE` bindings are read (C21). Entering a token is the reauthorization: it moves `NEEDS_TOKEN` bindings back to
-    `ACTIVE` with a fresh read (R16-4, AC9). **Because it is derived (R16-18, C-11),** an asset that is maintained here
-    again — `unarchive` (`C/usecase/ArchiveAsset.kt:30`), or a withdrawn OUT then an unarchive
-    (`C/usecase/WithdrawTransferRecord.kt:37-38`) — makes a still-enabled binding `ACTIVE` with no owner step; the next
-    successful read applies the current state only, at most one transition dated that day, with no catch-up. The
-    binding is this phone's own, never imported, so no reauthorization is owed; `ArchiveAsset`, `RetireAsset` and
-    `MarkTransferredOut` stay unedited (row 26a).
+    `ACTIVE` with a fresh read (R16-4, AC9). **Because it is derived (R16-18, C-11),** an asset maintained here again
+    makes a still-enabled binding `ACTIVE` with no owner step and no catch-up (limit 9; row 26a); the lifecycle use
+    cases stay unedited.
 
 ### B4 — the secret store (C18)
 
@@ -500,10 +500,7 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   a fresh 12-byte IV followed by the GCM output — is one file `<noBackupFilesDir>/ha-secrets/<connectionId>.bin`,
   written to a temporary file then renamed. Neither Auto Backup nor a device-to-device transfer copies the no-backup
   directory (the `InstallationIdentity` precedent, `A/prefs/InstallationIdentity.kt:12-15`), so **no manifest backup
-  rule changes** — a deliberate deviation from D9's "excluded by `dataExtractionRules`"
-  (`docs/design/09-security-privacy.md:25`; likewise D3 `docs/design/03-target-architecture.md:445` and D8's risk
-  S7, `docs/design/08-risk-register.md:33`): an exclusion rule for a directory the platform never copies adds
-  nothing (N-1; R16-5; B10 notes it beside those lines). The AEAD sits behind a small seam (`KeyedAead`: `seal(alias, bytes)`, `open(alias, bytes)`,
+  rule changes** — R16-5's stated deviation from D9's `dataExtractionRules` line (N-1). The AEAD sits behind a small seam (`KeyedAead`: `seal(alias, bytes)`, `open(alias, bytes)`,
   `deleteKey(alias)`) so the JVM tests use the JDK's AES-GCM with an in-memory key; the device row (C29) uses the
   Keystore. `get` answers **null, never a throw**, when the file is absent, the key is absent, or the tag fails
   (a platform restore on a new phone — H5); `has` is "file present and key present". **The orphan sweep:**
@@ -516,12 +513,12 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   `HttpURLConnection` from the `open: (URL) -> URLConnection` seam (`UrlConnectionTransport`'s shape, `:39-45`): 
   1. `HaEndpointPolicy.check(baseUrl)` again — refused → `NoDecision(ENDPOINT_REFUSED)`, nothing opened; the INTERNET
      probe (`AppGraph.kt:631-634`) false → `NoDecision(DENIED)`, nothing opened (a quiet status, no retry);
-     **1a (http only; C-8, R16-Q-B (b) as recommended):** a point query of the active network —
+     **1a (http only; C-8, R16-Q-B (b), DECIDED):** a point query of the active network —
      `ConnectivityManager.getNetworkCapabilities(activeNetwork)` has `TRANSPORT_WIFI` or `TRANSPORT_ETHERNET` — else
      `NoDecision(NOT_ON_LOCAL_NETWORK)`, nothing opened, no retry. No callback and no new permission:
      `ACCESS_NETWORK_STATE` already arrives merged from WorkManager (`README.md:83`). Behind an `ActiveTransport`
      seam so the JVM rows script it. https skips 1a (TLS authenticates the peer);
-     **1b (an https name only; C-9, R16-Q-B (c) as recommended):** resolve the name through the shipped
+     **1b (an https name only; C-9, R16-Q-B (c), DECIDED):** resolve the name through the shipped
      `HostResolver`; any answer that is not `isPrivateLanAddress` (C8 rule 5), or no answer →
      `NoDecision(NAME_NOT_LOCAL)` (or `UNREACHABLE` when resolution itself fails), nothing opened;
   2. the URL is exactly `baseUrl + "/api/states/" + entityId`; the platform parser's host must equal the policy's
@@ -540,7 +537,7 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   same call (steps 1–5) with the path `/api/`. **Its own mapping (N-3):** 200 with a JSON object (HA's API root) → OK;
   401/403 → `AUTH_REFUSED`; 3xx → `REDIRECTED`; **404 and every other status → `HTTP_ERROR`** with the status (never
   `ENTITY_NOT_FOUND`, which names an entity); a non-JSON 200 → `MALFORMED`; the transport kinds as above.
-- **C20, the network security config (R16-Q-B as recommended).** New `app/src/main/res/xml/network_security_config.xml`:
+- **C20, the network security config (R16-Q-B, DECIDED).** New `app/src/main/res/xml/network_security_config.xml`:
   one `<base-config cleartextTrafficPermitted="true">` with `<trust-anchors><certificates src="system"/></trust-anchors>`;
   no `<domain-config>` (a runtime host cannot be named), no `src="user"`, no debug override.
   `android:networkSecurityConfig="@xml/network_security_config"` on `<application>`
@@ -672,7 +669,7 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   there, a connection to `http://192.168.0.10:8123` with a fictional token (an address the emulator cannot reach) and
   one linked binding answer Sync now with `UNREACHABLE` or `TIMED_OUT` and write no season row. Following on and off
   is **not** a signed-build step — a signed build cannot reach the instrumentation process's fake — and is proven by
-  R2's `SeasonSyncPlatformProofTest` on a debug build and by the JVM scenario (row 60). `docs/design/09-security-privacy.md`: the HA token row (D9's Todoist row is the template) with "revoked on
+  R2's `SeasonSyncPlatformProofTest` (debug build), the JVM scenario (row 60) and §7's real-HA proof. `docs/design/09-security-privacy.md`: the HA token row (D9's Todoist row is the template) with "revoked on
   disconnect: deleted locally; the owner revokes it in HA". `docs/design/03-target-architecture.md:30`'s
   `SecretStore` row: "built for #16". A new `docs/home-assistant-season-sync.md`: the fictional helper and
   automation (an `input_boolean` helper named for the season, an automation that turns it on and off on the owner's
@@ -700,7 +697,8 @@ today's phase; **I3** every non-`on`/`off` outcome is no decision; **I4** a fail
 run and never undone by a poll, and FOLLOW never applies a stored observation (C-5); **I7** while enabled, the binding
 is the only writer of the asset's season (four writers refused, the offer withheld, the legacy pair's shipped 422); **I8** an asset not maintained here takes no decision; **I9** the token is only in the store and one
 request; **I10** the bearer goes to the configured origin only, over http only from Wi-Fi or Ethernet, and to a name
-only when it resolves to private addresses (C-8, C-9); **I11** the binding and the connection never travel;
+only when it resolves to private addresses (C-8, C-9); **I11** the binding and the connection are in no ServiceTag backup, export, merge or pack (Auto Backup may restore
+them inert, R16-Q-F);
 **I12** a restored or imported configuration sends nothing before a token is entered here.
 
 ## 3. Test matrix
@@ -854,7 +852,7 @@ before the binding exists, and the Force path calls the body); B4 and B5 need B1
 before it; B6b needs B6a's wiring; B7a needs B6a's wiring (the handler reads the store); B8a, B8b1 and B8b2 need
 B6a's runner, and B8b2 needs B8b1's strings file; B9 needs B4–B6a; B10 describes everything.
 
-**The season authority (R16-1, as recommended).** (a) the binding owns a MANUAL asset while enabled: one guard
+**The season authority (R16-1, DECIDED).** (a) the binding owns a MANUAL asset while enabled: one guard
 read by six classes, one 409, zero enum or codec change. (b) a fourth `SeasonMode` value moves every exhaustive
 `when` over the mode, the DTO and MCP enums, the legacy mapping and the codec, and forces a format bump with a
 device-local binding — and a restored or packed asset would carry an HA mode to a phone with no binding. (c) writing
@@ -914,7 +912,7 @@ B8b1/B8b2 draw them), each closed by its row:
 
 ## 5. Strings
 
-**PROPOSED for the owner's ratification as one block (R16-Q-C).** Each new string is declared once as a `const val`
+**RATIFIED by the owner 2026-10-02 (P16-1…52 and G1–G3; eight amendments — P16-3, 5, 12, 28, 29, 44, 45, 51, copied verbatim from the owner's rulings).** Each new string is declared once as a `const val`
 (or a one-line function for a format) at the home named, and imported, never copied. Two homes:
 `A/ui/homeassistant/HomeAssistantStrings.kt` (P16-1…21, P16-48, P16-50…52; the outcome sentences live here because both screens
 draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49).
@@ -923,16 +921,16 @@ draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49).
 |---|---|---|
 | P16-1 | "Home Assistant" | the Settings → Utilities row and the screen's title (C26) |
 | P16-2 | "Server address" | the address field's label (C26) |
-| P16-3 | "Use https:// and the server's name, or http:// and its private IPv4 address on your home network." | the address field's helper (C26, C8) |
+| P16-3 | "Use https:// with the server's name or private IPv4 address, or http:// with its private IPv4 address on your home network." | the address field's helper (C26, C8) |
 | P16-4 | "Access token" | the masked field's label (C26) |
-| P16-5 | "A long-lived access token from a Home Assistant user made for ServiceTag, without administrator rights. ServiceTag only reads the entities you link." | the token field's helper (C26; the issue's "do not call it a read-only token") |
+| P16-5 | "A long-lived access token from a Home Assistant user made for ServiceTag, without administrator rights. ServiceTag uses it only for read requests." | the token field's helper (C26; the issue's "do not call it a read-only token") |
 | P16-6 | "Test connection" | the button (C26, C19) |
 | P16-7 | "Home Assistant answered. The address and the token work." | Test connection's success line (C26) |
 | P16-8 | "Disconnect" | the button and the dialog's confirm (C26, C17) |
 | P16-9 | "Disconnect Home Assistant? Linked assets stop following it and keep their current season and history. The token is deleted from this phone; revoke it in Home Assistant as well." | the confirm dialog's body, no title (C17; limit 10) |
 | P16-10 | "Not connected. Enter the server address and an access token." | the screen with no connection; C16's `NO_CONNECTION` (C26) |
 | P16-11 | "Enter the access token again: this phone no longer has it." | `NEEDS_TOKEN`, on both screens (C17, C18) |
-| P16-12 | "That address is not allowed. Use https:// with a name, or http:// with a private IPv4 address." | `ENDPOINT_REFUSED` (C8, C17, C19) |
+| P16-12 | "That address is not allowed. Use https:// with a server name or private IPv4 address, or http:// with a private IPv4 address." | `ENDPOINT_REFUSED` (C8, C17, C19) |
 | P16-13 | "Could not reach Home Assistant. Check that this phone is on the same network." | `UNREACHABLE` |
 | P16-14 | "Home Assistant took too long to answer." | `TIMED_OUT` |
 | P16-15 | "ServiceTag is not allowed to use the network. Allow network access in the app settings, then close ServiceTag and open it again." | `DENIED`, with "Open app settings" (reused) — P85-10's shape without its download clause |
@@ -948,8 +946,8 @@ draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49).
 | P16-25 | "Force out of season" | mode control (the issue's words) |
 | P16-26 | "Sync now" | the block's button (C21) |
 | P16-27 | "Follows %s" — the entity id | the source line in FOLLOW |
-| P16-28 | "Forced in season. %s is not followed until you choose Follow Home Assistant." | the source line in FORCE_IN |
-| P16-29 | "Forced out of season. %s is not followed until you choose Follow Home Assistant." | the source line in FORCE_OUT |
+| P16-28 | "Forced in season. %s is still checked, but it does not change the season until you choose Follow Home Assistant." | the source line in FORCE_IN |
+| P16-29 | "Forced out of season. %s is still checked, but it does not change the season until you choose Follow Home Assistant." | the source line in FORCE_OUT |
 | P16-30 | "Last successful check %s" — the shipped date-and-time display | the last-success line (C13's `last_success_at`) |
 | P16-31 | "No reading from Home Assistant yet." | before the first valid observation |
 | P16-32 | "Not checked in the last 30 minutes." | the stale marker (R16-Q-D's number) |
@@ -964,14 +962,14 @@ draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49).
 | P16-41 | "Syncing is stopped. Home Assistant no longer changes this asset's season." | a stopped binding's line, on every mode's branch (reworded in rev 1.1: the asset may no longer be MANUAL, C-4) |
 | P16-42 | "Entity ID" | the setup sheet's field (C16) |
 | P16-43 | "An on/off helper that is on while this asset is in season, for example input_boolean.example_heater_in_season. Not the appliance's own power switch." | the field's helper (AC2, H10) |
-| P16-44 | "Linking this asset to Home Assistant replaces its calendar dates. From today, its season starts and ends when Home Assistant says." | the setup sheet, a CALENDAR asset (C16) |
-| P16-45 | "This asset has no operating season now. Linking it to Home Assistant gives it one: in season from today, then started and ended when Home Assistant says." | the setup sheet, a YEAR_ROUND asset (C16) |
+| P16-44 | "Linking this asset to Home Assistant replaces its calendar dates. From today, its season starts and ends when Home Assistant says. Maintenance that counts from the start of the season will count from today." | the setup sheet, a CALENDAR asset (C16) |
+| P16-45 | "This asset has no operating season now. Linking it to Home Assistant gives it one: in season from today, then started and ended when Home Assistant says. Maintenance that counts from the start of the season will count from today." | the setup sheet, a YEAR_ROUND asset (C16) |
 | P16-46 | "From now on Home Assistant starts and ends this asset's season. Its season history stays as it is." | the setup sheet, a MANUAL asset (C16) |
 | P16-47 | "This asset's season follows Home Assistant. Stop syncing on the asset's page to change it here." | the editor's read-only season block (C27) |
 | P16-48 | "A token is saved on this phone." | the token field after a save (C26) |
 | P16-49 | "Enter an entity ID such as input_boolean.example_heater_in_season: lowercase letters, digits and underscores, with one dot." | C16's `BAD_ENTITY_ID` |
 | P16-50 | "This phone is not on Wi-Fi or Ethernet, so ServiceTag did not contact Home Assistant over http." | `NOT_ON_LOCAL_NETWORK` (C19 step 1a, C-8) |
-| P16-51 | "That server name does not lead to an address on your home network, so ServiceTag did not contact it." | `NAME_NOT_LOCAL` (C19 step 1b, C-9) |
+| P16-51 | "That server name does not resolve only to private network addresses, so ServiceTag did not contact it." | `NAME_NOT_LOCAL` (C19 step 1b, C-9) |
 | P16-52 | "Home Assistant's certificate could not be verified." | `TLS_FAILED` (C19 step 5, N-4) |
 
 **Reused verbatim from their one home:** "Operating season" (`OPERATING_SEASON`, `A/ui/asset/AssetEditScreen.kt:94`;
@@ -990,10 +988,8 @@ long" (`A/ui/references/MaterializeStrings.kt:29`, `:31`) — there is no downlo
 shapes. The editor's "You start and end the season yourself…" (`AssetEditScreen.kt:124-125`) stays the MANUAL radio's
 helper; P16-41 is its stopped-sync counterpart.
 
-**Flags for the owner:** **P16-44 and P16-45 do not yet say that the cadence moves** (limit 14, C-2): maintenance that
-counts from the start of the season will count from the link day. If R16-Q-G stays as recommended, the owner may
-append "Maintenance that counts from the start of the season will count from today." to both (a proposal, not in the
-table until ratified). No change proposed for the rest: P16-43 and P16-49 put the fictional entity id on screen as an example;
+**Flags, settled by the ratification:** P16-44 and P16-45 now disclose the cadence move (limit 14, R16-Q-G) before
+the write; P16-28/29 now say HA is still checked under Force (R16-15). Kept as ratified: P16-43 and P16-49 put the fictional entity id on screen as an example;
 P16-32 repeats R16-Q-D's number in words (a different ruling changes the string); P16-28/29 name the entity id rather
 than "Home Assistant's helper"; the token field has **no reveal toggle** in v1 and is never pre-filled (autofill
 off); the three mode labels are the issue's own.
@@ -1008,35 +1004,35 @@ off); the three mode labels are the issue's own.
 
 ## 6. Owner rulings
 
-| ruling | whose | the question · the recommendation | where it lands |
+| ruling | status | the ruling (the owner's words where the owner ruled) | where it lands |
 |---|---|---|---|
-| **R16-0** | **owner** | **The scope sentence** (header): ratify as written, or amend. | every brief's must-nots |
-| R16-1 | controller default | **Season authority = audit Q1:** the binding owns a MANUAL asset's season while enabled; setup switches CALENDAR or YEAR_ROUND into MANUAL at today's phase through `SetSeasonMode`'s rules (the strands refusal stays and is shown; #78's prompt follows a YEAR_ROUND link, never silently; the cadence consequence is R16-Q-G's); while enabled the phone's Start/End become the three mode controls and four writers answer one 409 `SEASON_SYNC_ENABLED` — the asset PATCH's legacy pair keeps its shipped 422 (C-3); the merge and the replace restore stay unguarded (the merge brings history the next run reconciles once, in FOLLOW and FORCE; the restore cascades the binding away); Stop and Disconnect write nothing and leave MANUAL at today's phase. A fourth `SeasonMode` forces a format bump and travels; writing over CALENDAR needs an engine change. | C15–C17, §4 |
-| R16-2 | controller default | **Idempotency inside the write:** compare the desired phase with today's from the activation rows; the two 409s are "already applied"; one transaction discipline — the extracted in-transaction body (`ReplaceAsset`'s C15 shape), never a nested `run` (H3). | C12, C13 |
-| R16-3 | controller default | **The transition date = the local day it is applied;** HA's `last_changed` is information; HA's change time, the fetch time and the application time are three fields. | C5, C13 |
-| R16-4 | controller default | **Device-local, schema 21, format 20:** `ha_connection` (address, no token, no display name — one connection needs none) and `season_sync_binding`; neither travels; the nine table sets and the schema-only `VersionAgreementTest` split move; a platform restore without the key reads **NEEDS_TOKEN** — derived from the store at read time rather than flipping `enabled`, so entering the token is the one reauthorization step. | C9–C11, C17, C18 |
-| R16-5 | controller default | **The secret store = D9's design:** a Keystore AES-GCM key, ciphertext in `noBackupFilesDir`, no dependency, a core `SecretStore` port with a JVM double; the token never in a log, diagnostic, `toString`, API, MCP, backup or pack. **One stated deviation (N-1):** D9's "excluded by `dataExtractionRules`" (`09-security-privacy.md:25`; D3 `:445`; D8 S7) is not done — the platform never copies `noBackupFilesDir`, so the rule would add nothing; B10 notes it beside those lines. | C7, C18, C30 |
-| R16-6 | controller default | **A new small LAN client, not #85's downloader;** #85's classifier, probe, allowlist and `User-Agent` reused; the rule in code; exact `on`/`off` only; DENIED quiet; #85's policy untouched. | C8, C19, C20 |
-| R16-7 | controller default | **The backstop's shape:** unique periodic work, 30 minutes, CONNECTED, exponential backoff, KEEP; stale at 30 minutes drives the resume refresh; Sync now explicit; no network callback; single flight plus the revision guard. | C21–C23 |
-| R16-8 | controller default | **Lifecycle:** `maintainedHere(held)` on the applier and the link; a replaced asset's binding stays inert on the predecessor. | C13, C16 |
-| R16-9 | controller default | **API/MCP read-only:** one sub-resource (the 28th), one MCP read tool (90); no write, no address, no token. | C3, C24, C25 |
-| R16-10 | controller default | **Cardinality:** one connection per installation, any number of bindings, at most one per asset. | C9, C17 |
-| R16-11 | controller default | **No provenance column on activation rows;** the binding's `applied_*` fields carry it. | C9, C13 |
-| R16-12 | controller default | **Proofs under the 2026-10-02 ruling:** JVM first; one device class for WorkManager, the Keystore, the cleartext policy and the client against an in-process fake HA, one Compose class; 59 → 61 on the software-rendered emulator; AC10's phone proof is R16-Q-A. | §3, §7 |
-| R16-13 | controller default (plan) | **Test connection reads `GET <base>/api/`** (HA's API root), the same client, headers and rules as the poll: the one way to prove the address and token before any entity is linked. | C19, C26 |
-| R16-14 | controller default (plan) | **Disconnect deletes the connection, its bindings (CASCADE) and the token;** a per-asset **Stop syncing** keeps the binding and its provenance. | C17 |
-| R16-15 | controller default (plan) | **Polls continue under a Force mode** and record HA's answer as status, and **every run re-asserts the forced phase through `applyIfChanged`**, whatever HA answered (C-5): idempotent through the compare, at most one row, provenance recorded — so a merge or pack that landed the other phase is corrected on the next run (row 36) and the owner still sees what HA says before returning to Follow. | C13, C27 |
-| R16-16 | controller default (plan) | **The editor's season block is read-only and the journal's season offer is not raised** while a binding is enabled; the guard stays the backstop. `SeasonOffers.offerFor`'s condition is the plan's **one recorded exception** to "never re-check in the UI a rule the use case owns" (N-11): the offer is a prompt, not a write, and its refusal would come only after the owner accepted. | C15, C27 |
-| R16-17 | controller default (plan) | **The MCP tool is appended as a "#16" block** (the shipped convention), so the two tail pins move (audit correction 3) rather than inserting it among the season tools. | C25, §3 |
-| R16-18 | controller default (plan) | **A binding resumes on its own when its asset is maintained here again (C-11).** Unarchiving (`C/usecase/ArchiveAsset.kt:30`), or withdrawing an OUT and then unarchiving (a withdrawal leaves the assets archived, `WithdrawTransferRecord.kt:37-38`), leaves a still-enabled binding enabled; the next successful read applies the current state only — at most one transition dated that day, no catch-up — with no owner step. The binding is this phone's own, never imported, so the issue's "no resume before explicit reauthorization" (about restored or imported configuration) does not apply. The alternative — archive, retire and transfer-out flip `enabled = false` in the same write, so Resume is the owner's step — costs a writer in `ArchiveAsset`, `RetireAsset` and `MarkTransferredOut`, which stay fenced. | C17, row 26a |
-| R16-19 | controller default (plan) | **Resume runs the link's reconciliation (C-4).** A stopped binding whose asset the owner moved to CALENDAR or YEAR_ROUND resumes through C16's steps — the P16-44/45 sentence, the switch row dated today, S55 on a strands refusal, #78's prompt after a YEAR_ROUND resume — and the binding block is drawn on every season mode's branch, so no stopped binding is a dead end. No per-asset Unlink is added (R16-14's Disconnect stays the only delete); P16-38 and P16-41 are reworded to match. | C17, C27, rows 43a, 67, 68 |
-| **R16-Q-A** | **owner** | **The development-phone proof (AC10) against the 2026-10-02 ruling that the phone stays untouched.** Recommend the emulator proof (C29) plus the JVM scenario (row 60) as AC10's proof, and an **optional owner-run check at #98's 1.0.0 smoke** for what only a phone shows: real Wi-Fi reachability of the owner's HA (and how the phone resolves its name under Private DNS or a VPN); a real HA's answers for a non-admin user's token (401 against 403, and that **both** `/api/states/<id>` and `/api/` are readable by that user — to be verified, not assumed, N-3); real TLS chains; which transport the phone reports for its active network on home Wi-Fi with and without a VPN (C19 step 1a); OEM and Doze timing of the periodic work. | §7 |
-| **R16-Q-B** | **owner** | **Cleartext on the LAN (audit Q3), with two sub-questions.** **(a) The rule.** Recommend: `base-config cleartextTrafficPermitted="true"` with the rule in code — **http only to an RFC 1918 IPv4 literal; a name only over https; no redirect; system CAs only; no user-installed CAs in v1** (a self-signed HA is reached over http to its private address). Alternatives: https only (no cleartext at all; a self-signed HA then needs user CAs, `src="user"`); or a wider http allowance (link-local, IPv6 ULA, `.local` names — DNS rebinding returns, H9). **The main cleartext risk (C-8):** on cellular or someone else's Wi-Fi the same private literal names a different host, which would receive `Authorization: Bearer` in clear; a non-admin token can still call services, and if the owner's HA is also reachable remotely the leaked token works from anywhere. **(b) Recommend** a point check before each **http** request that the active network is Wi-Fi or Ethernet (`TRANSPORT_WIFI`/`TRANSPORT_ETHERNET`; no callback, no new permission), else the quiet `NOT_ON_LOCAL_NETWORK` (P16-50). It narrows the exposure but cannot remove it on a foreign Wi-Fi; **the owner may prefer https-only**. **(c) An https name may resolve anywhere (C-9),** which would make remote access (a cloud relay, a dynamic-DNS name) reachable by configuration, against the issue's "LAN-only". Recommend enforcing at each request that a name resolves only to private addresses (RFC 1918 IPv4, IPv6 `fc00::/7`), else `NAME_NOT_LOCAL` (P16-51); TLS still validates the name. The alternative is a recorded limit ("an https name is not checked to be local") with a row pinning it. **Note:** the documentation address `192.0.2.10` is not RFC 1918, so `http://192.0.2.10:8123` is the refused example; the accepted one is `http://192.168.0.10:8123` (C-7). | C8, C19, C20, limits 15 |
-| **R16-Q-C** | **owner** | **The strings (§5, one block):** the setup reconciliation sentences P16-44…46 (the one place #78 meets #16), the three mode labels P16-23…25, every status sentence, the masked field without a reveal toggle, and the flags. | §5, C26, C27 |
-| **R16-Q-D** | **owner** | **Cadence (audit Q9):** recommend a 30-minute period (WorkManager's floor is 15 and may run later) and "stale" at 30 minutes for the resume refresh; 15 minutes doubles the polls for little gain on a season decision. | C21, C22, P16-32 |
-| **R16-Q-E** | **owner** | **Should a binding ever travel?** Recommend **no**: device-local; after any restore the owner links again, which makes "no resume before reauthorization" and "a pack never activates the sender's integration" true by construction. **The cost of yes:** a format bump to 21 (about 80 pin sites in about 40 files — the 24 literal sites, the four one-past twins, the import range at 8 sites, `counts.size` 31 → 32 at 8, `MergeTable` 23 → 24), a `SENDER_ONLY` transfer class, a merge rule ("local wins, never CONFLICT"), and restored rows landing stopped with NEEDS_TOKEN. | C9, §4 |
-| **R16-Q-F** | **owner** | **May non-secret household configuration stay in the platform backup (C-1)?** Auto Backup is on (`AndroidManifest.xml:58-62`), so the Room file — and in it every row of the two tables — goes to the owner's platform backup: `base_url`, every `entity_id`, `observed_state` / `observed_changed_at`, `error_detail` (HA's reported state text), the `applied_*` provenance, the modes and the times. **Recommend yes:** none of it is a secret, and a restore without the token reads NEEDS_TOKEN and sends nothing (C17, C18). The cost of no: `dataExtractionRules`/`fullBackupContent` cannot exclude a table, so the two tables would move to a second database file excluded by rule (or into the no-backup directory) — a second Room database, its own migrations and about one more brief. | C9, C18, limit 4 |
-| **R16-Q-G** | **owner** | **The link's cadence consequence (C-2).** Linking (or resuming, R16-19) a CALENDAR or YEAR_ROUND asset writes the switch row dated today, so IN_SERVICE schedules re-anchor to the link day (limit 14; `SetSeasonMode.kt:23-26`, `ServicePolicyEngine.kt:108-123`). **Recommend the shipped behaviour:** a row dated today, exactly as the editor's switch into MANUAL does — #16 must not fork `SetSeasonMode` — disclosed by the setup sheet (§5's flag on P16-44/45) and pinned (row 40a). **The alternative, costed:** date the switch row `cycleStartAt(today)` (an in-window CALENDAR asset's latest window start), keeping its schedules' cadence: a backdated MANUAL row through `SetSeasonMode`'s body, an amendment of inv. 92's "dated today" for the link path, a new parameter on the extracted body, and a guard for old history: a CALENDAR asset may keep MANUAL rows from an earlier stint (unread while CALENDAR), and one dated after the window's start would then outrank the backdated switch row and decide the phase — so the alternative must refuse or clamp that case; YEAR_ROUND has no cycle start, so it still anchors today. About half a brief plus rows. | C16, C17, row 40a |
+| **R16-0** | **owner — DECIDED 2026-10-02** | **The scope sentence: RATIFIED exactly in substance**, and `GET /api/` for Test connection is also in scope; the fence stays binding. | header, every brief's must-nots |
+| R16-1 | **DECIDED** — ratified | **Season authority = audit Q1:** the binding owns a MANUAL asset's season while enabled; setup switches CALENDAR or YEAR_ROUND into MANUAL at today's phase through `SetSeasonMode`'s rules (the strands refusal stays and is shown; #78's prompt follows a YEAR_ROUND link, never silently; the cadence consequence is R16-Q-G's); while enabled the phone's Start/End become the three mode controls and four writers answer one 409 `SEASON_SYNC_ENABLED` — the asset PATCH's legacy pair keeps its shipped 422 (C-3); the merge and the replace restore stay unguarded (the merge brings history the next run reconciles once, in FOLLOW and FORCE; the restore cascades the binding away); Stop and Disconnect write nothing and leave MANUAL at today's phase. A fourth `SeasonMode` forces a format bump and travels; writing over CALENDAR needs an engine change. | C15–C17, §4 |
+| R16-2 | **DECIDED** — ratified | **Idempotency inside the write:** compare the desired phase with today's from the activation rows; the two 409s are "already applied"; one transaction discipline — the extracted in-transaction body (`ReplaceAsset`'s C15 shape), never a nested `run` (H3). | C12, C13 |
+| R16-3 | **DECIDED** — ratified | **The transition date = the local day it is applied;** HA's `last_changed` is information; HA's change time, the fetch time and the application time are three fields. | C5, C13 |
+| R16-4 | **DECIDED** — ratified | **Device-local, schema 21, format 20:** `ha_connection` (address, no token, no display name — one connection needs none) and `season_sync_binding`; neither travels; the nine table sets and the schema-only `VersionAgreementTest` split move; a platform restore without the key reads **NEEDS_TOKEN** — derived from the store at read time rather than flipping `enabled`, so entering the token is the one reauthorization step. | C9–C11, C17, C18 |
+| R16-5 | **DECIDED** — ratified | **The secret store = D9's design:** a Keystore AES-GCM key, ciphertext in `noBackupFilesDir`, no dependency, a core `SecretStore` port with a JVM double; the token never in a log, diagnostic, `toString`, API, MCP, backup or pack. **One stated deviation (N-1):** D9's "excluded by `dataExtractionRules`" (`09-security-privacy.md:25`; D3 `:445`; D8 S7) is not done — the platform never copies `noBackupFilesDir`, so the rule would add nothing; B10 notes it beside those lines. | C7, C18, C30 |
+| R16-6 | **DECIDED** — ratified | **A new small LAN client, not #85's downloader;** #85's classifier, probe, allowlist and `User-Agent` reused; the rule in code; exact `on`/`off` only; DENIED quiet; #85's policy untouched. | C8, C19, C20 |
+| R16-7 | **DECIDED** — ratified | **The backstop's shape:** unique periodic work, 30 minutes, CONNECTED, exponential backoff, KEEP; stale at 30 minutes drives the resume refresh; Sync now explicit; no network callback; single flight plus the revision guard. | C21–C23 |
+| R16-8 | **DECIDED** — ratified | **Lifecycle:** `maintainedHere(held)` on the applier and the link; a replaced asset's binding stays inert on the predecessor. | C13, C16 |
+| R16-9 | **DECIDED** — ratified | **API/MCP read-only:** one sub-resource (the 28th), one MCP read tool (90); no write, no address, no token. | C3, C24, C25 |
+| R16-10 | **DECIDED** — ratified | **Cardinality:** one connection per installation, any number of bindings, at most one per asset. | C9, C17 |
+| R16-11 | **DECIDED** — ratified | **No provenance column on activation rows;** the binding's `applied_*` fields carry it. | C9, C13 |
+| R16-12 | **DECIDED** — ratified | **Proofs under the 2026-10-02 ruling:** JVM first; one device class for WorkManager, the Keystore, the cleartext policy and the client against an in-process fake HA, one Compose class; 59 → 61 on the software-rendered emulator; the fake HA is the device test, and AC10's proof is §7's real-HA proof (R16-Q-A). | §3, §7 |
+| R16-13 | **DECIDED** — ratified (plan default) | **Test connection reads `GET <base>/api/`** (HA's API root), the same client, headers and rules as the poll: the one way to prove the address and token before any entity is linked. | C19, C26 |
+| R16-14 | **DECIDED** — ratified (plan default) | **Disconnect deletes the connection, its bindings (CASCADE) and the token;** a per-asset **Stop syncing** keeps the binding and its provenance. | C17 |
+| R16-15 | **DECIDED** — ratified (plan default) | **Polls continue under a Force mode** and record HA's answer as status, and **every run re-asserts the forced phase through `applyIfChanged`**, whatever HA answered (C-5): idempotent through the compare, at most one row, provenance recorded — so a merge or pack that landed the other phase is corrected on the next run (row 36) and the owner still sees what HA says before returning to Follow. | C13, C27 |
+| R16-16 | **DECIDED** — ratified (plan default) | **The editor's season block is read-only and the journal's season offer is not raised** while a binding is enabled; the guard stays the backstop. `SeasonOffers.offerFor`'s condition is the plan's **one recorded exception** to "never re-check in the UI a rule the use case owns" (N-11): the offer is a prompt, not a write, and its refusal would come only after the owner accepted. | C15, C27 |
+| R16-17 | **DECIDED** — ratified (plan default) | **The MCP tool is appended as a "#16" block** (the shipped convention), so the two tail pins move (audit correction 3) rather than inserting it among the season tools. | C25, §3 |
+| R16-18 | **DECIDED** — ratified (plan default) | **A binding resumes on its own when its asset is maintained here again (C-11).** Unarchiving (`C/usecase/ArchiveAsset.kt:30`), or withdrawing an OUT and then unarchiving (a withdrawal leaves the assets archived, `WithdrawTransferRecord.kt:37-38`), leaves a still-enabled binding enabled; the next successful read applies the current state only — at most one transition dated that day, no catch-up — with no owner step. The binding is this phone's own, never imported, so the issue's "no resume before explicit reauthorization" (about restored or imported configuration) does not apply. The alternative — archive, retire and transfer-out flip `enabled = false` in the same write, so Resume is the owner's step — costs a writer in `ArchiveAsset`, `RetireAsset` and `MarkTransferredOut`, which stay fenced. | C17, row 26a |
+| R16-19 | **DECIDED** — ratified (plan default) | **Resume runs the link's reconciliation (C-4).** A stopped binding whose asset the owner moved to CALENDAR or YEAR_ROUND resumes through C16's steps — the P16-44/45 sentence, the switch row dated today, S55 on a strands refusal, #78's prompt after a YEAR_ROUND resume — and the binding block is drawn on every season mode's branch, so no stopped binding is a dead end. No per-asset Unlink is added (R16-14's Disconnect stays the only delete); P16-38 and P16-41 are reworded to match. | C17, C27, rows 43a, 67, 68 |
+| **R16-Q-A** | **owner — DECIDED** | **Proof = deterministic JVM scenario + device/platform tests against an in-process fake HA + one bounded end-to-end proof from the emulator to the real owner HA over the LAN**, with the private fixture already recorded; no real endpoint, hostname, entity id or token in committed code, docs or logs (placeholders only); **the development phone is untouched** — a physical-phone check may come later as an optional #98 / 1.0.0 smoke, not #16's gate. AC10 in the issue now reads this way. | §1 AC10, §7, rows 60, 71 |
+| **R16-Q-B** | **owner — DECIDED (strict, as proposed)** | **(a)** http only to an RFC 1918 IPv4 literal; https to a DNS name or a private IPv4 literal; no redirects; system trust anchors only. **(b)** before every http request the active network must report Wi-Fi or Ethernet, else the quiet `NOT_ON_LOCAL_NETWORK` and nothing sent; no VPN special case and no inspection of an underlying network in v1. **(c)** an https name only when **every** resolved address is private (RFC 1918 IPv4 or IPv6 ULA `fc00::/7`) at request time, else `NAME_NOT_LOCAL`. **(d) No user-installed or private CA trust in v1:** a private-CA endpoint honestly reports `TLS_FAILED`. The limit stays explicit (limit 15): Wi-Fi/Ethernet plus an RFC 1918 literal narrows but cannot remove a foreign LAN's host owning that address. | C8, C19, C20, limits 15, 17 |
+| **R16-Q-C** | **owner — DECIDED** | **P16-1…52, the reused strings and G1–G3 RATIFIED, with eight wording changes** (P16-3, 5, 12, 28, 29, 44, 45, 51 — §5, verbatim); P16-28/29 say HA is still checked under Force but does not change the season. | §5, C26, C27 |
+| **R16-Q-D** | **owner — DECIDED** | **Periodic WorkManager every 30 minutes; stale threshold 30 minutes;** background timing stays best effort; no 15-minute polling in v1. | C21, C22, P16-32 |
+| **R16-Q-E** | **owner — DECIDED** | **The HA connection and the binding are never in a ServiceTag backup/export, merge or Transfer Pack contract;** no format bump (format stays 20). Wording: never "never travels under any restore mechanism" — Android Auto Backup is Q-F's. | C9, row 20, I11 |
+| **R16-Q-F** | **owner — DECIDED: YES** | **The non-secret Room configuration may stay in Android Auto Backup** (base URL, entity ids, observed state and HA change text, error detail, modes and times, applied provenance); the token, key and ciphertext do not restore as a usable credential, so after a platform restore the binding reads **NEEDS_TOKEN and sends nothing** until the owner re-enters a token — the explicit reauthorization step. The rule: device-local in ServiceTag portability; restorable as inert non-secret configuration through the platform backup. | C9, C17, C18, limit 4 |
+| **R16-Q-G** | **owner — DECIDED: the shipped behaviour** | **`SetSeasonMode`'s switch row dated today; no special backdated-anchor path for #16.** Linking or resuming a CALENDAR or YEAR_ROUND asset may re-anchor IN_SERVICE schedules to today; this is disclosed before the write by the amended P16-44/45 and pinned by the schedule-cadence row (40a). | C16, C17, limit 14, row 40a |
 
 ## 7. Proofs
 
@@ -1079,10 +1075,37 @@ off); the three mode labels are the issue's own.
 - **The schema-21 upgrade note.** The schema 20 → 21 in-place upgrade of a signed build is **not** proven by this
   plan's gate: it is the carrying release's gate, written by B10 (C30) beside the schema-18…20 paragraphs; no
   release carries 18–20 yet, so that first release proves all four.
-- **The emulator and the phones.** The merged-tip gate runs a debug build at schema 21 on the emulator only. Not
-  proven by #16 unless R16-Q-A rules otherwise: the phones (untouched; no install); a real HA; real Wi-Fi and Doze
-  timing; a platform Auto Backup restore onto a second device (JVM-proven through the store's missing-key answer,
-  row 48, and the device row's deleted-key case, row 71).
+- **The end-to-end proof against the real HA (AC10; R16-Q-A, DECIDED).** A proof, not a test: the gate's device
+  class keeps the in-process fake HA (row 71), and the gate never depends on the owner's network.
+  - **Who, where, when:** the controller, once, after the merge and the merged-tip gate, on `emulator-5554` started
+    `-no-window -gpu swangle_indirect -feature -Vulkan`, with the merged tip's debug build. The app on the emulator
+    reaches the owner's HA over the LAN through the emulator's NAT. The environment record states the emulator's
+    active transport (C19 step 1a needs Wi-Fi or Ethernet for http; mobile data is switched off if it is the default).
+  - **Secrets by path only:** the base URL, the https name and the fixture's entity ids come from
+    `~/.config/servicetag/ha-test-proof.env`, the token from `~/.config/servicetag/ha-test.env`, both read by the
+    proof driver and never echoed. None appears in a tracked file, report, ledger, log line or issue: reports say
+    `<ha-base-url>` and `<ha-https-name>`. The token is typed into the masked field (P16-4) by the driver, on the
+    development machine only (limit 17).
+  - **The fixture (the owner's real test helpers, allowed by name):** `input_boolean.servicetag_test_in_season`
+    (starts off) and the other `servicetag_test_*` helpers, each read from the proof file by key: a source switch, a
+    template binary_sensor that reads `unavailable` while that switch is off, an input_text holding an odd state, and
+    an entity id no entity has. The season boolean is flipped **only from the host, through HA's service API**
+    (`input_boolean.turn_on` / `turn_off` with the proof token), never through the app.
+  - **What it observes**, each after Sync now and read back through C24's route and the drawn season card, on a
+    fictional MANUAL asset "Example Heater" linked to the season boolean: on → one START dated today (in season); off →
+    one END (out of season); **offline recovery** — airplane mode or a blocked route gives a status and no row, the
+    boolean flipped meanwhile, and the next successful refresh applies one transition dated that day; **an override**
+    — Force out of season while HA says on writes one END, polls leave it, Follow applies a fresh read; **status
+    only** — the unavailable sensor (`UNSUPPORTED_STATE`, "unavailable"), the odd-state entity
+    (`UNSUPPORTED_STATE`), the missing entity (`ENTITY_NOT_FOUND`, 404); **the private-CA https name** refused with
+    `TLS_FAILED` (R16-Q-B (d)); Test connection OK on the http address. Background timing is recorded honestly, never
+    as a deadline.
+  - **Afterwards:** the fixture is set back (season boolean off, source switch on), the app's Disconnect deletes the
+    token on the emulator, and the record lands in the controller's ledger with placeholders only.
+- **The emulator and the phones.** The merged-tip gate runs a debug build at schema 21 on the emulator only; the
+  development phone is untouched (no install). Not proven by #16: a phone's own Wi-Fi, DNS and Doze timing (limit 13;
+  the optional #98 / 1.0.0 smoke); a platform Auto Backup restore onto a second device (JVM-proven through the
+  store's missing-key answer, row 48, and the device row's deleted-key case, row 71).
 
 ## 8. Relationships
 
@@ -1108,8 +1131,7 @@ off); the three mode labels are the issue's own.
 ## Briefs — common to every brief (eighteen dispatches)
 
 Read §1–§8, the audit and issue #16 (`.superpowers/sdd/2026-10-02-issue-16/issue-16.md`) and every earlier report on
-this branch. **Dispatch precondition:** R16-0 and the controller defaults R16-1…R16-19 accepted at the plan stop, before any dispatch; R16-Q-B (a)–(c) before B1b; R16-Q-E and R16-Q-F before B2; R16-Q-G before B3c; R16-Q-D before B6a;
-R16-Q-C (§5 ratified) before B8a; R16-Q-A before B9 and B10. **The core doubles (C7):** every core brief from B3a
+this branch. **Dispatch precondition: MET** — every ruling DECIDED 2026-10-02 (§6); execution authorized from B1a. **The core doubles (C7):** every core brief from B3a
 builds its fixtures through `BackupInstall`, never a bare list, so a missing cascade fails for the right reason.
 **Fenced words (C-3, C31):** no KDoc, docstring, document, test name or commit added by a brief carries #69 C33(1)'s
 words or a #56 word, even to deny it. **Constructor plumbing (#47 C-1):** a brief whose contract adds a constructor
@@ -1143,7 +1165,7 @@ string not in §5; a schema change outside B2 or any format change; a cited line
 an undecided owner question; the cap reached, the 1-hour target passed with under half the rows green, or the 2-hour
 hard stop.
 
-**Must NOT, always:** step outside the scope (pending R16-0, binding once ruled): "#16 = one bounded workflow — an
+**Must NOT, always:** step outside the scope (R16-0, RATIFIED): "#16 = one bounded workflow — an
 owner-enabled binding from an existing Asset to one Home Assistant boolean entity … Nothing more." — so never add a
 telemetry, reading, meter or measurement path (#56); a write to HA; an NFC surface; InfluxDB, Grafana, MQTT,
 WebSocket or SSE; remote access; a countdown; an inbound listener, server socket in `app/src/main`, foreground service
@@ -1233,7 +1255,7 @@ produced:** `LinkSeasonSync`, `SetSeasonSyncMode`, `EditSeasonSyncEntity`, `Stop
 `requestFreshRead(assetId)`) with a recording double. **Greps:** `SetSeasonMode`'s `run` still opens one write and
 calls the extracted body (read it); `'manualSwitchActivation'` call sites unchanged in count. **Untouched:** as §4.
 **Must NOT:** write an END on stop or forget; link or resume a non-MANUAL asset without the reconciliation step;
-date the switch row other than today (R16-Q-G as recommended); put the token into a row. **Counted RED (9):** rows
+date the switch row other than today (R16-Q-G, DECIDED); put the token into a row. **Counted RED (9):** rows
 39–45, 40a, 43a. **Caps:** 12 runs; 1 h / 2 h. **Size:** about 230 production lines, 380 test lines. **Estimate:**
 60 min. **Split clause:** past 40 min with rows 43a–45 unstarted, they go to a B3c2 (same files).
 
