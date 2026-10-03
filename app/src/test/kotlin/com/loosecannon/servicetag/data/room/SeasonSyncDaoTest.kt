@@ -179,7 +179,13 @@ class SeasonSyncDaoTest {
         bindings.insert(binding(heater, revision = 3))
         assertTrue(bindings.anyEnabled())
 
-        val next = binding(heater, revision = 4).copy(enabled = false, lastAttemptAt = 6_000L, updatedAt = 6_000L)
+        // every field set, distinct within each type, so a transposed SET pair in the hand-written UPDATE shows
+        val next = binding(heater, revision = 4).copy(
+            mode = SyncMode.FORCE_IN, enabled = false, observedState = HaSwitchState.ON,
+            observedChangedAt = "2026-10-02T07:00:00+00:00", lastSuccessAt = 6_100L, lastAttemptAt = 6_200L,
+            errorKind = SyncErrorKind.HTTP_ERROR, errorDetail = "503", errorAt = 6_300L,
+            appliedAction = SeasonAction.END, appliedOn = "2026-10-02", appliedAt = 6_400L, updatedAt = 6_500L,
+        )
         assertTrue("revision 3 -> 4 writes", bindings.update(next))
         assertEquals(next, bindings.get(heater))
         assertFalse(bindings.anyEnabled())
