@@ -55,7 +55,7 @@ ServiceTag 1.6.0 lets a paired workstation do the jobs that used to need the pho
 
 The next product phase is **supplies and consumables**: a canonical catalog for filters, batteries, belts, cartridges, chemicals, fluids and other service materials, with their specifications, the assets they fit, and replacement-on-cadence through ordinary maintenance schedules. After that, ServiceTag can attach manuals, receipts, photos, links and share-intake resources directly to those supply identities.
 
-Larger ideas such as installed-component tracking, richer backup conflict resolution, telemetry/BLE ingestion, Home Assistant integrations, and LLM-assisted equipment research remain later work rather than prerequisites for the core maintenance app.
+Larger ideas such as installed-component tracking, richer backup conflict resolution, telemetry/BLE ingestion, Home Assistant integrations beyond the season sync below, and LLM-assisted equipment research remain later work rather than prerequisites for the core maintenance app.
 
 ## Local-first by design
 
@@ -73,14 +73,29 @@ That means:
 
 ServiceTag is also distinct from [NoteTag](https://github.com/GonzRon/NoteTag). ServiceTag tags identify physical Assets. NoteTag handles the separate tag-to-note/link use case.
 
+### Home Assistant season sync
+
+An Asset's operating season can follow one Home Assistant on/off helper — a heater's heating season, say, set by your own automation. It is optional and does nothing until you connect: Settings › Utilities › **Home Assistant** takes the server address and a long-lived access token from a Home Assistant user made for ServiceTag, without administrator rights; then **Link to Home Assistant** on an Asset's season card takes the helper's entity ID.
+
+- **What the phone reads.** One entity's state, by an authenticated `GET` from the phone to the address you entered — outbound only. `on` starts the season and `off` ends it through the ordinary Start season and End season, dated the day the phone applies it, and only when the answer differs from the Asset's season today; any other answer changes nothing, and the season card says why. **Follow Home Assistant**, **Force in season** and **Force out of season** choose who decides, and **Sync now** checks at once.
+- **How often.** Every 12 hours, Once a day (the default), Once a week or Once a month — a requested interval, never a deadline. The phone checks when you open or return to the app and the interval has passed without a successful check, on Sync now, and by Android's periodic background work where your settings allow it.
+- **Where.** **Any network** is for an https:// address you have made reachable from outside your home, and asks Android for nothing. **Only on this home Wi-Fi** sends the token only after the phone confirms it is on the Wi-Fi you captured, and is the one choice that allows http:// (to a private IPv4 address); it needs precise location, because Android shows a Wi-Fi network's name only with it. Under it, **Background checks on this home network** is Off by default; On asks for background location as well, and refused or withdrawn it falls back to Off's behaviour.
+- **The token** stays on this phone, encrypted with a key in the Android Keystore, in storage Android never backs up. It is in no ServiceTag backup, export, merge or Transfer Pack, on no API or MCP answer, and in no log; the connection and the links are this phone's own as well. After a restore through Android's own backup, the phone asks for the token again and sends nothing until it has it.
+- **From a workstation**, the read-only `GET /v1/assets/{id}/season-sync` ([Developer API v1](docs/api/v1.md)) and the MCP tool `get_season_sync` show a link's state — never the address, the home Wi-Fi's name or the token.
+
+The setup, a fictional example and the limits are in [Home Assistant season sync](docs/home-assistant-season-sync.md).
+
 ### Permissions
 
 - **Notifications** (`POST_NOTIFICATIONS`) — asked at the point of need since 1.2, never at launch.
 - **NFC** and **RECEIVE_BOOT_COMPLETED** — declared, with no runtime request: NFC reads and writes tags, and the boot broadcast re-arms the daily reminder check.
-- **INTERNET** — used by the Developer API, because Android gates creating even a loopback socket on it, and by **Save as document**, ServiceTag's one outbound use: an https download of a reference's document, made when you tap it on the phone, or when your paired workstation asks through the Developer API while its screen is open. On stock Android it is install-time and cannot be denied; some hardened Android builds let the user revoke it. There is no runtime request: the Developer API screen and Save as document each explain a denial and link to the app's settings page.
+- **INTERNET** — used by the Developer API, because Android gates creating even a loopback socket on it, and by ServiceTag's two outbound uses: **Save as document**, an https download of a reference's document, made when you tap it on the phone, or when your paired workstation asks through the Developer API while its screen is open; and the **Home Assistant season sync** (Settings › Utilities › Home Assistant, [above](#home-assistant-season-sync)), one authenticated read of one on/off entity at the address you entered. On standard Android it is install-time and cannot be denied; some hardened Android builds let the user revoke it. There is no runtime request: the Developer API screen, Save as document and the Home Assistant screen each explain a denial and link to the app's settings page.
+- **Precise and approximate location** (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`) — asked together, by the Home Assistant screen, only when you choose "Only on this home Wi-Fi": Android shows the connected Wi-Fi's name only to an app with precise location, and ServiceTag reads that name, never where you are. An approximate grant counts as none. "Any network" asks for nothing.
+- **Background location** (`ACCESS_BACKGROUND_LOCATION`) — asked only when you turn "Background checks on this home network" On, after the precise-location grant; on Android 11 and later you choose "Allow all the time" on the app's settings page. Refused or withdrawn, background checks pause and ServiceTag checks when you open it and on Sync now.
+- **ACCESS_WIFI_STATE** — declared, install-time, with no runtime request: the other half of reading the connected Wi-Fi's name for "Only on this home Wi-Fi".
 - **The attachments folder** — not a permission but a folder-picker grant, for the folder you choose and nothing else.
 - **A shared file** — not a permission but a temporary read grant that comes with the share.
-- **Merged from libraries** — `FOREGROUND_SERVICE`, `WAKE_LOCK` and `ACCESS_NETWORK_STATE` (WorkManager's backstop for reminders), and AndroidX's signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. None is requested at runtime.
+- **Merged from libraries** — `FOREGROUND_SERVICE`, `WAKE_LOCK` and `ACCESS_NETWORK_STATE` (WorkManager's backstop for reminders; ServiceTag also declares `ACCESS_NETWORK_STATE` itself, install-time, for the Home Assistant season sync's network check), and AndroidX's signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. None is requested at runtime.
 - **ACCESS_LOCAL_NETWORK** — Android 17 adds and grants it implicitly to an app that declares INTERNET and targets API 36, as ServiceTag does; ServiceTag never requests it.
 
 ## Build
@@ -110,6 +125,7 @@ ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest
 - [Post-1.4 roadmap — #76](https://github.com/GonzRon/ServiceTag/issues/76)
 - [Developer API v1](docs/api/v1.md)
 - [ServiceTag MCP tools](tools/servicetag-mcp/README.md)
+- [Home Assistant season sync](docs/home-assistant-season-sync.md)
 - [1.4 seasons, service policy, condition and health specification](docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md)
 - [1.3 Android share-intake specification](docs/superpowers/specs/2026-09-23-servicetag-share-intake.md)
 - [1.2 operational-maintenance specification](docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md)

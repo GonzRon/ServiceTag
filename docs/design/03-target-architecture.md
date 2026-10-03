@@ -27,9 +27,35 @@ Boundaries that earn their keep (they hide foreign vocabularies):
 | `ReminderProvider` | AlarmManager/WorkManager/Notification vs Todoist HTTP | `LocalReminderProvider`, `TodoistReminderProvider` |
 | `NdefCodec` (pure) + `TagReader`/`TagWriter` ports | `android.nfc.*` | `NfcReaderModeSession`, `TagWriter` |
 | `AttachmentStore` | filesystem vs SAF vs future cloud | `LocalAttachmentStore`, `SafTreeAttachmentStore` |
-| `SecretStore` | Android Keystore + `Cipher` | `KeystoreSecretStore` |
+| `SecretStore` — built for #16 | Android Keystore + `Cipher`, the ciphertext in `noBackupFilesDir` | `KeystoreSecretStore` |
+| `HaStateReader` (#16) | Home Assistant's REST answer over `HttpURLConnection`, the network check | `HomeAssistantStateClient` |
 | `BackupCodec` (pure) + `BackupIO` port | ZIP/JSON layout vs SAF streams | `SafBackupIO` |
 | `Clock`/`Today` | wall clock | injected; tests pass fixed dates |
+
+> **What #16 built. Amended at implementation (2026-10-03, #16, Home Assistant season sync).**
+> `SecretStore` was built for #16's access token, not for Todoist: one AES-256-GCM Keystore key per connection
+> (alias `servicetag.ha.<id>`), the ciphertext in `noBackupFilesDir/ha-secrets/`, behind a `:core` port with a JVM
+> double. Beside it, `HaStateReader` reads one entity's state. What the rest of #16 rests on:
+>
+> - **A binding drives a `MANUAL` asset only.** `SeasonMode` gained no value. Linking switches a `CALENDAR` or
+>   `YEAR_ROUND` asset into `MANUAL` at today's phase through `SetSeasonMode`'s own rules, and while a binding is
+>   enabled it is the only writer of that asset's season: the four other season writers refuse with
+>   `SeasonSyncOwnsSeason` (the API's 409 `SEASON_SYNC_ENABLED`).
+> - **The applier compares first.** `RecordSeasonSyncResult` takes the desired phase — FOLLOW: Home Assistant's
+>   fresh `on`/`off`; FORCE_IN, FORCE_OUT: the forced phase — compares it with today's phase from the activation rows,
+>   and only on a difference writes one START or END through `RecordSeasonActivation`'s in-transaction body, dated
+>   the day it applies. The compare runs inside the write at the binding's revision, so an older result, a stopped
+>   binding or an asset not maintained here writes nothing.
+> - **Three times, three fields:** Home Assistant's `last_changed` (`observed_changed_at`, its text verbatim,
+>   information only); the fetch time of the last valid answer (`last_success_at`, which a failure never moves;
+>   `last_attempt_at` takes every outcome); and the application time (`applied_at`, with `applied_on` the
+>   activation's date).
+> - **Provenance is the binding's `last_applied_source`** (`HOME_ASSISTANT`, `FORCED_IN`, `FORCED_OUT`), set with
+>   `applied_action`, `applied_on` and `applied_at`, all four together and by the applier alone. Activation rows
+>   carry no provenance column.
+> - **Nothing travels.** `ha_connection` and `season_sync_binding` (Room schema 21) are device-local, the
+>   `deadline_local_delivery` precedent: no backup, export, merge or Transfer Pack carries them, and the backup
+>   format stays 20.
 
 ## 2. Component diagram
 
@@ -445,6 +471,12 @@ attachments/<attachment-id>.<ext>   managed bytes only (references are metadata)
   `dataExtractionRules` excluding the secret file.
 - Restoring tag relationships is automatic: `nfc_tags` rows carry the payload keys, so every tag
   resolves after Replace or Merge.
+
+> **Not done, by design (2026-10-03, #16, R16-5).** No `dataExtractionRules` exclusion was written for the secret
+> file. The one `SecretStore` keeps its ciphertext in `noBackupFilesDir`, which Auto Backup never copies, and its
+> Keystore key never leaves the device, so the rule would add nothing. The Home Assistant connection and bindings
+> are Room rows Auto Backup does copy (R16-Q-F); restored without the key, each binding reads `NEEDS_TOKEN` and
+> sends nothing until the owner enters a token.
 
 Encryption: optional passphrase (AES-GCM, Argon2id or PBKDF2-HMAC-SHA256 with a high iteration
 count) as a NEXT item; default unencrypted with an explicit warning, because an encrypted backup
