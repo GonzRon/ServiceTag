@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -57,6 +58,7 @@ import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.homeassistant.HA_TITLE
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import kotlinx.coroutines.launch
 
@@ -93,6 +95,7 @@ fun SettingsScreen(
     onBackup: () -> Unit,
     onDeveloperApi: () -> Unit,
     onCategories: () -> Unit,
+    onHomeAssistant: () -> Unit,
 ) {
     val activity = LocalActivity.current
     val prefs = graph.prefs
@@ -258,6 +261,11 @@ fun SettingsScreen(
                 icon = ServiceTagIcons.Label,
                 label = "Categories",
                 onClick = onCategories,
+            )
+            UtilityRow(
+                icon = Icons.Outlined.Home,
+                label = HA_TITLE,
+                onClick = onHomeAssistant,
             )
 
             SectionHeader(title = "About")

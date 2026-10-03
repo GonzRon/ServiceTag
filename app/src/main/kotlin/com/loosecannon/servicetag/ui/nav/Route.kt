@@ -124,6 +124,12 @@ sealed interface Route : NavKey {
     @Serializable data object Categories : Route
 
     /**
+     * #16 (C26) — the one Home Assistant connection: address, token, how often and where to check. A pushed
+     * destination reached from Settings, like [DeveloperApi]; no deep link.
+     */
+    @Serializable data object HomeAssistant : Route
+
+    /**
      * 1.2 — the Maintenance destination (spec §2.6, the navigation ruling): due work, schedules
      * including the paused ones the dashboard deliberately omits, maintenance groups and reminder
      * health. The third and last tab.

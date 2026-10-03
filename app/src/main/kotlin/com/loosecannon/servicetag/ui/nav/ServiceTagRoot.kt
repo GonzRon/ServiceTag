@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.seasonsync.ResumeRefresh
 import com.loosecannon.servicetag.ui.api.DeveloperApiScreen
+import com.loosecannon.servicetag.ui.homeassistant.HomeAssistantScreen
 import com.loosecannon.servicetag.ui.asset.AssetDetailScreen
 import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
@@ -491,6 +492,13 @@ fun ServiceTagRoot(
                         onBackup = { backStack.add(Route.Backup) },
                         onDeveloperApi = { backStack.add(Route.DeveloperApi) },
                         onCategories = { backStack.add(Route.Categories) },
+                        onHomeAssistant = { backStack.add(Route.HomeAssistant) },
+                    )
+                }
+                entry<Route.HomeAssistant> {
+                    HomeAssistantScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
                     )
                 }
                 entry<Route.Categories> {
