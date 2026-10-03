@@ -66,8 +66,8 @@ the one body key it is about, then the `problems` in parentheses.
   same way, from the same read, naming the feature "supply item and installed component resources". Given
   `asset_id`, each keeps exactly the minimum it had. The minima are therefore 8 for every write, 11 for the warranty
   tools, 12 for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the
-  supply tools and a linked line, 19 for the installed component tools, and 20 for a supply item or installed
-  component owner on the five resource tools.
+  supply tools and a linked line, 19 for the installed component tools, 20 for a supply item or installed
+  component owner on the five resource tools, and 21 for `get_season_sync` (#16, Home Assistant season sync).
 
 ## Using it
 

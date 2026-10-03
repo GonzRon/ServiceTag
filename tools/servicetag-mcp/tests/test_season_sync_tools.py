@@ -112,15 +112,20 @@ def test_the_answer_carries_c3s_keys_and_nothing_more(phone21) -> None:
 
 def test_a_schema_20_phone_is_refused_with_nothing_sent(paired) -> None:
     """Row 64 (C25): the route is schema 21's, so a schema-20 phone is refused by name with nothing sent but the
-    pairing's one `/v1/status` read, and the refusal names the feature (G2)."""
-    assert server_module._MIN_SEASON_SYNC_SCHEMA_VERSION == 21
+    pairing's one `/v1/status` read, and the refusal names the feature (G2). The behaviour is asserted first and
+    the pinned minimum last, so a gate written one lower fails here on the request it lets through."""
     paired.reply("GET", "/v1/status", 200, STATUS_20)
-    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as raised:
-        server_module.get_season_sync(asset_id="a1")
-    text = str(raised.value)
+    try:
+        answer = server_module.get_season_sync(asset_id="a1")
+    except ToolError as refused:
+        text = str(refused)
+    else:
+        text = f"answered {answer!r}"
+    assert paths(paired) == [("GET", "/v1/status")], "a schema-20 phone must be sent only the status read"
+    assert "APP_SCHEMA_TOO_OLD" in text, text
     assert "reports schema 20; get_season_sync needs schema 21" in text, text
     assert "(Home Assistant season sync)" in text, text
-    assert paths(paired) == [("GET", "/v1/status")]
+    assert server_module._MIN_SEASON_SYNC_SCHEMA_VERSION == 21
 
 
 def test_an_empty_id_or_an_unknown_argument_is_refused_before_any_request(paired) -> None:
