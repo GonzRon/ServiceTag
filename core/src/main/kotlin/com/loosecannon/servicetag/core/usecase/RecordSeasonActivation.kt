@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 
 /**
  * Records one manual START or END (spec §3.3; master plan §7.2). An activation is an **immutable fact**:
@@ -25,7 +26,8 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   later-created row then wins (inv. 91);
  * - an `eventId` must name an event of this asset ([SeasonProblem.ForeignEvent]).
  *
- * Then the state, each a 409: [SeasonNotManual]; a START when the latest row is a START
+ * Then the state, each a 409: first #16's [SeasonSyncOwnsSeason] while an enabled binding owns the season (C15),
+ * then [SeasonNotManual]; a START when the latest row is a START
  * ([SeasonAlreadyStarted]); an END when it is an END, or when there is no row at all, because a MANUAL
  * asset with no history reads OUT_OF_SEASON (plan decision 32; [SeasonAlreadyEnded]).
  *
@@ -42,9 +44,10 @@ class RecordSeasonActivation(
     private val clock: Clock,
     private val today: Today,
     private val recompute: RecomputeSchedules,
+    private val seasonSync: SeasonSyncGuard,
 ) {
     suspend fun run(assetId: AssetId, cmd: ActivationCommand): SeasonActivation = uow.write {
-        recordInTransaction(assetId, cmd)
+        recordInTransaction(assetId, cmd, guarded = true)
     }
 
     /**
@@ -53,8 +56,11 @@ class RecordSeasonActivation(
      * transaction witness before the outer block finishes), so
      * [RecordSeasonSyncResult][com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult] — already inside its
      * own `uow.write` — calls this directly instead of nesting through [run].
+     *
+     * [guarded] asks [SeasonSyncGuard] after the 422 and before the first 409 (C15): [run] passes `true`; the applier,
+     * the binding's own writer, passes `false`.
      */
-    internal suspend fun recordInTransaction(assetId: AssetId, cmd: ActivationCommand): SeasonActivation {
+    internal suspend fun recordInTransaction(assetId: AssetId, cmd: ActivationCommand, guarded: Boolean): SeasonActivation {
         val asset = assets.get(assetId) ?: throw NoSuchAsset(assetId)
         val t = today.localDate()
         val manual = asset.seasonMode == SeasonMode.MANUAL
@@ -74,6 +80,7 @@ class RecordSeasonActivation(
         }
         if (problems.isNotEmpty()) throw SeasonValidation(problems)
 
+        if (guarded) seasonSync.requireNotSynced(assetId)
         if (!manual) throw SeasonNotManual(assetId)
         when (cmd.action) {
             SeasonAction.START -> if (latest?.action == SeasonAction.START) throw SeasonAlreadyStarted(assetId)

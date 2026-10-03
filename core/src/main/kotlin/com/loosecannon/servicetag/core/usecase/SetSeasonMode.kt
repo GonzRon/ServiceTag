@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 
 /**
  * Changes how an asset's season is decided (spec §3.2, §3.4; master plan §7.2): YEAR_ROUND, a
@@ -18,7 +19,8 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * - 422 [SeasonValidation] for the body ([seasonModeProblems]);
  * - 409 [SeasonModeStrandsPolicy] when the change would remove or re-kind the boundary a PRE_SERVICE
- *   schedule counts back from ([strandedBy]), naming those schedules.
+ *   schedule counts back from ([strandedBy]), naming those schedules;
+ * - #16 (C15): before that, 409 [SeasonSyncOwnsSeason] while an enabled binding owns the season — a change only.
  *
  * **A switch into MANUAL** writes exactly one activation dated today, in the same transaction: START
  * for IN_SEASON, END for OUT_OF_SEASON — even when the latest historical row already says the same,
@@ -41,8 +43,21 @@ class SetSeasonMode(
     private val clock: Clock,
     private val today: Today,
     private val recompute: RecomputeSchedules,
+    private val seasonSync: SeasonSyncGuard,
 ) {
     suspend fun run(assetId: AssetId, cmd: SeasonModeCommand): Asset = uow.write {
+        setInTransaction(assetId, cmd, guarded = true)
+    }
+
+    /**
+     * The rules and the write themselves, without opening a transaction ([ApplyTemplate.applyInTransaction]'s
+     * shape: the fake unit of work's `write` is not re-entrant). [guarded] asks the season guard, as [run] always
+     * does. #16's link and resume (C16, C17) call this inside their own write for the switch into MANUAL, dated today:
+     * the link with [guarded] false, since its binding does not exist yet (the applier's
+     * [RecordSeasonActivation.recordInTransaction] shape); the resume with [guarded] true, **before** it enables its
+     * binding, so the guard still finds it stopped. Nothing else calls it.
+     */
+    internal suspend fun setInTransaction(assetId: AssetId, cmd: SeasonModeCommand, guarded: Boolean): Asset {
         val current = assets.get(assetId) ?: throw NoSuchAsset(assetId)
         val clean = cmd.trimmed()
         val problems = seasonModeProblems(current.seasonMode, clean)
@@ -52,8 +67,9 @@ class SetSeasonMode(
             current.seasonStartMmdd == clean.seasonStartMmdd &&
             current.seasonEndMmdd == clean.seasonEndMmdd
         ) {
-            return@write current
+            return current
         }
+        if (guarded) seasonSync.requireNotSynced(assetId)
 
         val now = clock.nowMillis()
         val next = current.copy(
@@ -69,6 +85,6 @@ class SetSeasonMode(
         manualSwitchActivation(assetId, current.seasonMode, clean, today.localDate(), now, ids)
             ?.let { activations.insert(it) }
         recompute.forAsset(assetId)
-        next
+        return next
     }
 }

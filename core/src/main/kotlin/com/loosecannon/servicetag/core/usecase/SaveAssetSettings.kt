@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import java.time.LocalDate
 
 /**
@@ -44,6 +45,8 @@ data class AssetSettingsCommand(
  *   re-kinds the boundary then, and [BreakStrandsPolicy] otherwise.
  * - **A switch into MANUAL** writes exactly one activation dated today, as [SetSeasonMode] does
  *   (inv. 92); a create counts as coming from YEAR_ROUND, so creating a MANUAL asset writes its first row.
+ * - **#16 (C15):** a save that changes the season mode or window is refused with [SeasonSyncOwnsSeason], first
+ *   among the 409s, while an enabled binding owns the season; a save that changes no season field is not.
  * - **Unchanged writes nothing.** A save equal to the stored row writes no asset, no activation and
  *   recomputes nothing; a changed season or break recomputes the asset's schedules, and nothing else
  *   does. No event, closure or schedule column is touched (inv. 86).
@@ -70,6 +73,7 @@ class SaveAssetSettings(
     private val recompute: RecomputeSchedules,
     private val applyTemplate: ApplyTemplate,
     private val promoteCategory: PromoteCategory,
+    private val seasonSync: SeasonSyncGuard,
 ) {
     suspend fun run(id: AssetId?, cmd: AssetSettingsCommand, templateKey: String? = null): Asset = uow.write {
         saveInTransaction(id, cmd, templateKey, today.localDate())
@@ -135,6 +139,8 @@ class SaveAssetSettings(
 
         if (current != null) {
             if (next.copy(updatedAt = current.updatedAt) == current) return current
+            // #16 (C15): only a season write is refused — a changed mode or window, which a switch into MANUAL is.
+            if (current.seasonModeChangedTo(next)) seasonSync.requireNotSynced(current.id)
             // The 409: the kind before this save against the kind after both parts apply.
             val stranded = strandedBy(current, next, schedules.forAsset(current.id))
             if (stranded.isNotEmpty()) {
@@ -160,6 +166,10 @@ class SaveAssetSettings(
         // The row as stored: a template stamps its key on the asset it seeds.
         return assets.get(next.id) ?: next
     }
+
+    /** Whether the season mode or its window changed: the season facts a synced asset's binding owns (#16, C15). */
+    private fun Asset.seasonModeChangedTo(next: Asset): Boolean =
+        seasonMode != next.seasonMode || seasonStartMmdd != next.seasonStartMmdd || seasonEndMmdd != next.seasonEndMmdd
 
     /** Whether the season or the break — the inputs every schedule's state reads from the asset — changed. */
     private fun Asset.seasonChangedTo(next: Asset): Boolean =

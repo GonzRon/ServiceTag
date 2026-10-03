@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
 import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -376,13 +377,22 @@ class FakeGraph(
 
     /** 1.4 — the season model's commands, mirroring `AppGraph`'s five fields by name (master plan §1). */
     val setSeasonMode: SetSeasonMode =
-        SetSeasonMode(assets, schedules, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules)
+        SetSeasonMode(
+            assets, schedules, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
+            SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+        )
     val setMaintenanceBreak: SetMaintenanceBreak =
         SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
     val recordSeasonActivation: RecordSeasonActivation =
-        RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules)
+        RecordSeasonActivation(
+            assets, events, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
+            SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+        )
     val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, todayPort)
-    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, todayPort)
+    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(
+        seasonActivations, recordSeasonActivation, uow, todayPort,
+        SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+    )
 
     /** 1.4 — condition and health configuration, mirroring `AppGraph`'s six fields by name (master plan §1). */
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
@@ -412,7 +422,7 @@ class FakeGraph(
     val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-        applyTemplate, promoteCategory,
+        applyTemplate, promoteCategory, SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
     )
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
@@ -628,7 +638,10 @@ class FakeGraph(
      */
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, todayPort),
-        SeasonOffers(assets, seasonActivations, acceptSeasonOffer, todayPort),
+        SeasonOffers(
+            assets, seasonActivations, acceptSeasonOffer, todayPort,
+            SeasonSyncGuard(RoomSeasonSyncRepository(db.seasonSyncBindingDao())),
+        ),
         ImpairmentOffers(assets, conditions, acceptImpairmentOffer, todayPort),
     )
 

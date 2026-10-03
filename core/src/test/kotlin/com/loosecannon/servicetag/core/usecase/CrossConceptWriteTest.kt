@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
+import com.loosecannon.servicetag.core.testing.InMemorySeasonSyncRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
@@ -268,9 +270,9 @@ class CrossConceptWriteTest {
     )
     private val acceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     private val recordSeasonActivation =
-        RecordSeasonActivation(assets, events, activations, uow, ids, clock, today, recompute)
-    private val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, today)
-    private val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute)
+        RecordSeasonActivation(assets, events, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
+    private val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, today, SeasonSyncGuard(InMemorySeasonSyncRepository()))
+    private val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     private val setMaintenanceBreak = SetMaintenanceBreak(assets, schedules, uow, clock, recompute)
     private val setHealthPolicy = SetHealthPolicy(assets, subjects, uow, clock)
     private val setWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
@@ -282,7 +284,7 @@ class CrossConceptWriteTest {
     private val promoteCategory = PromoteCategory(categories)
     private val saveAssetSettings = SaveAssetSettings(
         assets, schedules, subjects, activations, uow, ids, clock, today, recompute,
-        ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory,
+        ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory, SeasonSyncGuard(InMemorySeasonSyncRepository()),
     )
     private val createAsset =
         CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory)

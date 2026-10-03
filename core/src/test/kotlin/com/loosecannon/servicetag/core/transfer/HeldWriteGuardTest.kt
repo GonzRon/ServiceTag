@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.journal.SeedTemplates
@@ -236,7 +237,7 @@ class HeldWriteGuardTest {
     private val promote = PromoteCategory(install.categories)
     private val applyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     private val recordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, today)
-    private val recordActivation = RecordSeasonActivation(assets, events, activations, uow, ids, clock, today, recompute)
+    private val recordActivation = RecordSeasonActivation(assets, events, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(install.seasonSyncBindings))
 
     private val heater = AssetId("h1")
     private val anode = AssetId("h2")
@@ -316,6 +317,7 @@ class HeldWriteGuardTest {
         val retire = RetireAsset(assets, uow, clock) { recompute.forAsset(it) }
         val settings = SaveAssetSettings(
             assets, schedules, subjects, activations, uow, ids, clock, today, recompute, applyTemplate, promote,
+            SeasonSyncGuard(install.seasonSyncBindings),
         )
         val create = CreateAsset(assets, uow, ids, clock, applyTemplate, promote)
         refused(
@@ -336,7 +338,7 @@ class HeldWriteGuardTest {
             },
             "SetWarrantyReminder" to { SetWarrantyReminder(assets, uow, clock).run(heater, com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand(14)) },
             "SetSeasonMode" to {
-                SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute)
+                SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(install.seasonSyncBindings))
                     .run(heater, SeasonModeCommand(SeasonMode.CALENDAR, "11-01", "03-31"))
             },
             "SetMaintenanceBreak" to {
@@ -497,7 +499,7 @@ class HeldWriteGuardTest {
         refused(
             anode,
             "AcceptSeasonOffer" to {
-                AcceptSeasonOffer(activations, recordActivation, uow, today).run(anode, install.events.get(EventId("e2"))!!, SeasonAction.START)
+                AcceptSeasonOffer(activations, recordActivation, uow, today, SeasonSyncGuard(install.seasonSyncBindings)).run(anode, install.events.get(EventId("e2"))!!, SeasonAction.START)
             },
         )
     }

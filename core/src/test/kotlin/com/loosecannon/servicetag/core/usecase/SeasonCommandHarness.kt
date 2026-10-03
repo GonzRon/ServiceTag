@@ -14,7 +14,9 @@ import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemorySeasonSyncRepository
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
@@ -77,12 +79,12 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
         schedules, states, events, closures, groups, assets, activations, todayPort, clock,
     ) { ZoneOffset.UTC }
 
-    val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, todayPort, recompute)
+    val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, todayPort, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     val setMaintenanceBreak = SetMaintenanceBreak(assets, schedules, uow, clock, recompute)
     val recordSeasonActivation =
-        RecordSeasonActivation(assets, events, activations, uow, ids, clock, todayPort, recompute)
+        RecordSeasonActivation(assets, events, activations, uow, ids, clock, todayPort, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     val getAssetSeason = GetAssetSeason(assets, activations, uow, todayPort)
-    val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, todayPort)
+    val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, todayPort, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     val promoteCategory = PromoteCategory(categories)
     val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
     val createAsset = CreateAsset(
