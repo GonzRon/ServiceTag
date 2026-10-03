@@ -161,6 +161,8 @@ import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
+import com.loosecannon.servicetag.seasonsync.JdkAead
+import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.journal.CaseLinks
@@ -643,6 +645,11 @@ class FakeGraph(
     /** #16: the Home Assistant connection and the season bindings, over the real tables, as `AppGraph` builds them. */
     val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
     val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
+
+    /** #16 (C18): the token store as `AppGraph` builds it, over the JDK's AES-GCM and a temporary no-backup directory. */
+    val secretStore: KeystoreSecretStore =
+        KeystoreSecretStore(kotlin.io.path.createTempDirectory("no-backup").toFile(), JdkAead())
+
     val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
     val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
 

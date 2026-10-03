@@ -234,6 +234,7 @@ import com.loosecannon.servicetag.reminders.DeadlineDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
+import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
@@ -450,6 +451,9 @@ class AppGraph(private val context: Context) {
      */
     val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
     val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
+
+    /** #16 (C18, R16-5): the Home Assistant token, sealed by a Keystore key in a file the platform never copies. */
+    val secretStore: KeystoreSecretStore = KeystoreSecretStore.onDevice(context)
 
     /**
      * Derived state as a **read**, so the delivery path cannot reach the one write method the
