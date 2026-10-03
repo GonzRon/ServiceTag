@@ -145,10 +145,11 @@ is read-only until syncing stops, and the Developer API's season start, end and 
 
 ## When the phone checks
 
-On Test connection; on the fresh check that linking, choosing Follow, resuming or saving the connection asks for; on
-Sync now; when you open or return to ServiceTag and a link has had no successful check within the chosen interval;
-and by Android's periodic background work at the chosen interval, with "Any network", or with "Only on this home
-Wi-Fi" and Background checks On.
+On Test connection; on the fresh check that linking, changing a link's entity ID, choosing Follow, resuming, or
+saving a changed address, token, network option or captured Wi-Fi asks for; on Sync now; when you open or return
+to ServiceTag and a link has had no successful check within the chosen interval; and by Android's periodic
+background work at the chosen interval, with "Any network", or with "Only on this home Wi-Fi" and Background
+checks On.
 
 ## The token, backups and other phones
 
@@ -184,5 +185,10 @@ it came from. Neither shows the address, the home Wi-Fi's name or the token, and
   up.
 - **A merge or a Transfer Pack can bring in another season change** for a linked Asset; the next check corrects it
   with at most one change.
-- **The last change is kept only on the link.** Season history lists the starts and ends like any other, and
-  Disconnect removes the link's record of them.
+- **The last change is kept only on the link.** Season history lists the starts and ends like any other. Disconnect
+  deletes the link's record of its last change; the season history stays.
+- **Proven on an emulator, not yet on a phone.** A phone's own Wi-Fi, its private DNS and Android's battery saving
+  (Doze) have not been observed, and a background check's read of the Wi-Fi name is proven only on an emulator.
+- **Some cases are silent.** If the phone's key store or database fails during Sync now or a card action, nothing
+  is shown and the last status stays; try again. A capture that reads a blank Wi-Fi name, or a name Android hides
+  without a reason, captures nothing and shows no line.
