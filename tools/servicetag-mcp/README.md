@@ -110,7 +110,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Eighty-nine: `pair` plus one per API operation.
+Ninety: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -325,6 +325,14 @@ unit the replaced row's parent and place, and only the link and the composition 
 `list_installed_components` and pass them. Nothing is inferred: an installed component names a supply item only
 by the id a caller sends, and adding one writes no applicability row and no event. `docs/api/v1.md`'s
 **Installed components (#47)** section is the contract.
+
+**Home Assistant season sync (#16; needs schema 21)** — `get_season_sync`: `GET /v1/assets/{id}/season-sync`, read
+only. On the phone an asset can follow one Home Assistant on/off entity; this shows that link's non-secret state and
+status — the connection's settings, the binding's mode and state, its last valid answer, the latest check that
+decided nothing and the last activation it recorded — and never the address, the home Wi-Fi's name or the token.
+Linking, the modes, Sync now, stopping and the connection are the phone's alone; while a binding is enabled,
+`start_season`, `end_season` and a `set_season_mode` change on that asset answer `SEASON_SYNC_ENABLED` (409).
+`docs/api/v1.md`'s **Home Assistant season sync (#16)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 
