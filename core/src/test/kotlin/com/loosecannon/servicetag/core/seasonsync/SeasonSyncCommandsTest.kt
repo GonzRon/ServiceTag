@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -223,6 +224,29 @@ class SeasonSyncCommandsTest {
         assertEquals(SeasonSyncLinkRefusal.BAD_ENTITY_ID, e.reason)
     }
 
+    /** Fix round 1, MINOR-1: a stopped binding has given the season back, so its mode and entity are stored only. */
+    @Test
+    fun aModeSetOnAStoppedBindingIsStoredOnly() = runTest {
+        val c = linkedHeater()
+        c.stop.run(heater)
+        val rows = c.h.dated()
+        val commits = c.mark()
+
+        val forced = c.setMode.run(heater, SyncMode.FORCE_OUT)
+        assertEquals(rows, c.h.dated(), "stopped: Force writes no row")
+        assertEquals(3, forced.revision)
+        c.setMode.run(heater, SyncMode.FOLLOW)
+        c.edit.run(heater, "input_boolean.another_example")
+        assertEquals(5, c.h.binding().revision)
+        assertEquals(SeasonPhase.IN_SEASON, c.phase())
+        c.after(commits)
+
+        val resumed = c.mark()
+        c.resume.run(heater)
+        assertEquals(rows, c.h.dated(), "a MANUAL asset: Resume itself writes no row")
+        c.after(resumed, "ensure", "read $HEATER")
+    }
+
     // ---- row 43a: Resume reconciles (C-4, R16-19) ----
 
     @Test
@@ -339,6 +363,26 @@ class SeasonSyncCommandsTest {
         assertEquals(first.id, last.id, "updated in place: one row, one id")
         assertEquals(first.createdAt, last.createdAt)
         assertEquals("https://ha.example:8123", last.baseUrl)
+    }
+
+    /** Fix round 1, MINOR-2: a committed settings change still reaches the work when the token store fails. */
+    @Test
+    fun aFailedTokenPutStillReschedulesTheWorkAndAsksForNoRead() = runTest {
+        val c = linkedHeater()
+        val connection = c.connections.rows.values.single()
+        c.secrets.failPuts = true
+        val commits = c.mark()
+
+        val e = assertFailsWith<IllegalStateException> {
+            c.save.run(
+                connection.baseUrl, Secret("fictional-token-2"), SyncCadence.WEEKLY, connection.networkEligibility,
+                connection.homeNetworkSsid, connection.backgroundChecks,
+            )
+        }
+
+        assertEquals("the token store failed", e.message)
+        assertEquals(SyncCadence.WEEKLY, c.connections.rows.values.single().cadence, "the row committed")
+        c.after(commits, "ensure")
     }
 
     // ---- row 45: reauthorization (AC9, I12) ----

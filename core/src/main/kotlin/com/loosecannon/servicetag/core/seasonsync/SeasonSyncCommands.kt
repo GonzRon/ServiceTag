@@ -11,8 +11,10 @@ import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 
 /**
  * #16 (C17, C22) — how the commands reach the runner, which implements this (B6a). Every call comes **after** the
- * command's write has committed. [ensure] keeps the periodic work in step with the stored settings, as C22's rule
- * allows it; [cancel] stops it; [requestFreshRead] asks for one read of that asset's binding.
+ * command's write has committed. [ensure] enqueues or updates the work when C22's rule allows it (an enabled binding,
+ * and ANY_NETWORK, or HOME_NETWORK_ONLY with background checks ON and the grant) **and cancels it otherwise**; the
+ * commands call it whenever some binding is enabled, so it is never only an enqueue. [cancel] stops the work, called
+ * when no binding is enabled; [requestFreshRead] asks for one read of that asset's binding.
  */
 interface SeasonSyncScheduler {
     suspend fun ensure()
@@ -223,7 +225,8 @@ class SaveHaConnectionRefused(val reason: SaveHaConnectionRefusal) :
  * [backgroundChecks] is given; a null [cadence] or [backgroundChecks] keeps a stored connection's. [token] is put in
  * the [SecretStore] **after** the commit, and only when given. A new token, address, eligibility or Wi-Fi name moves
  * every binding's revision, so a read built before it is dropped, and each enabled binding is then read afresh; a
- * changed cadence, eligibility or background setting ensures or cancels the work after the commit.
+ * changed cadence, eligibility or background setting ensures or cancels the work after the commit — even when the
+ * token store fails, whose failure then reaches the caller and asks for no read.
  */
 class SaveHaConnection(
     private val connections: HaConnectionRepository,
@@ -292,11 +295,14 @@ class SaveHaConnection(
                 stored.backgroundChecks != next.backgroundChecks
             Saved(next, reread, if (rescheduled) bindings.anyEnabled() else null)
         }
-        if (token != null) secrets.put(saved.connection.id, token)
-        when (saved.work) {
-            true -> scheduler.ensure()
-            false -> scheduler.cancel()
-            null -> Unit
+        try {
+            if (token != null) secrets.put(saved.connection.id, token)
+        } finally {
+            when (saved.work) {
+                true -> scheduler.ensure()
+                false -> scheduler.cancel()
+                null -> Unit
+            }
         }
         saved.reread.forEach { scheduler.requestFreshRead(it) }
         return saved.connection
