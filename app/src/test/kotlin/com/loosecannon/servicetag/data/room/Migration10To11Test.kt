@@ -98,7 +98,7 @@ class Migration10To11Test {
                         )
                         assertEquals(30, m.columnsOf("asset").size)
                         // #79b's two case tables follow in the next step of the chain.
-                        assertEquals("the one new table", V11_TABLES, m.tableNames() - ROOM_INTERNAL - v10Tables() - V12_TABLES - V13_TABLES - V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES)
+                        assertEquals("the one new table", V11_TABLES, m.tableNames() - ROOM_INTERNAL - v10Tables() - V12_TABLES - V13_TABLES - V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES - V21_TABLES)
                     }
                 }
             }

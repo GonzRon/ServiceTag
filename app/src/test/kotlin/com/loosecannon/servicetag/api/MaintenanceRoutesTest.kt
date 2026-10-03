@@ -1549,7 +1549,7 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(20, status.schemaVersion)
+        assertEquals(21, status.schemaVersion)
         assertEquals(20, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])

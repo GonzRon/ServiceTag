@@ -174,7 +174,7 @@ class Migration19To20Test {
                 withConnection(file) { m ->
                     withConnection(fresh) { f ->
                         assertEquals("the table set", f.tableNames() - ROOM_INTERNAL, m.tableNames() - ROOM_INTERNAL)
-                        assertEquals("no table is added", V19_ALL_TABLES, f.tableNames() - ROOM_INTERNAL)
+                        assertEquals("no table is added", V19_ALL_TABLES + V21_TABLES, f.tableNames() - ROOM_INTERNAL)
                         for (table in f.tableNames() - ROOM_INTERNAL) {
                             assertEquals("$table columns", f.columnsOf(table), m.columnsOf(table))
                             assertEquals("$table primary key", f.primaryKeyOf(table), m.primaryKeyOf(table))

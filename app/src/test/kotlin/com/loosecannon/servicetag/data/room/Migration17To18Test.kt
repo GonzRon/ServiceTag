@@ -73,7 +73,7 @@ class Migration17To18Test {
                 }
             }
             withConnection(file) { m ->
-                assertEquals("the three new tables", V18_TABLES, m.tableNames() - ROOM_INTERNAL - v17Tables - V19_TABLES)
+                assertEquals("the three new tables", V18_TABLES, m.tableNames() - ROOM_INTERNAL - v17Tables - V19_TABLES - V21_TABLES)
                 for (table in V18_TABLES) {
                     assertEquals("$table is empty", listOf("0"), m.lines("SELECT COUNT(*) FROM $table"))
                     assertEquals("$table primary key", listOf("id"), m.primaryKeyOf(table))
