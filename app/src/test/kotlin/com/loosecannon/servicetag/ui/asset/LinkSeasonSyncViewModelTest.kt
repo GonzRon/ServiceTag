@@ -128,6 +128,21 @@ class LinkSeasonSyncViewModelTest {
         graph.assets.upsert(assetRow("year", seasonMode = SeasonMode.YEAR_ROUND))
         graph.assets.upsert(assetRow("hand", seasonMode = SeasonMode.MANUAL))
         graph.assets.upsert(assetRow("spare", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("late", seasonMode = SeasonMode.MANUAL))
+
+        // Save is held until the sentence is read: a model whose asset read is still pending writes nothing.
+        val pending = LinkSeasonSyncViewModel(
+            AssetId("late"), SeasonSyncSheetPurpose.LINK, graph.assets, graph.schedules, graph.haConnections,
+            graph.linkSeasonSync, graph.resumeSeasonSync,
+        )
+        assertNull("the read is pending", pending.now.sentence)
+        assertFalse(pending.now.canSave)
+        pending.onEntityId(helper)
+        pending.save()
+        advanceUntilIdle()
+        assertEquals(manualSentence, pending.now.sentence)
+        assertNull("nothing written before the sentence", binding("late"))
+        assertNull(pending.now.finished)
 
         mapOf("cal" to calendarSentence, "year" to yearRoundSentence, "hand" to manualSentence).forEach { (id, said) ->
             val sheet = open(id, SeasonSyncSheetPurpose.LINK)
@@ -155,11 +170,12 @@ class LinkSeasonSyncViewModelTest {
     /**
      * #78 after a YEAR_ROUND link: the binding is written first, then P78-1a/1b's count — the live CONTINUOUS
      * schedules, ACTIVE and PAUSED, never ARCHIVED — and the sheet waits for the answer, which writes nothing:
-     * "Keep schedules as-is" closes it, "Review maintenance schedules" closes it onto the schedules.
+     * "Keep schedules as-is" closes it, "Review maintenance schedules" closes it onto the schedules. A stopped binding
+     * resumed through the sheet on an asset moved back to YEAR_ROUND asks the same question (R16-19; row 43a's phone half).
      */
     @Test fun aYearRoundLinkWithContinuousSchedulesAsksP78After() = runTest {
         connect()
-        listOf("year", "year2").forEach { id ->
+        listOf("year", "year2", "year3").forEach { id ->
             graph.assets.upsert(assetRow(id, seasonMode = SeasonMode.YEAR_ROUND))
             graph.schedules.upsert(continuous("$id-a", id))
             graph.schedules.upsert(continuous("$id-p", id, ScheduleStatus.PAUSED))
@@ -177,12 +193,29 @@ class LinkSeasonSyncViewModelTest {
         assertEquals(SeasonSheetExit.CLOSED, keep.now.finished)
         assertEquals("the answer writes nothing", before, graph.schedules.forAsset(AssetId("year")))
 
+        val beforeReview = graph.schedules.forAsset(AssetId("year2"))
         val review = open("year2", SeasonSyncSheetPurpose.LINK)
         review.onEntityId(helper)
         act { review.save() }
         assertEquals(EditPrompt.ReconcileSchedules(2), review.now.prompt)
         act { review.reviewSchedules() }
         assertEquals(SeasonSheetExit.REVIEW_SCHEDULES, review.now.finished)
+        assertEquals("the answer writes nothing", beforeReview, graph.schedules.forAsset(AssetId("year2")))
+
+        // Resume: linked out of season (MANUAL, no row), stopped, moved back to YEAR_ROUND, then resumed in the sheet.
+        graph.assets.upsert(assetRow("year3", seasonMode = SeasonMode.MANUAL))
+        graph.linkSeasonSync.run(AssetId("year3"), helper)
+        graph.stopSeasonSync.run(AssetId("year3"))
+        graph.setSeasonMode.run(AssetId("year3"), SeasonModeCommand(SeasonMode.YEAR_ROUND))
+        advanceUntilIdle()
+        val resumed = open("year3", SeasonSyncSheetPurpose.RESUME)
+        assertEquals(yearRoundSentence, resumed.now.sentence)
+        act { resumed.save() }
+        assertTrue("the resume is written before the question", binding("year3")!!.enabled)
+        assertEquals(EditPrompt.ReconcileSchedules(2), resumed.now.prompt)
+        assertNull("the sheet waits for the answer", resumed.now.finished)
+        act { resumed.keepSchedules() }
+        assertEquals(SeasonSheetExit.CLOSED, resumed.now.finished)
     }
 
     /** A PRE_SERVICE strand refuses the CALENDAR link: S55 names the schedule, the sheet stays, nothing is written. */

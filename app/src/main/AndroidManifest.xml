@@ -14,7 +14,7 @@
     <!-- #16 (C32; R16-21, R16-20 as amended): the home-network check reads the connected Wi-Fi's name. The manifest
          declares; it grants nothing. The network-state and Wi-Fi-state lines are install-time (the first also arrives
          merged from WorkManager). Precise and approximate location are requested together, by the Home Assistant
-         screen, only when the owner picks "Only on this home Wi-Fi/local network"; background location only when
+         screen, only when the owner picks "Only on this home Wi-Fi"; background location only when
          the owner turns its background checks on, after that grant. "Any network" asks for nothing. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
