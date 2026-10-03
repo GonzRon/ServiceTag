@@ -53,8 +53,8 @@ sealed interface SeasonSyncRecorded {
  * - **Lifecycle (R16-8, R16-18).** An asset that is not maintained here takes no decision and shows
  *   [SyncErrorKind.NOT_MAINTAINED_HERE]; once it is again, the next run applies the current state only.
  *
- * It writes one activation row (through the body), one binding update and the body's recompute, and nothing else:
- * no event, closure, condition, case, schedule or asset column (C14).
+ * It writes at most one activation row (through the body), one binding update and the body's recompute, and nothing
+ * else: no event, closure, condition, case, schedule or asset column (C14).
  */
 class RecordSeasonSyncResult(
     private val bindings: SeasonSyncRepository,

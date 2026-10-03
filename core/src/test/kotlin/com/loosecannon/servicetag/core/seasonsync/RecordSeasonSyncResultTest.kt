@@ -31,6 +31,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -42,10 +43,12 @@ import kotlinx.coroutines.test.runTest
  * [today] and the clock stands at [now], both moved by hand; the binding port counts its successful updates.
  */
 internal class SeasonSyncHarness(today: String = "2026-06-10") {
-    /** The binding table, counting the updates that wrote. */
+    /** The binding table, counting the updates that wrote; [refuse] makes every update answer false, as a lost CAS does. */
     class CountingBindings(private val inner: InMemorySeasonSyncRepository) : SeasonSyncRepository by inner {
         var updates = 0
-        override suspend fun update(binding: SeasonSyncBinding): Boolean = inner.update(binding).also { if (it) updates++ }
+        var refuse = false
+        override suspend fun update(binding: SeasonSyncBinding): Boolean =
+            if (refuse) false else inner.update(binding).also { if (it) updates++ }
     }
 
     val raw = BackupInstall()
@@ -580,6 +583,23 @@ class RecordSeasonSyncResultTest {
 
         assertNull(h.binding().errorKind)
         assertEquals(2, h.rows().size)
+    }
+
+    // ---- C13: a refused binding update rolls the whole write back ----
+
+    @Test
+    fun aRefusedBindingUpdateThrowsAndRollsBackTheRow() = runTest {
+        val h = SeasonSyncHarness()
+        h.asset()
+        h.link()
+        val before = h.binding()
+        h.bindings.refuse = true
+
+        assertFailsWith<IllegalStateException> { h.result(on()) }
+
+        assertEquals(emptyList(), h.rows(), "the START rolled back with the refused update")
+        assertEquals(before, h.binding(), "the binding is unchanged")
+        assertEquals(1, h.raw.uow.rollbacks, "one write, rolled back")
     }
 
     // ---- row 31: it writes nothing else (AC7, C14) ----
