@@ -38,6 +38,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -57,7 +58,10 @@ import javax.crypto.SecretKey
 import javax.net.ServerSocketFactory
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.X509KeyManager
 import kotlin.concurrent.thread
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -79,7 +83,7 @@ import org.junit.runners.MethodSorters
  * platform's network security policy and HTTP stack against an in-process fake Home Assistant, and C32's real reader
  * naming the emulator's Wi-Fi. Each case's KDoc names the one OS boundary it proves (#62). The decisions themselves
  * (the address rule, the network match, the mapper, the applier, the 404 and `unknown`/`unavailable` answers) are the
- * JVM's (rows 1–60); nothing here re-proves them.
+ * JVM's (rows 1–60); a case here may run one of them through the platform, but nothing here is their proof.
  *
  * **The fake Home Assistant** listens in this instrumentation process on this device's own site-local IPv4 address,
  * read at run time (the default network's link addresses, else the interfaces), on port 0 — never loopback, which the
@@ -93,12 +97,19 @@ import org.junit.runners.MethodSorters
  * `foreground…` (the while-in-use read) and then `homeOn…` (nothing enqueued without the grant, then the grant), before
  * `worker…`. A truly backgrounded phone's worker is limit 19's, not this class's.
  *
+ * **This class needs a fresh install** (the gate installs one per class): background location already granted when it
+ * starts fails `foreground…` and `homeOn…` on purpose — uninstall the app and rerun. Before every case it waits, bounded,
+ * for the app's start-up work on `appScope` (the token sweep and the schedule check, launched by `ServiceTagApp`), so
+ * neither can race a case.
+ *
  * **Teardown, every time (N-15):** the connections this class stored (their bindings go by the CASCADE), their tokens
  * and the Keystore cases' keys and files, the `"season-sync"` work, the asset it created, the fake listeners, the
- * worker's dispatch, the proxy properties and Location as found. It never touches a row it did not create, and it
- * refuses to start a stored-connection case when this install already holds a connection.
+ * worker's dispatch, the proxy properties and Location as found. It never touches a row it did not create: no case
+ * starts when this install already holds a connection, and then the teardown leaves the work alone too.
  */
 @RunWith(AndroidJUnit4::class)
+// Load-bearing: `foreground…` and `homeOn…` need background location not yet granted, and their names sort before every
+// case that grants it. A renamed or added case that grants it has to sort after them.
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class SeasonSyncPlatformProofTest {
 
@@ -115,10 +126,19 @@ class SeasonSyncPlatformProofTest {
     private val savedProxy = linkedMapOf<String, String?>()
     private var savedDispatch: SeasonSyncRunner? = null
     private var locationWasOff = false
+    private var startedClean = false
 
     @Before
-    fun rememberTheDispatch() {
+    fun setUp() {
         savedDispatch = SeasonSyncDispatch.runner
+        waitUntil("the app's start-up work on appScope (the token sweep and the schedule check) to finish") {
+            graph.appScope.coroutineContext.job.children.none()
+        }
+        assertNull(
+            "this install already holds a Home Assistant connection, and this class never overwrites one",
+            runBlocking { graph.haConnections.get() },
+        )
+        startedClean = true
     }
 
     @After
@@ -132,12 +152,14 @@ class SeasonSyncPlatformProofTest {
         // The rows first, so a pass still in flight drops its result and a late schedule check finds nothing to keep.
         step { runBlocking { storedConnectionIds.forEach { graph.uow.write { graph.haConnections.delete(it) } } } }
         step { runBlocking { (storedConnectionIds + KEYSTORE_IDS).forEach { graph.secretStore.delete(it) } } }
-        step {
-            WorkManagerSeasonSync(context).cancel()
-            waitUntil("no season sync work left pending") { pendingWork().isEmpty() }
+        if (startedClean) {
+            step {
+                WorkManagerSeasonSync(context).cancel()
+                waitUntil("no season sync work left pending") { pendingWork().isEmpty() }
+            }
         }
         step { runBlocking { createdAssets.forEach { graph.deleteAsset.run(it) } } }
-        step { listeners.forEach { it.close() } }
+        listeners.forEach { step { it.close() } }
         step { restoreProxy() }
         step { if (locationWasOff) setLocation(enabled = false) }
         SeasonSyncDispatch.runner = savedDispatch
@@ -159,9 +181,10 @@ class SeasonSyncPlatformProofTest {
     }
 
     /**
-     * OS boundary: `AndroidKeyStore` — a key entry deleted under the store, the shape a platform restore leaves (the
-     * Room rows back, the key gone, H5). The ciphertext file stays, [KeystoreSecretStore.get] answers null without a
-     * throw and `has` is false, so the binding reads NEEDS_TOKEN (C18, row 48's device twin, §7).
+     * OS boundary: `AndroidKeyStore` — a key entry deleted under the store while its ciphertext file stays: the harder
+     * case beside a platform restore (H5), which brings the Room rows back with neither the key nor the file, as after a
+     * Keystore reset. [KeystoreSecretStore.get] answers null without a throw and `has` is false, so the binding reads
+     * NEEDS_TOKEN (C18, row 48's device twin, §7).
      */
     @Test
     fun deletedKeystoreKeyReadsNullWhileItsFileStays() {
@@ -194,7 +217,7 @@ class SeasonSyncPlatformProofTest {
         assertTrue("precondition: precise location granted", platform.preciseLocationGranted())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             assertFalse(
-                "precondition: only the while-in-use grant; background location is granted later in this class",
+                "background location is already granted: this class needs a fresh install, uninstall the app and rerun",
                 platform.backgroundLocationGranted(),
             )
         }
@@ -219,14 +242,13 @@ class SeasonSyncPlatformProofTest {
      */
     @Test
     fun homeOnWorkIsEnqueuedOnlyOnceTheBackgroundGrantIsGiven() {
-        requireNoStoredConnection()
         val asset = newAsset()
         storeConnection(connection(HOME_ON_ID, FICTIONAL_HTTPS_ORIGIN, homeWifi = HOME_WIFI))
         storeBinding(binding(asset, HOME_ON_ID))
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             assertFalse(
-                "precondition: background location not granted yet (a fresh install)",
+                "background location is already granted: this class needs a fresh install, uninstall the app and rerun",
                 graph.seasonSyncBackgroundAllowed(),
             )
             runBlocking { graph.seasonSyncRunner.ensure() }
@@ -320,15 +342,19 @@ class SeasonSyncPlatformProofTest {
 
     /**
      * OS boundary: the platform's TLS stack under the network security config's trust anchors (system only, C20):
-     * a local listener presenting a self-signed certificate is refused in the handshake, recorded as `TLS_FAILED`
-     * (R16-Q-B (d)), and no request reaches it.
+     * a local listener that does present its self-signed certificate (asserted on its key manager) has **every**
+     * handshake refused by the client, recorded as `TLS_FAILED` (R16-Q-B (d)), and no request reaches it. A client
+     * that completed the handshake — a permissive trust manager failing only the host name check — fails here.
      */
     @Test
     fun realClientRefusesASelfSignedCertificateAsTlsFailed() {
         val fake = listen(stateAnswer("on"), selfSignedServerSockets())
 
         assertEquals(HaReadOutcome.NoDecision(SyncErrorKind.TLS_FAILED, null), read(fake.origin(scheme = "https")))
-        waitUntil("the handshake reached the listener") { fake.accepted.get() >= 1 }
+        waitUntil("every connection the listener accepted to finish") {
+            fake.accepted.get() >= 1 && fake.finished.get() == fake.accepted.get()
+        }
+        assertEquals("every handshake refused, by the trust store", fake.accepted.get(), fake.refusedHandshakes.get())
         assertEquals("no request was sent over a refused handshake", 0, fake.requests.size)
     }
 
@@ -386,7 +412,6 @@ class SeasonSyncPlatformProofTest {
      */
     @Test
     fun workerBodyProceedsOnTheCapturedWifiAndSendsNothingOnAnother() {
-        requireNoStoredConnection()
         locationOn()
         grantBackgroundLocation()
         val captured = runBlocking { graph.currentNetworkReader.read() }
@@ -442,13 +467,6 @@ class SeasonSyncPlatformProofTest {
     private fun pendingWork(): List<WorkInfo> =
         WorkManager.getInstance(context).getWorkInfosForUniqueWork(SeasonSyncWorker.UNIQUE_NAME).get()
             .filter { !it.state.isFinished }
-
-    private fun requireNoStoredConnection() {
-        assertNull(
-            "this install already holds a Home Assistant connection, and this class never overwrites one",
-            runBlocking { graph.haConnections.get() },
-        )
-    }
 
     private fun newAsset(): AssetId =
         runBlocking { graph.createAsset.run(name = ASSET_NAME) }.id.also { createdAssets += it }
@@ -573,9 +591,13 @@ class SeasonSyncPlatformProofTest {
         val password = KEY_PASSWORD.toCharArray()
         val keys = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
             load(null, null)
-            setKeyEntry("fake-home-assistant", key, password, arrayOf(certificate))
+            setKeyEntry(TLS_ALIAS, key, password, arrayOf(certificate))
         }
         val managers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply { init(keys, password) }
+        // Not vacuous: the listener really presents this certificate, so a refused handshake is the client's trust.
+        val presented = managers.keyManagers.single() as X509KeyManager
+        assertEquals(certificate, presented.getCertificateChain(TLS_ALIAS)?.single())
+        assertNotNull(presented.getPrivateKey(TLS_ALIAS))
         return SSLContext.getInstance("TLS").apply { init(managers.keyManagers, null, null) }.serverSocketFactory
     }
 
@@ -647,13 +669,15 @@ class SeasonSyncPlatformProofTest {
                 "VyB8eRv0a5sRd3H1zAta8XN1LTAfBgNVHSMEGDAWgBTLVyB8eRv0a5sRd3H1zAta8XN1LTAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49" +
                 "BAMCA0kAMEYCIQDa3P6ILc0JfJD/qComWazEeltzc4sqx4GC4jr4CIxnBwIhAIsyHcAGY7yVeD0dmf6jGzkGm2iF3d5UTBPQz2Sj3xqg"
         const val KEY_PASSWORD = "fictional"
+        const val TLS_ALIAS = "fake-home-assistant"
     }
 }
 
 /**
  * The in-process stand-in for Home Assistant (C29): one listener on [address] — this device's own — at port 0,
- * answering every connection with [answer] once and keeping each request's head (the request line, then the header
- * lines). [accepted] counts connections, a refused TLS handshake included.
+ * answering every connection with [answer] once and keeping each non-empty request head (the request line, then the
+ * header lines). [accepted] counts connections, [finished] those it is done with, and [refusedHandshakes] the TLS
+ * handshakes that failed (an `SSLSocket`'s handshake is started explicitly, before anything is read).
  */
 private class FakeHomeAssistant(
     private val address: Inet4Address,
@@ -662,6 +686,8 @@ private class FakeHomeAssistant(
 ) : Closeable {
     private val listener: ServerSocket = sockets.createServerSocket(0, BACKLOG, address)
     val accepted = AtomicInteger()
+    val finished = AtomicInteger()
+    val refusedHandshakes = AtomicInteger()
     val requests: MutableList<List<String>> = CopyOnWriteArrayList()
     private val worker = thread(isDaemon = true, name = "fake-home-assistant") { serve() }
 
@@ -678,14 +704,25 @@ private class FakeHomeAssistant(
             try {
                 socket.use {
                     it.soTimeout = SOCKET_TIMEOUT_MILLIS
-                    requests += headOf(it.getInputStream())
+                    if (it is SSLSocket) {
+                        try {
+                            it.startHandshake()
+                        } catch (_: IOException) {
+                            refusedHandshakes.incrementAndGet()
+                            return@use
+                        }
+                    }
+                    val head = headOf(it.getInputStream())
+                    if (head.isNotEmpty()) requests += head
                     it.getOutputStream().apply {
                         write(answer.toByteArray(Charsets.UTF_8))
                         flush()
                     }
                 }
             } catch (_: Exception) {
-                // a client that hung up, or a handshake the client refused: nothing to answer
+                // a client that hung up: nothing to answer
+            } finally {
+                finished.incrementAndGet()
             }
         }
     }
