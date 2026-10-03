@@ -42,8 +42,9 @@ SEASON_WRITES = ("start_season", "end_season", "set_season_mode")
 
 
 def linked() -> dict:
-    """C3's body for a fictional "Example Heater" following a fictional helper: in season since a START the link
-    applied, then one failed check, so the three times differ."""
+    """C3's body for a fictional "Example Heater" following a fictional helper: Home Assistant turned it on in the
+    evening, the link applied a START at the next check (midnight), a later check at noon fetched the same `on`, and
+    the check after that failed (the next midnight), so no two times are equal and no swap of two fields passes."""
     return {
         "assetId": "a1",
         "connection": {
@@ -52,8 +53,8 @@ def linked() -> dict:
         },
         "binding": {
             "entityId": "input_boolean.example_heater_in_season", "mode": "FOLLOW", "enabled": True,
-            "state": "ACTIVE", "observation": {"state": "ON", "haLastChanged": "2026-02-10T06:30:00+00:00"},
-            "lastSuccessAt": 1770681600000, "lastAttemptAt": 1770768000000,
+            "state": "ACTIVE", "observation": {"state": "ON", "haLastChanged": "2026-02-09T18:00:00+00:00"},
+            "lastSuccessAt": 1770724800000, "lastAttemptAt": 1770768000000,
             "lastError": {"kind": "UNREACHABLE", "detail": None, "at": 1770768000000},
             "lastApplied": {"action": "START", "occurredOn": "2026-02-10", "at": 1770681600000},
         },

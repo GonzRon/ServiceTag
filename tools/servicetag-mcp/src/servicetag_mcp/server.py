@@ -4300,9 +4300,10 @@ def replace_installed_component(
 def get_season_sync(asset_id: str) -> dict[str, Any]:
     """One asset's Home Assistant season sync, read only: `GET /v1/assets/{id}/season-sync` →
     `{assetId, connection, binding}`, answered as the phone sends it. On the phone an asset can follow one Home
-    Assistant on/off entity: when the phone checks, `on` starts its season and `off` ends it, each through the
-    ordinary activation and only when the season differs from the asset's today. This shows that link's
-    non-secret state — never the address, the home Wi-Fi's name or the token, which no route returns.
+    Assistant on/off entity: when the phone checks, in `FOLLOW` Home Assistant's answer decides (`on` starts its
+    season and `off` ends it), and in `FORCE_IN` or `FORCE_OUT` the owner's forced season holds whatever it answers
+    — each through the ordinary activation and only when the season differs from the asset's today. This shows that
+    link's non-secret state — never the address, the home Wi-Fi's name or the token, which no route returns.
 
     `connection` is the phone's one connection as settings: `configured`, `needsToken` (it exists and its token is
     not on this phone), `cadence` (`EVERY_12_HOURS`, `DAILY`, `WEEKLY` or `MONTHLY`, a requested period and never a

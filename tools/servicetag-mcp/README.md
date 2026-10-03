@@ -35,8 +35,8 @@ the one body key it is about, then the `problems` in parentheses.
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
   five service-case tools, the five loan tools, the succession tool, #92's seven tools, #15's eight
-  supply tools and #47's five installed component tools below keeps the minimum of 8 — and a line tool
-  that sends `supplyId` needs 18 for that call.
+  supply tools, #47's five installed component tools and the season sync tool below keeps the minimum of 8 — and
+  a line tool that sends `supplyId` needs 18 for that call.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
@@ -67,7 +67,9 @@ the one body key it is about, then the `problems` in parentheses.
   `asset_id`, each keeps exactly the minimum it had. The minima are therefore 8 for every write, 11 for the warranty
   tools, 12 for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the
   supply tools and a linked line, 19 for the installed component tools, 20 for a supply item or installed
-  component owner on the five resource tools, and 21 for `get_season_sync` (#16, Home Assistant season sync).
+  component owner on the five resource tools, and 21 for the season sync tool.
+- **The season sync tool needs schema 21.** `get_season_sync` — a read — refuses an app whose `schemaVersion` is
+  below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
 
 ## Using it
 

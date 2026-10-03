@@ -1014,4 +1014,5 @@ def test_the_readme_names_every_tool_the_supply_gate_and_the_installed_component
     assert "The supply tools need schema 18." in readme
     assert "The installed component tools need schema 19." in readme
     assert "A supply item or installed component owner needs schema 20." in readme
+    assert "The season sync tool needs schema 21." in readme
     assert "`supplyId`" in tools and "`APP_SCHEMA_TOO_OLD`" in tools
