@@ -76,7 +76,7 @@ internal class SeasonSyncHarness(today: String = "2026-06-10") {
     /** A fresh applier over the same stores — what a recreated process builds. */
     fun applierOf(): RecordSeasonSyncResult = RecordSeasonSyncResult(
         bindings, assets, activations, raw.transfers,
-        RecordSeasonActivation(assets, events, activations, raw.uow, ids, clock, todayPort, recompute),
+        RecordSeasonActivation(assets, events, activations, raw.uow, ids, clock, todayPort, recompute, SeasonSyncGuard(raw.seasonSyncBindings)),
         raw.uow, clock, todayPort,
     )
 
@@ -430,7 +430,7 @@ class RecordSeasonSyncResultTest {
         r.raw.seasonSyncBindings.insert(seasonSyncBindingOf(PRED))
         val applier = RecordSeasonSyncResult(
             r.raw.seasonSyncBindings, r.assets, r.activations, r.raw.transfers,
-            RecordSeasonActivation(r.assets, r.events, r.activations, r.uow, r.ids, r.clock, r.todayPort, r.recompute),
+            RecordSeasonActivation(r.assets, r.events, r.activations, r.uow, r.ids, r.clock, r.todayPort, r.recompute, SeasonSyncGuard(r.raw.seasonSyncBindings)),
             r.uow, r.clock, r.todayPort,
         )
 

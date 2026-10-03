@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 
 /**
  * Changes how an asset's season is decided (spec §3.2, §3.4; master plan §7.2): YEAR_ROUND, a
@@ -18,7 +19,8 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * - 422 [SeasonValidation] for the body ([seasonModeProblems]);
  * - 409 [SeasonModeStrandsPolicy] when the change would remove or re-kind the boundary a PRE_SERVICE
- *   schedule counts back from ([strandedBy]), naming those schedules.
+ *   schedule counts back from ([strandedBy]), naming those schedules;
+ * - #16 (C15): before that, 409 [SeasonSyncOwnsSeason] while an enabled binding owns the season — a change only.
  *
  * **A switch into MANUAL** writes exactly one activation dated today, in the same transaction: START
  * for IN_SEASON, END for OUT_OF_SEASON — even when the latest historical row already says the same,
@@ -41,6 +43,7 @@ class SetSeasonMode(
     private val clock: Clock,
     private val today: Today,
     private val recompute: RecomputeSchedules,
+    private val seasonSync: SeasonSyncGuard,
 ) {
     suspend fun run(assetId: AssetId, cmd: SeasonModeCommand): Asset = uow.write {
         val current = assets.get(assetId) ?: throw NoSuchAsset(assetId)
@@ -54,6 +57,7 @@ class SetSeasonMode(
         ) {
             return@write current
         }
+        seasonSync.requireNotSynced(assetId)
 
         val now = clock.nowMillis()
         val next = current.copy(

@@ -120,7 +120,7 @@ class RecordSeasonSyncResult(
             SeasonPhase.OUT_OF_SEASON -> SeasonAction.END
         }
         return try {
-            record.recordInTransaction(asset.id, ActivationCommand(action, occurredOn = day.toString()))
+            record.recordInTransaction(asset.id, ActivationCommand(action, occurredOn = day.toString()), guarded = false)
             binding.copy(appliedAction = action, appliedOn = day.toString(), appliedAt = now)
         } catch (e: SeasonAlreadyStarted) {
             binding

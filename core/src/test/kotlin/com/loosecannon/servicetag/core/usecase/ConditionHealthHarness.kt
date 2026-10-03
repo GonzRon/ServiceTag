@@ -25,7 +25,9 @@ import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemorySeasonSyncRepository
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.HealthFixtures
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
@@ -112,7 +114,7 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
     val promoteCategory = PromoteCategory(categories)
     val saveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, activations, uow, ids, clock, todayPort, recompute, applyTemplate,
-        promoteCategory,
+        promoteCategory, SeasonSyncGuard(InMemorySeasonSyncRepository()),
     )
 
     /** An asset stored as it is, with no command in between — the state a test starts from. */

@@ -102,6 +102,14 @@ class BreakStrandsPolicy(val assetId: AssetId, val schedules: List<StrandedSched
 class SeasonNotManual(val assetId: AssetId) :
     IllegalStateException("asset ${assetId.value} is not in MANUAL season mode")
 
+/**
+ * #16 (C2, C15; R16-1) — 409: an enabled Home Assistant binding owns this asset's season, so every other season
+ * writer is refused until the owner stops its season sync. Thrown only by
+ * [SeasonSyncGuard][com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard].
+ */
+class SeasonSyncOwnsSeason(val assetId: AssetId) :
+    IllegalStateException("this asset's season follows Home Assistant; stop its season sync on the phone first")
+
 /** 409: a START when the latest activation is already a START. */
 class SeasonAlreadyStarted(val assetId: AssetId) :
     IllegalStateException("the season of ${assetId.value} has already started")
