@@ -70,6 +70,7 @@ import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.journal.classify
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -237,6 +238,10 @@ fun AssetDetailScreen(
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
+    // #16 (C27): the season card's Home Assistant block, its own model beside the screen's.
+    val syncModel: SeasonSyncBlockViewModel =
+        viewModel(key = "season-sync:$assetId") { SeasonSyncBlockViewModel(graph, AssetId(assetId)) }
+    val sync by syncModel.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
     val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -429,6 +434,8 @@ fun AssetDetailScreen(
                     onStart = { model.askSeason(SeasonAction.START) },
                     onEnd = { model.askSeason(SeasonAction.END) },
                     editable = current.offersWrites,
+                    syncOwnsSeason = sync.hidesStartAndEnd,
+                    syncBlock = { SeasonSyncBlock(syncModel, sync) },
                 )
             }
             // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).
@@ -1189,7 +1196,16 @@ private fun GlyphLine(glyph: StateGlyph, tint: Color, text: String) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> Unit, editable: Boolean = true) {
+private fun SeasonSection(
+    season: SeasonView,
+    onStart: () -> Unit,
+    onEnd: () -> Unit,
+    editable: Boolean = true,
+    /** #16 (C27, R16-1): an enabled Home Assistant binding owns the season, so Start and End are not drawn. */
+    syncOwnsSeason: Boolean = false,
+    /** #16 (C27, C-4): the Home Assistant block, drawn after whichever mode's branch is taken. */
+    syncBlock: @Composable () -> Unit = {},
+) {
     // S28 heads the section, in the sentence case S5 and S94 are drawn in (the ruling on I-4).
     SentenceSectionHeader(OPERATING_SEASON)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1213,7 +1229,7 @@ private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> 
                     itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     PhaseBadge(season.phase)
-                    when (manualAction(season)?.takeIf { editable }) {
+                    when (manualAction(season)?.takeIf { editable && !syncOwnsSeason }) {
                         SeasonAction.START -> Button(onClick = onStart, shape = ControlShape) { Text(START_SEASON) }
                         SeasonAction.END -> OutlinedButton(onClick = onEnd, shape = ControlShape) { Text(END_SEASON) }
                         null -> Unit
@@ -1221,6 +1237,8 @@ private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> 
                 }
             }
         }
+        // C-4: on every mode, after its branch — a stopped binding on a CALENDAR or YEAR_ROUND asset keeps its Resume.
+        syncBlock()
     }
     if (seasonHistoryShown(season)) {
         val rows = seasonHistory(season)
