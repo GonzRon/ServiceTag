@@ -46,6 +46,18 @@ class SetSeasonMode(
     private val seasonSync: SeasonSyncGuard,
 ) {
     suspend fun run(assetId: AssetId, cmd: SeasonModeCommand): Asset = uow.write {
+        setInTransaction(assetId, cmd, guarded = true)
+    }
+
+    /**
+     * The rules and the write themselves, without opening a transaction ([ApplyTemplate.applyInTransaction]'s
+     * shape: the fake unit of work's `write` is not re-entrant). [guarded] asks the season guard, as [run] always
+     * does. #16's link and resume (C16, C17) call this inside their own write for the switch into MANUAL, dated today:
+     * the link with [guarded] false, since its binding does not exist yet (the applier's
+     * [RecordSeasonActivation.recordInTransaction] shape); the resume with [guarded] true, **before** it enables its
+     * binding, so the guard still finds it stopped. Nothing else calls it.
+     */
+    internal suspend fun setInTransaction(assetId: AssetId, cmd: SeasonModeCommand, guarded: Boolean): Asset {
         val current = assets.get(assetId) ?: throw NoSuchAsset(assetId)
         val clean = cmd.trimmed()
         val problems = seasonModeProblems(current.seasonMode, clean)
@@ -55,9 +67,9 @@ class SetSeasonMode(
             current.seasonStartMmdd == clean.seasonStartMmdd &&
             current.seasonEndMmdd == clean.seasonEndMmdd
         ) {
-            return@write current
+            return current
         }
-        seasonSync.requireNotSynced(assetId)
+        if (guarded) seasonSync.requireNotSynced(assetId)
 
         val now = clock.nowMillis()
         val next = current.copy(
@@ -73,6 +85,6 @@ class SetSeasonMode(
         manualSwitchActivation(assetId, current.seasonMode, clean, today.localDate(), now, ids)
             ?.let { activations.insert(it) }
         recompute.forAsset(assetId)
-        next
+        return next
     }
 }
