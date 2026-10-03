@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import android.os.Build
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,6 +96,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.warranty.WarrantyStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
+import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
 import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
 import com.loosecannon.servicetag.ui.components.ActionGrid
 import com.loosecannon.servicetag.ui.components.ActionSpec
@@ -239,8 +242,16 @@ fun AssetDetailScreen(
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
     // #16 (C27): the season card's Home Assistant block, its own model beside the screen's.
-    val syncModel: SeasonSyncBlockViewModel =
-        viewModel(key = "season-sync:$assetId") { SeasonSyncBlockViewModel(graph, AssetId(assetId)) }
+    val appContext = LocalContext.current.applicationContext
+    val syncModel: SeasonSyncBlockViewModel = viewModel(key = "season-sync:$assetId") {
+        SeasonSyncBlockViewModel(graph, AssetId(assetId), AndroidNetworkPlatform(appContext)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                appContext.packageManager.backgroundPermissionOptionLabel.toString()
+            } else {
+                ""
+            }
+        }
+    }
     val sync by syncModel.state.collectAsStateWithLifecycle()
     // #16 (C27): the setup sheet, for Link or for Resume on an asset no longer MANUAL; each opening a fresh model.
     var syncSheet by rememberSaveable { mutableStateOf<SeasonSyncSheetPurpose?>(null) }

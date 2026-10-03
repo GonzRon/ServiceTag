@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.seasonsync.SeasonSyncScheduler
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncState
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.currentSeasonSyncState
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +53,13 @@ fun seasonSyncScheduleOf(connection: HaConnection?, anyEnabled: Boolean, backgro
         }
     }
 }
+
+/**
+ * #16 (C21, C27) — the one stale rule, the runner's resume refresh and the card's marker (P16-32): no success yet, the
+ * last one at least one [cadence] old, or one dated after [now] (a clock moved back). An attempt never counts.
+ */
+internal fun seasonSyncStale(lastSuccessAt: Long?, cadence: SyncCadence, now: Long): Boolean =
+    lastSuccessAt == null || now < lastSuccessAt || now - lastSuccessAt >= Duration.ofHours(cadence.hours).toMillis()
 
 /**
  * Why a pass stopped short, by the store that failed, so the worker's result is decided by type (C22). No message,
@@ -138,9 +146,8 @@ class SeasonSyncRunner(
     }
 
     private suspend fun staleOnes(now: Long): SeasonSyncPass {
-        val cadence = database { connections.get() }?.let { Duration.ofHours(it.cadence.hours).toMillis() }
-            ?: return SeasonSyncPass(emptyList())
-        return pass { binding -> binding.lastSuccessAt.let { it == null || now < it || now - it >= cadence } }
+        val cadence = database { connections.get() }?.cadence ?: return SeasonSyncPass(emptyList())
+        return pass { binding -> seasonSyncStale(binding.lastSuccessAt, cadence, now) }
     }
 
     /**

@@ -9,7 +9,6 @@ import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
-import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
@@ -23,26 +22,35 @@ import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.core.seasonsync.appliedLineOf
 import com.loosecannon.servicetag.core.seasonsync.seasonSyncStateOf
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.seasonsync.NetworkPlatform
 import com.loosecannon.servicetag.seasonsync.SeasonSyncSchedule
 import com.loosecannon.servicetag.seasonsync.seasonSyncScheduleOf
+import com.loosecannon.servicetag.seasonsync.seasonSyncStale
 import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.homeassistant.HA_APPROXIMATE_ONLY
 import com.loosecannon.servicetag.ui.homeassistant.HA_BACKGROUND_PAUSED
 import com.loosecannon.servicetag.ui.homeassistant.HA_ENTER_TOKEN_AGAIN
+import com.loosecannon.servicetag.ui.homeassistant.HA_PRECISE_LOCATION_WHY
+import com.loosecannon.servicetag.ui.homeassistant.HA_PRECISE_LOCATION_WITHDRAWN
 import com.loosecannon.servicetag.ui.homeassistant.Notice
 import com.loosecannon.servicetag.ui.homeassistant.NoticeAction
-import java.time.Duration
+import com.loosecannon.servicetag.ui.homeassistant.PermissionRequest
+import com.loosecannon.servicetag.ui.homeassistant.haBackgroundLocationWhy
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -58,11 +66,13 @@ internal enum class SeasonSyncBlockKind { NONE, ENABLED, STOPPED }
  * place. [notices] is the last command's refusal.
  */
 internal data class SeasonSyncBlockState(
+    /** False until the binding has been read once: Start and End wait for it (NOTE-2). */
+    val loaded: Boolean = false,
     val kind: SeasonSyncBlockKind = SeasonSyncBlockKind.NONE,
     /** No binding, a connection, the asset maintained here: P16-22 (C27). */
     val offersLink: Boolean = false,
     val mode: SyncMode? = null,
-    /** The mode control and Sync now: an enabled binding on an asset maintained here and not held. */
+    /** The mode control and Sync now: an enabled binding on an asset maintained here (so not held). */
     val offersControls: Boolean = false,
     val offersStop: Boolean = false,
     val offersResume: Boolean = false,
@@ -79,9 +89,11 @@ internal data class SeasonSyncBlockState(
     val stoppedLine: String? = null,
     val notices: List<Notice> = emptyList(),
     val busy: Boolean = false,
+    /** P16-73, while it waits for the owner's Open app settings or Cancel. */
+    val backgroundAsk: String? = null,
 ) {
     /** While a binding is enabled it owns the season (R16-1): the shipped Start and End are not drawn. */
-    val hidesStartAndEnd: Boolean get() = kind == SeasonSyncBlockKind.ENABLED
+    val hidesStartAndEnd: Boolean get() = !loaded || kind == SeasonSyncBlockKind.ENABLED
 }
 
 /**
@@ -103,27 +115,50 @@ internal class SeasonSyncBlockViewModel(
     private val runSyncNow: suspend (AssetId) -> Unit,
     private val backgroundAllowed: () -> Boolean,
     private val clock: Clock,
+    /** The location grants and the API level, as the Home Assistant screen reads them (C32). */
+    private val platform: NetworkPlatform,
+    /** Android's own label for the background option, asked on API 30+ only. */
+    private val backgroundOptionLabel: () -> String,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, assetId: AssetId) : this(
-        assetId, graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.assets,
-        graph.transferRecords, graph.setSeasonSyncMode, graph.stopSeasonSync, graph.resumeSeasonSync,
-        { graph.seasonSyncRunner.syncNow(it) }, graph.seasonSyncBackgroundAllowed, graph.clock,
-    )
+    constructor(graph: AppGraph, assetId: AssetId, platform: NetworkPlatform, backgroundOptionLabel: () -> String) :
+        this(
+            assetId, graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.assets,
+            graph.transferRecords, graph.setSeasonSyncMode, graph.stopSeasonSync, graph.resumeSeasonSync,
+            { graph.seasonSyncRunner.syncNow(it) }, graph.seasonSyncBackgroundAllowed, graph.clock, platform,
+            backgroundOptionLabel,
+        )
 
-    private data class Pending(val busy: Boolean = false, val notices: List<Notice> = emptyList())
+    private data class Pending(
+        val busy: Boolean = false,
+        val notices: List<Notice> = emptyList(),
+        val backgroundAsk: String? = null,
+    )
 
     private val pending = MutableStateFlow(Pending())
     private val refreshes = MutableStateFlow(0)
+    private val requestQueue = Channel<PermissionRequest>(Channel.BUFFERED)
+    private var awaitingPrecise = false
+
+    /** What to ask Android for, on the owner's Allow again only; [LocationAsks] launches each and reports back. */
+    val requests: Flow<PermissionRequest> = requestQueue.receiveAsFlow()
 
     val state: StateFlow<SeasonSyncBlockState> = combine(
         bindings.observeFor(assetId),
         assets.observeAll().map { all -> all.firstOrNull { it.id == assetId } }.distinctUntilChanged(),
         refreshes,
         pending,
-    ) { binding, asset, _, pending -> build(binding, asset).copy(busy = pending.busy, notices = pending.notices) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, SeasonSyncBlockState())
+    ) { binding, asset, _, pending ->
+        val built = build(binding, asset)
+        // A refusal that is already the binding's state line (P16-11, P16-36) is drawn once.
+        built.copy(
+            loaded = true,
+            busy = pending.busy,
+            notices = pending.notices.filterNot { it.text == built.stateLine },
+            backgroundAsk = pending.backgroundAsk,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, SeasonSyncBlockState())
 
     /** Reads the connection, the token and the clock again: on resume, after a permission answer. */
     fun refresh() = refreshes.update { it + 1 }
@@ -136,6 +171,54 @@ internal class SeasonSyncBlockViewModel(
 
     /** Resume on a MANUAL asset; on any other the screen opens the setup sheet ([SeasonSyncBlockState.resumeOpensSheet]). */
     fun resumeSyncing() = command { resume.run(assetId) }
+
+    /** A line's button: Allow again re-runs the matching flow (P16-76, C26), or the app's settings page. */
+    fun act(action: NoticeAction) = when (action) {
+        NoticeAction.ALLOW_PRECISE_AGAIN -> askPrecise()
+        NoticeAction.ALLOW_BACKGROUND_AGAIN -> askBackground()
+        NoticeAction.OPEN_APP_SETTINGS -> {
+            requestQueue.trySend(PermissionRequest.APP_SETTINGS)
+            Unit
+        }
+    }
+
+    /** P16-73's Open app settings: background location is granted there on API 30+. */
+    fun acceptBackgroundAsk() {
+        pending.update { it.copy(backgroundAsk = null) }
+        requestQueue.trySend(PermissionRequest.APP_SETTINGS)
+    }
+
+    fun declineBackgroundAsk() = pending.update { it.copy(backgroundAsk = null) }
+
+    /** A request answered: P16-65 has done its work; the grants are read again. */
+    fun onPermissionAnswered() {
+        awaitingPrecise = false
+        pending.update { it.copy(notices = emptyList()) }
+        refresh()
+    }
+
+    fun onResumed() {
+        awaitingPrecise = false // the platform delivers a permission answer before the resume
+        refresh()
+    }
+
+    /** P16-65, then the precise request — one in flight at a time, as the Home Assistant screen asks it. */
+    private fun askPrecise() {
+        if (awaitingPrecise) return
+        awaitingPrecise = true
+        pending.update { it.copy(notices = listOf(Notice(HA_PRECISE_LOCATION_WHY))) }
+        requestQueue.trySend(PermissionRequest.PRECISE_LOCATION)
+    }
+
+    /** After the foreground grant only: the system dialog on API 29, P16-73 then the settings page on 30+. */
+    private fun askBackground() {
+        if (!platform.preciseLocationGranted() || platform.backgroundLocationGranted()) return refresh()
+        if (platform.apiLevel < SETTINGS_PAGE_API) {
+            requestQueue.trySend(PermissionRequest.BACKGROUND_LOCATION)
+        } else {
+            pending.update { it.copy(backgroundAsk = haBackgroundLocationWhy(backgroundOptionLabel())) }
+        }
+    }
 
     private fun command(block: suspend () -> Unit) {
         if (pending.value.busy) return
@@ -179,34 +262,41 @@ internal class SeasonSyncBlockViewModel(
                 stoppedLine = SEASON_SYNC_STOPPED,
             )
         }
-        val paused = seasonSyncScheduleOf(connection, true, backgroundAllowed()) == SeasonSyncSchedule.PAUSED
+        val pausedLine = pausedLine(seasonSyncScheduleOf(connection, true, backgroundAllowed()))
         return SeasonSyncBlockState(
             kind = SeasonSyncBlockKind.ENABLED,
             mode = binding.mode,
-            offersControls = writable && derived != SeasonSyncState.NOT_MAINTAINED_HERE,
+            offersControls = here,
             offersStop = writable,
             sourceLine = seasonSyncSourceLine(binding.mode, binding.entityId),
             lastSuccessLine = binding.lastSuccessAt?.let { seasonSyncLastSuccess(dateTime(Instant.ofEpochMilli(it))) }
                 ?: SEASON_SYNC_NO_READING_YET,
-            staleLine = SEASON_SYNC_NOT_CHECKED_IN_TIME.takeIf { stale(binding.lastSuccessAt, connection) },
+            staleLine = SEASON_SYNC_NOT_CHECKED_IN_TIME.takeIf {
+                connection == null || seasonSyncStale(binding.lastSuccessAt, connection.cadence, clock.nowMillis())
+            },
             haChangedLine = binding.observedChangedAt?.let(::haTime)?.let(::seasonSyncChangedInHa),
             appliedLine = appliedLineOf(binding)?.let { line -> appliedLineText(line, day(binding.appliedOn)) },
             stateLine = stateLine,
-            pausedLine = Notice(HA_BACKGROUND_PAUSED, NoticeAction.ALLOW_BACKGROUND_AGAIN).takeIf { paused },
+            pausedLine = pausedLine,
             errorLines = binding.errorKind?.let { seasonSyncErrorNotices(it, binding.errorDetail, binding.entityId) }
                 .orEmpty()
-                .filterNot { it.text == stateLine },
+                .filterNot { it.text == stateLine || it == pausedLine },
         )
     }
 
     /**
-     * The stale marker (C27, the runner's rule): no success yet, or the last one at least one cadence old, or dated
-     * after now (a clock moved back). An attempt never counts.
+     * Background checks paused (C22): P16-75 with Allow again only while precise location is held; without it the
+     * recovery line the Home Assistant screen shows takes its place (P16-79, or P16-78 with Allow again), so the
+     * background request is never offered before the foreground grant.
      */
-    private fun stale(lastSuccessAt: Long?, connection: HaConnection?): Boolean {
-        val cadence = connection?.let { Duration.ofHours(it.cadence.hours).toMillis() } ?: return true
-        val now = clock.nowMillis()
-        return lastSuccessAt == null || now < lastSuccessAt || now - lastSuccessAt >= cadence
+    private fun pausedLine(schedule: SeasonSyncSchedule): Notice? = if (schedule != SeasonSyncSchedule.PAUSED) {
+        null
+    } else if (platform.preciseLocationGranted()) {
+        Notice(HA_BACKGROUND_PAUSED, NoticeAction.ALLOW_BACKGROUND_AGAIN)
+    } else if (platform.approximateLocationGranted()) {
+        Notice(HA_APPROXIMATE_ONLY, NoticeAction.OPEN_APP_SETTINGS)
+    } else {
+        Notice(HA_PRECISE_LOCATION_WITHDRAWN, NoticeAction.ALLOW_PRECISE_AGAIN)
     }
 
     /** A key store that cannot answer reads as no token (B4's rule), never a crash. */
@@ -230,5 +320,8 @@ internal class SeasonSyncBlockViewModel(
 
     private companion object {
         val DATE_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
+
+        /** API 30: background location is granted on the app's settings page, no longer in a dialog (C32). */
+        const val SETTINGS_PAGE_API = 30
     }
 }

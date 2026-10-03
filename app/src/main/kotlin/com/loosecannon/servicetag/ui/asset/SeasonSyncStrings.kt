@@ -146,9 +146,13 @@ internal fun seasonSyncErrorNotices(kind: SyncErrorKind, detail: String?, entity
     SyncErrorKind.NOT_MAINTAINED_HERE -> listOf(Notice(SEASON_SYNC_NOT_MAINTAINED_HERE))
     SyncErrorKind.NOT_MANUAL -> listOf(Notice(SEASON_SYNC_NOT_MANUAL))
     SyncErrorKind.DATE_BEFORE_HISTORY -> listOf(Notice(SEASON_SYNC_DATE_BEFORE_HISTORY))
-    SyncErrorKind.NOT_ON_LOCAL_NETWORK -> when (val cause = UnconfirmedCause.entries.firstOrNull { it.name == detail }) {
-        null -> listOf(Notice(HA_NOT_ON_HOME_WIFI))
-        else -> listOf(Notice(HA_COULD_NOT_CONFIRM_WIFI), remedyFor(cause))
+    SyncErrorKind.NOT_ON_LOCAL_NETWORK -> {
+        val cause = UnconfirmedCause.entries.firstOrNull { it.name == detail }
+        if (cause == null) {
+            listOf(Notice(HA_NOT_ON_HOME_WIFI))
+        } else {
+            listOf(Notice(HA_COULD_NOT_CONFIRM_WIFI), remedyFor(cause))
+        }
     }
     SyncErrorKind.NAME_NOT_LOCAL -> listOf(Notice(HA_NAME_NOT_PRIVATE))
     SyncErrorKind.TLS_FAILED -> listOf(Notice(HA_CERTIFICATE_NOT_VERIFIED))

@@ -3,29 +3,37 @@ package com.loosecannon.servicetag.ui.asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefusal
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
+import com.loosecannon.servicetag.seasonsync.DefaultNetworkAnswer
+import com.loosecannon.servicetag.seasonsync.DefaultNetworkKind
 import com.loosecannon.servicetag.seasonsync.JdkAead
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
+import com.loosecannon.servicetag.seasonsync.NetworkPlatform
 import com.loosecannon.servicetag.seasonsync.UnconfirmedCause
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.ui.homeassistant.Notice
 import com.loosecannon.servicetag.ui.homeassistant.NoticeAction
+import com.loosecannon.servicetag.ui.homeassistant.PermissionRequest
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
@@ -95,11 +103,37 @@ class SeasonSyncBlockViewModelTest {
         return id
     }
 
+    /** The location grants and the API level, as a test sets them; below API 29 background location is implied. */
+    private class ScriptedGrants : NetworkPlatform {
+        override var apiLevel: Int = 34
+        var precise = true
+        var approximate = false
+        var background = false
+        override fun defaultNetworkKind(): DefaultNetworkKind? = null
+        override fun connectedWifiName(): String? = null
+        override fun listenToDefaultNetwork(onAnswer: (DefaultNetworkAnswer) -> Unit): () -> Unit = {}
+        override fun locationOn(): Boolean = true
+        override fun preciseLocationGranted(): Boolean = precise
+        override fun approximateLocationGranted(): Boolean = approximate || precise
+        override fun backgroundLocationGranted(): Boolean = apiLevel < 29 || background
+        override fun inForeground(): Boolean = true
+    }
+
+    private val grants = ScriptedGrants()
+
+    private suspend fun homeWifiWithBackgroundChecks() {
+        graph.saveHaConnection.run(
+            "http://192.168.0.10:8123", Secret("fictional-token-1"), SyncCadence.DAILY,
+            NetworkEligibility.HOME_NETWORK_ONLY, "ExampleHomeWifi", BackgroundChecks.ON,
+        )
+    }
+
     private fun TestScope.open(id: AssetId = heater): SeasonSyncBlockViewModel {
         val model = SeasonSyncBlockViewModel(
             id, graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.assets, graph.transferRecords,
             graph.setSeasonSyncMode, graph.stopSeasonSync, graph.resumeSeasonSync,
-            { graph.seasonSyncRunner.syncNow(it) }, graph.seasonSyncBackgroundAllowed, graph.clock, { ZoneOffset.UTC },
+            { graph.seasonSyncRunner.syncNow(it) }, graph.seasonSyncBackgroundAllowed, graph.clock, grants,
+            { "Allow all the time" }, { ZoneOffset.UTC },
         )
         advanceUntilIdle()
         return model
@@ -360,6 +394,139 @@ class SeasonSyncBlockViewModelTest {
         )
         assertFalse("nothing to check or force while inert", block.now.offersControls)
         assertTrue(block.now.offersStop)
+        graph.secretStore.delete(connectionId)
+        act { block.refresh() }
+        assertEquals("no token reads first", "Enter the access token again: this phone no longer has it.", block.now.stateLine)
+        assertFalse("archived with no token: still inert", block.now.offersControls)
+        assertTrue(block.now.offersStop)
+    }
+
+    @Test fun pausedWithoutPreciseLocationShowsTheRecoveryLineNotP16_75() = runTest {
+        homeWifiWithBackgroundChecks()
+        linked()
+        grants.precise = false
+        val block = open()
+        assertEquals(
+            Notice(
+                "ServiceTag no longer has permission to read the Wi-Fi network's name. Allow precise Location again.",
+                NoticeAction.ALLOW_PRECISE_AGAIN,
+            ),
+            block.now.pausedLine,
+        )
+        grants.approximate = true
+        act { block.refresh() }
+        assertEquals(
+            Notice(
+                "ServiceTag has only approximate Location, which hides the Wi-Fi network's name. Change it to Precise " +
+                    "in the app settings.",
+                NoticeAction.OPEN_APP_SETTINGS,
+            ),
+            block.now.pausedLine,
+        )
+    }
+
+    @Test fun allowAgainRerunsTheMatchingFlow() = runTest {
+        homeWifiWithBackgroundChecks()
+        linked()
+        grants.precise = false
+        val block = open()
+        val asked = mutableListOf<PermissionRequest>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { block.requests.collect { asked += it } }
+        act { block.act(NoticeAction.ALLOW_BACKGROUND_AGAIN) }
+        assertTrue("no background ask before the foreground grant", asked.isEmpty())
+        assertNull(block.now.backgroundAsk)
+        act { block.act(NoticeAction.ALLOW_PRECISE_AGAIN) }
+        act { block.act(NoticeAction.ALLOW_PRECISE_AGAIN) }
+        assertEquals(
+            listOf(
+                Notice(
+                    "To check that this phone is on your home Wi-Fi before it sends the access token, ServiceTag needs " +
+                        "to read the Wi-Fi network's name. Android allows that only with precise Location permission, " +
+                        "so choose Precise. ServiceTag does not use your location, but Android will list it among apps " +
+                        "that used location.",
+                ),
+            ),
+            block.now.notices,
+        )
+        assertEquals("one precise request in flight", listOf(PermissionRequest.PRECISE_LOCATION), asked)
+        grants.precise = true
+        act { block.onPermissionAnswered() }
+        assertEquals(emptyList<Notice>(), block.now.notices)
+        assertEquals(NoticeAction.ALLOW_BACKGROUND_AGAIN, block.now.pausedLine?.action)
+        act { block.act(NoticeAction.ALLOW_BACKGROUND_AGAIN) }
+        assertEquals(
+            "To check in the background, ServiceTag must read the Wi-Fi network's name while the app is closed. " +
+                "Android allows that only when Location is set to \"Allow all the time\". ServiceTag reads only the " +
+                "network's name, never where you are, and Android will remind you that it has this access.",
+            block.now.backgroundAsk,
+        )
+        act { block.acceptBackgroundAsk() }
+        assertNull(block.now.backgroundAsk)
+        grants.apiLevel = 29
+        act { block.act(NoticeAction.ALLOW_BACKGROUND_AGAIN) }
+        assertEquals(
+            listOf(PermissionRequest.PRECISE_LOCATION, PermissionRequest.APP_SETTINGS, PermissionRequest.BACKGROUND_LOCATION),
+            asked,
+        )
+    }
+
+    @Test fun aResumeRefusalIsItsSentenceDrawnOnce() = runTest {
+        assertEquals(
+            listOf("This asset is no longer maintained here, so Home Assistant no longer changes its season."),
+            seasonSyncRefusalNotices(SeasonSyncLinkRefusal.NOT_MAINTAINED_HERE).map { it.text },
+        )
+        assertEquals(
+            listOf("Not connected. Enter the server address and an access token."),
+            seasonSyncRefusalNotices(SeasonSyncLinkRefusal.NO_CONNECTION).map { it.text },
+        )
+        assertEquals(
+            listOf("Enter the access token again: this phone no longer has it."),
+            seasonSyncRefusalNotices(SeasonSyncLinkRefusal.NEEDS_TOKEN).map { it.text },
+        )
+        assertTrue(seasonSyncRefusalNotices(SeasonSyncLinkRefusal.BAD_ENTITY_ID).isEmpty())
+        assertTrue(seasonSyncRefusalNotices(SeasonSyncLinkRefusal.ALREADY_LINKED).isEmpty())
+        connect()
+        linked()
+        graph.stopSeasonSync.run(heater)
+        val connectionId = checkNotNull(graph.haConnections.get()).id
+        graph.secretStore.delete(connectionId)
+        val block = open()
+        act { block.resumeSyncing() }
+        assertEquals("Enter the access token again: this phone no longer has it.", block.now.stateLine)
+        assertEquals("P16-11 once, as the state line", emptyList<Notice>(), block.now.notices)
+        assertEquals(SeasonSyncBlockKind.STOPPED, block.now.kind)
+        graph.secretStore.put(connectionId, Secret("fictional-token-1"))
+        graph.archiveAsset.run(heater)
+        advanceUntilIdle()
+        act { block.resumeSyncing() }
+        assertEquals(
+            listOf(Notice("This asset is no longer maintained here, so Home Assistant no longer changes its season.")),
+            block.now.notices,
+        )
+    }
+
+    @Test fun aHeldAssetOffersNoAction() = runTest {
+        connect()
+        linked()
+        graph.assets.upsert(assetRow("example-boiler", name = "Example Boiler", seasonMode = SeasonMode.MANUAL))
+        for (id in listOf(heater, AssetId("example-boiler"))) {
+            graph.transferRecords.append(
+                TransferRecord(
+                    id = "out-${id.value}", assetId = id, kind = TransferKind.OUT, packId = "pack-elsewhere",
+                    lineage = emptyList(), at = dayMillis("2026-02-01"), packSha256 = "ab".repeat(32),
+                    nameSnapshot = "Example Heater", note = "",
+                ),
+            )
+        }
+        val enabled = open().now
+        assertEquals(SeasonSyncBlockKind.ENABLED, enabled.kind)
+        assertFalse(enabled.offersControls)
+        assertFalse(enabled.offersStop)
+        assertFalse("an unbound held asset is not offered a link", open(AssetId("example-boiler")).now.offersLink)
+        graph.stopSeasonSync.run(heater)
+        val stopped = open().now
+        assertEquals(SeasonSyncBlockKind.STOPPED, stopped.kind)
+        assertFalse(stopped.offersResume)
     }
 
     private companion object {

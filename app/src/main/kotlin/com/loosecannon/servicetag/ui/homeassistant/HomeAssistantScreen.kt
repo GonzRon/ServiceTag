@@ -1,12 +1,8 @@
 package com.loosecannon.servicetag.ui.homeassistant
 
-import android.Manifest
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -32,7 +28,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,19 +36,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
-import com.loosecannon.servicetag.ui.api.OPEN_APP_SETTINGS
 import com.loosecannon.servicetag.ui.asset.CANCEL_BUTTON
 import com.loosecannon.servicetag.ui.attachments.SAVE_LABEL
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
-import com.loosecannon.servicetag.ui.components.appDetails
-import com.loosecannon.servicetag.ui.components.open
 
 /**
  * #16 (C26) — Settings → Home Assistant: the one connection of this installation. A pushed destination reached only
@@ -82,28 +73,14 @@ internal fun HomeAssistantScreen(graph: AppGraph, onBack: () -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val token by model.tokenField.collectAsStateWithLifecycle()
 
-    val precise = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        model.onPermissionAnswered()
-    }
-    val background = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        model.onPermissionAnswered()
-    }
-    LaunchedEffect(model) {
-        model.requests.collect { request ->
-            when (request) {
-                PermissionRequest.PRECISE_LOCATION -> precise.launch(
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-                )
-                PermissionRequest.BACKGROUND_LOCATION ->
-                    background.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                PermissionRequest.APP_SETTINGS -> context.open(appDetails(context))
-            }
-        }
-    }
-    LifecycleResumeEffect(model) {
-        model.onResumed()
-        onPauseOrDispose {}
-    }
+    LocationAsks(
+        requests = model.requests,
+        backgroundAsk = state.backgroundAsk,
+        onAnswered = model::onPermissionAnswered,
+        onResumed = model::onResumed,
+        onAcceptBackgroundAsk = model::acceptBackgroundAsk,
+        onDeclineBackgroundAsk = model::declineBackgroundAsk,
+    )
 
     Scaffold(
         topBar = {
@@ -197,35 +174,6 @@ internal fun HomeAssistantScreen(graph: AppGraph, onBack: () -> Unit) {
             confirmButton = { TextButton(onClick = model::confirmDisconnect) { Text(HA_DISCONNECT) } },
             dismissButton = { TextButton(onClick = model::dismissDisconnect) { Text(CANCEL_BUTTON) } },
         )
-    }
-    state.backgroundAsk?.let { body ->
-        AlertDialog(
-            onDismissRequest = model::declineBackgroundAsk,
-            text = { Text(body) },
-            confirmButton = { TextButton(onClick = model::acceptBackgroundAsk) { Text(OPEN_APP_SETTINGS) } },
-            dismissButton = { TextButton(onClick = model::declineBackgroundAsk) { Text(CANCEL_BUTTON) } },
-        )
-    }
-}
-
-/** One ratified line and, when it has one, its button: Allow again (P16-76) or Open app settings. */
-@Composable
-private fun NoticeLine(notice: Notice, onAction: (NoticeAction) -> Unit) {
-    Column {
-        Text(notice.text, style = MaterialTheme.typography.bodyMedium)
-        notice.action?.let { action ->
-            TextButton(
-                onClick = { onAction(action) },
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    when (action) {
-                        NoticeAction.ALLOW_PRECISE_AGAIN, NoticeAction.ALLOW_BACKGROUND_AGAIN -> HA_ALLOW_AGAIN
-                        NoticeAction.OPEN_APP_SETTINGS -> OPEN_APP_SETTINGS
-                    },
-                )
-            }
-        }
     }
 }
 
