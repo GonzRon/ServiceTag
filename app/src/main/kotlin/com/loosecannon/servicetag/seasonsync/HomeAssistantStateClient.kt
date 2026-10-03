@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.fetch.transportFailureOf
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.Proxy
 import java.net.URL
 import java.net.URLConnection
 import javax.net.ssl.SSLException
@@ -71,7 +72,8 @@ class HomeAssistantStateClient(
     private val resolver: HostResolver,
     private val io: CoroutineContext = Dispatchers.IO,
     private val parse: (String) -> URL = ::URL,
-    private val open: (URL) -> URLConnection = URL::openConnection,
+    /** Direct, never through a system proxy: the bearer goes to the configured origin and nowhere else (I10). */
+    private val open: (URL) -> URLConnection = { it.openConnection(Proxy.NO_PROXY) },
 ) : HaStateReader {
 
     /**
