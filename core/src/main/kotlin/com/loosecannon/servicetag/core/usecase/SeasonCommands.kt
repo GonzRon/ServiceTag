@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
@@ -276,3 +277,11 @@ internal val ACTIVATION_ORDER: Comparator<SeasonActivation> =
 
 /** The latest of [rows], whatever order they were handed in. */
 internal fun latestOf(rows: List<SeasonActivation>): SeasonActivation? = rows.maxWithOrNull(ACTIVATION_ORDER)
+
+/**
+ * #78's count, lifted by #16 (C27): how many of [schedules] are live — ACTIVE or PAUSED, never ARCHIVED — and
+ * CONTINUOUS, the ones that keep coming due out of season (P78-1a/1b). The asset editor asks with it after a save out
+ * of YEAR_ROUND, and the Home Assistant setup sheet after a link or a resume out of YEAR_ROUND.
+ */
+fun liveContinuousCount(schedules: List<MaintenanceSchedule>): Int =
+    schedules.count { it.status != ScheduleStatus.ARCHIVED && it.servicePolicy == ServicePolicy.CONTINUOUS }

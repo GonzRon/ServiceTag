@@ -443,15 +443,19 @@ private fun PlacementBlock(state: AssetEditState, model: AssetEditViewModel) {
  * S28 and its three answers (spec §3.1, §10.4), each chosen answer's own fields under it: S32 and S33
  * with S34 under S30; S38 under S31, and S35 with S36 and S37 — **none chosen** — when S31 is a
  * switch into MANUAL (inv. 92). S55 names the schedules a refused change would strand.
+ *
+ * **#16 (C27, R16-16):** while a Home Assistant binding owns the season the block is drawn read-only — the stored
+ * answer chosen, none offered — with P16-47 under it; the other blocks are as shipped.
  */
 @Composable
 private fun OperatingSeasonBlock(state: AssetEditState, model: AssetEditViewModel) {
     SentenceSectionHeader(OPERATING_SEASON)
+    val open = state.seasonSyncLine == null
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        ChoiceRow(YEAR_ROUND, state.seasonMode == SeasonMode.YEAR_ROUND) {
+        ChoiceRow(YEAR_ROUND, state.seasonMode == SeasonMode.YEAR_ROUND, enabled = open) {
             model.onSeasonMode(SeasonMode.YEAR_ROUND)
         }
-        ChoiceRow(SAME_DATES_EVERY_YEAR, state.seasonMode == SeasonMode.CALENDAR) {
+        ChoiceRow(SAME_DATES_EVERY_YEAR, state.seasonMode == SeasonMode.CALENDAR, enabled = open) {
             model.onSeasonMode(SeasonMode.CALENDAR)
         }
         if (state.seasonMode == SeasonMode.CALENDAR) {
@@ -463,10 +467,10 @@ private fun OperatingSeasonBlock(state: AssetEditState, model: AssetEditViewMode
                 QuietLine(SEASON_MAY_RUN_ACROSS_THE_NEW_YEAR)
             }
         }
-        ChoiceRow(STARTED_AND_ENDED_BY_HAND, state.seasonMode == SeasonMode.MANUAL) {
+        ChoiceRow(STARTED_AND_ENDED_BY_HAND, state.seasonMode == SeasonMode.MANUAL, enabled = open) {
             model.onSeasonMode(SeasonMode.MANUAL)
         }
-        if (state.seasonMode == SeasonMode.MANUAL) {
+        if (state.seasonMode == SeasonMode.MANUAL && open) {
             Nested {
                 QuietLine(YOU_START_AND_END_THE_SEASON)
                 if (state.asksManualPhase) {
@@ -481,6 +485,7 @@ private fun OperatingSeasonBlock(state: AssetEditState, model: AssetEditViewMode
             }
         }
     }
+    state.seasonSyncLine?.let { QuietLine(it) }
     state.seasonRefusal?.let { RefusalLine(it) }
 }
 

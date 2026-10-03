@@ -242,6 +242,13 @@ fun AssetDetailScreen(
     val syncModel: SeasonSyncBlockViewModel =
         viewModel(key = "season-sync:$assetId") { SeasonSyncBlockViewModel(graph, AssetId(assetId)) }
     val sync by syncModel.state.collectAsStateWithLifecycle()
+    // #16 (C27): the setup sheet, for Link or for Resume on an asset no longer MANUAL; each opening a fresh model.
+    var syncSheet by rememberSaveable { mutableStateOf<SeasonSyncSheetPurpose?>(null) }
+    var syncSheetOpening by rememberSaveable { mutableIntStateOf(0) }
+    val openSyncSheet: (SeasonSyncSheetPurpose) -> Unit = { purpose ->
+        syncSheetOpening += 1
+        syncSheet = purpose
+    }
     val missing by model.missing.collectAsStateWithLifecycle()
     val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -260,13 +267,16 @@ fun AssetDetailScreen(
     // ordinary visit does not recompose when the page above the sections changes height.
     val scroll = rememberScrollState()
     var sectionShown by rememberSaveable { mutableStateOf(false) }
-    val seekingSchedules = section == SECTION_SCHEDULES && !sectionShown
+    // #16 (C27): the setup sheet's P78-2 answer seeks the same sections on this page.
+    var reviewingSchedules by remember { mutableStateOf(false) }
+    val seekingSchedules = (section == SECTION_SCHEDULES && !sectionShown) || reviewingSchedules
     var maintenanceTop by remember { mutableIntStateOf(-1) }
     if (seekingSchedules) {
         LaunchedEffect(maintenanceTop) {
             if (maintenanceTop >= 0) {
                 scroll.scrollTo(maintenanceTop)
                 sectionShown = true
+                reviewingSchedules = false
             }
         }
     }
@@ -348,6 +358,19 @@ fun AssetDetailScreen(
         }
         markingOperational?.let { condition ->
             MarkOperationalDialog(graph = graph, assetId = assetId, current = condition) { markingOperational = null }
+        }
+        syncSheet?.let { purpose ->
+            LinkSeasonSyncSheet(
+                graph = graph,
+                assetId = assetId,
+                purpose = purpose,
+                opening = syncSheetOpening,
+                onReviewSchedules = {
+                    maintenanceTop = -1
+                    reviewingSchedules = true
+                },
+                onDone = { syncSheet = null },
+            )
         }
         // The screen's 16dp gutter is applied per block rather than to the whole scroll, because
         // 1.2's two maintenance sections draw their **own** gutter: they reuse the Maintenance
@@ -435,7 +458,14 @@ fun AssetDetailScreen(
                     onEnd = { model.askSeason(SeasonAction.END) },
                     editable = current.offersWrites,
                     syncOwnsSeason = sync.hidesStartAndEnd,
-                    syncBlock = { SeasonSyncBlock(syncModel, sync) },
+                    syncBlock = {
+                        SeasonSyncBlock(
+                            syncModel,
+                            sync,
+                            onLink = { openSyncSheet(SeasonSyncSheetPurpose.LINK) },
+                            onReconcile = { openSyncSheet(SeasonSyncSheetPurpose.RESUME) },
+                        )
+                    },
                 )
             }
             // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).

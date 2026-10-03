@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.AppliedLine
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefusal
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
@@ -27,7 +28,8 @@ import com.loosecannon.servicetag.ui.homeassistant.remedyFor
 
 // #16 (C27, §5) — the season card's Home Assistant block: its ratified sentences, each declared once here, and the
 // maps from a code to its sentence. The outcome sentences the Home Assistant screen also draws live in
-// HomeAssistantStrings.kt and are imported, never copied. The setup sheet's (P16-42…47, P16-49) are B8b2's to add.
+// HomeAssistantStrings.kt and are imported, never copied. The setup sheet's and the editor's (P16-42…47, P16-49)
+// close the file.
 
 /** P16-22 — the card's action on an asset with no binding while a connection exists. */
 internal const val SEASON_SYNC_LINK = "Link to Home Assistant"
@@ -162,3 +164,42 @@ internal fun seasonSyncRefusalNotices(reason: SeasonSyncLinkRefusal): List<Notic
     SeasonSyncLinkRefusal.NEEDS_TOKEN -> listOf(Notice(HA_ENTER_TOKEN_AGAIN))
     SeasonSyncLinkRefusal.BAD_ENTITY_ID, SeasonSyncLinkRefusal.ALREADY_LINKED -> emptyList()
 }
+
+/** P16-42 — the setup sheet's field. */
+internal const val SEASON_SYNC_ENTITY_ID = "Entity ID"
+
+/** P16-43 — the field's helper (AC2, H10). */
+internal const val SEASON_SYNC_ENTITY_ID_HELP =
+    "An on/off helper that is on while this asset is in season, for example input_boolean.example_heater_in_season. " +
+        "Not the appliance's own power switch."
+
+/** P16-44 — the setup sheet on a CALENDAR asset (C16; R16-Q-G: the cadence move, disclosed). */
+internal const val SEASON_SYNC_LINK_CALENDAR =
+    "Linking this asset to Home Assistant replaces its calendar dates. From today, its season starts and ends when " +
+        "Home Assistant says. Maintenance that counts from the start of the season will count from today."
+
+/** P16-45 — the setup sheet on a YEAR_ROUND asset. */
+internal const val SEASON_SYNC_LINK_YEAR_ROUND =
+    "This asset has no operating season now. Linking it to Home Assistant gives it one: in season from today, then " +
+        "started and ended when Home Assistant says. Maintenance that counts from the start of the season will count " +
+        "from today."
+
+/** P16-46 — the setup sheet on a MANUAL asset. */
+internal const val SEASON_SYNC_LINK_MANUAL =
+    "From now on Home Assistant starts and ends this asset's season. Its season history stays as it is."
+
+/** The setup sheet's reconciliation sentence for an asset in [mode], drawn before anything is written (C16, C-4). */
+internal fun seasonSyncLinkSentence(mode: SeasonMode): String = when (mode) {
+    SeasonMode.CALENDAR -> SEASON_SYNC_LINK_CALENDAR
+    SeasonMode.YEAR_ROUND -> SEASON_SYNC_LINK_YEAR_ROUND
+    SeasonMode.MANUAL -> SEASON_SYNC_LINK_MANUAL
+}
+
+/** P16-47 — the editor's read-only season block (R16-16), and the guard's refusal wherever the phone reaches it. */
+internal const val SEASON_SYNC_FOLLOWS_HA =
+    "This asset's season follows Home Assistant. Stop syncing on the asset's page to change it here."
+
+/** P16-49 — C16's `BAD_ENTITY_ID`, under the field. */
+internal const val SEASON_SYNC_BAD_ENTITY_ID =
+    "Enter an entity ID such as input_boolean.example_heater_in_season: lowercase letters, digits and underscores, " +
+        "with one dot."
