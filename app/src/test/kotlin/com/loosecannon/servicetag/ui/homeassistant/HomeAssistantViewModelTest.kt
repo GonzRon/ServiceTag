@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.Secret
+import com.loosecannon.servicetag.core.seasonsync.SecretStore
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.seasonsync.ConnectionTestOutcome
@@ -88,10 +89,10 @@ class HomeAssistantViewModelTest {
         val state: HomeAssistantState get() = model.state.value
     }
 
-    private fun TestScope.open(): Open {
+    private fun TestScope.open(secrets: SecretStore = graph.secretStore): Open {
         val model = HomeAssistantViewModel(
             graph.haConnections,
-            graph.secretStore,
+            secrets,
             graph.saveHaConnection,
             graph.forgetHaConnection,
             { connection, token ->
@@ -135,7 +136,8 @@ class HomeAssistantViewModelTest {
         )
         assertNull(graph.haConnections.get())
         assertTrue(graph.secretStore.keys().isEmpty())
-        assertEquals("", screen.model.tokenField.value)
+        // Nothing was stored, and Home Assistant shows a token once: the typed text stays for the corrected address.
+        assertEquals("fictional-token-1", screen.model.tokenField.value)
     }
 
     @Test fun afterSaveTheStateHoldsNoTokenText() = runTest {
@@ -162,7 +164,8 @@ class HomeAssistantViewModelTest {
     }
 
     @Test fun testConnectionShowsEachOutcomesSentence() = runTest {
-        val screen = open()
+        val screen = homeWifiChosen()
+        screen.model.captureNetwork()
         screen.model.onAddressChange(" https://ha.example:8123 ")
         screen.model.onTokenChange("fictional-token-1")
         val notOnHome = SyncErrorKind.NOT_ON_LOCAL_NETWORK
@@ -249,7 +252,8 @@ class HomeAssistantViewModelTest {
         }
         val (candidate, token) = tested.last()
         assertEquals("https://ha.example:8123", candidate.baseUrl)
-        assertEquals(NetworkEligibility.ANY_NETWORK, candidate.networkEligibility)
+        assertEquals(NetworkEligibility.HOME_NETWORK_ONLY, candidate.networkEligibility)
+        assertEquals("ExampleHomeWifi", candidate.homeNetworkSsid)
         assertEquals(Secret("fictional-token-1"), token)
         assertNull(graph.haConnections.get())
 
@@ -262,6 +266,54 @@ class HomeAssistantViewModelTest {
             screen.state.notices,
         )
         assertEquals(expected.size, tested.size)
+    }
+
+    @Test fun anHttpAnyNetworkFormAnsweredNotOnTheHomeWifiShowsP16_67AndAsksNothing() = runTest {
+        val screen = open()
+        screen.model.onAddressChange("http://192.168.0.10:8123")
+        screen.model.onTokenChange("fictional-token-1")
+        answer = failed(SyncErrorKind.NOT_ON_LOCAL_NETWORK, "PERMISSION_MISSING")
+        screen.model.testConnection()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                Notice("An http:// address needs ‘Only on this home Wi-Fi’. Choose it, or use an https:// address."),
+            ),
+            screen.state.notices,
+        )
+        assertTrue(screen.asked.isEmpty())
+    }
+
+    @Test fun aHomeFormWithNothingCapturedRaisesTheCaptureButtonOnTestConnection() = runTest {
+        val screen = homeWifiChosen()
+        screen.model.onAddressChange("http://192.168.0.10:8123")
+        screen.model.onTokenChange("fictional-token-1")
+        answer = failed(SyncErrorKind.NOT_ON_LOCAL_NETWORK)
+        screen.model.testConnection()
+        advanceUntilIdle()
+
+        assertTrue(screen.state.promptCapture)
+        assertTrue(screen.state.notices.isEmpty())
+    }
+
+    @Test fun aKeystoreThatCannotAnswerReadsAsNoTokenAndNeverCrashes() = runTest {
+        graph.saveHaConnection.run(
+            "https://ha.example:8123", Secret("fictional-token-1"), null, NetworkEligibility.ANY_NETWORK, null, null,
+        )
+        val broken = object : SecretStore by graph.secretStore {
+            override suspend fun has(key: String): Boolean = throw IllegalStateException("keystore unavailable")
+        }
+        val screen = open(broken)
+        assertEquals("Enter the access token again: this phone no longer has it.", screen.state.statusLine)
+
+        screen.model.onTokenChange("fictional-token-2")
+        screen.model.save()
+        advanceUntilIdle()
+        assertTrue(screen.state.loaded)
+        assertFalse(screen.state.busy)
+        assertEquals("Enter the access token again: this phone no longer has it.", screen.state.statusLine)
+        assertEquals("", screen.model.tokenField.value)
     }
 
     @Test fun testConnectionWithAnEmptyFieldUsesTheStoredTokenForThatRequestOnly() = runTest {
@@ -385,6 +437,17 @@ class HomeAssistantViewModelTest {
         )
         assertEquals(listOf(PermissionRequest.PRECISE_LOCATION), screen.asked)
         assertFalse(screen.state.homeNetworkChosen)
+    }
+
+    @Test fun aDoubleTapAsksForPreciseLocationOnce() = runTest {
+        val screen = open()
+        screen.model.chooseHomeWifi()
+        screen.model.chooseHomeWifi()
+        assertEquals(listOf(PermissionRequest.PRECISE_LOCATION), screen.asked)
+
+        grants.precise = true
+        screen.model.onPermissionAnswered() // the real grant still chooses the option
+        assertTrue(screen.state.homeNetworkChosen)
     }
 
     @Test fun deniedOrApproximateLeavesItOffWithP16_66() = runTest {

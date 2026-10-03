@@ -54,7 +54,7 @@ internal data class Notice(val text: String, val action: NoticeAction? = null)
 /**
  * #16 (C26) — the Home Assistant screen as drawn. The form holds the stored connection's settings until the owner
  * changes them; the access token is never here: [tokenPresent] says only whether the store holds one (the typed text
- * lives in [HomeAssistantViewModel.tokenField] until Save returns). The grants are read, never asked, on entry.
+ * lives in [HomeAssistantViewModel.tokenField] until Save stores it). The grants are read, never asked, on entry.
  */
 internal data class HomeAssistantState(
     val loaded: Boolean = false,
@@ -95,8 +95,9 @@ internal data class HomeAssistantState(
 
     /**
      * Under the home-network choice: the recovery when precise location is gone (P16-79 with Open app settings when
-     * only approximate is left, else P16-78 with Allow again), then the background checks' line — P16-69 while off,
-     * P16-74 while they run, P16-75 with Allow again and P16-69 while On lacks the background grant (C22's fallback).
+     * only approximate is left, else P16-78 with Allow again), then the background checks' line: P16-69 while off;
+     * P16-74 while they run; while On cannot run, P16-69, after P16-75 with Allow again when only the background grant
+     * is missing (C22's fallback).
      */
     val locationLines: List<Notice>
         get() = if (!homeNetworkChosen) emptyList() else buildList {
@@ -134,8 +135,9 @@ internal data class HomeAssistantState(
  * each [requests] item and reports back through [onPermissionAnswered] or [onResumed], which read the grants again.
  *
  * **The token** is trimmed and sent to the use case, which puts it in the store after its commit; [tokenField] is
- * emptied when Save returns, whatever the answer, so no text of it outlives the call. Test connection uses the typed
- * token, or the stored one for that one request, and never keeps it.
+ * emptied once Save has stored it or failed past its refusals; a refusal stores nothing and keeps it, since Home
+ * Assistant shows a token once. Test connection uses the typed token, or the stored one for that one request, and
+ * never keeps it.
  */
 internal class HomeAssistantViewModel(
     private val connections: HaConnectionRepository,
@@ -165,7 +167,7 @@ internal class HomeAssistantViewModel(
 
     private val typedToken = MutableStateFlow("")
 
-    /** The masked field's text: held only while the owner types, emptied when Save returns. */
+    /** The masked field's text: held only while the owner types, emptied once Save stores it (a refusal keeps it). */
     val tokenField: StateFlow<String> = typedToken.asStateFlow()
 
     private val requestQueue = Channel<PermissionRequest>(Channel.BUFFERED)
@@ -244,7 +246,10 @@ internal class HomeAssistantViewModel(
     }
 
     /** Back on screen, from the settings page or anywhere: the grants are read again (a withdrawal shows here). */
-    fun onResumed() = mutableState.update(::withGrants)
+    fun onResumed() {
+        awaitingPrecise = false // the platform delivers a permission answer before the resume
+        mutableState.update(::withGrants)
+    }
 
     /** "Use the network I'm on now" (P16-62): the reader's answer, once; only a named Wi-Fi is captured. */
     fun captureNetwork() {
@@ -282,8 +287,9 @@ internal class HomeAssistantViewModel(
                     homeNetworkSsid = form.homeWifi,
                     backgroundChecks = form.backgroundChecks,
                 )
-                mutableState.value = loaded(saved, secrets.has(saved.id))
-            } catch (refused: SaveHaConnectionRefused) {
+                typedToken.value = ""
+                mutableState.value = loaded(saved, tokenHeld(saved.id))
+            } catch (refused: SaveHaConnectionRefused) { // nothing was stored: the typed token stays
                 mutableState.update {
                     it.copy(
                         busy = false,
@@ -294,9 +300,8 @@ internal class HomeAssistantViewModel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                reload()
-            } finally {
                 typedToken.value = ""
+                reload()
             }
         }
     }
@@ -309,6 +314,7 @@ internal class HomeAssistantViewModel(
         viewModelScope.launch {
             val stored = connections.get()
             val token = if (typed.isNotEmpty()) Secret(typed) else stored?.let { secrets.get(it.id) }
+            var noName = false
             val notices = if (token == null) {
                 listOf(Notice(if (stored == null) HA_NOT_CONNECTED else HA_ENTER_TOKEN_AGAIN))
             } else {
@@ -323,9 +329,13 @@ internal class HomeAssistantViewModel(
                     createdAt = 0L,
                     updatedAt = 0L,
                 )
-                testNotices(testConnection(candidate, token))
+                val outcome = testConnection(candidate, token)
+                // A home-network form with nothing captured: P16-62's prompt, as Save's HOME_NETWORK_NOT_SET.
+                noName = homeOnly && candidate.homeNetworkSsid == null &&
+                    outcome == ConnectionTestOutcome.Failed(SyncErrorKind.NOT_ON_LOCAL_NETWORK, null)
+                if (noName) emptyList() else testNotices(outcome, candidate.networkEligibility)
             }
-            mutableState.update { it.copy(busy = false, notices = notices) }
+            mutableState.update { it.copy(busy = false, notices = notices, promptCapture = noName) }
         }
     }
 
@@ -351,6 +361,7 @@ internal class HomeAssistantViewModel(
     }
 
     private fun askPrecise() {
+        if (awaitingPrecise) return // one request in flight: a second would be answered empty at once
         awaitingPrecise = true
         mutableState.update { it.copy(notices = listOf(Notice(HA_PRECISE_LOCATION_WHY))) }
         requestQueue.trySend(PermissionRequest.PRECISE_LOCATION)
@@ -370,7 +381,16 @@ internal class HomeAssistantViewModel(
 
     private suspend fun reload() {
         val stored = connections.get()
-        mutableState.value = loaded(stored, stored != null && secrets.has(stored.id))
+        mutableState.value = loaded(stored, stored != null && tokenHeld(stored.id))
+    }
+
+    /** B4: the store passes a Keystore failure to its caller; here it reads as no token (P16-11), never a crash. */
+    private suspend fun tokenHeld(id: String): Boolean = try {
+        secrets.has(id)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        false
     }
 
     private fun loaded(stored: HaConnection?, tokenPresent: Boolean): HomeAssistantState = withGrants(
@@ -421,8 +441,10 @@ internal fun remedyFor(cause: UnconfirmedCause): Notice = when (cause) {
 /**
  * Test connection's answer as drawn: P16-7, or the kind's sentence — an exhaustive `when`, no `else`. The kinds that
  * need an entity or an asset never come from the API root (N-3's map), so they draw nothing here; the card has them.
+ * [tested] is the candidate's eligibility: under "Any network" the client checks the network only for an http
+ * address (C19 step 1a, fail closed), so that answer is P16-67, with no remedy and no button.
  */
-internal fun testNotices(outcome: ConnectionTestOutcome): List<Notice> = when (outcome) {
+internal fun testNotices(outcome: ConnectionTestOutcome, tested: NetworkEligibility): List<Notice> = when (outcome) {
     ConnectionTestOutcome.Ok -> listOf(Notice(HA_CONNECTION_WORKS))
     is ConnectionTestOutcome.Failed -> when (outcome.kind) {
         SyncErrorKind.ENDPOINT_REFUSED -> listOf(Notice(HA_ADDRESS_NOT_ALLOWED))
@@ -434,12 +456,15 @@ internal fun testNotices(outcome: ConnectionTestOutcome): List<Notice> = when (o
         SyncErrorKind.HTTP_ERROR -> listOfNotNull(outcome.detail?.let { Notice(haAnsweredWithError(it)) })
         SyncErrorKind.MALFORMED -> listOf(Notice(HA_ANSWER_UNREADABLE))
         SyncErrorKind.NEEDS_TOKEN -> listOf(Notice(HA_ENTER_TOKEN_AGAIN))
-        SyncErrorKind.NOT_ON_LOCAL_NETWORK -> {
-            val cause = UnconfirmedCause.entries.firstOrNull { it.name == outcome.detail }
-            if (cause == null) {
-                listOf(Notice(HA_NOT_ON_HOME_WIFI))
-            } else {
-                listOf(Notice(HA_COULD_NOT_CONFIRM_WIFI), remedyFor(cause))
+        SyncErrorKind.NOT_ON_LOCAL_NETWORK -> when (tested) {
+            NetworkEligibility.ANY_NETWORK -> listOf(Notice(HA_HTTP_NEEDS_HOME_WIFI))
+            NetworkEligibility.HOME_NETWORK_ONLY -> {
+                val cause = UnconfirmedCause.entries.firstOrNull { it.name == outcome.detail }
+                if (cause == null) {
+                    listOf(Notice(HA_NOT_ON_HOME_WIFI))
+                } else {
+                    listOf(Notice(HA_COULD_NOT_CONFIRM_WIFI), remedyFor(cause))
+                }
             }
         }
         SyncErrorKind.NAME_NOT_LOCAL -> listOf(Notice(HA_NAME_NOT_PRIVATE))
