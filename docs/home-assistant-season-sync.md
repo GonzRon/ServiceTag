@@ -141,7 +141,8 @@ is read-only until syncing stops, and the Developer API's season start, end and 
   a fresh check rather than reusing an old one.
 - **Stop syncing** leaves the season as it is, records nothing, and keeps the link for **Resume syncing**.
 - **An Asset no longer maintained here** (archived, retired or transferred out) is left alone; its link wakes up
-  by itself when the Asset is maintained here again. A replaced Asset's successor has no link.
+  by itself when the Asset is maintained here again. A replaced Asset's successor has no link. An Asset that comes
+  back from a transfer through its Transfer Pack returns without its link: link it again.
 
 ## When the phone checks
 

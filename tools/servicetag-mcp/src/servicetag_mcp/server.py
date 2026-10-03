@@ -4315,9 +4315,9 @@ def get_season_sync(asset_id: str) -> dict[str, Any]:
     `enabled` (false once the owner stops syncing), `state` (`ACTIVE`, `STOPPED`, `NEEDS_TOKEN` or
     `NOT_MAINTAINED_HERE`, derived when read), `observation` (`null` or `{state: ON|OFF, haLastChanged}`, the
     last valid answer), `lastSuccessAt`, `lastAttemptAt`, `lastError` (`null` or `{kind, detail, at}`, the latest
-    check that decided nothing) and `lastApplied` (`null` or `{action: START|END, occurredOn, at}`). The times are
-    epoch milliseconds and each means one thing: `lastSuccessAt` is when the last valid answer was fetched, and a
-    failure never moves it; `lastAttemptAt` is the latest check, whatever its outcome; `lastApplied`'s `at` is
+    check that decided nothing) and `lastApplied` (`null` or `{action: START|END, occurredOn, at, source}`). The
+    times are epoch milliseconds and each means one thing: `lastSuccessAt` is when the last valid answer was fetched,
+    and a failure never moves it; `lastAttemptAt` is the latest check, whatever its outcome; `lastApplied`'s `at` is
     when the link last recorded an activation, its `occurredOn` the day it was applied. `haLastChanged` is Home
     Assistant's own text, information only: it never dates an activation. The effective season is
     `get_season`'s `seasonPhase`, not repeated here.

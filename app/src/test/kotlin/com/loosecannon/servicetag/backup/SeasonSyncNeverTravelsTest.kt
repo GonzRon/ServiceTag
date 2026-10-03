@@ -59,7 +59,7 @@ class SeasonSyncNeverTravelsTest {
         revision = 5, observedState = HaSwitchState.ON, observedChangedAt = "2026-10-01T05:00:00+00:00",
         lastSuccessAt = 3_000L, lastAttemptAt = 3_500L, errorKind = SyncErrorKind.UNREACHABLE, errorDetail = "fetch-detail-x",
         errorAt = 3_500L, appliedAction = SeasonAction.START, appliedOn = "2026-10-01", appliedAt = 3_000L,
-        lastAppliedSource = LastAppliedSource.HOME_ASSISTANT, createdAt = 2_500L, updatedAt = 3_500L,
+        lastAppliedSource = LastAppliedSource.FORCED_IN, createdAt = 2_500L, updatedAt = 3_500L,
     )
 
     private suspend fun link(into: FakeGraph) {
@@ -164,7 +164,8 @@ class SeasonSyncNeverTravelsTest {
         val MARKERS = listOf(
             "ha_", "season_sync", "seasonSync", "haConnection", "SeasonSync", "HaConnection", CONNECTION, ENTITY,
             "input_boolean", "192.168.0.10", ":8123", "ExampleHomeWifi", "homeNetwork", "fetch-detail-x",
-            "2026-10-01T05:00:00", "networkEligibility", "backgroundChecks", "WEEKLY",
+            "2026-10-01T05:00:00", "networkEligibility", "backgroundChecks", "WEEKLY", "last_applied_source",
+            "lastAppliedSource", "FORCED_IN",
         )
     }
 }

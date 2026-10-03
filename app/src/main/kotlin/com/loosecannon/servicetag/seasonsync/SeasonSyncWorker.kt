@@ -37,7 +37,7 @@ enum class SeasonSyncWorkResult { SUCCESS, RETRY }
  * - any other exception: success, logged by G5's line (C33(6)) — a schedule check that failed after the pass, or a
  *   throw from the reader outside its transport; the next period repeats it;
  * - cancellation propagates, and an `Error` is never caught.
- * No log line attaches the exception: a store failure can carry a file path, and G3 and G5 name the step only.
+ * No log line attaches the exception: a store failure can carry a file path, and G3, G4 and G5 name the step only.
  */
 class SeasonSyncWorkerBody(
     private val runner: SeasonSyncRunner?,
@@ -67,7 +67,7 @@ class SeasonSyncWorkerBody(
         /** G3: a local database failure, the one retried end. */
         const val RUN_FAILED = "season sync run failed; WorkManager retries it"
 
-        /** G3's shape, for a key store that cannot load: success, so the next period runs the pass again. */
+        /** G4: a key store that cannot load: success, so the next period runs the pass again. */
         const val KEY_STORE_FAILED = "the Home Assistant key store failed; the next run repeats it"
 
         private const val TAG = "SeasonSyncWorker"

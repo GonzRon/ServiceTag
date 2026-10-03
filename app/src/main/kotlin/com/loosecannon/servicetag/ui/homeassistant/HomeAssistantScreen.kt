@@ -159,7 +159,11 @@ internal fun HomeAssistantScreen(graph: AppGraph, onBack: () -> Unit) {
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 Button(onClick = model::save, enabled = !state.busy) { Text(SAVE_LABEL) }
-                OutlinedButton(onClick = model::testConnection, enabled = !state.busy) { Text(HA_TEST_CONNECTION) }
+                OutlinedButton(
+                    onClick = model::testConnection,
+                    // The stored token only for the stored connection (I10): a changed form needs a typed one.
+                    enabled = !state.busy && (token.isNotBlank() || state.testsStoredConnection),
+                ) { Text(HA_TEST_CONNECTION) }
             }
             if (state.connected) {
                 TextButton(onClick = model::askDisconnect, enabled = !state.busy) { Text(HA_DISCONNECT) }

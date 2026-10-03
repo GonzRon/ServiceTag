@@ -423,6 +423,20 @@ class SeasonSyncBlockViewModelTest {
             ),
             block.now.pausedLine,
         )
+        grants.approximate = false
+        graph.haStateReader.answer = { HaReadOutcome.NoDecision(SyncErrorKind.NOT_ON_LOCAL_NETWORK, "PERMISSION_MISSING") }
+        act { block.syncNow() }
+        assertEquals(
+            "an error that carries the paused line draws P16-77 first, and the remedy once",
+            listOf(
+                Notice("ServiceTag could not confirm that this phone is on your home Wi-Fi, so it did not contact Home Assistant."),
+                Notice(
+                    "ServiceTag no longer has permission to read the Wi-Fi network's name. Allow precise Location again.",
+                    NoticeAction.ALLOW_PRECISE_AGAIN,
+                ),
+            ),
+            listOfNotNull(block.now.pausedLine) + block.now.errorLines,
+        )
     }
 
     @Test fun allowAgainRerunsTheMatchingFlow() = runTest {

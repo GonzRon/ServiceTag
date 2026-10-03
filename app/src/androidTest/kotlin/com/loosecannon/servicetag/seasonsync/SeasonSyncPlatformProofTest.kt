@@ -181,9 +181,9 @@ class SeasonSyncPlatformProofTest {
     }
 
     /**
-     * OS boundary: `AndroidKeyStore` — a key entry deleted under the store while its ciphertext file stays: the harder
-     * case beside a platform restore (H5), which brings the Room rows back with neither the key nor the file, as after a
-     * Keystore reset. [KeystoreSecretStore.get] answers null without a throw and `has` is false, so the binding reads
+     * OS boundary: `AndroidKeyStore` — a key entry deleted under the store while its ciphertext file stays, as after a
+     * Keystore reset: the harder case beside a platform restore (H5), which brings the Room rows back with neither the
+     * key nor the file. [KeystoreSecretStore.get] answers null without a throw and `has` is false, so the binding reads
      * NEEDS_TOKEN (C18, row 48's device twin, §7).
      */
     @Test

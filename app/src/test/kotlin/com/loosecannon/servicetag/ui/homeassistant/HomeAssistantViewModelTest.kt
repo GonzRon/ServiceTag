@@ -330,6 +330,51 @@ class HomeAssistantViewModelTest {
         assertFalse(screen.state.toString().contains("fictional-token-1"))
     }
 
+    /**
+     * MAJOR-1 (I10, R16-6): with an empty token field the stored token goes to the stored connection only — its
+     * canonical address, its network choice and its captured Wi-Fi name. A changed form keeps Test connection off
+     * and the model sends nothing; a typed token still tests it.
+     */
+    @Test fun testConnectionNeverSendsTheStoredTokenToAChangedAddressOrNetwork() = runTest {
+        grants.precise = true
+        graph.saveHaConnection.run(
+            "https://ha.example:8123", Secret("fictional-token-1"), null, NetworkEligibility.HOME_NETWORK_ONLY,
+            "ExampleHomeWifi", null,
+        )
+        val screen = open()
+        assertTrue("the stored form", screen.state.testsStoredConnection)
+
+        fun sendsNothing(what: String) {
+            assertFalse(what, screen.state.testsStoredConnection)
+            screen.model.testConnection()
+            advanceUntilIdle()
+            assertTrue(what, tested.isEmpty())
+            assertTrue(what, screen.state.notices.isEmpty())
+            assertFalse(what, screen.state.busy)
+        }
+
+        screen.model.onAddressChange("https://ha-typo.example:8123")
+        sendsNothing("another address")
+        screen.model.onAddressChange(" HTTPS://HA.example:8123/ ")
+        assertTrue("the same origin, written another way", screen.state.testsStoredConnection)
+
+        screen.model.chooseAnyNetwork()
+        sendsNothing("another network choice")
+        screen.model.chooseHomeWifi()
+        assertTrue("the stored choice again", screen.state.testsStoredConnection)
+
+        graph.currentNetwork = NetworkReading(CurrentNetwork.Wifi("ExampleOtherWifi"), null)
+        screen.model.captureNetwork()
+        advanceUntilIdle()
+        sendsNothing("another Wi-Fi name")
+
+        screen.model.onTokenChange("fictional-token-2")
+        screen.model.testConnection()
+        advanceUntilIdle()
+        assertEquals(Secret("fictional-token-2"), tested.single().second)
+        assertEquals("ExampleOtherWifi", tested.single().first.homeNetworkSsid)
+    }
+
     @Test fun disconnectAsksP16_9ThenForgets() = runTest {
         val saved = graph.saveHaConnection.run(
             "https://ha.example:8123", Secret("fictional-token-1"), null, NetworkEligibility.ANY_NETWORK, null, null,

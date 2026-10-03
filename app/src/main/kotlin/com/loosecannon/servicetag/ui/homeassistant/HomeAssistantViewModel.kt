@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.HaEndpointPolicy
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.SaveHaConnection
 import com.loosecannon.servicetag.core.seasonsync.SaveHaConnectionRefusal
@@ -77,7 +78,24 @@ internal data class HomeAssistantState(
     val disconnectAsk: String? = null,
     /** A home-network save refused for want of a captured name: the screen raises P16-62's button. */
     val promptCapture: Boolean = false,
+    /** The stored connection as last read (no token in it): what an empty token field may test. */
+    val stored: HaConnection? = null,
 ) {
+    /**
+     * The form still describes [stored] — its canonical address, its network choice and, under "Only on this home
+     * Wi-Fi", its captured name — so Test connection with an empty token field may use the stored token for that one
+     * request. Any other form never receives it (I10, R16-6): the screen keeps the button off, the model refuses.
+     */
+    val testsStoredConnection: Boolean get() = stored?.let(::describes) == true
+
+    /** [connection]'s origin and network rule, as this form would send them. */
+    fun describes(connection: HaConnection): Boolean {
+        val homeOnly = eligibility == NetworkEligibility.HOME_NETWORK_ONLY
+        return HaEndpointPolicy.canonical(address.trim()) == connection.baseUrl &&
+            eligibility == connection.networkEligibility &&
+            homeWifi.takeIf { homeOnly } == connection.homeNetworkSsid
+    }
+
     /** The derived status line: P16-10 with no connection, P16-11 when this phone has lost the token (C17). */
     val statusLine: String?
         get() = when {
@@ -136,8 +154,8 @@ internal data class HomeAssistantState(
  *
  * **The token** is trimmed and sent to the use case, which puts it in the store after its commit; [tokenField] is
  * emptied once Save has stored it or failed past its refusals; a refusal stores nothing and keeps it, since Home
- * Assistant shows a token once. Test connection uses the typed token, or the stored one for that one request, and
- * never keeps it.
+ * Assistant shows a token once. Test connection uses the typed token, or the stored one for that one request while
+ * the form still describes the stored connection ([HomeAssistantState.testsStoredConnection]), and never keeps it.
  */
 internal class HomeAssistantViewModel(
     private val connections: HaConnectionRepository,
@@ -306,17 +324,26 @@ internal class HomeAssistantViewModel(
         }
     }
 
-    /** Test connection (R16-13): the form's address and network setting, the typed token or else the stored one. */
+    /**
+     * Test connection (R16-13): the form's address and network setting, the typed token or else the stored one — the
+     * stored one only while the form still describes the stored connection (I10); otherwise nothing is sent.
+     */
     fun testConnection() {
         val form = mutableState.value
         val typed = typedToken.value.trim()
         mutableState.update { it.copy(busy = true, notices = emptyList()) }
         viewModelScope.launch {
             val stored = connections.get()
-            val token = if (typed.isNotEmpty()) Secret(typed) else stored?.let { secrets.get(it.id) }
+            val lent = stored?.takeIf(form::describes)
+            val token = if (typed.isNotEmpty()) Secret(typed) else lent?.let { secrets.get(it.id) }
             var noName = false
             val notices = if (token == null) {
-                listOf(Notice(if (stored == null) HA_NOT_CONNECTED else HA_ENTER_TOKEN_AGAIN))
+                // A changed form never borrows the stored token; its button is off, so no sentence is drawn here.
+                if (stored != null && lent == null) {
+                    emptyList()
+                } else {
+                    listOf(Notice(if (stored == null) HA_NOT_CONNECTED else HA_ENTER_TOKEN_AGAIN))
+                }
             } else {
                 val homeOnly = form.eligibility == NetworkEligibility.HOME_NETWORK_ONLY
                 val candidate = HaConnection(
@@ -406,6 +433,7 @@ internal class HomeAssistantViewModel(
                 eligibility = stored.networkEligibility,
                 homeWifi = stored.homeNetworkSsid,
                 backgroundChecks = stored.backgroundChecks,
+                stored = stored,
             )
         },
     )

@@ -66,8 +66,6 @@ internal enum class SeasonSyncBlockKind { NONE, ENABLED, STOPPED }
  * place. [notices] is the last command's refusal.
  */
 internal data class SeasonSyncBlockState(
-    /** False until the binding has been read once: Start and End wait for it (NOTE-2). */
-    val loaded: Boolean = false,
     val kind: SeasonSyncBlockKind = SeasonSyncBlockKind.NONE,
     /** No binding, a connection, the asset maintained here: P16-22 (C27). */
     val offersLink: Boolean = false,
@@ -93,7 +91,7 @@ internal data class SeasonSyncBlockState(
     val backgroundAsk: String? = null,
 ) {
     /** While a binding is enabled it owns the season (R16-1): the shipped Start and End are not drawn. */
-    val hidesStartAndEnd: Boolean get() = !loaded || kind == SeasonSyncBlockKind.ENABLED
+    val hidesStartAndEnd: Boolean get() = kind == SeasonSyncBlockKind.ENABLED
 }
 
 /**
@@ -153,7 +151,6 @@ internal class SeasonSyncBlockViewModel(
         val built = build(binding, asset)
         // A refusal that is already the binding's state line (P16-11, P16-36) is drawn once.
         built.copy(
-            loaded = true,
             busy = pending.busy,
             notices = pending.notices.filterNot { it.text == built.stateLine },
             backgroundAsk = pending.backgroundAsk,
@@ -222,7 +219,7 @@ internal class SeasonSyncBlockViewModel(
 
     private fun command(block: suspend () -> Unit) {
         if (pending.value.busy) return
-        pending.value = Pending(busy = true)
+        pending.update { it.copy(busy = true, notices = emptyList()) }
         viewModelScope.launch {
             val notices = try {
                 block()
@@ -236,7 +233,7 @@ internal class SeasonSyncBlockViewModel(
                 // and the next resume, run or Sync now repeats the step. No sentence is ratified for it.
                 emptyList()
             }
-            pending.value = Pending(notices = notices)
+            pending.update { it.copy(busy = false, notices = notices) }
         }
     }
 
@@ -262,7 +259,11 @@ internal class SeasonSyncBlockViewModel(
                 stoppedLine = SEASON_SYNC_STOPPED,
             )
         }
-        val pausedLine = pausedLine(seasonSyncScheduleOf(connection, true, backgroundAllowed()))
+        val paused = pausedLine(seasonSyncScheduleOf(connection, true, backgroundAllowed()))
+        // A paused line the latest error already carries is drawn once, after the error's own first sentence.
+        val errors = binding.errorKind?.let { seasonSyncErrorNotices(it, binding.errorDetail, binding.entityId) }
+            .orEmpty()
+            .filterNot { it.text == stateLine }
         return SeasonSyncBlockState(
             kind = SeasonSyncBlockKind.ENABLED,
             mode = binding.mode,
@@ -277,10 +278,8 @@ internal class SeasonSyncBlockViewModel(
             haChangedLine = binding.observedChangedAt?.let(::haTime)?.let(::seasonSyncChangedInHa),
             appliedLine = appliedLineOf(binding)?.let { line -> appliedLineText(line, day(binding.appliedOn)) },
             stateLine = stateLine,
-            pausedLine = pausedLine,
-            errorLines = binding.errorKind?.let { seasonSyncErrorNotices(it, binding.errorDetail, binding.entityId) }
-                .orEmpty()
-                .filterNot { it.text == stateLine || it == pausedLine },
+            pausedLine = paused?.takeUnless { it in errors },
+            errorLines = errors,
         )
     }
 

@@ -429,7 +429,7 @@ class SeasonSyncScreensTest {
             stop.run(heater)
             graph.setSeasonMode.run(heater, SeasonModeCommand(SeasonMode.CALENDAR, "10-01", "04-30"))
         }
-        detail(heater, sheet = SeasonSyncSheetPurpose.RESUME)
+        detail(heater)
         rule.awaitText(SEASON_SYNC_STOPPED)
 
         rule.onNodeWithText(SEASON_STARTS).performScrollTo().assertIsDisplayed()

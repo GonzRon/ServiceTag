@@ -9,13 +9,14 @@
          each explain a denial and link to the app's settings page (#66). No component is added for
          it — a socket is not a component, so there is nothing here to export.
 
-         INTERNET gives the process network capability. Its two intentional outbound uses are Save as document (#85): an https download of a reference's document, made when the owner taps it on the phone, or when the owner's paired workstation asks through the Developer API while its screen is open (#92); and the Home Assistant season sync (#16): one authenticated GET of one entity's state at the address the owner configured, under the address and network rules enforced in HomeAssistantStateClient. The Developer API's listener still binds only to localhost; future cloud features may make intentional outbound use of the permission under their own designs. -->
+         INTERNET gives the process network capability. Its two intentional outbound uses are Save as document (#85): an https download of a reference's document, made when the owner taps it on the phone, or when the owner's paired workstation asks through the Developer API while its screen is open (#92); and the Home Assistant season sync (#16): authenticated GETs at the address the owner configured: one entity's state, or the API root for Test connection, under the address and network rules enforced in HomeAssistantStateClient. The Developer API's listener still binds only to localhost; future cloud features may make intentional outbound use of the permission under their own designs. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- #16 (C32; R16-21, R16-20 as amended): the home-network check reads the connected Wi-Fi's name. The manifest
          declares; it grants nothing. The network-state and Wi-Fi-state lines are install-time (the first also arrives
          merged from WorkManager). Precise and approximate location are requested together, by the Home Assistant
-         screen, only when the owner picks "Only on this home Wi-Fi"; background location only when
-         the owner turns its background checks on, after that grant. "Any network" asks for nothing. -->
+         screen (and again from an Asset's season card, Allow again, after a withdrawal), only when the owner picks
+         "Only on this home Wi-Fi"; background location only when the owner turns its background checks on, after that
+         grant. "Any network" asks for nothing. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
