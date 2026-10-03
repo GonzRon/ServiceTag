@@ -15,6 +15,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -57,6 +58,9 @@ internal fun LinkSeasonSyncSheet(
     val state by model.state.collectAsStateWithLifecycle()
     val review by rememberUpdatedState(onReviewSchedules)
     val done by rememberUpdatedState(onDone)
+    // Swipe, scrim and back all ask this first: Hidden is refused while saving, so a refusal is never left in a hidden
+    // sheet (MaterializeSheet's idiom).
+    val saving by rememberUpdatedState(state.saving)
     LaunchedEffect(state.finished) {
         when (state.finished) {
             SeasonSheetExit.CLOSED -> done()
@@ -76,7 +80,10 @@ internal fun LinkSeasonSyncSheet(
         )
         null -> ModalBottomSheet(
             onDismissRequest = { if (!state.saving) onDone() },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            sheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = true,
+                confirmValueChange = { it != SheetValue.Hidden || !saving },
+            ),
         ) {
             LinkSeasonSyncForm(state, model::onEntityId, model::save, onCancel = onDone)
         }
