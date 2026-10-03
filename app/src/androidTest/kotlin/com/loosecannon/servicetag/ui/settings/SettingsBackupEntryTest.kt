@@ -45,6 +45,7 @@ class SettingsBackupEntryTest {
                     onBackup = { backupTapped++ },
                     onDeveloperApi = {},
                     onCategories = {},
+                    onHomeAssistant = {},
                 )
             }
         }
@@ -69,6 +70,7 @@ class SettingsBackupEntryTest {
                     onBackup = {},
                     onDeveloperApi = { apiTapped++ },
                     onCategories = {},
+                    onHomeAssistant = {},
                 )
             }
         }
@@ -96,6 +98,7 @@ class SettingsBackupEntryTest {
                     onBackup = {},
                     onDeveloperApi = {},
                     onCategories = { categoriesTapped++ },
+                    onHomeAssistant = {},
                 )
             }
         }

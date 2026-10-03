@@ -38,13 +38,11 @@ import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.OperationalCondition
-import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
-import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -85,6 +83,7 @@ import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
@@ -115,12 +114,14 @@ import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
+import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
 import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderProblem
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
+import com.loosecannon.servicetag.core.usecase.liveContinuousCount
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.ui.attachments.AttachmentFailure
@@ -1838,8 +1839,10 @@ data class AssetEditState(
     /** S60 and S61: empty whenever S59 is turned on. */
     val breakStart: String = "",
     val breakEnd: String = "",
-    /** S55, naming the schedules, when the season's change was refused. */
+    /** S55, naming the schedules, when the season's change was refused; P16-47 when the season guard refused it. */
     val seasonRefusal: String? = null,
+    /** #16 (C27, R16-16): P16-47 while a Home Assistant binding owns the season — the block is drawn read-only. */
+    val seasonSyncLine: String? = null,
     /** S63 or S64 (naming the schedules), when the break's change was refused. */
     val breakRefusal: String? = null,
     /** The asset's subjects in `sortOrder`, archived ones included and marked (S111). Existing assets only. */
@@ -2031,6 +2034,8 @@ class AssetEditViewModel(
     private val reconcile: ReminderReconcile? = null,
     /** #77 (C19, rm-5): the held set, so the parent choices never offer a transferred-out asset. Null holds nothing. */
     private val transfers: TransferRecordRepository? = null,
+    /** #16 (C27, R16-16): whether a Home Assistant binding owns the asset's season, read once. Null: none does. */
+    private val seasonSync: SeasonSyncGuard? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?, parentId: String? = null) : this(
@@ -2040,6 +2045,7 @@ class AssetEditViewModel(
         notifications = graph.notificationPermission,
         reconcile = graph.reminderReconcile,
         transfers = graph.transferRecords,
+        seasonSync = SeasonSyncGuard(graph.seasonSyncBindings),
     )
 
     private val _state = MutableStateFlow(
@@ -2118,6 +2124,7 @@ class AssetEditViewModel(
             val attached = id?.let { existing -> attachments.forOwner(AttachmentOwner.OfAsset(existing)) }
                 .orEmpty()
                 .let(::attachedDocumentsOf)
+            val synced = id != null && seasonSync?.isSynced(id) == true
             if (row != null) {
                 leadAtLoad = row.warrantyReminderLeadDays
                 writtenLead = row.warrantyReminderLeadDays
@@ -2125,7 +2132,11 @@ class AssetEditViewModel(
             }
             _state.update { form ->
                 val filled = if (row == null) form else form.filledFrom(row, subjects)
-                filled.copy(parentChoices = choicesIn(all, transfers?.heldIds().orEmpty()), attached = attached)
+                filled.copy(
+                    parentChoices = choicesIn(all, transfers?.heldIds().orEmpty()),
+                    attached = attached,
+                    seasonSyncLine = SEASON_SYNC_FOLLOWS_HA.takeIf { synced },
+                )
             }
         }
         // The subject list follows the store, so one added or archived in the subject editor is
@@ -2170,7 +2181,7 @@ class AssetEditViewModel(
      */
     fun onSeasonMode(mode: SeasonMode) =
         edit(AssetField.SEASON_START, AssetField.SEASON_END) { form ->
-            if (form.seasonMode == mode) {
+            if (form.seasonMode == mode || form.seasonSyncLine != null) {
                 form
             } else {
                 form.copy(seasonMode = mode, manualPhase = null, seasonRefusal = null)
@@ -2178,13 +2189,19 @@ class AssetEditViewModel(
         }
 
     /** S36 or S37, the answer to S35. */
-    fun onManualPhase(phase: SeasonPhase) = _state.update { it.copy(manualPhase = phase, seasonRefusal = null) }
+    fun onManualPhase(phase: SeasonPhase) = seasonEdit { it.copy(manualPhase = phase, seasonRefusal = null) }
 
     fun onSeasonStart(value: String) =
-        edit(AssetField.SEASON_START) { it.copy(seasonStart = value, seasonRefusal = null) }
+        edit(AssetField.SEASON_START) { seasonOnly(it) { form -> form.copy(seasonStart = value, seasonRefusal = null) } }
 
     fun onSeasonEnd(value: String) =
-        edit(AssetField.SEASON_END) { it.copy(seasonEnd = value, seasonRefusal = null) }
+        edit(AssetField.SEASON_END) { seasonOnly(it) { form -> form.copy(seasonEnd = value, seasonRefusal = null) } }
+
+    /** #16 (C27, R16-16): while a Home Assistant binding owns the season, the season's answers are not taken. */
+    private fun seasonEdit(change: (AssetEditState) -> AssetEditState) = _state.update { seasonOnly(it, change) }
+
+    private fun seasonOnly(form: AssetEditState, change: (AssetEditState) -> AssetEditState): AssetEditState =
+        if (form.seasonSyncLine != null) form else change(form)
 
     /** S59. Either way both dates start empty: a break is never prefilled (inv. 121). */
     fun onBreak(on: Boolean) =
@@ -2476,6 +2493,10 @@ class AssetEditViewModel(
                     _messages.tryEmit("${nameOf(failure.parentId)} is already part of this asset.")
                     return
                 }
+                is SeasonSyncOwnsSeason -> {
+                    _state.update { it.copy(saving = false, seasonRefusal = SEASON_SYNC_FOLLOWS_HA) }
+                    return
+                }
                 is WarrantyReminderValidation -> {
                     _state.update {
                         it.copy(saving = false, problems = mapOf(AssetField.WARRANTY_LEAD to leadLineFor(failure.problems)))
@@ -2610,9 +2631,7 @@ class AssetEditViewModel(
         val asset = id ?: return null
         val intoSeason = form.seasonMode == SeasonMode.CALENDAR || form.seasonMode == SeasonMode.MANUAL
         if (form.storedSeasonMode != SeasonMode.YEAR_ROUND || !intoSeason) return null
-        val continuous = schedules.forAsset(asset).count {
-            it.status != ScheduleStatus.ARCHIVED && it.servicePolicy == ServicePolicy.CONTINUOUS
-        }
+        val continuous = liveContinuousCount(schedules.forAsset(asset))
         return if (continuous > 0) EditPrompt.ReconcileSchedules(continuous) else null
     }
 

@@ -90,6 +90,11 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
     setHealthPolicy = graph.setHealthPolicy,
     health = graph.assetHealthReadModel,
     attention = graph.attentionReadModel,
+    seasonSyncBindings = graph.seasonSyncBindings,
+    haConnections = graph.haConnections,
+    secrets = graph.secretStore,
+    transfers = graph.transferRecords,
+    backgroundAllowed = graph.seasonSyncBackgroundAllowed,
 )
 
 /**

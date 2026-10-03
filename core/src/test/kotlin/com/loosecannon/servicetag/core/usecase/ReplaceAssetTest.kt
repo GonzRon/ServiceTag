@@ -48,6 +48,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
@@ -962,6 +963,7 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
         SaveAssetSettings(
             assets, schedules, subjects, activations, raw.uow, ids, clock, todayPort, recompute,
             ApplyTemplate(definitions, profiles, assets, raw.uow, ids, clock), PromoteCategory(raw.categories),
+            SeasonSyncGuard(raw.seasonSyncBindings),
         ),
         SaveSchedule(schedules, assets, groups, definitions, profiles, raw.uow, ids, clock, recompute, subjects),
         SaveGroup(groups, assets, raw.uow, ids, clock),

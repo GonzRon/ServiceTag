@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
@@ -71,6 +72,16 @@ import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.seasonsync.EditSeasonSyncEntity
+import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
+import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult
+import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.SaveHaConnection
+import com.loosecannon.servicetag.core.seasonsync.SetSeasonSyncMode
+import com.loosecannon.servicetag.core.seasonsync.StopSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
@@ -174,6 +185,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_16_17
 import com.loosecannon.servicetag.data.room.MIGRATION_17_18
 import com.loosecannon.servicetag.data.room.MIGRATION_18_19
 import com.loosecannon.servicetag.data.room.MIGRATION_19_20
+import com.loosecannon.servicetag.data.room.MIGRATION_20_21
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
@@ -187,6 +199,7 @@ import com.loosecannon.servicetag.data.room.RoomDeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
+import com.loosecannon.servicetag.data.room.RoomHaConnectionRepository
 import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
 import com.loosecannon.servicetag.data.room.RoomInstalledComponentRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
@@ -196,6 +209,7 @@ import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomSeasonActivationRepository
+import com.loosecannon.servicetag.data.room.RoomSeasonSyncRepository
 import com.loosecannon.servicetag.data.room.RoomServiceCaseEntryRepository
 import com.loosecannon.servicetag.data.room.RoomServiceCaseRepository
 import com.loosecannon.servicetag.data.room.RoomSupplyItemRepository
@@ -229,6 +243,17 @@ import com.loosecannon.servicetag.reminders.DeadlineDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
+import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
+import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
+import com.loosecannon.servicetag.seasonsync.HomeAssistantStateClient
+import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
+import com.loosecannon.servicetag.seasonsync.NetworkPlatform
+import com.loosecannon.servicetag.seasonsync.PlatformNetworkReader
+import com.loosecannon.servicetag.seasonsync.ResumeRefresh
+import com.loosecannon.servicetag.seasonsync.SeasonSyncRunner
+import com.loosecannon.servicetag.seasonsync.SeasonSyncWork
+import com.loosecannon.servicetag.seasonsync.WorkManagerSeasonSync
+import com.loosecannon.servicetag.seasonsync.storedHaConnection
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
@@ -273,7 +298,7 @@ class AppGraph(private val context: Context) {
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
             MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
-            MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
+            MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
         )
         .build()
 
@@ -438,6 +463,16 @@ class AppGraph(private val context: Context) {
     /** #79 (C17): a deadline's device-local stamp; never exported, never merged, no foreign key. */
     val deadlineLocalDelivery: DeadlineLocalDeliveryRepository =
         RoomDeadlineLocalDeliveryRepository(db.deadlineLocalDeliveryDao())
+
+    /**
+     * #16 (C9, C11): the Home Assistant connection and the season bindings — device-local, never exported, merged or
+     * packed. Unguarded, one instance each: a held asset's binding is refused by the applier's `maintainedHere` (C13).
+     */
+    val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
+    val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
+
+    /** #16 (C18, R16-5): the Home Assistant token, sealed by a Keystore key in a file the platform never copies. */
+    val secretStore: KeystoreSecretStore = KeystoreSecretStore.onDevice(context)
 
     /**
      * Derived state as a **read**, so the delivery path cannot reach the one write method the
@@ -649,6 +684,21 @@ class AppGraph(private val context: Context) {
         addAttachment, networkPermissionGranted, clock,
     )
 
+    /**
+     * #16 (C19, C32) — the Home Assistant client and the network reader it asks first: one GET of one entity at the
+     * stored address, whose network setting it reads at each request; an https name in the home-network mode is
+     * resolved through #85's resolver. The season sync runner below is its one caller, through the port; the stored
+     * connection's lookup is a database read the worker retries (C22).
+     */
+    private val networkPlatform: NetworkPlatform = AndroidNetworkPlatform(context.applicationContext)
+    val currentNetworkReader: CurrentNetworkReader = PlatformNetworkReader(networkPlatform)
+    val haStateClient: HomeAssistantStateClient = HomeAssistantStateClient(
+        settings = storedHaConnection(haConnections),
+        networkPermissionGranted = networkPermissionGranted,
+        currentNetwork = currentNetworkReader,
+        resolver = InetHostResolver(networkPermissionGranted),
+    )
+
     /** A cache file the camera can write into through the FileProvider (spec §9.3). */
     fun cameraCaptureUri(): Uri {
         val file = File(File(context.applicationContext.cacheDir, "camera"), "${ids.newId()}.jpg")
@@ -794,13 +844,56 @@ class AppGraph(private val context: Context) {
     // the API and the offers refuse the same things; each season or break write rebuilds the asset's
     // schedules, and an activation writes its row and no asset column.
     val setSeasonMode: SetSeasonMode =
-        SetSeasonMode(assets, schedules, seasonActivations, uow, ids, clock, today, recomputeSchedules)
+        SetSeasonMode(
+            assets, schedules, seasonActivations, uow, ids, clock, today, recomputeSchedules,
+            SeasonSyncGuard(seasonSyncBindings),
+        )
     val setMaintenanceBreak: SetMaintenanceBreak =
         SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
     val recordSeasonActivation: RecordSeasonActivation =
-        RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, today, recomputeSchedules)
+        RecordSeasonActivation(
+            assets, events, seasonActivations, uow, ids, clock, today, recomputeSchedules,
+            SeasonSyncGuard(seasonSyncBindings),
+        )
     val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, today)
-    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, today)
+    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(
+        seasonActivations, recordSeasonActivation, uow, today, SeasonSyncGuard(seasonSyncBindings),
+    )
+
+    /**
+     * #16 (C13, C16, C17, C21–C23) — Home Assistant season sync. The applier records each read through the season
+     * body (guarded activations, as every season writer); the runner is the one poller, single flight, and the
+     * commands' scheduler: after each commit it applies C22's rule to the unique periodic work, re-reading the
+     * background grant ([seasonSyncBackgroundAllowed]: precise location, and background location on API 29+, C32).
+     * [resumeRefresh] is the nav shell's resume hook (C23). `ServiceTagApp` assigns the worker's dispatch and runs the
+     * start-up sweep and schedule.
+     */
+    val recordSeasonSyncResult: RecordSeasonSyncResult = RecordSeasonSyncResult(
+        seasonSyncBindings, assets, seasonActivations, transferRecords, recordSeasonActivation, uow, clock, today,
+    )
+    val seasonSyncWork: SeasonSyncWork = WorkManagerSeasonSync(context.applicationContext)
+    val seasonSyncBackgroundAllowed: () -> Boolean =
+        { networkPlatform.preciseLocationGranted() && networkPlatform.backgroundLocationGranted() }
+    val seasonSyncRunner: SeasonSyncRunner = SeasonSyncRunner(
+        seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateClient, recordSeasonSyncResult,
+        seasonSyncWork, seasonSyncBackgroundAllowed, appScope, clock,
+    )
+    val resumeRefresh: ResumeRefresh = ResumeRefresh { seasonSyncRunner.launchRefreshIfStale() }
+    val linkSeasonSync: LinkSeasonSync = LinkSeasonSync(
+        assets, seasonActivations, transferRecords, seasonSyncBindings, haConnections, secretStore, setSeasonMode,
+        seasonSyncRunner, uow, clock, today,
+    )
+    val setSeasonSyncMode: SetSeasonSyncMode =
+        SetSeasonSyncMode(seasonSyncBindings, assets, recordSeasonSyncResult, seasonSyncRunner, uow, clock)
+    val editSeasonSyncEntity: EditSeasonSyncEntity =
+        EditSeasonSyncEntity(seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val resumeSeasonSync: ResumeSeasonSync =
+        ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
+    val saveHaConnection: SaveHaConnection =
+        SaveHaConnection(haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock)
+    val forgetHaConnection: ForgetHaConnection =
+        ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow)
 
     // 1.4 — condition and health configuration (master plan §9, §10.1). A condition write inserts one
     // immutable row and nothing else; the offer writes only when accepted. The subject and policy
@@ -850,7 +943,7 @@ class AppGraph(private val context: Context) {
     ) { reason -> Log.w("PickedContact", reason) }
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
-        promoteCategory,
+        promoteCategory, SeasonSyncGuard(seasonSyncBindings),
     )
 
     val archiveAsset: ArchiveAsset =
@@ -1003,7 +1096,7 @@ class AppGraph(private val context: Context) {
      */
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, today),
-        SeasonOffers(assets, seasonActivations, acceptSeasonOffer, today),
+        SeasonOffers(assets, seasonActivations, acceptSeasonOffer, today, SeasonSyncGuard(seasonSyncBindings)),
         ImpairmentOffers(assets, conditions, acceptImpairmentOffer, today),
     )
 
@@ -1097,6 +1190,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 20
+        const val SCHEMA_VERSION = 21
     }
 }

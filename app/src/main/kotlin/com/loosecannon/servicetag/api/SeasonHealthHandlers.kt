@@ -8,6 +8,11 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
+import com.loosecannon.servicetag.core.seasonsync.SecretStore
+import com.loosecannon.servicetag.core.seasonsync.currentSeasonSyncState
 import com.loosecannon.servicetag.core.usecase.ArchiveHealthSubject
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
@@ -39,6 +44,10 @@ import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
  * deletes a condition or an activation, deletes a health subject or writes a health value, because
  * no use case that could is a collaborator of this class.
  *
+ * #16 adds one read, the asset's Home Assistant season sync (C24), over the binding and connection repositories and
+ * the token store's `has`, and writes nothing. Its season writes answer `SEASON_SYNC_ENABLED` from their use cases'
+ * guard while a binding is enabled; nothing here re-checks it.
+ *
  * A read that names an asset answers the shipped 404 `no_such_asset` when it is not there, before
  * any read model is asked: the health and season views of a vanished asset are empty rather than
  * errors, which is right on a screen and wrong on a wire.
@@ -58,12 +67,19 @@ internal class SeasonHealthHandlers(
     private val setHealthPolicy: SetHealthPolicy,
     private val health: AssetHealthReadModel,
     private val attention: AttentionReadModel,
+    private val seasonSyncBindings: SeasonSyncRepository,
+    private val haConnections: HaConnectionRepository,
+    private val secrets: SecretStore,
+    private val transfers: TransferRecordRepository,
+    private val backgroundAllowed: () -> Boolean,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.seasonActivations, graph.conditions, graph.healthSubjects,
         graph.setSeasonMode, graph.setMaintenanceBreak, graph.recordSeasonActivation, graph.getAssetSeason,
         graph.recordCondition, graph.saveHealthSubject, graph.archiveHealthSubject, graph.setHealthPolicy,
         graph.assetHealthReadModel, graph.attentionReadModel,
+        graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.transferRecords,
+        graph.seasonSyncBackgroundAllowed,
     )
 
     // --- the season ---------------------------------------------------------------------------
@@ -100,6 +116,29 @@ internal class SeasonHealthHandlers(
             AssetSeasonResponse.serializer(),
             AssetSeasonResponse(saved.toDto(), getAssetSeason.run(AssetId(assetId)).toResponse()),
         )
+    }
+
+    // --- season sync (#16) ---------------------------------------------------------------------
+
+    /**
+     * #16 (C3, C24; R16-9) — the twenty-eighth `/v1/assets/{id}/…` sub-resource, read only: the asset's binding, its
+     * state derived now by the shared derivation (C17), and the connection's non-secret settings. No binding is a 200
+     * with `binding: null`. The token is asked about through [SecretStore.has] alone and never read; the
+     * connection's address and home Wi-Fi name stay in the connection. A key store that cannot load throws out of
+     * `has` and answers the shipped 500 `internal`, never a guessed state (C18). Nothing here writes.
+     */
+    suspend fun getSeasonSync(assetId: String): ApiResponse {
+        asset(assetId)
+        val stored = haConnections.get()
+        val connection = if (stored == null) {
+            SeasonSyncConnectionDto.NOT_CONFIGURED
+        } else {
+            stored.toSeasonSyncDto(secrets.has(stored.id), backgroundAllowed())
+        }
+        val binding = seasonSyncBindings.get(AssetId(assetId))?.let { found ->
+            found.toDto(currentSeasonSyncState(found, secrets, assets, transfers))
+        }
+        return ok(SeasonSyncResponse.serializer(), SeasonSyncResponse(assetId, connection, binding))
     }
 
     // --- condition ----------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import android.os.Build
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +72,7 @@ import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.journal.classify
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -93,6 +96,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.warranty.WarrantyStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
+import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
 import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
 import com.loosecannon.servicetag.ui.components.ActionGrid
 import com.loosecannon.servicetag.ui.components.ActionSpec
@@ -237,6 +241,25 @@ fun AssetDetailScreen(
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
+    // #16 (C27): the season card's Home Assistant block, its own model beside the screen's.
+    val appContext = LocalContext.current.applicationContext
+    val syncModel: SeasonSyncBlockViewModel = viewModel(key = "season-sync:$assetId") {
+        SeasonSyncBlockViewModel(graph, AssetId(assetId), AndroidNetworkPlatform(appContext)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                appContext.packageManager.backgroundPermissionOptionLabel.toString()
+            } else {
+                ""
+            }
+        }
+    }
+    val sync by syncModel.state.collectAsStateWithLifecycle()
+    // #16 (C27): the setup sheet, for Link or for Resume on an asset no longer MANUAL; each opening a fresh model.
+    var syncSheet by rememberSaveable { mutableStateOf<SeasonSyncSheetPurpose?>(null) }
+    var syncSheetOpening by rememberSaveable { mutableIntStateOf(0) }
+    val openSyncSheet: (SeasonSyncSheetPurpose) -> Unit = { purpose ->
+        syncSheetOpening += 1
+        syncSheet = purpose
+    }
     val missing by model.missing.collectAsStateWithLifecycle()
     val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -255,13 +278,16 @@ fun AssetDetailScreen(
     // ordinary visit does not recompose when the page above the sections changes height.
     val scroll = rememberScrollState()
     var sectionShown by rememberSaveable { mutableStateOf(false) }
-    val seekingSchedules = section == SECTION_SCHEDULES && !sectionShown
+    // #16 (C27): the setup sheet's P78-2 answer seeks the same sections on this page.
+    var reviewingSchedules by remember { mutableStateOf(false) }
+    val seekingSchedules = (section == SECTION_SCHEDULES && !sectionShown) || reviewingSchedules
     var maintenanceTop by remember { mutableIntStateOf(-1) }
     if (seekingSchedules) {
         LaunchedEffect(maintenanceTop) {
             if (maintenanceTop >= 0) {
                 scroll.scrollTo(maintenanceTop)
                 sectionShown = true
+                reviewingSchedules = false
             }
         }
     }
@@ -343,6 +369,19 @@ fun AssetDetailScreen(
         }
         markingOperational?.let { condition ->
             MarkOperationalDialog(graph = graph, assetId = assetId, current = condition) { markingOperational = null }
+        }
+        syncSheet?.let { purpose ->
+            LinkSeasonSyncSheet(
+                graph = graph,
+                assetId = assetId,
+                purpose = purpose,
+                opening = syncSheetOpening,
+                onReviewSchedules = {
+                    maintenanceTop = -1
+                    reviewingSchedules = true
+                },
+                onDone = { syncSheet = null },
+            )
         }
         // The screen's 16dp gutter is applied per block rather than to the whole scroll, because
         // 1.2's two maintenance sections draw their **own** gutter: they reuse the Maintenance
@@ -429,6 +468,15 @@ fun AssetDetailScreen(
                     onStart = { model.askSeason(SeasonAction.START) },
                     onEnd = { model.askSeason(SeasonAction.END) },
                     editable = current.offersWrites,
+                    syncOwnsSeason = sync.hidesStartAndEnd,
+                    syncBlock = {
+                        SeasonSyncBlock(
+                            syncModel,
+                            sync,
+                            onLink = { openSyncSheet(SeasonSyncSheetPurpose.LINK) },
+                            onReconcile = { openSyncSheet(SeasonSyncSheetPurpose.RESUME) },
+                        )
+                    },
                 )
             }
             // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).
@@ -1189,7 +1237,16 @@ private fun GlyphLine(glyph: StateGlyph, tint: Color, text: String) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> Unit, editable: Boolean = true) {
+private fun SeasonSection(
+    season: SeasonView,
+    onStart: () -> Unit,
+    onEnd: () -> Unit,
+    editable: Boolean = true,
+    /** #16 (C27, R16-1): an enabled Home Assistant binding owns the season, so Start and End are not drawn. */
+    syncOwnsSeason: Boolean = false,
+    /** #16 (C27, C-4): the Home Assistant block, drawn after whichever mode's branch is taken. */
+    syncBlock: @Composable () -> Unit = {},
+) {
     // S28 heads the section, in the sentence case S5 and S94 are drawn in (the ruling on I-4).
     SentenceSectionHeader(OPERATING_SEASON)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1213,7 +1270,7 @@ private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> 
                     itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     PhaseBadge(season.phase)
-                    when (manualAction(season)?.takeIf { editable }) {
+                    when (manualAction(season)?.takeIf { editable && !syncOwnsSeason }) {
                         SeasonAction.START -> Button(onClick = onStart, shape = ControlShape) { Text(START_SEASON) }
                         SeasonAction.END -> OutlinedButton(onClick = onEnd, shape = ControlShape) { Text(END_SEASON) }
                         null -> Unit
@@ -1221,6 +1278,8 @@ private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> 
                 }
             }
         }
+        // C-4: on every mode, after its branch — a stopped binding on a CALENDAR or YEAR_ROUND asset keeps its Resume.
+        syncBlock()
     }
     if (seasonHistoryShown(season)) {
         val rows = seasonHistory(season)

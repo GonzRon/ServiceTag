@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
@@ -2691,6 +2692,7 @@ class AssetViewModelsTest {
     private fun saveSettingsOver(assets: AssetRepository) = SaveAssetSettings(
         assets, graph.schedules, graph.healthSubjects, graph.seasonActivations, graph.uow, graph.ids,
         graph.clock, graph.todayPort, graph.recomputeSchedules, graph.applyTemplate, graph.promoteCategory,
+        SeasonSyncGuard(graph.seasonSyncBindings),
     )
 
     /** `SaveAssetSettings.run` reads every asset first, and nothing else here goes through this port. */

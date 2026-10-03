@@ -946,6 +946,45 @@ val MIGRATION_19_20: Migration = object : Migration(19, 20) {
 }
 
 /**
+ * Schema v20 -> v21 (#16, C9–C10; R16-4, R16-10): the two device-local Home Assistant tables and the binding's one
+ * index. Nothing existing moves: no column on an existing table, no row, no timestamp and no recreate, so a
+ * pre-upgrade export still re-plans IDENTICAL, and the backup format stays 20 — neither table is named by any export,
+ * merge or pack. A v20 install arrives with no connection and no binding, and nothing is read off an asset to make one.
+ *
+ *  1. `ha_connection`, the one connection of the installation: eight columns, no foreign key.
+ *  2. `season_sync_binding`, at most one per asset (its key): owned by the asset (CASCADE) and by the connection
+ *     (CASCADE), `connection_id` indexed for its key.
+ *
+ * Each statement is copied verbatim from the exported `21.json`, so Room validates the result on open.
+ */
+val MIGRATION_20_21: Migration = object : Migration(20, 21) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `ha_connection` (`id` TEXT NOT NULL, `base_url` TEXT NOT NULL, " +
+                "`cadence` TEXT NOT NULL, `network_eligibility` TEXT NOT NULL, `home_network_ssid` TEXT, " +
+                "`background_checks` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `season_sync_binding` (`asset_id` TEXT NOT NULL, " +
+                "`connection_id` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `mode` TEXT NOT NULL, " +
+                "`enabled` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `observed_state` TEXT, " +
+                "`observed_changed_at` TEXT, `last_success_at` INTEGER, `last_attempt_at` INTEGER, " +
+                "`error_kind` TEXT, `error_detail` TEXT, `error_at` INTEGER, `applied_action` TEXT, " +
+                "`applied_on` TEXT, `applied_at` INTEGER, `last_applied_source` TEXT, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`asset_id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`connection_id`) REFERENCES `ha_connection`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_season_sync_binding_connection_id` " +
+                "ON `season_sync_binding` (`connection_id`)",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

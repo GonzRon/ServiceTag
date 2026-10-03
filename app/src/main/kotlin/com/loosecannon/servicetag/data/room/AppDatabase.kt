@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.data.room.dao.DeadlineLocalDeliveryDao
 import com.loosecannon.servicetag.data.room.dao.DefinitionDao
 import com.loosecannon.servicetag.data.room.dao.EventDao
 import com.loosecannon.servicetag.data.room.dao.ExternalLinkDao
+import com.loosecannon.servicetag.data.room.dao.HaConnectionDao
 import com.loosecannon.servicetag.data.room.dao.HealthSubjectDao
 import com.loosecannon.servicetag.data.room.dao.InstalledComponentDao
 import com.loosecannon.servicetag.data.room.dao.MaintenanceGroupDao
@@ -25,6 +26,7 @@ import com.loosecannon.servicetag.data.room.dao.ProfileDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleLocalDeliveryDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
 import com.loosecannon.servicetag.data.room.dao.SeasonActivationDao
+import com.loosecannon.servicetag.data.room.dao.SeasonSyncBindingDao
 import com.loosecannon.servicetag.data.room.dao.ServiceCaseDao
 import com.loosecannon.servicetag.data.room.dao.ServiceCaseEntryDao
 import com.loosecannon.servicetag.data.room.dao.SupplyItemDao
@@ -43,6 +45,7 @@ import com.loosecannon.servicetag.data.room.entities.ConsumableUsageEntity
 import com.loosecannon.servicetag.data.room.entities.DeadlineLocalDeliveryEntity
 import com.loosecannon.servicetag.data.room.entities.EventProfileEntity
 import com.loosecannon.servicetag.data.room.entities.ExternalLinkEntity
+import com.loosecannon.servicetag.data.room.entities.HaConnectionEntity
 import com.loosecannon.servicetag.data.room.entities.HealthSubjectEntity
 import com.loosecannon.servicetag.data.room.entities.InstalledComponentCompositionEntity
 import com.loosecannon.servicetag.data.room.entities.InstalledComponentEntity
@@ -58,6 +61,7 @@ import com.loosecannon.servicetag.data.room.entities.ProfileFieldEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleLocalDeliveryEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleProviderEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
+import com.loosecannon.servicetag.data.room.entities.SeasonSyncBindingEntity
 import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntity
 import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntryEntity
 import com.loosecannon.servicetag.data.room.entities.SupplyItemEntity
@@ -99,8 +103,10 @@ import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
         AssetSupplyEntity::class,
         InstalledComponentEntity::class,
         InstalledComponentCompositionEntity::class,
+        HaConnectionEntity::class,
+        SeasonSyncBindingEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -130,4 +136,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun supplyItemDao(): SupplyItemDao
     abstract fun assetSupplyDao(): AssetSupplyDao
     abstract fun installedComponentDao(): InstalledComponentDao
+    abstract fun haConnectionDao(): HaConnectionDao
+    abstract fun seasonSyncBindingDao(): SeasonSyncBindingDao
 }

@@ -12,6 +12,12 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
+import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
+import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
@@ -350,6 +356,43 @@ class OffersTest {
         assertTrue(graph.eventOffers.offersAfter(eventOn("tub", EventKind.SEASON_START)).single() is SeasonOfferPrompt)
         assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("old", EventKind.SEASON_START)))
         assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("gone", EventKind.SEASON_START)))
+    }
+
+    /** #16: a fictional connection and a binding of [assetId] as a link leaves it, [enabled] or stopped. */
+    private suspend fun linked(assetId: String, enabled: Boolean) {
+        graph.haConnections.upsert(
+            HaConnection(
+                id = "conn-1", baseUrl = "http://192.168.0.10:8123", cadence = SyncCadence.DAILY,
+                networkEligibility = NetworkEligibility.HOME_NETWORK_ONLY, homeNetworkSsid = "ExampleHomeWifi",
+                backgroundChecks = BackgroundChecks.OFF, createdAt = 1_000L, updatedAt = 1_000L,
+            ),
+        )
+        graph.seasonSyncBindings.insert(
+            SeasonSyncBinding(
+                assetId = AssetId(assetId), connectionId = "conn-1", entityId = "input_boolean.example_heater_in_season",
+                mode = SyncMode.FOLLOW, enabled = enabled, revision = 1, observedState = null, observedChangedAt = null,
+                lastSuccessAt = null, lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null,
+                appliedAction = null, appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 2_000L,
+                updatedAt = 2_000L,
+            ),
+        )
+    }
+
+    /** #16 (C15; R16-16, N-11): no season offer while a Home Assistant binding owns the season. */
+    @Test fun noOfferForAnAssetWhoseBindingIsEnabled() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        linked("heater", enabled = true)
+
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("heater", EventKind.SEASON_START)))
+    }
+
+    /** #16 (C15): a stopped binding owns nothing, so the journal's offer is made as shipped. */
+    @Test fun aStoppedBindingStillGetsTheOffer() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        linked("heater", enabled = false)
+
+        val offer = graph.eventOffers.offersAfter(eventOn("heater", EventKind.SEASON_START)).single()
+        assertTrue(offer is SeasonOfferPrompt && offer.action == SeasonAction.START)
     }
 
     /**

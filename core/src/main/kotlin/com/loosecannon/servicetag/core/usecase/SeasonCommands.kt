@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
@@ -101,6 +102,14 @@ class BreakStrandsPolicy(val assetId: AssetId, val schedules: List<StrandedSched
 /** 409: an activation was aimed at an asset whose season is not MANUAL. */
 class SeasonNotManual(val assetId: AssetId) :
     IllegalStateException("asset ${assetId.value} is not in MANUAL season mode")
+
+/**
+ * #16 (C2, C15; R16-1) — 409: an enabled Home Assistant binding owns this asset's season, so every other season
+ * writer is refused until the owner stops its season sync. Thrown only by
+ * [SeasonSyncGuard][com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard].
+ */
+class SeasonSyncOwnsSeason(val assetId: AssetId) :
+    IllegalStateException("this asset's season follows Home Assistant; stop its season sync on the phone first")
 
 /** 409: a START when the latest activation is already a START. */
 class SeasonAlreadyStarted(val assetId: AssetId) :
@@ -268,3 +277,11 @@ internal val ACTIVATION_ORDER: Comparator<SeasonActivation> =
 
 /** The latest of [rows], whatever order they were handed in. */
 internal fun latestOf(rows: List<SeasonActivation>): SeasonActivation? = rows.maxWithOrNull(ACTIVATION_ORDER)
+
+/**
+ * #78's count, lifted by #16 (C27): how many of [schedules] are live — ACTIVE or PAUSED, never ARCHIVED — and
+ * CONTINUOUS, the ones that keep coming due out of season (P78-1a/1b). The asset editor asks with it after a save out
+ * of YEAR_ROUND, and the Home Assistant setup sheet after a link or a resume out of YEAR_ROUND.
+ */
+fun liveContinuousCount(schedules: List<MaintenanceSchedule>): Int =
+    schedules.count { it.status != ScheduleStatus.ARCHIVED && it.servicePolicy == ServicePolicy.CONTINUOUS }

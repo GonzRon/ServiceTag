@@ -178,6 +178,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "update_installed_component",
     "remove_installed_component",
     "replace_installed_component",
+    # #16 — Home Assistant season sync, read only, at a schema-21 minimum. One, taking the total to 90.
+    "get_season_sync",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -255,6 +257,14 @@ each). Given an `asset_id`, each keeps exactly the gates it had. The global writ
 _RESOURCE_OWNER_FEATURE = "supply item and installed component resources"
 """The feature a resource tool names when it refuses a supply item or installed component owner to a phone below
 schema 20 (G3)."""
+
+_MIN_SEASON_SYNC_SCHEMA_VERSION = 21
+"""The Room schema that carries Home Assistant season sync (#16): the phone's one connection and each asset's
+binding, both device-local. `get_season_sync` reads a route an older app does not have, so it refuses a phone below
+it, with nothing sent: a per-tool minimum on the succession tool's pattern. The global write minimum stays 8."""
+
+_SEASON_SYNC_FEATURE = "Home Assistant season sync"
+"""The feature `get_season_sync` names when it refuses a phone below schema 21 (G2)."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
@@ -367,6 +377,11 @@ def _require_resource_owner_schema(tool: str) -> None:
     """One of #69's five resource tools given a supply item or installed component owner, the reads included, on a
     phone below schema 20 (G3). Never called for an asset owner, so an asset's call keeps exactly the gates it had."""
     _require_tool_schema(tool, _MIN_RESOURCE_OWNER_SCHEMA_VERSION, _RESOURCE_OWNER_FEATURE)
+
+
+def _require_season_sync_schema(tool: str) -> None:
+    """#16's one season sync tool, a read, on a phone below schema 21 (G2)."""
+    _require_tool_schema(tool, _MIN_SEASON_SYNC_SCHEMA_VERSION, _SEASON_SYNC_FEATURE)
 
 
 def _carries_supply_id(lines: Any) -> bool:
@@ -2389,7 +2404,9 @@ def start_season(asset_id: str, occurred_on: str | None, event_id: str | None) -
     (`SEASON_DATE_OUT_OF_RANGE`). `event_id` names an event of this asset the start came with, or
     `None` (`FOREIGN_EVENT` when it is another asset's). On an asset that is not `MANUAL` the app
     answers `SEASON_NOT_MANUAL`, and on one already in season `SEASON_ALREADY_STARTED` — this tool
-    does not pre-check either. Answers `{activation, season}`.
+    does not pre-check either. On an asset whose season follows Home Assistant (#16: a season sync enabled on
+    the phone, which `get_season_sync` shows) the app answers `SEASON_SYNC_ENABLED` (409) and writes nothing.
+    Answers `{activation, season}`.
     """
     return _activation(asset_id, "START", occurred_on, event_id)
 
@@ -2405,7 +2422,9 @@ def end_season(asset_id: str, occurred_on: str | None, event_id: str | None) -> 
     for today, never later than today nor earlier than the latest `START`/`END`) and `event_id`
     (`None`, or an event of this asset). An asset that is not `MANUAL` is `SEASON_NOT_MANUAL`; one
     already out of season — including a `MANUAL` asset with no activation yet — is
-    `SEASON_ALREADY_ENDED`. Answers `{activation, season}`.
+    `SEASON_ALREADY_ENDED`. On an asset whose season follows Home Assistant (#16: a season sync enabled on the
+    phone, which `get_season_sync` shows) the app answers `SEASON_SYNC_ENABLED` (409) and writes nothing.
+    Answers `{activation, season}`.
     """
     return _activation(asset_id, "END", occurred_on, event_id)
 
@@ -2427,7 +2446,9 @@ def set_season_mode(
     records one `START` or `END` dated today — and refused everywhere else (`MANUAL_PHASE_REQUIRED`
     / `MANUAL_PHASE_FORBIDDEN`). A change that would remove or re-kind the boundary a `PRE_SERVICE`
     schedule counts back from is `SEASON_MODE_STRANDS_POLICY`, naming those schedules. The same mode
-    and window as stored writes nothing. Answers `{asset, season}`.
+    and window as stored writes nothing. A change on an asset whose season follows Home Assistant (#16: a season
+    sync enabled on the phone, which `get_season_sync` shows) is `SEASON_SYNC_ENABLED` (409) and writes nothing.
+    Answers `{asset, season}`.
     """
     return _call(
         "POST",
@@ -4265,6 +4286,50 @@ def replace_installed_component(
         notes=notes,
     )
     return _call("POST", path, json_body=body, content_type="application/json")
+
+
+# --- #16, Home Assistant season sync (docs/api/v1.md, **Home Assistant season sync (#16)**) ------------------------
+#
+# One read-only route a phone below schema 21 does not have, so the tool refuses such a phone by name before anything
+# is sent. On the phone an asset can follow one Home Assistant on/off entity; the route shows that link's non-secret
+# state and status. Linking, the follow and force modes, Sync now, stopping, resuming and the connection itself are
+# the phone's alone: no tool writes any of them, and none returns the address, the home Wi-Fi's name or the token.
+
+
+@mcp.tool()
+def get_season_sync(asset_id: str) -> dict[str, Any]:
+    """One asset's Home Assistant season sync, read only: `GET /v1/assets/{id}/season-sync` →
+    `{assetId, connection, binding}`, answered as the phone sends it. On the phone an asset can follow one Home
+    Assistant on/off entity: when the phone checks, in `FOLLOW` Home Assistant's answer decides (`on` starts its
+    season and `off` ends it), and in `FORCE_IN` or `FORCE_OUT` the owner's forced season holds whatever it answers
+    — each through the ordinary activation and only when the season differs from the asset's today. This shows that
+    link's non-secret state — never the address, the home Wi-Fi's name or the token, which no route returns.
+
+    `connection` is the phone's one connection as settings: `configured`, `needsToken` (it exists and its token is
+    not on this phone), `cadence` (`EVERY_12_HOURS`, `DAILY`, `WEEKLY` or `MONTHLY`, a requested period and never a
+    deadline), `networkEligibility` (`ANY_NETWORK` or `HOME_NETWORK_ONLY`), `backgroundChecks` (`OFF` or `ON`),
+    `backgroundAllowed` (whether Android grants what `ON` needs) and `homeNetworkSet` (whether a home network is
+    set, never which). The five keys after `needsToken` are **absent**, not `null`, when `configured` is false.
+
+    `binding` is `null` when the asset has none, else `entityId`, `mode` (`FOLLOW`, `FORCE_IN` or `FORCE_OUT`),
+    `enabled` (false once the owner stops syncing), `state` (`ACTIVE`, `STOPPED`, `NEEDS_TOKEN` or
+    `NOT_MAINTAINED_HERE`, derived when read), `observation` (`null` or `{state: ON|OFF, haLastChanged}`, the
+    last valid answer), `lastSuccessAt`, `lastAttemptAt`, `lastError` (`null` or `{kind, detail, at}`, the latest
+    check that decided nothing) and `lastApplied` (`null` or `{action: START|END, occurredOn, at, source}`). The
+    times are epoch milliseconds and each means one thing: `lastSuccessAt` is when the last valid answer was fetched,
+    and a failure never moves it; `lastAttemptAt` is the latest check, whatever its outcome; `lastApplied`'s `at` is
+    when the link last recorded an activation, its `occurredOn` the day it was applied. `haLastChanged` is Home
+    Assistant's own text, information only: it never dates an activation. The effective season is
+    `get_season`'s `seasonPhase`, not repeated here.
+    `lastApplied`'s `source` says who applied it: `HOME_ASSISTANT`, or the owner's forced `FORCED_IN` or `FORCED_OUT`.
+
+    While a binding is enabled the phone refuses `start_season`, `end_season` and a `set_season_mode` change on
+    that asset. An unknown asset is `no_such_asset`. Needs a phone at schema 21 or later: an older one is refused
+    with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-sync"
+    _require_season_sync_schema("get_season_sync")
+    return _call("GET", path)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

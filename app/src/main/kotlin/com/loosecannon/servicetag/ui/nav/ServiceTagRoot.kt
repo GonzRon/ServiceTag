@@ -21,7 +21,9 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.seasonsync.ResumeRefresh
 import com.loosecannon.servicetag.ui.api.DeveloperApiScreen
+import com.loosecannon.servicetag.ui.homeassistant.HomeAssistantScreen
 import com.loosecannon.servicetag.ui.asset.AssetDetailScreen
 import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
@@ -73,6 +75,7 @@ fun ServiceTagRoot(
     deepLinks: SharedFlow<Route>,
     snackbars: SharedFlow<String>,
     readerMode: ReaderMode = rememberReaderMode(),
+    resumeRefresh: ResumeRefresh = graph.resumeRefresh,
 ) {
     val backStack = rememberNavBackStack(Route.Dashboard)
     val snackbarHost = remember { SnackbarHostState() }
@@ -107,6 +110,13 @@ fun ServiceTagRoot(
     LifecycleResumeEffect(readerMode, readsTags) {
         readerMode.hold(readsTags)
         onPauseOrDispose { readerMode.hold(false) }
+    }
+
+    // #16 (C23): on every resume, the Home Assistant season sync refreshes what is stale, on the graph's scope; the
+    // hook returns at once and draws nothing. The only such hook: no network callback, no other screen's.
+    LifecycleResumeEffect(resumeRefresh) {
+        resumeRefresh.onResume()
+        onPauseOrDispose { }
     }
 
     Scaffold(
@@ -482,6 +492,13 @@ fun ServiceTagRoot(
                         onBackup = { backStack.add(Route.Backup) },
                         onDeveloperApi = { backStack.add(Route.DeveloperApi) },
                         onCategories = { backStack.add(Route.Categories) },
+                        onHomeAssistant = { backStack.add(Route.HomeAssistant) },
+                    )
+                }
+                entry<Route.HomeAssistant> {
+                    HomeAssistantScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
                     )
                 }
                 entry<Route.Categories> {

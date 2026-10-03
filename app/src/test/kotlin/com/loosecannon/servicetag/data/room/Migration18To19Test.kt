@@ -32,7 +32,7 @@ class Migration18To19Test {
     fun bothTablesExistEmptyWithTheirIndicesAndForeignKeys() = runTest {
         migrating { file, before ->
             withConnection(file) { m ->
-                assertEquals("the two new tables", V19_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys)
+                assertEquals("the two new tables", V19_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys - V21_TABLES)
                 for (table in V19_TABLES) {
                     assertEquals("$table is empty", listOf("0"), m.lines("SELECT COUNT(*) FROM $table"))
                     assertEquals("$table primary key", listOf("id"), m.primaryKeyOf(table))

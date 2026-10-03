@@ -51,11 +51,18 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
         it.cascadesTo(attachments::cascadeFromInstalledComponents)
         it.cascadesTo(references::cascadeFromInstalledComponents)
     }
+    /**
+     * #16's device-local bindings and their one connection (C7). The asset double's delete and wipe take an asset's
+     * binding, and a connection delete its bindings, as the schema's two CASCADEs do. Neither is handed to the export,
+     * the replace or the merge below: neither is in a backup (R16-Q-E).
+     */
+    val seasonSyncBindings = InMemorySeasonSyncRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
+    val haConnections = InMemoryHaConnectionRepository(seasonSyncBindings)
     val storage = FakeAttachmentStorage()
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies, installedComponents,
+        successions, supplyItems, assetSupplies, installedComponents, seasonSyncBindings, haConnections,
     )
 
     var rebuilds = 0

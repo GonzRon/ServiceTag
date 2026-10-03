@@ -35,8 +35,8 @@ the one body key it is about, then the `problems` in parentheses.
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
   five service-case tools, the five loan tools, the succession tool, #92's seven tools, #15's eight
-  supply tools and #47's five installed component tools below keeps the minimum of 8 — and a line tool
-  that sends `supplyId` needs 18 for that call.
+  supply tools, #47's five installed component tools and the season sync tool below keeps the minimum of 8 — and
+  a line tool that sends `supplyId` needs 18 for that call.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
@@ -66,8 +66,10 @@ the one body key it is about, then the `problems` in parentheses.
   same way, from the same read, naming the feature "supply item and installed component resources". Given
   `asset_id`, each keeps exactly the minimum it had. The minima are therefore 8 for every write, 11 for the warranty
   tools, 12 for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the
-  supply tools and a linked line, 19 for the installed component tools, and 20 for a supply item or installed
-  component owner on the five resource tools.
+  supply tools and a linked line, 19 for the installed component tools, 20 for a supply item or installed
+  component owner on the five resource tools, and 21 for the season sync tool.
+- **The season sync tool needs schema 21.** `get_season_sync` — a read — refuses an app whose `schemaVersion` is
+  below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
 
 ## Using it
 
@@ -110,7 +112,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Eighty-nine: `pair` plus one per API operation.
+Ninety: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -325,6 +327,14 @@ unit the replaced row's parent and place, and only the link and the composition 
 `list_installed_components` and pass them. Nothing is inferred: an installed component names a supply item only
 by the id a caller sends, and adding one writes no applicability row and no event. `docs/api/v1.md`'s
 **Installed components (#47)** section is the contract.
+
+**Home Assistant season sync (#16; needs schema 21)** — `get_season_sync`: `GET /v1/assets/{id}/season-sync`, read
+only. On the phone an asset can follow one Home Assistant on/off entity; this shows that link's non-secret state and
+status — the connection's settings, the binding's mode and state, its last valid answer, the latest check that
+decided nothing and the last activation it recorded — and never the address, the home Wi-Fi's name or the token.
+Linking, the modes, Sync now, stopping and the connection are the phone's alone; while a binding is enabled,
+`start_season`, `end_season` and a `set_season_mode` change on that asset answer `SEASON_SYNC_ENABLED` (409).
+`docs/api/v1.md`'s **Home Assistant season sync (#16)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 

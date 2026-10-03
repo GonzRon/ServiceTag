@@ -100,7 +100,7 @@ internal class ApiRouter(
     internal fun downloadInFlight(): Job? = download.current()
 
     /**
-     * The whole surface. Eighty-one path shapes over one hundred and one method-and-path rows; anything
+     * The whole surface. Eighty-two path shapes over one hundred and two method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -187,6 +187,11 @@ internal class ApiRouter(
      * …/references`) and own files (`GET` and `POST …/attachments`), each the asset sub-resource's handler with
      * another owner, and each a 405 for a verb it does not take. **Nothing destructive came with them:** no verb
      * deletes a link or a file, and none moves one to another owner — a move is the phone's remove and a new add.
+     *
+     * #16 added one row over one shape: the twenty-eighth `/v1/assets/{id}/…` sub-resource, the asset's Home
+     * Assistant season sync, read only (R16-9): the binding's non-secret state and status and the connection's
+     * settings, never its address or token. **No route writes season sync**: linking, the mode, Sync now, stopping,
+     * resuming and the connection itself are the phone's alone, so every other verb on the shape is a 404.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -263,6 +268,8 @@ internal class ApiRouter(
                 "supply-items" to "GET" -> handlers.supplies.listForAsset(rest[1])
                 // #47 — the twenty-seventh: the asset's installed components, current and removed, read only.
                 "installed-components" to "GET" -> handlers.installedComponents.listForAsset(rest[1])
+                // #16 — the twenty-eighth: the asset's Home Assistant season sync, its non-secret state, read only.
+                "season-sync" to "GET" -> handlers.seasonHealth.getSeasonSync(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 

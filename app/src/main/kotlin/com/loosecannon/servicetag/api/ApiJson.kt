@@ -72,6 +72,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
+import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
 import com.loosecannon.servicetag.core.usecase.ServiceCaseValidation
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
@@ -94,7 +95,9 @@ internal const val API_VERSION: Int = 1
  * `ignoreUnknownKeys = false` so a misspelled field is a 400 naming it, rather than an intent
  * silently dropped — on a `PATCH` that is the difference between an error and a lost edit.
  * `encodeDefaults = true` matches `BackupCodec`'s own `Json` (`BackupCodec.kt:54`–`57`), so every
- * field is present in every response and a client never distinguishes absent from default.
+ * field is present in every response and a client never distinguishes absent from default — with one exception:
+ * `SeasonSyncConnectionDto`, whose five settings keys `GET /v1/assets/{id}/season-sync` omits when `configured` is
+ * false (#16, C3).
  * `prettyPrint` is off: this goes over a socket, not into a file a person reads.
  */
 internal val ApiJson: Json = Json {
@@ -508,6 +511,11 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     )
     is SeasonNotManual -> errorResponse(
         409, "Conflict", "SEASON_NOT_MANUAL", "this asset's season is not MANUAL, so it takes no start or end",
+    )
+    // #16 (C2): the season guard's refusal on every shipped season write while the asset's binding is enabled.
+    is SeasonSyncOwnsSeason -> errorResponse(
+        409, "Conflict", "SEASON_SYNC_ENABLED",
+        "this asset's season follows Home Assistant; stop its season sync on the phone first",
     )
     is SeasonAlreadyStarted -> errorResponse(
         409, "Conflict", "SEASON_ALREADY_STARTED", "this asset's season has already started",
