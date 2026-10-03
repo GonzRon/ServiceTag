@@ -32,10 +32,12 @@ enum class SeasonSyncWorkResult { SUCCESS, RETRY }
  * read or write of the pass, the client's stored-connection lookup included), bounded by the work's backoff; never
  * for a network outcome, since every Home Assistant answer and failure is recorded on its binding and the next period
  * reads again (not the backstop's blanket retry, H6). Each other end, decided and pinned:
- * - an unassigned dispatch, a pass that recorded its outcomes, and any other exception: success;
+ * - an unassigned dispatch and a pass that recorded its outcomes: success;
  * - a key store that cannot load ([SeasonSyncKeyStoreFailed]): success, logged without the exception (B4's rule);
+ * - any other exception: success, logged by G5's line (C33(6)) — a schedule check that failed after the pass, or a
+ *   throw from the reader outside its transport; the next period repeats it;
  * - cancellation propagates, and an `Error` is never caught.
- * Neither log line attaches the exception: a store failure can carry a file path, and G3 names the step only.
+ * No log line attaches the exception: a store failure can carry a file path, and G3 and G5 name the step only.
  */
 class SeasonSyncWorkerBody(
     private val runner: SeasonSyncRunner?,
@@ -55,9 +57,8 @@ class SeasonSyncWorkerBody(
             log(KEY_STORE_FAILED)
             SeasonSyncWorkResult.SUCCESS
         } catch (_: Exception) {
-            // A recorded silent site (B6a review MINOR-1): a schedule check that failed after the pass, or a throw from
-            // the reader outside its transport. No line until a G-list line for it is ratified: letting it escape would
-            // hand the exception to WorkManager's log; the stale marker is the visible trace and the next period repeats.
+            // B6a review MINOR-1's site: letting it escape would hand the exception to WorkManager's log
+            log(CHECK_NOT_RUN)
             SeasonSyncWorkResult.SUCCESS
         }
     }

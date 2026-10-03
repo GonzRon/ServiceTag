@@ -971,8 +971,8 @@ val MIGRATION_20_21: Migration = object : Migration(20, 21) {
                 "`enabled` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `observed_state` TEXT, " +
                 "`observed_changed_at` TEXT, `last_success_at` INTEGER, `last_attempt_at` INTEGER, " +
                 "`error_kind` TEXT, `error_detail` TEXT, `error_at` INTEGER, `applied_action` TEXT, " +
-                "`applied_on` TEXT, `applied_at` INTEGER, `created_at` INTEGER NOT NULL, " +
-                "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`asset_id`), " +
+                "`applied_on` TEXT, `applied_at` INTEGER, `last_applied_source` TEXT, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`asset_id`), " +
                 "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
                 "FOREIGN KEY(`connection_id`) REFERENCES `ha_connection`(`id`) " +
                 "ON UPDATE NO ACTION ON DELETE CASCADE )",

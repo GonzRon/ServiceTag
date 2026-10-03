@@ -539,4 +539,44 @@ class SeasonSyncCommandsTest {
         c.save.run("https://ha.example:8123", null, null, NetworkEligibility.ANY_NETWORK, null, BackgroundChecks.ON)
         c.after(commits, "cancel")
     }
+
+    // ---- row 77: the Force commands record their forced source (C33(3); R16-Q-H) ----
+
+    @Test
+    fun forceInAndForceOutRecordTheirForcedSource() = runTest {
+        val c = linkedHeater(inSeason = false)
+
+        val forcedIn = c.setMode.run(heater, SyncMode.FORCE_IN)
+
+        assertEquals(SeasonAction.START, forcedIn.appliedAction)
+        assertEquals(LastAppliedSource.FORCED_IN, forcedIn.lastAppliedSource, "never shown as Home Assistant's")
+
+        c.h.now += 60_000L
+        val forcedOut = c.setMode.run(heater, SyncMode.FORCE_OUT)
+
+        assertEquals(listOf(SeasonAction.START to today, SeasonAction.END to today), c.h.dated().takeLast(2))
+        assertEquals(SeasonAction.END, forcedOut.appliedAction)
+        assertEquals(LastAppliedSource.FORCED_OUT, forcedOut.lastAppliedSource)
+        assertEquals(forcedOut, c.h.binding())
+    }
+
+    @Test
+    fun choosingFollowKeepsTheForcedSourceUntilHomeAssistantApplies() = runTest {
+        val c = linkedHeater()
+        val forced = c.setMode.run(heater, SyncMode.FORCE_OUT)
+        val rows = c.h.dated()
+
+        val following = c.setMode.run(heater, SyncMode.FOLLOW)
+
+        assertEquals(rows, c.h.dated(), "no row at the switch")
+        assertEquals(LastAppliedSource.FORCED_OUT, following.lastAppliedSource, "the forced source stays")
+        assertEquals(forced.appliedAt, following.appliedAt)
+
+        c.h.now += 60_000L
+        c.h.result(answerOn())
+
+        assertEquals(SeasonAction.START to today, c.h.dated().last(), "Home Assistant's next applying read")
+        assertEquals(SeasonAction.START, c.h.binding().appliedAction)
+        assertEquals(LastAppliedSource.HOME_ASSISTANT, c.h.binding().lastAppliedSource)
+    }
 }

@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
@@ -623,5 +624,107 @@ class RecordSeasonSyncResultTest {
         assertEquals(1, h.bindings.updates, "one binding update")
         assertEquals(commits + 1, h.raw.uow.commits, "one write")
         assertEquals(h.now, h.states.rows.getValue("s-heater").computedAt, "the body's recompute ran")
+    }
+
+    // ---- row 76: the source of an application (C33(1), C33(3), I13) ----
+
+    @Test
+    fun aFollowApplicationRecordsHomeAssistant() = runTest {
+        val h = SeasonSyncHarness()
+        h.asset()
+        h.link()
+
+        h.result(on())
+        assertEquals(SeasonAction.START, h.binding().appliedAction)
+        assertEquals(LastAppliedSource.HOME_ASSISTANT, h.binding().lastAppliedSource, "on over out of season")
+
+        h.on("2026-06-12")
+        h.result(off())
+        assertEquals(SeasonAction.END to "2026-06-12", h.dated().last())
+        assertEquals(SeasonAction.END, h.binding().appliedAction)
+        assertEquals(LastAppliedSource.HOME_ASSISTANT, h.binding().lastAppliedSource, "off over in season")
+    }
+
+    @Test
+    fun aForcedReassertionRecordsTheForcedSource() = runTest {
+        val forcedOut = SeasonSyncHarness()
+        forcedOut.asset()
+        forcedOut.activation("act-1", SeasonAction.START, "2026-03-01")
+        forcedOut.link(mode = SyncMode.FORCE_OUT)
+
+        forcedOut.result(on())
+
+        assertEquals(SeasonAction.END to "2026-06-10", forcedOut.dated().last())
+        assertEquals(SeasonAction.END, forcedOut.binding().appliedAction)
+        assertEquals(LastAppliedSource.FORCED_OUT, forcedOut.binding().lastAppliedSource, "Home Assistant said on")
+
+        val forcedIn = SeasonSyncHarness()
+        forcedIn.asset()
+        forcedIn.link(mode = SyncMode.FORCE_IN)
+
+        forcedIn.result(off())
+
+        assertEquals(listOf(SeasonAction.START to "2026-06-10"), forcedIn.dated())
+        assertEquals(SeasonAction.START, forcedIn.binding().appliedAction)
+        assertEquals(LastAppliedSource.FORCED_IN, forcedIn.binding().lastAppliedSource, "Home Assistant said off")
+    }
+
+    /**
+     * A binding that a forced START once applied, now following: no case below writes a row, so the four `applied*`
+     * fields stand as they were, the forced source included (a forced source stays until Home Assistant applies one).
+     */
+    @Test
+    fun noApplicationMovesTheSource() = runTest {
+        val prior: (SeasonSyncBinding) -> SeasonSyncBinding = {
+            it.copy(
+                appliedAction = SeasonAction.START, appliedOn = "2026-03-01", appliedAt = 1_000L,
+                lastAppliedSource = LastAppliedSource.FORCED_IN,
+            )
+        }
+        fun SeasonSyncBinding.applied() = listOf(appliedAction, appliedOn, appliedAt, lastAppliedSource)
+        val expected = prior(seasonSyncBindingOf(heater)).applied()
+
+        for (case in listOf("agreeing", "already applied", "not manual", "date before history", "no decision")) {
+            val h = SeasonSyncHarness()
+            h.asset(mode = if (case == "not manual") SeasonMode.YEAR_ROUND else SeasonMode.MANUAL)
+            h.activation("act-1", SeasonAction.START, if (case == "date before history") "2026-06-01" else "2026-03-01")
+            if (case == "date before history") h.activation("act-2", SeasonAction.END, "2026-06-20")
+            h.link(edit = prior)
+            val rows = h.rows()
+
+            when (case) {
+                "agreeing" -> h.result(on())
+                // the phase read sees no row while the body sees the START: the shipped "already started" refusal
+                "already applied" -> h.result(on(), applier = blindToRows(h))
+                "date before history" -> h.result(off())
+                "no decision" -> h.result(HaReadOutcome.NoDecision(SyncErrorKind.UNREACHABLE, null))
+                else -> h.result(on())
+            }
+
+            assertEquals(rows, h.rows(), "$case: no row")
+            assertEquals(expected, h.binding().applied(), "$case: the provenance stands")
+            val kind = when (case) {
+                "not manual" -> SyncErrorKind.NOT_MANUAL
+                "date before history" -> SyncErrorKind.DATE_BEFORE_HISTORY
+                "no decision" -> SyncErrorKind.UNREACHABLE
+                else -> null
+            }
+            assertEquals(kind, h.binding().errorKind, case)
+        }
+    }
+
+    /** An applier whose phase read sees no activation row, over [h]'s stores and the shipped body. */
+    private fun blindToRows(h: SeasonSyncHarness): RecordSeasonSyncResult {
+        val blind = object : SeasonActivationRepository by h.activations {
+            override suspend fun forAsset(assetId: AssetId): List<SeasonActivation> = emptyList()
+        }
+        return RecordSeasonSyncResult(
+            h.bindings, h.assets, blind, h.raw.transfers,
+            RecordSeasonActivation(
+                h.assets, h.events, h.activations, h.raw.uow, h.ids, h.clock, h.todayPort, h.recompute,
+                SeasonSyncGuard(h.raw.seasonSyncBindings),
+            ),
+            h.raw.uow, h.clock, h.todayPort,
+        )
     }
 }

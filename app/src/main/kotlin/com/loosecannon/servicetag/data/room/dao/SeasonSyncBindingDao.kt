@@ -25,7 +25,8 @@ interface SeasonSyncBindingDao {
             "observed_changed_at = :observedChangedAt, last_success_at = :lastSuccessAt, " +
             "last_attempt_at = :lastAttemptAt, error_kind = :errorKind, error_detail = :errorDetail, " +
             "error_at = :errorAt, applied_action = :appliedAction, applied_on = :appliedOn, " +
-            "applied_at = :appliedAt, created_at = :createdAt, updated_at = :updatedAt " +
+            "applied_at = :appliedAt, last_applied_source = :lastAppliedSource, created_at = :createdAt, " +
+            "updated_at = :updatedAt " +
             "WHERE asset_id = :assetId AND revision = :expectedRevision",
     )
     suspend fun updateAtRevision(
@@ -46,6 +47,7 @@ interface SeasonSyncBindingDao {
         appliedAction: String?,
         appliedOn: String?,
         appliedAt: Long?,
+        lastAppliedSource: String?,
         createdAt: Long,
         updatedAt: Long,
     ): Int

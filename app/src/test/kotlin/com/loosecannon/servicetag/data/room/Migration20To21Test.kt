@@ -64,6 +64,7 @@ class Migration20To21Test {
                         "applied_action TEXT notnull=0 default=- pk=0",
                         "applied_on TEXT notnull=0 default=- pk=0",
                         "applied_at INTEGER notnull=0 default=- pk=0",
+                        "last_applied_source TEXT notnull=0 default=- pk=0",
                         "created_at INTEGER notnull=1 default=- pk=0",
                         "updated_at INTEGER notnull=1 default=- pk=0",
                     ),

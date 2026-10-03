@@ -372,7 +372,8 @@ class OffersTest {
                 assetId = AssetId(assetId), connectionId = "conn-1", entityId = "input_boolean.example_heater_in_season",
                 mode = SyncMode.FOLLOW, enabled = enabled, revision = 1, observedState = null, observedChangedAt = null,
                 lastSuccessAt = null, lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null,
-                appliedAction = null, appliedOn = null, appliedAt = null, createdAt = 2_000L, updatedAt = 2_000L,
+                appliedAction = null, appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 2_000L,
+                updatedAt = 2_000L,
             ),
         )
     }

@@ -43,15 +43,31 @@ class SeasonSyncWorkerBodyTest {
 
     private fun FakeGraph.body() = SeasonSyncWorkerBody(seasonSyncRunner) { logged += it }
 
-    /** The graph's runner over other parts: a failing repository, or the real client. */
+    /** The graph's runner over other parts: a failing repository, or the real client; its G5 line recorded. */
     private fun FakeGraph.runnerOver(
         bindings: SeasonSyncRepository = seasonSyncBindings,
         reader: HaStateReader = haStateReader,
         work: SeasonSyncWork = seasonSyncWork,
     ) = SeasonSyncRunner(
         bindings, haConnections, secretStore, assets, transferRecords, reader, recordSeasonSyncResult, work,
-        seasonSyncBackgroundAllowed, seasonSyncScope, clock,
+        seasonSyncBackgroundAllowed, seasonSyncScope, clock, log = { logged += it },
     )
+
+    /** A work store whose every call fails, as one not ready yet. */
+    private fun FakeGraph.failingWork() = object : SeasonSyncWork by seasonSyncWork {
+        override fun isEnqueued(): Boolean = throw IllegalStateException("fictional: the work store is not ready")
+
+        override fun ensure(request: SeasonSyncWorkRequest) = throw IllegalStateException("fictional: not ready")
+
+        override fun cancel() = throw IllegalStateException("fictional: not ready")
+    }
+
+    /** G5 alone (R16-Q-J): exactly one line, and none of the fixture's address, entity, Wi-Fi name or token. */
+    private fun assertOnlyG5() {
+        assertEquals(listOf(CHECK_NOT_RUN), logged)
+        val fixture = listOf("192.168.0.10", "input_boolean.example_heater_in_season", HOME_WIFI, "fictional-token-1")
+        assertTrue(logged.none { line -> fixture.any { it in line } })
+    }
 
     private fun request(period: Duration) = SeasonSyncWorkRequest(
         period, NetworkType.CONNECTED, BackoffPolicy.EXPONENTIAL, Duration.ofMinutes(5), ExistingPeriodicWorkPolicy.UPDATE,
@@ -143,7 +159,7 @@ class SeasonSyncWorkerBodyTest {
 
         graph.haStateReader.answer = { throw IllegalArgumentException("fictional") }
         assertEquals(SeasonSyncWorkResult.SUCCESS, graph.body().run())
-        assertEquals(emptyList<String>(), logged)
+        assertEquals(listOf(CHECK_NOT_RUN), logged)
     }
 
     // Row 59 — enqueue and cancel
@@ -362,5 +378,70 @@ class SeasonSyncWorkerBodyTest {
         assertEquals(1, opened.size)
         assertNotEquals(SyncErrorKind.NOT_ON_LOCAL_NETWORK, graph.binding("a").errorKind)
         assertEquals(AssetId("a"), graph.binding("a").assetId)
+    }
+
+    // Row 80 — G5 at each of the four silent sites (C33(6); R16-Q-J)
+
+    /** A command's fresh read (`requestFreshRead`, launched quietly) whose pass fails: G5, and nothing written. */
+    @Test fun aCommandsFreshReadThatFailsLogsG5() = runBlocking {
+        val graph = graph()
+        graph.connect()
+        graph.heater("a")
+        val before = graph.binding("a")
+        val broken = object : SeasonSyncRepository by graph.seasonSyncBindings {
+            override suspend fun all() = throw IllegalStateException("database is locked")
+        }
+
+        graph.runnerOver(bindings = broken).requestFreshRead(AssetId("a"))
+        graph.awaitSeasonSyncReads()
+
+        assertOnlyG5()
+        assertEquals(before, graph.binding("a"))
+        assertTrue(graph.readEntities().isEmpty())
+    }
+
+    /** The resume refresh (`launchRefreshIfStale`) whose schedule check fails after its stale read: G5, read kept. */
+    @Test fun aResumeRefreshThatFailsLogsG5() = runBlocking {
+        val graph = graph()
+        graph.connect()
+        graph.heater("a")
+
+        graph.runnerOver(work = graph.failingWork()).launchRefreshIfStale()
+        graph.awaitSeasonSyncReads()
+
+        assertOnlyG5()
+        assertEquals(listOf(entityOf("a")), graph.readEntities())
+        assertEquals(SyncErrorKind.UNREACHABLE, graph.binding("a").errorKind)
+    }
+
+    /** The start-up's schedule check that fails: G5, the sweep before it done, and the start returns as shipped. */
+    @Test fun aStartUpReconcileThatFailsLogsG5() = runBlocking {
+        val graph = graph()
+        val connection = graph.connect()
+        graph.heater("a")
+        val orphan = "00000000-0000-4000-8000-999999999998"
+        graph.secretStore.put(orphan, Secret("fictional-token-2"))
+
+        val runner = graph.runnerOver(work = graph.failingWork())
+
+        startSeasonSync(graph.secretStore, graph.haConnections, graph.uow, runner) { logged += it }
+
+        assertOnlyG5()
+        assertFalse(graph.secretStore.has(orphan))
+        assertTrue(graph.secretStore.has(connection.id))
+    }
+
+    /** The worker's schedule check that fails after its pass: G5, success (no retry), and the pass recorded. */
+    @Test fun aWorkerScheduleCheckThatFailsLogsG5AndSucceeds() = runBlocking {
+        val graph = graph()
+        graph.connect()
+        graph.heater("a")
+
+        val result = SeasonSyncWorkerBody(graph.runnerOver(work = graph.failingWork())) { logged += it }.run()
+
+        assertEquals(SeasonSyncWorkResult.SUCCESS, result)
+        assertOnlyG5()
+        assertEquals(listOf(entityOf("a")), graph.readEntities())
+        assertEquals(SyncErrorKind.UNREACHABLE, graph.binding("a").errorKind)
     }
 }

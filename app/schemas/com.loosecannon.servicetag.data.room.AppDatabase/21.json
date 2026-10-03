@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 21,
-    "identityHash": "2a2ab224ee5556f7e7a1c65c98f091fe",
+    "identityHash": "4f31f7549a2884166adf784f015fc16a",
     "entities": [
       {
         "tableName": "asset",
@@ -3804,7 +3804,7 @@
       },
       {
         "tableName": "season_sync_binding",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`asset_id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `mode` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `observed_state` TEXT, `observed_changed_at` TEXT, `last_success_at` INTEGER, `last_attempt_at` INTEGER, `error_kind` TEXT, `error_detail` TEXT, `error_at` INTEGER, `applied_action` TEXT, `applied_on` TEXT, `applied_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`asset_id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`connection_id`) REFERENCES `ha_connection`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`asset_id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `mode` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `observed_state` TEXT, `observed_changed_at` TEXT, `last_success_at` INTEGER, `last_attempt_at` INTEGER, `error_kind` TEXT, `error_detail` TEXT, `error_at` INTEGER, `applied_action` TEXT, `applied_on` TEXT, `applied_at` INTEGER, `last_applied_source` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`asset_id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`connection_id`) REFERENCES `ha_connection`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "assetId",
@@ -3893,6 +3893,11 @@
             "affinity": "INTEGER"
           },
           {
+            "fieldPath": "lastAppliedSource",
+            "columnName": "last_applied_source",
+            "affinity": "TEXT"
+          },
+          {
             "fieldPath": "createdAt",
             "columnName": "created_at",
             "affinity": "INTEGER",
@@ -3950,7 +3955,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2a2ab224ee5556f7e7a1c65c98f091fe')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4f31f7549a2884166adf784f015fc16a')"
     ]
   }
 }

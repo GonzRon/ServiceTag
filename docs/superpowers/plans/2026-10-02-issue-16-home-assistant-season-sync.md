@@ -1,4 +1,9 @@
-# #16 — [PRE-1.0][FEATURE] Sync Asset operating season from Home Assistant over LAN: plan and briefs (rev 1.4, 2026-10-03)
+# #16 — [PRE-1.0][FEATURE] Sync Asset operating season from Home Assistant over LAN: plan and briefs (rev 1.5, 2026-10-03)
+
+> **Rev 1.5 (2026-10-03) folds the second owner gate (comment 5972214001)**, nothing else: §5's block RATIFIED (six
+> rows amended, P16-83/84 added); §6 R16-Q-H…J; **C33** and the new brief **B2b** (§27), folded before B8b1; pointers
+> in C3, C9, C13, C27, C30, C32, limit 15; rows 75–80 and B2b's pins; §4 (twenty dispatches); the B8a, B8b1 and B10
+> briefs; §7's API key. The same comment authorizes lane B (B8a →).
 
 > **GATE PASSED 2026-10-02; execution authorized from B1a.** B1a, B1b landed; B1a2 in flight (`e24b4371`, `c2654a65`).
 > Placement #16 → #98 → ServiceTag 1.0.0 (1.6.0 / code 19; schema 21 / format 20; no release). **Rev 1.4 (2026-10-03)**
@@ -9,7 +14,7 @@
 > 54c, 66a, 67); **C-4** the fences (global, C31, briefs-common, B5, R16-Q-B); **C-5** C19 step 1a fails closed, rows
 > 54a, 54b; **C-6** R16-20, R16-Q-F; **C-7** §4/§10a, row 73; notes N-1…N-14 where tagged. §5's **PENDING** block (31
 > strings) is also `.superpowers/sdd/2026-10-02-issue-16/strings-pending-rev1.4.md`. *History:* rev 1.1
-> `153409c9`, rev 1.2 `ec4854f6`, rev 1.3 `f9364504` (`git show` each for its change list).
+> `153409c9`, rev 1.2 `ec4854f6`, rev 1.3 `f9364504`, rev 1.4 `c816c569` (`git show` each for its change list).
 
 > **Scope, RATIFIED by the owner 2026-10-02 (R16-0), binding on every brief; `GET /api/` for Test connection is also
 > in scope:** *#16 = one
@@ -30,8 +35,8 @@
 > **Ledger:** `.superpowers/sdd/2026-10-02-issue-16/progress.md` (the controller's; implementers never write it).
 > **Audit (inventory of record):** `.superpowers/sdd/2026-10-02-issue-16/audit.md`, every citation read on `811aecae`.
 > This planner re-read on the same base every site it cites, and **corrects the audit in six places** (§4, "Audit
-> corrections"). **Nineteen dispatches on one branch `issue-16`:** B1a, B1b, B1a2, B2, B3a, B3b, B3c, B4, B5, B6a, B6b,
-> then **(B7a → B7b → B9) ∥ (B8a → B8b1 → B8b2 → B8c)**, then B10 — each `<base>` the previous accepted tip; **B1a's `<base>` is
+> corrections"). **Twenty dispatches on one branch `issue-16`:** B1a, B1b, B1a2, B2, B3a, B3b, B3c, B4, B5, B6a, B6b,
+> then **(B7a → B7b → B9 → B2b) ∥ (B8a → B8b1 → B8b2 → B8c)**, B2b folded before B8b1 (rev 1.5), then B10 — each `<base>` the previous accepted tip; **B1a's `<base>` is
 > master at dispatch** (today `811aecae`: 1.6.0 / code 19, Room schema 20 / backup format 20, MCP 89 tools, gitlink
 > `7e0377a`, 59 device classes) plus this plan's commit. One task review each, at most one bounded fix round each,
 > one whole-branch review, the merge, one merged-tip gate.
@@ -100,8 +105,8 @@ under `com/loosecannon/servicetag/`; `M/` = `tools/servicetag-mcp/`; `S/` = `too
   RFC 1918 literal, C-7); the **refused** `http://192.0.2.10:8123` (RFC 5737); `https://ha.example:8123` (RFC 2606); the
   home Wi-Fi `ExampleHomeWifi`; RFC 1918 range edges only in C8's rows; the emulator's own guest address and Wi-Fi read
   at run time (C29). No real name, host, Wi-Fi, token, serial or e-mail address anywhere; home paths `~`.
-- **Strings.** Every user-visible string is §5's with its one home — RATIFIED 2026-10-02 (R16-Q-C) or PENDING (rev
-  1.4's block, ratified before B8a); developer-facing texts are the G-list; no brief invents or rewords one.
+- **Strings.** Every user-visible string is §5's with its one home — RATIFIED 2026-10-02 (R16-Q-C) or 2026-10-03
+  (R16-Q-H…J); developer-facing texts are the G-list (G1–G5); no brief invents or rewords one.
 - **Tests.** JVM first (core over the core doubles through `BackupInstall`; app over the production router and the
   Room-backed `FakeGraph`; the HTTP client over a fake `HttpURLConnection` through the shipped `open` seam,
   `A/fetch/UrlConnectionTransport.kt:44`). Device rows only for genuine Android boundaries (R16-12): one platform class
@@ -112,7 +117,7 @@ under `com/loosecannon/servicetag/`; `M/` = `tools/servicetag-mcp/`; `S/` = `too
   casual lowercase subject line; no body, no trailers, no AI attribution. `tools/` never names a screen-driving tool.
   **Implementers never write ledgers.** No dependency is added (no `security-crypto`, no HTTP library, no
   `lifecycle-process`). **Every `AppGraph` and `FakeGraph` edit lands in B2, B3b, B4, B5 or B6a (#47 C-1); B6a is
-  the last edit of either;** B6b, B7a, B7b, B8a, B8b1, B8b2, B8c, B9 and B10 edit neither.
+  the last edit of either;** B6b, B7a, B7b, B2b, B8a, B8b1, B8b2, B8c, B9 and B10 edit neither.
 - **Schema 21 on master**, emulator only, never a phone; the schema-21 release paragraph is B10's (C30).
 - **Time boxes:** 1 h target, 2 h hard stop per brief (B1a2 shipped in ~45 min); past 1 h with under half the rows green,
   stop and report; fix rounds 45 min; mutation caps per brief; one task review, at most one bounded fix round,
@@ -171,7 +176,7 @@ API or MCP write; the base URL over the API or MCP; a generic REST or provider-n
     (`C/schedule/SeasonContext.kt:84-88`, `:183-190`), IN_SERVICE re-enters at `cycleStartAt(at)`
     (`C/schedule/ServicePolicyEngine.kt:108-123`); e.g. window start 10-01, AT_START offset 14 (due 10-16), linked
     10-20 → opens 11-03. Disclosed by P16-44/45; row 40a.
-15. **Cleartext on another network (as amended):** http requires "Only on this home Wi-Fi/local network" and each
+15. **Cleartext on another network (as amended):** http requires "Only on this home Wi-Fi" (P16-60 as amended) and each
     request first matches the captured Wi-Fi name (C32); a network copying that name still passes — the check narrows
     the exposure, it cannot authenticate the network; **Ethernet never passes** (C-2). In that mode an https name must
     resolve privately (R16-Q-B (c)); a DNS change after that check is caught only by TLS's name check.
@@ -224,7 +229,7 @@ API or MCP write; the base URL over the API or MCP; a generic REST or provider-n
 | `binding.lastSuccessAt` | millis or `null` — the fetch time of the last valid observation; a failure never moves it |
 | `binding.lastAttemptAt` | millis or `null` — any outcome |
 | `binding.lastError` | `null`, or `{"kind": SyncErrorKind name, "detail": string\|null, "at": millis}` — `detail` is an HTTP status or HA's reported state, never a URL or token |
-| `binding.lastApplied` | `null`, or `{"action": "START"\|"END", "occurredOn": "YYYY-MM-DD", "at": millis}` — the provenance (R16-11) |
+| `binding.lastApplied` | `null`, or `{"action": "START"\|"END", "occurredOn": "YYYY-MM-DD", "at": millis, "source": "HOME_ASSISTANT"\|"FORCED_IN"\|"FORCED_OUT"}` — the provenance (R16-11); `source` added by rev 1.5 (C33, R16-Q-H) |
 
   Times are epoch milliseconds (`createdAt`'s shape, `C/model/SeasonModel.kt:21-29`); the effective season is
   `GET …/season`'s phase, not repeated; `GET /v1/status` moves `schemaVersion` to 21, nothing else.
@@ -299,8 +304,8 @@ Rev 1.3 shortens C4–C7 to their contract; the signatures of record are the B1a
     DELETE CASCADE` and `Index("connection_id")`; `entity_id TEXT NOT NULL`; `mode TEXT NOT NULL`; `enabled INTEGER
     NOT NULL`; `revision INTEGER NOT NULL`; `observed_state TEXT`, `observed_changed_at TEXT`, `last_success_at
     INTEGER`, `last_attempt_at INTEGER`; `error_kind TEXT`, `error_detail TEXT`, `error_at INTEGER`;
-    `applied_action TEXT`, `applied_on TEXT`, `applied_at INTEGER`; `created_at INTEGER NOT NULL`, `updated_at
-    INTEGER NOT NULL`. Enum columns hold the enum name.
+    `applied_action TEXT`, `applied_on TEXT`, `applied_at INTEGER`, **`last_applied_source TEXT`** (rev 1.5, C33);
+    `created_at INTEGER NOT NULL`, `updated_at INTEGER NOT NULL`. Enum columns hold the enum name.
   - Neither table is named by `BackupCodec`, `BackupData`, the merge planner, `TransferTables.CLASSES` or any
     export, so neither is in any ServiceTag backup, export, merge or pack (R16-Q-E; Android Auto Backup may restore
     the rows, inert, R16-Q-F — the classification test reads `BackupData`'s lists only,
@@ -351,7 +356,8 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   `applyIfChanged`: if `!asset.maintainedHere(transfers.heldIds())` → error `NOT_MAINTAINED_HERE`; else if
   `asset.seasonMode != MANUAL` → error `NOT_MANUAL`; else compare `desired` with `SeasonContext.of(asset.seasonInputs(
   activations.forAsset(assetId))).phaseAt(today)`; equal → nothing; different → `record.recordInTransaction(assetId,
-  ActivationCommand(START|END, occurredOn = today))` and `withApplied(action, today, now)`. The shipped refusals are
+  ActivationCommand(START|END, occurredOn = today))` and `withApplied(action, today, now)` (rev 1.5: and the source of
+  the mode that applied, C33(3)). The shipped refusals are
   **mapped, never thrown**: `SeasonAlreadyStarted` / `SeasonAlreadyEnded` → "already applied" (no `lastApplied`
   change, no error); `SeasonValidation` holding `SeasonDateOutOfRange` → `DATE_BEFORE_HISTORY`; `SeasonNotManual` →
   `NOT_MANUAL`; `AssetTransferredOut` → `NOT_MAINTAINED_HERE`. With the compare in the same write, the two 409 arms
@@ -582,7 +588,7 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   - **an enabled binding** → `PhaseBadge` stays (the effective season, reused); the Start/End button is replaced by
     the three-way mode control (P16-23…25); the source line (P16-27, or P16-28/29 when forced); **Sync now** (P16-26);
     "Last successful check" (P16-30) or P16-31; the stale marker (P16-32) when `last_success_at` is null or at least
-    one cadence old (the owner's definition, rev 1.3; it replaces N-12's attempt-keyed marker); HA's `last_changed` as information (P16-33); the provenance line (P16-34/35); the latest error's sentence (`NOT_ON_LOCAL_NETWORK`: P16-50, or P16-77 then
+    one cadence old (the owner's definition, rev 1.3; it replaces N-12's attempt-keyed marker); HA's `last_changed` as information (P16-33); the provenance line (P16-34/35 from Home Assistant, P16-83/84 when forced — C33(4), rev 1.5); the latest error's sentence (`NOT_ON_LOCAL_NETWORK`: P16-50, or P16-77 then
     the cause's remedy and action, C19, C26)
     (§5's table) on its own line — **never in place of** the last-success line; **Stop syncing** (P16-39);
   - **a stopped binding** → P16-41 and **Resume syncing** (P16-40) beside the mode's shipped controls; on a
@@ -618,7 +624,8 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   this device's own site-local IPv4 address (read at run time), carrying `Authorization: Bearer fictional-token-1`,
   answering `on` → `Observed(ON)`; a 302 → `REDIRECTED`, its target untouched. Teardown cancels `"season-sync"` and
   deletes the test's key and file (N-15).
-- **C30, the documents.** `docs/release-proofs.md`: a schema-21 paragraph beside the schema-20 one (`:135`) — its
+- **C30, the documents.** `docs/release-proofs.md`: a schema-21 paragraph beside the schema-20 one (`:135`), naming both tables and
+  `season_sync_binding.last_applied_source` (C33, rev 1.5) — its
   checks include 18–20's; nothing seeded for #16 on the older side; after the upgrade `schemaVersion` 21, format 20,
   `counts` unchanged, the pre-upgrade export re-plans `IDENTICAL` with zero INSERT, and an export after linking carries
   no `ha_`, entity, address or Wi-Fi-name byte; all on `emulator-5554` with the signed candidate (N-14), where a
@@ -632,7 +639,7 @@ check(bindings.update(next.copy(revision = b.revision + 1)))           // the wr
   appliance's switch" (AC2, H10), every value fictional (`input_boolean.example_heater_in_season`,
   `http://192.168.0.10:8123`, `https://ha.example:8123`, Wi-Fi `ExampleHomeWifi`). `README.md:80` names both outbound
   uses and the Home Assistant screen; `:83` and new lines list C32's permissions — location only for "Only on this
-  home Wi-Fi/local network", background location only for its background checks, `ACCESS_WIFI_STATE` (N-16). `docs/versioning.md` and `docs/releases/` untouched.
+  home Wi-Fi" (P16-60 as amended, R16-Q-I), background location only for its background checks, `ACCESS_WIFI_STATE` (N-16). `docs/versioning.md` and `docs/releases/` untouched.
 - **C31, the fence, as greps** (every brief; anchored, over the brief's diff): (1) #69's C33(1) tripwire as written;
   (2) `git diff <base> -U0 -- app/src/main core/src/main tools/servicetag-mcp/src | grep -ciE
   '^[+].*\b(telemetry|measurement|meter|sensor_reading|mqtt|websocket|influx|grafana)\b'` → 0; (3) `git diff <base>
@@ -679,7 +686,7 @@ backgrounded phone's worker; an approximate grant hiding the name (B8a treats ap
 - **Permissions — the owner's principle, verbatim: "Background location / nearby-Wi-Fi capability is optional and
   owner-controlled, not forbidden and not mandatory."** Declared in the manifest, which grants nothing:
   `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` (asked together, as API 31+ requires; approximate counts as not
-  granted) **only when the owner picks "Only on this home Wi-Fi/local network"**; `ACCESS_BACKGROUND_LOCATION` **only
+  granted) **only when the owner picks "Only on this home Wi-Fi"** (P16-60 as amended); `ACCESS_BACKGROUND_LOCATION` **only
   when the owner turns Background checks on**, after the foreground grant (API 29+; 26–28 need nothing more);
   `ACCESS_WIFI_STATE` (install-time, no `maxSdkVersion`, C-1). "Any network" asks for nothing. No
   `NEARBY_WIFI_DEVICES` and no `ACCESS_LOCAL_NETWORK`.
@@ -700,6 +707,44 @@ request; **I10** the bearer goes to the configured origin only; in the home-netw
 network and to a name only when it resolves to private addresses; http only in that mode (C4a, C19, C32); **I11** the binding and the connection are in no ServiceTag backup, export, merge or pack (Auto Backup may restore
 them inert, R16-Q-F);
 **I12** a restored or imported configuration sends nothing before a token is entered here.
+
+### C33 — the provenance column and the G5 line (rev 1.5; R16-Q-H, R16-Q-J; B2b; #16's own, not #69's C33)
+
+Provenance **(a)**: a forced application is never labelled as one from Home Assistant. Every site read on `35befab3`.
+- **C33(1), the model.** `enum class LastAppliedSource { HOME_ASSISTANT, FORCED_IN, FORCED_OUT }`;
+  `SeasonSyncBinding.lastAppliedSource: LastAppliedSource?` after `appliedAt`, **no default** (B1a's rule; null =
+  nothing applied); the pure `appliedSourceOf(mode)`: FOLLOW → `HOME_ASSISTANT`, FORCE_IN → `FORCED_IN`, FORCE_OUT →
+  `FORCED_OUT`, exhaustive, no `else`. Three values, not `HOME_ASSISTANT | FORCED`: the source is the image of the
+  applying mode, so the API and the phone each need one lookup; `FORCED_IN` only ever goes with START and `FORCED_OUT`
+  with END (row 76). **I13:** the four `applied*` fields are all null or all set, and only `applyIfChanged`'s `copy` sets them.
+- **C33(2), the column (inside schema 21; R16-4 stands).** `season_sync_binding.last_applied_source TEXT` (nullable,
+  the enum's name) after `applied_at`: the entity; `MIGRATION_20_21`'s binding `CREATE TABLE`, byte-equal to the
+  regenerated `21.json` — **both change in place, 21 being unreleased** (no new step, no version); the DAO's
+  `updateAtRevision` SQL and parameter (`SeasonSyncBindingDao.kt:22-49`); the two mappers and the update call
+  (`SeasonSyncRepositories.kt:92`, `:113`, `:40`). `20.json`, `V21_TABLES` and the nine table sets do not move (a
+  column is not a table). **No format change** (C9, R16-Q-E). A database from an earlier schema-21 build fails Room's
+  identity check, so the gate and §7's proof start from a fresh install.
+- **C33(3), the applier.** `applyIfChanged`'s one `copy` (`RecordSeasonSyncResult.kt:124`) also sets
+  `lastAppliedSource = appliedSourceOf(binding.mode)`, `binding` being its argument: `run` passes `read` (the stored
+  mode: FOLLOW → `HOME_ASSISTANT`, a FORCE re-assertion → `FORCED_*`; `:96-97`); `SetSeasonSyncMode` passes `moded`
+  (the new mode → `FORCED_*`; `SeasonSyncCommands.kt:94-97`, so no B3c or `C/usecase` main line changes; row 77 pins
+  it). No row — an agreeing season, "already applied", an apply error, FOLLOW + `NoDecision` — leaves the four fields
+  as they were; Link writes null; Edit, Stop, Resume and choosing Follow leave them (a forced source stays until Home
+  Assistant applies a change).
+- **C33(4), the phone's line rule (core, pure).** `enum class AppliedLine { STARTED_FROM_HOME_ASSISTANT,
+  ENDED_FROM_HOME_ASSISTANT, FORCED_IN_SEASON, FORCED_OUT_OF_SEASON }`, `appliedLineOf(binding): AppliedLine?`:
+  `HOME_ASSISTANT` by the action (P16-34/35), `FORCED_IN` → P16-83, `FORCED_OUT` → P16-84, null → no line; dated
+  `appliedOn`. B8b1 maps it in `SeasonSyncStrings.kt` by an exhaustive `when`; `A/ui` never re-derives it.
+- **C33(5), the API — its only change.** `SeasonSyncAppliedDto` (`A/api/SeasonSyncDtos.kt:75`) gains `source` (the
+  enum's name); `lastApplied` shows only when all four fields are set (`:98-99`); `docs/api/v1.md:1849` names it; C3
+  as amended. The MCP passes it through (B7b): one docstring line (`server.py:4318`); `M/tests` unchanged.
+- **C33(6), G5 (R16-Q-J).** One `const val` beside `KEY_SWEEP_FAILED` (`A/seasonsync/SeasonSyncRunner.kt:269`), logged
+  at B6a's four silent sites (its concern 2 and MINOR-1): a command's fresh read and the resume refresh, both through
+  `launchQuietly`'s catch (`:165-171`, `:223-225`), by a new trailing runner parameter `log: (String) -> Unit`
+  defaulting to `Log.w` (the `SeasonSyncWorkerBody` precedent: no `AppGraph`/`FakeGraph` edit; the JVM's `Log` returns
+  defaults, `app/build.gradle.kts:100`); the start-up reconcile (`:259-265`) and the worker's catch-all
+  (`SeasonSyncWorker.kt:57-62`) through their existing `log`. The constant alone — no URL, host, entity, Wi-Fi name,
+  token or exception; a cancellation propagates unlogged; each site's result is as shipped.
 
 ## 3. Test matrix
 
@@ -784,7 +829,7 @@ names are the implementer's; what each proves is not.
 | 66 | C26 the screen's model (I9) | `T/ui/homeassistant/HomeAssistantViewModelTest` (new) · `aRefusedAddressShowsP16_12AndSavesNothing`; `afterSaveTheStateHoldsNoTokenText`; `testConnectionShowsEachOutcomesSentence`; `disconnectAsksP16_9ThenForgets`; `needsTokenShowsP16_11`; `theCadenceOffersExactlyFourAndPreselectsOnceADay` (rev 1.3) | the state keeps the typed token after save |
 | 66a | C26, C32 the home-network option, foreground (C-2, C-3) | same · `anyNetworkAsksForNothing`; `homeNetworkShowsP16_65ThenRequestsPreciseLocation`; `deniedOrApproximateLeavesItOffWithP16_66`; `grantedCapturesTheCurrentWifiAndShowsP16_63`; `captureOnEthernetShowsP16_81`; `captureOnMobileDataOrNoneShowsP16_82`; `locationOffAtCaptureShowsP16_68`; `httpWithAnyNetworkShowsP16_67` | the option enabled on a denial (the token would go to an unchecked network) |
 | 66b | C26, C32 background checks (R16-20 as amended) | same · `backgroundChecksAppearOnlyUnderHomeOnlyAndStartOff`; `turningOnAfterTheForegroundGrantShowsP16_73ThenRequestsBackgroundLocation`; `api30AndUpOpensAppSettings`; `declineOrRefusalShowsP16_75AndRunsForegroundOnly`; `allowAgainRerunsTheMatchingFlow` (P16-76 under P16-75 and P16-78); `offNeverAsksForBackgroundLocation` | background location asked while Background checks is Off |
-| 67 | C27 the block's model | `T/ui/asset/SeasonSyncBlockViewModelTest` (new) · `effectiveSeasonSourceLastSuccessAndLatestErrorAreSeparateLines`; `staleFollowsTheCadence` (one cadence without a success; the attempt time does not count); `theModeControlReplacesStartAndEnd`; `theBlockIsOnEveryModesBranchAndAStoppedOneOffersResume` (C-4); `syncNowCallsTheRunnerForThisAsset`; `everySyncErrorKindHasItsSentence` (exhaustive); `unconfirmedShowsP16_77AndTheCausesRemedy` (C-3) | the error line replaces the last-success line |
+| 67 | C27 the block's model | `T/ui/asset/SeasonSyncBlockViewModelTest` (new) · `effectiveSeasonSourceLastSuccessAndLatestErrorAreSeparateLines`; `staleFollowsTheCadence` (one cadence without a success; the attempt time does not count); `theModeControlReplacesStartAndEnd`; `theBlockIsOnEveryModesBranchAndAStoppedOneOffersResume` (C-4); `syncNowCallsTheRunnerForThisAsset`; `everySyncErrorKindHasItsSentence` (exhaustive); `unconfirmedShowsP16_77AndTheCausesRemedy` (C-3); `theProvenanceLineIsC33s` (rev 1.5, after B2b: a Home Assistant START draws P16-34, a forced START P16-83, a forced END P16-84, no source no line) | the error line replaces the last-success line; **and** the provenance line chosen by the action alone (P16-34 for a `FORCED_IN` source) — two counted |
 | 68 | C27 the setup sheet (R16-Q-C) | `T/ui/asset/LinkSeasonSyncViewModelTest` (new) · `eachModeShowsItsSentenceBeforeTheWrite`; `aYearRoundLinkWithContinuousSchedulesAsksP78After`; `aStrandRefusalShowsS55AndKeepsTheSheet`; `aBadEntityShowsP16_49`; `resumeOnACalendarAssetShowsP16_44BeforeTheWrite` (C-4) | the CALENDAR link written without its sentence (the state skips the confirm step) |
 | 69 | C27 the editor | `T/ui/asset/AssetEditViewModelTest` (+2) · `aSyncedAssetsSeasonBlockIsReadOnlyWithP16_47`; `#78's prompt is unchanged after the lift` (#78's shipped cases green); `anArchivedContinuousScheduleIsNotCounted` | the lifted count includes ARCHIVED schedules |
 | 70 | C28 drawn | **Compose** `AT/seasonsync/SeasonSyncScreensTest` (new, ~10) · the masked token field; the Settings row; the mode control in place of Start/End; Sync now; the status lines side by side; the stale marker; the setup sheet's sentence and S55; the editor's read-only block; a stopped binding drawn on a CALENDAR asset with Resume (C-4); the resume hook calls `refreshIfStale` | none counted (first run at the gate; B8c's report predicts the mask-removed failure) |
@@ -792,6 +837,12 @@ names are the implementer's; what each proves is not.
 | 72 | C30, C31 | the documents, the fence and the no-leak greps (§7) | none: greps |
 | 73 | C4a the connection's settings (B1a2, shipped `ba46d1d8`) | `CT/seasonsync/SeasonSyncModelTest` (+8) · `theCadenceIsExactlyFourWithTheirHours`; `eligibleNowFollowsTheMode` (ANY; HOME × Wifi same/other, `WifiUnnamed`, `Wired`, `Other`, `None`, no captured name); `theDoubleRefusesHomeWithoutANetworkAndHttpWithAnyNetwork`; `theDoubleRefusesABlankName`; B1a's field-name pin moved to the connection's **eight fields** (a twin; C-7) | `WifiUnnamed` made eligible (a hidden name passes) |
 | 74 | C17 the connection's settings (rev 1.3) | `CT/seasonsync/SeasonSyncCommandsTest` (+4) · `anHttpAddressWithAnyNetworkIsHttpNeedsHomeNetwork`; `homeWithoutACapturedNetworkIsHomeNetworkNotSet`; `aBlankCapturedNameIsHomeNetworkNotSet`; `aNewConnectionIsDailyAndBackgroundOff` (the writer sets both, the model defaults neither); `aCadenceChangeCallsEnsureAfterCommitAndAnEligibilityChangeBumpsEveryRevision` | the http/any-network refusal removed |
+| 75 | C33(2) the column survives the migration; the round trip (R16-4) | `T/data/room/Migration20To21Test` (moved pin: the binding's exact column list gains `last_applied_source TEXT`; `theMigratedSchemaEqualsAFreshVersion21` re-run) and `T/data/room/SeasonSyncDaoTest` (moved pins: `aBindingRoundTripsEveryField` sets a source; `noColumnOfEitherTableIsATokenOrSecret` counts 8 and 19; the guarded update's full-field `next` writes a source unlike the inserted row's) | `MIGRATION_20_21`'s binding `CREATE TABLE` without the column (the schema compare fails); **and** `updateAtRevision`'s SQL without `last_applied_source = :lastAppliedSource` (the full-field compare fails) — two counted |
+| 76 | C33(1), C33(3) the applier's source per outcome (I13) | `CT/seasonsync/RecordSeasonSyncResultTest` (+3) · `aFollowApplicationRecordsHomeAssistant` (on over out: START; off over in: END; both `HOME_ASSISTANT`); `aForcedReassertionRecordsTheForcedSource` (a FORCE_OUT binding on an in-season asset, HA answering on: END, `FORCED_OUT`; FORCE_IN the mirror: START, `FORCED_IN`); `noApplicationMovesTheSource` (an agreeing read, an "already applied" refusal, `NOT_MANUAL`, `DATE_BEFORE_HISTORY`, FOLLOW + `NoDecision`: the four `applied*` fields as they were, a forced source included) | the source written as `HOME_ASSISTANT` whatever the mode; **and** the source set on an agreeing read (it moves with no row) — two counted |
+| 77 | C33(3) the Force commands write `FORCED_*` (R16-Q-H) | `CT/seasonsync/SeasonSyncCommandsTest` (+2) · `forceInAndForceOutRecordTheirForcedSource` (FOLLOW → FORCE_IN on an out-of-season asset: START, `FORCED_IN`; then FORCE_OUT: END, `FORCED_OUT`); `choosingFollowKeepsTheForcedSourceUntilHomeAssistantApplies` (no row at the switch; the next applying read records `HOME_ASSISTANT`) | `SetSeasonSyncMode` hands `applyIfChanged` `stored` for `moded` (`SeasonSyncCommands.kt:97`): the forced START records `HOME_ASSISTANT` |
+| 78 | C33(4) the phone's line rule | `CT/seasonsync/SeasonSyncModelTest` (+3) · `appliedSourceOfMapsEachMode`; `appliedLineFollowsTheSource` (`HOME_ASSISTANT` × START/END → the two Home Assistant lines; `FORCED_IN` → `FORCED_IN_SEASON`; `FORCED_OUT` → `FORCED_OUT_OF_SEASON`); `noSourceNoLine` | `appliedLineOf` by the action alone (a forced START reads as started from Home Assistant) |
+| 79 | C33(5) the API key (R16-9) | `T/api/SeasonSyncRoutesTest` (moved pin `:148`: `lastApplied`'s keys gain `source`; +1) · `aForcedApplicationReadsSourceForcedIn` (FORCE_IN through the graph's `setSeasonSyncMode`: `"FORCED_IN"`; the linked asset's Home Assistant application: `"HOME_ASSISTANT"`) | the DTO's `source` written as the constant `"HOME_ASSISTANT"` |
+| 80 | C33(6) G5 at each silent site (R16-Q-J) | `T/seasonsync/SeasonSyncWorkerBodyTest` (+4; a recording `log`, the runner through `runnerOver`) · `aCommandsFreshReadThatFailsLogsG5`; `aResumeRefreshThatFailsLogsG5`; `aStartUpReconcileThatFailsLogsG5`; `aWorkerScheduleCheckThatFailsLogsG5AndSucceeds` — each: the recorded lines are exactly `[G5]` (none holds `192.168.0.10`, the entity, `ExampleHomeWifi` or `fictional-token-1`) and the site's result is as shipped | the line removed from `launchQuietly` (two cases fail); **and** from the start-up reconcile; **and** from the worker's catch-all — three counted |
 
 **Moving pins (each a twin-rule anchor; a hit elsewhere stops the brief):**
 
@@ -806,6 +857,8 @@ names are the implementer's; what each proves is not.
 | `T/api/ReferenceRoutesTest.kt:764-773` ("twenty-seven" → "twenty-eight `/v1/assets/{id}/…` sub-resources"; "twenty-seven" joins the refused list); `docs/api/v1.md:213-217` (schema clause only); `A/api/ApiRouter.kt:103` (KDoc) | B7a | a twenty-eighth sub-resource; schema 21 |
 | the tool count 89 → 90: `M/tests/test_argument_guard.py:8`, `:46`, `:51`, `:182`, `:203-204`, `:207`, `:257-258`, `:326`, `:341-342`; `test_tools.py:133-137` and its `EXPECTED_TOOLS` tuple (`:23`, the new name appended); `test_reference_tools.py:35`, `:65-66`; the docstrings `test_maintenance_tools.py:45`, `test_installed_component_tools.py:45`, `test_supply_tools.py:47` | B7b | one tool appended (audit correction 2) |
 | the tail pins `test_installed_component_tools.py:134` (`TOOL_NAMES[-len(INSTALLED_COMPONENT_TOOLS):]` → offset by the new block) and `test_supply_tools.py:128` (`[-len(SUPPLY_TOOLS) - 5:-5]` → `- 6:-6`), and a new tail pin for the #16 block | B7b | an appended block moves every tail position (audit correction 3) |
+| the binding's column pins: `CT/seasonsync/SeasonSyncModelTest.kt:180` (`theBindingCarriesExactlyTheColumnsOfItsTable`: 18 → 19), `T/data/room/Migration20To21Test.kt:24` (the binding's exact column list), `T/data/room/SeasonSyncDaoTest.kt:153` (8 and 18 → 8 and 19) and its full-field rows (`:141`, `:187`); `T/api/SeasonSyncRoutesTest.kt:148` (`lastApplied`'s keys + `source`); a shipped `emptyList<String>(), logged` assertion in `T/seasonsync/SeasonSyncWorkerBodyTest.kt` that covers one of G5's four sites (→ `listOf(G5)`, a twin, listed); the construction sites, arguments only: seven `SeasonSyncBinding(` (`C/seasonsync/LinkSeasonSync.kt:90`, `A/data/room/SeasonSyncRepositories.kt:92`, `CT/testing/InMemorySeasonSync.kt:216`, `T/backup/SeasonSyncNeverTravelsTest.kt:56`, `T/data/room/SeasonSyncDaoTest.kt:50`, `T/ui/condition/OffersTest.kt:371`, `AT/seasonsync/SeasonSyncPlatformProofTest.kt:502`), `SeasonSyncBindingEntity(` (`SeasonSyncRepositories.kt:113`), `SeasonSyncAppliedDto(` (`SeasonSyncDtos.kt:99`), `updateAtRevision(` (`SeasonSyncRepositories.kt:40`) — counts on `35befab3` | B2b (rev 1.5) | C33: one column in the unreleased schema 21, one API key, G5 |
+| **unchanged, re-run (B2b):** `V21_TABLES` and the nine whole-chain table sets, `20.json`, every format literal, `TransferTableClassificationTest`, `SeasonSyncNeverTravelsTest` (its one site only), `M/tests/test_season_sync_tools.py` (`:59`, `:108`: its canned body pins the pass-through, not C3) | — | a column is not a table; nothing travels |
 
 **Device rows.** Two new classes: `SeasonSyncPlatformProofTest` (C29; tier-3 framework contracts plus one tier-4
 socket to a peer in this process through the real `HttpURLConnection` and security policy) and `SeasonSyncScreensTest`
@@ -836,6 +889,7 @@ and not judged on a software run. **Known cost:** `AssetDetailConditionHealthSea
 | B8b2 | `A/ui/asset/{LinkSeasonSyncSheet,LinkSeasonSyncViewModel}.kt` (new); `A/ui/asset/SeasonSyncStrings.kt` (B8b1's file: the sheet's strings); `A/ui/asset/AssetDetailScreen.kt` (the link and Resume actions open the sheet); `A/ui/asset/AssetEditScreen.kt` (`OperatingSeasonBlock`'s read-only state); `A/ui/asset/AssetViewModels.kt` (`reconcilePromptFor` calls the lifted count; the editor's synced flag); `C/usecase/SeasonCommands.kt` (`liveContinuousCount`, lifted, pure); `T/ui/asset/LinkSeasonSyncViewModelTest.kt` (new), `AssetEditViewModelTest.kt` (+2) — rows 68–69 | `C/**` but the one function, `A/api`, `A/data`, `A/di`, `A/seasonsync`, `A/ui/homeassistant`, `docs`, `tools` |
 | B8c | `AT/seasonsync/SeasonSyncScreensTest.kt` (new) — row 70 | every main file; every shipped `AT/` file (B8a owns N-7's three sites) |
 | B9 | `AT/seasonsync/SeasonSyncPlatformProofTest.kt` (new) — row 71 | every main file |
+| B2b (rev 1.5) | `C/seasonsync/SeasonSyncModel.kt` (C33(1), C33(4)); `C/seasonsync/RecordSeasonSyncResult.kt` (the one `copy`); `C/seasonsync/LinkSeasonSync.kt` (its site, `null`); `A/data/room/entities/SeasonSyncBindingEntity.kt`, `A/data/room/dao/SeasonSyncBindingDao.kt`, `A/data/room/SeasonSyncRepositories.kt`, `A/data/room/Migrations.kt` (`MIGRATION_20_21` only), `app/schemas/…/21.json` (regenerated in place); `A/api/SeasonSyncDtos.kt`; `docs/api/v1.md` (the `lastApplied` row); `A/seasonsync/{SeasonSyncRunner,SeasonSyncWorker}.kt` (G5, the runner's defaulted `log`); `M/src/servicetag_mcp/server.py` (one docstring line); `CT/seasonsync/{SeasonSyncModelTest,RecordSeasonSyncResultTest,SeasonSyncCommandsTest}.kt`, `CT/testing/InMemorySeasonSync.kt`, `T/data/room/{Migration20To21Test,SeasonSyncDaoTest}.kt`, `T/api/SeasonSyncRoutesTest.kt`, `T/seasonsync/SeasonSyncWorkerBodyTest.kt`; construction sites only in `T/backup/SeasonSyncNeverTravelsTest.kt`, `T/ui/condition/OffersTest.kt`, `AT/seasonsync/SeasonSyncPlatformProofTest.kt` — rows 75–80 | `A/ui/**` (main); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt`; `C/usecase/**`, `C/seasonsync/SeasonSyncCommands.kt`; `C/schedule`, `C/backup`, `C/merge`, `C/transfer`, `C/model`; `20.json`; `M/tests`, `M/README.md`, `S/`; the manifest |
 | B10 | `docs/release-proofs.md`; `docs/design/{03-target-architecture,09-security-privacy}.md`; `docs/home-assistant-season-sync.md` (new); `README.md` (`:80` only) | any `.kt`, `.py`, `.xml`, `tools`, `docs/api`, `docs/versioning.md`, `docs/releases` |
 
 **(B7a → B7b → B9) ∥ (B8a → B8b1 → B8b2 → B8c) — the one parallel pair.** Lane 1's files are `A/api/**`, `docs/api/**`,
@@ -845,16 +899,18 @@ B3b), `A/ui/nav/{Route,ServiceTagRoot}.kt`, one `C/usecase/SeasonCommands.kt` fu
 lane 2 may run in a second worktree off B6b's tip (B6b precedes the fork); the controller lands both before B10, whose
 `<base>` holds both. `ServiceTagRoot.kt` is B6a's (the hook and the seam) and then B8a's (the route entry) — sequential
 by construction. Lane 1's `AT/` file and lane 2's B8a edit of `SettingsBackupEntryTest.kt` (N-7) are different files.
+**B2b (rev 1.5)** runs on a side lane off the tip holding B9, beside B8a (disjoint files), and is folded before B8b1;
+a `SeasonSyncBinding(` site a parallel brief adds after its `<base>` is the fold's (arguments only).
 
-**Order:** B1a → B1b → **B1a2** → B2 → B3a → B3b → B3c → B4 → B5 → B6a → B6b → { (B7a → B7b → B9) ∥ (B8a → B8b1 →
-B8b2 → B8c) } → B10 — **nineteen dispatches** (rev 1.3 inserted B1a2, shipped in ~45 min; rev 1.1 split B6 and B8b; B1a, B2, B3a
+**Order:** B1a → B1b → **B1a2** → B2 → B3a → B3b → B3c → B4 → B5 → B6a → B6b → { (B7a → B7b → B9 → **B2b**) ∥ (B8a → B8b1 →
+B8b2 → B8c) } → B10, B2b folded before B8b1 — **twenty dispatches** (rev 1.5 added B2b; rev 1.3 inserted B1a2, shipped in ~45 min; rev 1.1 split B6 and B8b; B1a, B2, B3a
 and B5 keep 40-minute clauses), every one ≤ 1 h by estimate. B1b needs B1a's model; B1a2 adds to B1a's model; B2
 needs B1a's ports and B1a2's columns;
 B3a needs nothing of B2's (core only) but follows it so the schema lands before any writer; B3b needs B3a's body
 split; B3c needs B3a's `applyIfChanged` and B3b's guard (a link must not be refused by its own guard: the link writes
 before the binding exists, and the Force path calls the body); B4 and B5 need B1a's ports; B6a needs everything
 before it; B6b needs B6a's wiring; B7a needs B6a's wiring (the handler reads the store); B8a, B8b1 and B8b2 need
-B6a's runner, and B8b2 needs B8b1's strings file; B9 needs B4–B6a; B10 describes everything.
+B6a's runner, and B8b2 needs B8b1's strings file; B9 needs B4–B6a; B2b needs B7a–B9's files, B8b1 needs B2b (C33(4)); B10 describes everything.
 
 **The season authority (R16-1, DECIDED)** and **the six audit corrections of rev 1** (nine whole-chain table sets; the
 twenty-one 89-tool sites; two tail pins; the two untrue documents, `docs/api/v1.md:38-41` and `README.md:80`; the
@@ -862,11 +918,12 @@ refused documentation address; 59 → 61 device classes) stand as written in rev
 has landed in §3's pins, §5 or the briefs.
 
 **Recomputed counts:** +2 device-local tables, no shipped column; format 20, lists, `MergeTable`, transfer classes
-unchanged; asset sub-resources 27 → **28**, router 81/101 → **82/102**; **1** new API code; MCP 89 → **90**; moving
+unchanged; asset sub-resources 27 → **28**, router 81/101 → **82/102**; **1** new API code and one key (`lastApplied.source`, rev 1.5); MCP 89 → **90**; moving
 pins: 4 schema sites, the chain and 9 table sets (B2), 26 construction sites (B3b, N-9), 3 + v1.md (B7a), 21 + 2 tails
-(B7b), 3 named arguments (B8a, N-7); **81** phone strings (50 RATIFIED, 31 PENDING; P16-64 withdrawn); device classes
-59 → **61** (~+20 cases, ~20 min under software rendering, reporting only); **19** dispatches, each ≤ 1 h. **Gate
-budget:** core +~120, app +~120, MCP +~8.
+(B7b), 3 named arguments (B8a, N-7), the column pins and ten construction sites (B2b); **83** phone strings (all
+RATIFIED: 50 on 2026-10-02, 33 on 2026-10-03; P16-64 withdrawn); device classes
+59 → **61** (~+20 cases, ~20 min under software rendering, reporting only); **20** dispatches, each ≤ 1 h. **Gate
+budget:** core +~120, app +~120, MCP +~8 (B2b: core +~5, app +~6, MCP 0).
 
 **Between-brief gaps** (each unreachable: nothing links a binding before B6a wires the commands and B8b1/B8b2 draw
 them): B2 → B3b, writers unguarded (rows 33–36); B3a → B3b, the API's season POST unguarded (row 33); B3c → B6a, the
@@ -875,10 +932,11 @@ answered 500 (row 62).
 
 ## 5. Strings
 
-**RATIFIED by the owner 2026-10-02 (P16-1…52 and G1–G3; rev 1.3–1.4 reopen P16-32 and P16-50 and add P16-53…82, PENDING below, P16-64 withdrawn; eight amendments — P16-3, 5, 12, 28, 29, 44, 45, 51, copied verbatim from the owner's rulings).** Each new string is declared once as a `const val`
+**RATIFIED by the owner 2026-10-02 (P16-1…52 and G1–G3; rev 1.3–1.4 reopen P16-32 and P16-50 and add P16-53…82, below, P16-64 withdrawn; eight amendments — P16-3, 5, 12, 28, 29, 44, 45, 51, copied verbatim from the owner's rulings) and 2026-10-03 (the rev 1.4 block below, six rows amended, P16-83/84, G4,
+G5; comment 5972214001, R16-Q-H…J; 83 phone strings in all).** Each new string is declared once as a `const val`
 (or a one-line function for a format) at the home named, and imported, never copied. Two homes:
 `A/ui/homeassistant/HomeAssistantStrings.kt` (P16-1…21, P16-48, P16-50…52; the outcome sentences live here because both screens
-draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49).
+draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49, P16-83/84).
 
 | id | proposed wording | where (contract) |
 |---|---|---|
@@ -913,10 +971,10 @@ draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49).
 | P16-29 | "Forced out of season. %s is still checked, but it does not change the season until you choose Follow Home Assistant." | the source line in FORCE_OUT |
 | P16-30 | "Last successful check %s" — the shipped date-and-time display | the last-success line (C13's `last_success_at`) |
 | P16-31 | "No reading from Home Assistant yet." | before the first valid observation |
-| P16-32 | **REOPENED — the PENDING block below** | the stale marker (C27) |
+| P16-32 | **REOPENED — the block below, RATIFIED 2026-10-03** | the stale marker (C27) |
 | P16-33 | "Changed in Home Assistant %s" — HA's `last_changed`, formatted for display when it parses as ISO-8601, the line omitted otherwise | information only (R16-3) |
-| P16-34 | "Started from Home Assistant on %s" | the provenance line after an applied START (R16-11) |
-| P16-35 | "Ended from Home Assistant on %s" | after an applied END |
+| P16-34 | "Started from Home Assistant on %s" | the provenance line after a START applied from Home Assistant: source `HOME_ASSISTANT` (R16-11; C33(4)) |
+| P16-35 | "Ended from Home Assistant on %s" | after an END applied from Home Assistant (`HOME_ASSISTANT`) |
 | P16-36 | "This asset is no longer maintained here, so Home Assistant no longer changes its season." | `NOT_MAINTAINED_HERE` (C13, C16) |
 | P16-37 | "This phone's date is before the latest season entry, so the season stays as it is until the date catches up." | `DATE_BEFORE_HISTORY` (H4) |
 | P16-38 | "This asset's season is no longer started and ended by hand, so Home Assistant cannot change it. Choose Stop syncing, then Resume syncing." | `NOT_MANUAL` (defensive; reworded in rev 1.1 so it names what C17 allows — Resume runs the reconciliation, C-4) |
@@ -931,14 +989,14 @@ draw them) and `A/ui/asset/SeasonSyncStrings.kt` (P16-22…47, P16-49).
 | P16-47 | "This asset's season follows Home Assistant. Stop syncing on the asset's page to change it here." | the editor's read-only season block (C27) |
 | P16-48 | "A token is saved on this phone." | the token field after a save (C26) |
 | P16-49 | "Enter an entity ID such as input_boolean.example_heater_in_season: lowercase letters, digits and underscores, with one dot." | C16's `BAD_ENTITY_ID` |
-| P16-50 | **REOPENED — the PENDING block below** | `NOT_ON_LOCAL_NETWORK` (C19 step 1a) |
+| P16-50 | **REOPENED — the block below, RATIFIED 2026-10-03** | `NOT_ON_LOCAL_NETWORK` (C19 step 1a) |
 | P16-51 | "That server name does not resolve only to private network addresses, so ServiceTag did not contact it." | `NAME_NOT_LOCAL` (C19 step 1b, C-9) |
 | P16-52 | "Home Assistant's certificate could not be verified." | `TLS_FAILED` (C19 step 5, N-4) |
 
-**PENDING RATIFICATION (rev 1.4, before B8a; R16-Q-D and R16-20 as amended, C32, the review's C-2/C-3).** Thirty-one
-strings, the complete set new or changed since rev 1.2; P16-54…57, P16-59/60 and P16-70…72 are the owner's own words;
-**P16-64 is withdrawn** (no wired identity, C-2). Homes: `HomeAssistantStrings.kt` but P16-32 (`SeasonSyncStrings.kt`).
-The owner ratifies from `.superpowers/sdd/2026-10-02-issue-16/strings-pending-rev1.4.md`, the same table.
+**RATIFIED 2026-10-03 (the rev 1.4 block, R16-Q-I; R16-Q-D and R16-20 as amended, C32, C-2/C-3).** Thirty-one strings,
+the set new or changed since rev 1.2, as written but **six amended verbatim** (P16-60, 66, 67, 69, 75, 80; the inner ‘ ’ are the owner's); **P16-64
+withdrawn** (C-2); **P16-83/84 added** (R16-Q-H). Homes: `HomeAssistantStrings.kt` but P16-32 and P16-83/84
+(`SeasonSyncStrings.kt`). Source: `.superpowers/sdd/2026-10-02-issue-16/owner-rulings-2026-10-03.md`.
 
 | id | proposed wording | where it is drawn |
 |---|---|---|
@@ -951,28 +1009,30 @@ The owner ratifies from `.superpowers/sdd/2026-10-02-issue-16/strings-pending-re
 | P16-57 | "Once a month" | cadence choice |
 | P16-58 | "Where to check" | Home Assistant screen: the network control's label (C26) |
 | P16-59 | "Any network" | network choice (https only) |
-| P16-60 | "Only on this home Wi-Fi/local network" | network choice |
+| P16-60 | "Only on this home Wi-Fi" | network choice — **amended 2026-10-03** |
 | P16-61 | "Only for an https:// address you have made reachable from outside your home. The token is sent from whatever network this phone is on." | under "Any network" (limit 18) |
 | P16-62 | "Use the network I'm on now" | the capture button under P16-60 (C32) |
 | P16-63 | "Home Wi-Fi: %s" | after a capture; %s is the captured Wi-Fi name |
 | P16-65 | "To check that this phone is on your home Wi-Fi before it sends the access token, ServiceTag needs to read the Wi-Fi network's name. Android allows that only with precise Location permission, so choose Precise. ServiceTag does not use your location, but Android will list it among apps that used location." | before the precise-location request, when P16-60 is chosen (C26) |
-| P16-66 | "Without precise Location permission, ServiceTag cannot tell which Wi-Fi this is, so \"Only on this home Wi-Fi/local network\" stays off." | after a refusal or an approximate-only grant |
-| P16-67 | "An http:// address needs \"Only on this home Wi-Fi/local network\". Choose it, or use an https:// address." | saving an http address with "Any network" (C17) |
+| P16-66 | "Without precise Location permission, ServiceTag cannot tell which Wi-Fi this is, so ‘Only on this home Wi-Fi’ stays off." | after a refusal or an approximate-only grant — **amended 2026-10-03** |
+| P16-67 | "An http:// address needs ‘Only on this home Wi-Fi’. Choose it, or use an https:// address." | saving an http address with "Any network" (C17) — **amended 2026-10-03** |
 | P16-68 | "Turn on Location so ServiceTag can read the Wi-Fi network's name, then try again." | at capture with Location off; after P16-77 when Location is off |
-| P16-69 | "With background checks off, ServiceTag checks when you open the app after the chosen interval and when you tap Sync now. It still needs precise Location while the app is open." | under P16-70 while background checks are off or paused |
+| P16-69 | "With background checks off, ServiceTag checks when you open or return to the app after the chosen interval, and when you tap Sync now. It still needs precise Location while the app is in use." | under P16-70 while background checks are off or paused — **amended 2026-10-03** |
 | P16-70 | "Background checks on this home network" | under P16-60: the sub-setting's label (R16-20) |
 | P16-71 | "Off" | background checks choice, preselected |
 | P16-72 | "On" | background checks choice |
 | P16-73 | "To check in the background, ServiceTag must read the Wi-Fi network's name while the app is closed. Android allows that only when Location is set to \"%s\". ServiceTag reads only the network's name, never where you are, and Android will remind you that it has this access." | before the background-location request; %s is Android's own label for the option (C26) |
 | P16-74 | "ServiceTag also checks in the background while this phone is on your home Wi-Fi." | under P16-70 while background checks run |
-| P16-75 | "Background checks are paused because Android does not let ServiceTag read the Wi-Fi network's name in the background. ServiceTag checks when you open the app and when you tap Sync now." | Home Assistant screen and card: On without the background grant (C22) |
+| P16-75 | "Background checks are paused because Android does not let ServiceTag read the Wi-Fi network's name in the background. ServiceTag checks when you open or return to the app and when you tap Sync now." | Home Assistant screen and card: On without the background grant (C22) — **amended 2026-10-03** |
 | P16-76 | "Allow again" | the action under P16-75 and P16-78: re-runs the matching permission flow |
 | P16-77 | "ServiceTag could not confirm that this phone is on your home Wi-Fi, so it did not contact Home Assistant." | the card's error line when the Wi-Fi name could not be read (C19 step 1a) |
 | P16-78 | "ServiceTag no longer has permission to read the Wi-Fi network's name. Allow precise Location again." | after P16-77: permission withdrawn, a one-time grant expired, or reset by Android |
 | P16-79 | "ServiceTag has only approximate Location, which hides the Wi-Fi network's name. Change it to Precise in the app settings." | after P16-77, with "Open app settings" |
-| P16-80 | "ServiceTag could not read the Wi-Fi network's name in the background. It checks again when you open the app." | after P16-77: the read ran outside the foreground |
+| P16-80 | "ServiceTag could not read the Wi-Fi network's name in the background. It checks again when you open or return to the app." | after P16-77: the read ran outside the foreground — **amended 2026-10-03** |
 | P16-81 | "On Ethernet, ServiceTag cannot tell which network this is. Connect to your home Wi-Fi, or choose \"Any network\" with an https:// address." | at capture on Ethernet; after P16-77 on Ethernet |
 | P16-82 | "Connect this phone to your home Wi-Fi, then try again." | at capture on mobile data or with no network |
+| P16-83 | "Forced in season on %s" — `%s` the date, as P16-34's | the card's provenance line after a START applied under Force in season: source `FORCED_IN` (C33(4); R16-Q-H) — `SeasonSyncStrings.kt` |
+| P16-84 | "Forced out of season on %s" | after an END applied under Force out of season: source `FORCED_OUT` — `SeasonSyncStrings.kt` |
 
 **Reused verbatim from their one home:** "Operating season" (`OPERATING_SEASON`, `A/ui/asset/AssetEditScreen.kt:94`;
 also the mode control's group name for TalkBack); the effective season drawn by the shipped `PhaseBadge`
@@ -997,6 +1057,9 @@ labels. N-11 noted, not changed: ratified P16-13 ("same network") reads oddly fo
 - **G3** — the log lines: "season sync run failed; WorkManager retries it" (a local database failure only), "the Home
   Assistant key sweep failed; the next start repeats it" — each names the step and never a URL, host, entity or
   token (C31's grep (5) reads every `Log` call for those words and expects none).
+- **G4** (2026-10-03, as written) — "the Home Assistant key store failed; the next run repeats it" (`KEY_STORE_FAILED`, B6a).
+- **G5** (2026-10-03, amended) — "a Home Assistant check could not run; it will retry on the next resume, scheduled
+  run, or app start": B6a's four silent sites (C33(6), B2b); no URL, host, entity, Wi-Fi name, token or exception.
 
 ## 6. Owner rulings
 
@@ -1031,6 +1094,9 @@ labels. N-11 noted, not changed: ratified P16-13 ("same network") reads oddly fo
 | **R16-Q-E** | **owner — DECIDED** | **The HA connection and the binding are never in a ServiceTag backup/export, merge or Transfer Pack contract;** no format bump (format stays 20). Wording: never "never travels under any restore mechanism" — Android Auto Backup is Q-F's. | C9, row 20, I11 |
 | **R16-Q-F** | **owner — DECIDED: YES** | **The non-secret Room configuration may stay in Android Auto Backup** (base URL, entity ids, observed state and HA change text, error detail, modes and times, applied provenance — and, since rev 1.3, **the home Wi-Fi's name**, which Android treats as location-sensitive; C-6); the token, key and ciphertext do not restore as a usable credential, so after a platform restore the binding reads **NEEDS_TOKEN and sends nothing** until the owner re-enters a token — the explicit reauthorization step. The rule: device-local in ServiceTag portability; restorable as inert non-secret configuration through the platform backup. | C9, C17, C18, limit 4 |
 | **R16-Q-G** | **owner — DECIDED: the shipped behaviour** | **`SetSeasonMode`'s switch row dated today; no special backdated-anchor path for #16.** Linking or resuming a CALENDAR or YEAR_ROUND asset may re-anchor IN_SERVICE schedules to today; this is disclosed before the write by the amended P16-44/45 and pinned by the schedule-cadence row (40a). | C16, C17, limit 14, row 40a |
+| **R16-Q-H** | **owner — DECIDED 2026-10-03: (a)** | **Provenance under a forced override:** "Add the last-application source to the binding within the still-unreleased schema 21 so a forced application is never mislabeled as one applied from Home Assistant"; the two new strings "Forced in season on %s" / "Forced out of season on %s" RATIFIED (P16-83/84); "Keep P16-34 / P16-35 for actual Home Assistant-driven applications." R16-11 stands: the source is a binding column, never one on activation rows. | C3, C9, C13, C27, C33, B2b |
+| **R16-Q-I** | **owner — DECIDED 2026-10-03** | **The rev 1.4 block's 31 strings RATIFIED AS WRITTEN but six amendments**, copied verbatim into §5: P16-60, 66, 67, 69, 75, 80 — "The implementation only recognizes a captured Wi-Fi SSID; Ethernet is explicitly not eligible. Do not label that mode as a generic “local network”." | §5, C26, B8a, B10 |
+| **R16-Q-J** | **owner — DECIDED 2026-10-03** | **G4 RATIFIED AS WRITTEN; G5 YES, amended:** "a Home Assistant check could not run; it will retry on the next resume, scheduled run, or app start"; "Same privacy rule as G1–G4: no URL, host, entity, Wi-Fi name, token or attached exception text." Emitted once at each of B6a's four silent sites, one line each, G3's shape. | §5's G-list, C33(6), B2b |
 
 ## 7. Proofs
 
@@ -1056,7 +1122,8 @@ labels. N-11 noted, not changed: ratified P16-13 ("same network") reads oddly fo
     it); `'activations\.insert\('` in `C/seasonsync` → 0 (the body is the only writer, C12).
   - `'"SEASON_SYNC_ENABLED"'` in `ApiJson.kt` → 1; `'"season-sync" to "GET"'` in `ApiRouter.kt` → 1; `'Eighty-two
     path shapes over one hundred and two'` → 1; `'twenty-eight `/v1/assets/\{id\}/…` sub-resources'` in `v1.md` → 1;
-    `'21 since #16'` in `v1.md` → 1 (the schema clause only).
+    `'21 since #16'` in `v1.md` → 1 (the schema clause only); **rev 1.5:** `'val source: String'` in `SeasonSyncDtos.kt`
+    → 1 and `v1.md`'s `lastApplied` row names `source` (read it; C33(5)).
   - `'^@mcp\.tool\('` in `server.py` → 90; `'^_MIN_SEASON_SYNC_SCHEMA_VERSION = 21$'` → 1; `'SEASON_SYNC_ENABLED'`
     in `server.py` → 3 (the three season write docstrings).
   - `'cleartextTrafficPermitted="true"'` in `res/xml/network_security_config.xml` → 1; `'src="user"'` → 0;
@@ -1081,7 +1148,7 @@ labels. N-11 noted, not changed: ratified P16-13 ("same network") reads oddly fo
   in-process fake HA (row 71) and never depends on the owner's network.
   - **Who, where, when:** the controller, once, after the merge and the merged-tip gate, on `emulator-5554`
     (`-no-window -gpu swangle_indirect -feature -Vulkan`), the merged tip's debug build, reaching the owner's HA through
-    the emulator's NAT. The http connection is saved "Only on this home Wi-Fi/local network" with the emulator's Wi-Fi
+    the emulator's NAT. The http connection is saved "Only on this home Wi-Fi" (P16-60) with the emulator's Wi-Fi
     captured (precise location granted by the driver; the name recorded, expected `AndroidWifi`); the same address with
     "Any network" is refused (P16-67); the environment record states the active transport.
   - **Secrets by path only:** the base URL, the https name and the entity ids from `~/.config/servicetag/ha-test-proof.env`,
@@ -1095,7 +1162,7 @@ labels. N-11 noted, not changed: ratified P16-13 ("same network") reads oddly fo
   - **What it observes** (Sync now, read back through C24's route and the card; a fictional MANUAL "Example Heater"):
     on → one START today; off → one END; **offline recovery** (airplane mode or a blocked route: a status, no row; the
     boolean flipped meanwhile; the next success applies one transition that day); **an override** (Force out while HA
-    says on: one END; polls leave it; Follow applies a fresh read); **status only** — `unavailable` and the odd state
+    says on: one END, `lastApplied.source` `FORCED_OUT`; polls leave it; Follow applies a fresh read, `HOME_ASSISTANT`); **status only** — `unavailable` and the odd state
     (`UNSUPPORTED_STATE`), the missing entity (`ENTITY_NOT_FOUND`); **the private-CA https name** → `TLS_FAILED`
     (R16-Q-B (d)); Test connection OK; **background (R16-20 as amended)** — Off: no work; On with the background grant:
     the work, forced once, checks the network first; the grant revoked (`pm revoke` ends the process) and the app
@@ -1117,10 +1184,10 @@ labels. N-11 noted, not changed: ratified P16-13 ("same network") reads oddly fo
   credential store or poller (audit §10). **#76:** the roadmap of record. **#90:** reporting only on a software run.
   **#98:** follows; by R16-Q-E its export → restore carries no binding. **#62:** rows 70 and 71 are tiers 2–4.
 
-## Briefs — common to every brief (nineteen dispatches)
+## Briefs — common to every brief (twenty dispatches)
 
 Read §1–§8, the audit, issue #16 and every earlier report on this branch. **Dispatch precondition: MET** (§6); §5's
-PENDING strings are ratified before B8a. **Core doubles (C7):** fixtures through `BackupInstall`, never a bare list.
+rev 1.4 block was RATIFIED 2026-10-03 (R16-Q-I). **Core doubles (C7):** fixtures through `BackupInstall`, never a bare list.
 **Fenced words (C-3, C31):** no #69 C33(1) or #56 word added anywhere, even to deny it. **Constructor plumbing (#47
 C-1):** a new constructor parameter's brief owns its `AppGraph` and `FakeGraph` lines and every construction site
 (arguments only); **no `AppGraph`/`FakeGraph` edit after B6a**. **Forced arms (#69 C-4):** a brief owns every compile
@@ -1146,7 +1213,7 @@ and after, twins moved, wall time, what is done, proven and not proven.
 
 **Stop and report, always:** an edit to a never-touched file; an assertion that must move outside the pin and twin
 rules; a JVM or build failure the brief did not cause (reported, not retried); a socket opened by a JVM test; a phone
-string not in §5; a schema change outside B2 or any format change; a cited line that reads differently on `<base>`;
+string not in §5; a schema change outside B2 and B2b (C33) or any format change; a cited line that reads differently on `<base>`;
 an undecided owner question; the cap reached, the 1-hour target passed with under half the rows green, or the 2-hour
 hard stop.
 
@@ -1333,27 +1400,31 @@ history sentences that name 89 as a past total (each read and listed). **Untouch
 
 **Read:** `A/ui/settings/SettingsScreen.kt:230-265`; `AT/ui/settings/SettingsBackupEntryTest.kt:35-110`;
 `A/ui/nav/Route.kt:100-120`; `A/ui/api/DeveloperApiScreen.kt` (the pushed-screen precedent); C32; §5's P16-1…21,
-P16-48, P16-50…52 and the ratified P16-53…82. **Rows:** 66, 66a, 66b. **Rulings:** R16-13, R16-14, R16-Q-C, R16-Q-D,
-R16-20, R16-21 (N-8). **Interfaces produced:**
+P16-48, P16-50…52 and P16-53…82 as RATIFIED 2026-10-03 — six amended verbatim (P16-60, 66, 67, 69, 75, 80;
+R16-Q-I): the option is "Only on this home Wi-Fi", and P16-66/67 keep the owner's ‘ ’. **Rows:** 66, 66a, 66b. **Rulings:** R16-13, R16-14, R16-Q-C, R16-Q-D,
+R16-20, R16-21 (N-8), R16-Q-I. **Interfaces produced:**
 `Route.HomeAssistant`, the screen, its view model, `HomeAssistantStrings`. **Forced sites (N-7):** the new
 `SettingsScreen` callback breaks the named-argument calls at `SettingsBackupEntryTest.kt:41`, `:65` and `:92`; B8a
 adds the argument there (arguments only, listed in its report; compile-checked by `:app:compileDebugAndroidTestKotlin`).
 **Greps:** every P16 const declared once (`git grep -c` per const → 1); `'PasswordVisualTransformation'` → 1;
 `'token' ` in the view model's state class → only `tokenPresent` (read it). **Untouched:** as §4. **Must NOT:** keep
 the token text in state after save; add a reveal toggle; deep-link the route; ask for any permission on "Any network";
-enable the home-network option without the grant; ask for background location while Background checks is Off.
+enable the home-network option without the grant; ask for background location while Background checks is Off; call the home-network option a "local network" (R16-Q-I).
 **Counted RED (3):** rows 66, 66a, 66b. **Caps:**
 4 runs; 1 h / 2 h. **Size:** about 270 production lines, 170 test lines, 3 argument edits. **Estimate:** 55 min.
 
 ## 22. B8b1 — the season card's block (C27; app JVM)
 
-**Read:** `A/ui/asset/AssetDetailScreen.kt:420-435`, `:1190-1290`; `A/ui/asset/AssetViewModels.kt:780-795`,
-`:1676-1690`; §5's P16-22…41. **Rows:** 67. **Rulings:** R16-1, R16-15, R16-19, R16-Q-C. **Interfaces produced:**
-the block, its view model, `SeasonSyncStrings` (the block's strings). **Greps:** every P16 const declared once; the
-`SyncErrorKind` → sentence `when` has no `else` (read it); the block is called from every mode's branch of
-`SeasonSection` (read it). **Untouched:** as §4. **Must NOT:** hide the last-success line behind an error; draw
-Start/End beside an enabled binding; draw a stopped binding only on MANUAL. **Counted RED (1):** row 67. **Caps:** 4
-runs; 1 h / 2 h. **Size:** about 200 production lines, 160 test lines. **Estimate:** 45 min.
+**After B2b is folded (rev 1.5).** **Read:** `A/ui/asset/AssetDetailScreen.kt:420-435`, `:1190-1290`;
+`A/ui/asset/AssetViewModels.kt:780-795`, `:1676-1690`; §5's P16-22…41, P16-83/84; C33(4); B2b's report. **Rows:** 67.
+**Rulings:** R16-1, R16-15, R16-19, R16-Q-C, R16-Q-H. **Interfaces produced:** the block, its view model,
+`SeasonSyncStrings` (the block's strings). **Consumes C33(4):** the provenance line is `appliedLineOf(binding)` →
+P16-34/35, P16-83/84 or no line, dated `appliedOn`, never re-derived from the mode or the action. **Greps:** every P16
+const declared once; the `SyncErrorKind` and `AppliedLine` → sentence `when`s have no `else` (read both); the block is
+called from every mode's branch of `SeasonSection` (read it). **Untouched:** as §4. **Must NOT:** hide the last-success
+line behind an error; draw Start/End beside an enabled binding; draw a stopped binding only on MANUAL; draw P16-34/35
+for a forced application. **Counted RED (2):** row 67 (two). **Caps:** 5 runs; 1 h / 2 h. **Size:** about 210
+production lines, 180 test lines. **Estimate:** 45 min.
 
 ## 23. B8b2 — the setup sheet, the editor and the #78 lift (C27; app JVM)
 
@@ -1392,9 +1463,40 @@ network (the rule is JVM-proven; the GET runs with a scripted eligible network);
 
 **Read:** `docs/release-proofs.md:120-140`; `docs/design/03-target-architecture.md:20-40`, `:440-450`;
 `docs/design/08-risk-register.md:30-36`; `docs/design/09-security-privacy.md:15-40`; `README.md:76-86`; every report on
-the branch. **Rows:** 72 (the greps). **Rulings:** R16-5 (N-1), R16-Q-A, R16-Q-E, R16-Q-F. **Greps:** C31's; every
+the branch. **Rows:** 72 (the greps). **Rulings:** R16-5 (N-1), R16-Q-A, R16-Q-E, R16-Q-F, R16-Q-H, R16-Q-I. **Rev 1.5:** `docs/release-proofs.md`'s schema-21
+paragraph names `season_sync_binding.last_applied_source` (C33); `README.md` and the new document call the option
+"Only on this home Wi-Fi" (P16-60), never a "local network". **Greps:** C31's; `git diff <base> -U0 -- README.md docs | grep -c
+'Wi-Fi/local network'` → 0; every
 value in `docs/home-assistant-season-sync.md` is from § Global constraints' fixture list (read it); every RFC 1918
 literal **but `192.168.0.10`** in the new document → 0 (`git grep -nE '\b(10\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])|192\.168)\.[0-9]+\.[0-9]+'`
 lists only `192.168.0.10`; C-7). **Untouched:** as §4. **Must NOT:** describe the token as read-only; name a real host,
 entity or network; touch `docs/versioning.md` or `docs/releases/`. **Counted RED (0):** a tripwire row. **Caps:** 3
 runs; 1 h / 2 h. **Size:** about 175 doc lines. **Estimate:** 40 min.
+
+## 27. B2b — the provenance column and the G5 line (C33; core and app JVM, one docstring line) — rev 1.5
+
+**When:** a side lane off the accepted tip holding B7a, B7b and B9 (it edits their DTO, test, docstring and device
+site), beside B8a (disjoint files, §4); folded **before B8b1 is dispatched**. (B2's split clause once reserved the
+name for row 20; that split never ran.) **Read:** C33 and every site it cites; the B1a, B2, B3a, B3c, B6a, B7a and
+B7b reports' signatures; `T/seasonsync/SeasonSyncWorkerBodyTest.kt:35-65` (`runnerOver`, the recording `log`).
+**Rows:** 75–80 and §3's B2b pins. **Rulings:** R16-4, R16-11, R16-Q-E, R16-Q-H, R16-Q-J. **Interfaces produced:**
+`LastAppliedSource`, `appliedSourceOf`, `AppliedLine`, `appliedLineOf` (for B8b1), the field, the column,
+`lastApplied.source`, G5's `const val`, the runner's defaulted `log`. **Count first:** `git grep -nE
+'SeasonSyncBinding\(|SeasonSyncBindingEntity\(|SeasonSyncAppliedDto\(|updateAtRevision\('` over `app/src core/src`
+(on `35befab3`: 7, 1, 1, 1) and `'emptyList<String>(), logged'` in `T/seasonsync`; report the numbers and every hit
+§3's pins do not name before editing; a site a parallel brief lands after `<base>` is the fold's (arguments only).
+**Greps:** `'last_applied_source'` in `21.json` → 2 (the `createSql` and the field), in `Migrations.kt` → 1 (read
+both: byte-equal); `'CREATE TABLE'` inside `MIGRATION_20_21` → 2; `20.json`'s diff → empty; `'appliedSourceOf\('` in
+main → its declaration and the one `copy`; `'lastAppliedSource ='` in main → that `copy`, Link's `null`, the two
+mappers (read each); G5's text in `app/src/main` → 1, its name at three catches for four sites; the one added `Log.`
+is the runner's default (read it); `git diff <base>` of `A/di`, `T/testing/FakeGraph.kt`, `C/usecase` and
+`C/seasonsync/SeasonSyncCommands.kt` → empty; `git diff <base> --stat -- tools` → `server.py`, one line;
+`FORMAT_VERSION = 20` → 1; C31's six. **Gate:** briefs-common's, plus `uv run --frozen pytest` in `M/`.
+**Untouched:** as §4. **Must NOT:** default the field; set the source outside `applyIfChanged`'s `copy`, move it
+without a row, or derive it from anything but the applying binding's mode; add a migration step, version, format
+literal, `MergeTable` member or backup field; edit `20.json`, `AppGraph`, `FakeGraph` or main `A/ui/**`; change a
+silent site's result or attach an exception, URL, host, entity, Wi-Fi name or token to a log line; edit `M/tests` or
+`M/README.md`. **Counted RED (10):** rows 75 (two), 76 (two), 77, 78, 79, 80 (three). **Caps:** 9 runs (mutations
+batched only across disjoint classes, B2's rule); 1 h / 2 h. **Size:** about 60 production lines plus `21.json`, 220
+test lines, 15 pin and site edits. **Estimate:** 50 min. **Split clause:** past 40 min with row 80 unstarted, row 80
+goes to a B2c (the runner, the worker and their test).

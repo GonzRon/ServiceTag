@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
+import com.loosecannon.servicetag.core.seasonsync.LastAppliedSource
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
@@ -42,8 +43,8 @@ class RoomSeasonSyncRepository(private val dao: SeasonSyncBindingDao) : SeasonSy
             entityId = e.entityId, mode = e.mode, enabled = e.enabled, revision = e.revision,
             observedState = e.observedState, observedChangedAt = e.observedChangedAt, lastSuccessAt = e.lastSuccessAt,
             lastAttemptAt = e.lastAttemptAt, errorKind = e.errorKind, errorDetail = e.errorDetail, errorAt = e.errorAt,
-            appliedAction = e.appliedAction, appliedOn = e.appliedOn, appliedAt = e.appliedAt, createdAt = e.createdAt,
-            updatedAt = e.updatedAt,
+            appliedAction = e.appliedAction, appliedOn = e.appliedOn, appliedAt = e.appliedAt,
+            lastAppliedSource = e.lastAppliedSource, createdAt = e.createdAt, updatedAt = e.updatedAt,
         ) == 1
     }
 
@@ -106,6 +107,7 @@ internal fun SeasonSyncBindingEntity.toDomain() = SeasonSyncBinding(
     appliedAction = appliedAction?.let(SeasonAction::valueOf),
     appliedOn = appliedOn,
     appliedAt = appliedAt,
+    lastAppliedSource = lastAppliedSource?.let(LastAppliedSource::valueOf),
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
@@ -127,6 +129,7 @@ internal fun SeasonSyncBinding.toEntity() = SeasonSyncBindingEntity(
     appliedAction = appliedAction?.name,
     appliedOn = appliedOn,
     appliedAt = appliedAt,
+    lastAppliedSource = lastAppliedSource?.name,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
