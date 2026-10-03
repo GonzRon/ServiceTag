@@ -368,6 +368,11 @@ class MergedManifestContractTest {
                 "android.permission.WAKE_LOCK",
                 "android.permission.ACCESS_NETWORK_STATE",
                 "android.permission.FOREGROUND_SERVICE",
+                // #16 (C32): the home-network check's lines, declared by the app, requested only by its own flows.
+                "android.permission.ACCESS_WIFI_STATE",
+                "android.permission.ACCESS_FINE_LOCATION",
+                "android.permission.ACCESS_COARSE_LOCATION",
+                "android.permission.ACCESS_BACKGROUND_LOCATION",
                 "com.loosecannon.servicetag.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
             ),
             declared,

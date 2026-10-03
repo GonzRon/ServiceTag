@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #16 C20 (R16-Q-B): cleartext is permitted app-wide because a runtime address cannot be named here; the rule is
+     enforced in code. Home Assistant's client sends http only to an RFC 1918 IPv4 literal on the owner's captured
+     home Wi-Fi (HomeAssistantStateClient, C19), and Save as document stays https-only (#85's HopPolicy). Trust is the
+     system's certificate authorities alone: no user-installed authority and no debug override. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
