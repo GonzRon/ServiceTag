@@ -56,12 +56,14 @@ internal class SeasonSyncCommandsHarness(today: String = "2026-06-10") {
         fun names(): List<String> = calls.map { it.first }
     }
 
-    /** The token store double, recording each put's key and the commit count it saw. */
+    /** The token store double, recording each put's key and the commit count it saw; [failPuts] makes a put throw. */
     class RecordingSecrets(private val inner: SecretStore, private val commits: () -> Int) : SecretStore by inner {
         val puts = mutableListOf<Pair<String, Int>>()
+        var failPuts = false
 
         override suspend fun put(key: String, secret: Secret) {
             puts += key to commits()
+            if (failPuts) throw IllegalStateException("the token store failed")
             inner.put(key, secret)
         }
     }

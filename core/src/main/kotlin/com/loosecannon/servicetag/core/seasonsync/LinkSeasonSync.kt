@@ -17,8 +17,8 @@ import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 
 /**
- * #16 (C16) — why a link, or a resume (C17), was refused before anything was written: a code the phone maps to one
- * sentence (§5), never a sentence itself.
+ * #16 (C16) — why a link, a resume or an entity edit (C17) was refused before anything was written: a code the phone
+ * maps to one sentence (§5), never a sentence itself.
  */
 enum class SeasonSyncLinkRefusal {
     /** The asset is archived, retired or held by an open transfer (P16-36). */
@@ -61,7 +61,8 @@ data class SeasonSyncLinked(val binding: SeasonSyncBinding, val switchedFrom: Se
  * YEAR_ROUND asset is switched into MANUAL through [SetSeasonMode]'s own rules and write, at the phase it has today,
  * so its season does not change on the day it is linked; the switch row is dated today, as every switch into MANUAL
  * is, so IN_SERVICE schedules count from today (limit 14). A PRE_SERVICE strands refusal from those rules stops the
- * link with nothing written. The switch runs before the binding exists, so the season guard lets it through.
+ * link with nothing written. The switch runs before the binding exists, so it is called unguarded, as the applier's
+ * body is.
  *
  * The binding is FOLLOW, enabled, revision 1, with no status yet. After the commit the work is ensured and a fresh
  * read is asked for. Nothing here reads Home Assistant or writes a row from an answer.
