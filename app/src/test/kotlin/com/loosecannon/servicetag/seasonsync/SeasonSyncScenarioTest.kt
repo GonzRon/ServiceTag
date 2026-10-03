@@ -287,9 +287,12 @@ class SeasonSyncScenarioTest {
         graph = graph.restarted(ha)
         graph.on("2026-10-02")
         graph.seasonSyncRunner.syncNow()
+        graph.haStateReader.reads.clear()
+        graph.now += 24 * HOUR
         graph.resumeRefresh.onResume()
         graph.awaitSeasonSyncReads()
 
+        assertEquals("a cadence after the last success: the resume reads once", listOf(HELPER), graph.readEntities())
         assertEquals("no second START after the restart", once, graph.season())
         assertEquals("no recurrence restarted", schedulesSettled, graph.scheduleStates.all().toSet())
         graph.binding(HEATER).let {
