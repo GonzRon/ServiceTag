@@ -1,7 +1,11 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import kotlinx.coroutines.runBlocking
@@ -712,5 +716,81 @@ class SeasonHealthRoutesTest {
         assertEquals(archived.bodyText(), 200, archived.status)
         assertEquals("ARCHIVED", ApiJson.decodeFromString(ScheduleResponse.serializer(), archived.bodyText()).schedule.status)
         assertNotNull(archivedAt(coolant))
+    }
+
+    // --- #16: the season follows Home Assistant (C2, C15, C24) -------------------------------------
+
+    /**
+     * Links [asset] to a fictional Home Assistant entity (connection `http://192.168.0.10:8123` on the home Wi-Fi
+     * `ExampleHomeWifi`, token `fictional-token-1`) and waits for the fresh read the link asks for, which answers the
+     * fake's default "no new decision" and writes no season row. The link switches a YEAR_ROUND asset into MANUAL,
+     * in season, so an END would be accepted but for the binding.
+     */
+    private fun linked(asset: String) = runBlocking {
+        graph.saveHaConnection.run(
+            "http://192.168.0.10:8123", Secret("fictional-token-1"), null,
+            NetworkEligibility.HOME_NETWORK_ONLY, "ExampleHomeWifi", null,
+        )
+        graph.linkSeasonSync.run(AssetId(asset), "input_boolean.example_heater_in_season")
+        graph.awaitSeasonSyncReads()
+    }
+
+    private fun activations(asset: String) = runBlocking { graph.seasonActivations.forAsset(AssetId(asset)) }
+
+    /** C2: an activation on an asset whose enabled binding owns its season is the one new 409, G1's words, no row. */
+    @Test fun anActivationOnASyncedAssetIs409SeasonSyncEnabled() {
+        val heater = api.asset("Example Heater")
+        linked(heater)
+        val before = activations(heater)
+
+        val error = refused(call("POST", "/v1/assets/$heater/season", """{"action":"END"}"""), 409, "SEASON_SYNC_ENABLED")
+        assertEquals(G1, error.message)
+        assertEquals(before, activations(heater))
+    }
+
+    /** C2: a season-mode change on a synced asset is the same 409, and the mode and its rows stay. */
+    @Test fun aSeasonModeChangeOnASyncedAssetIs409SeasonSyncEnabled() {
+        val heater = api.asset("Example Heater")
+        linked(heater)
+        val before = activations(heater)
+
+        val error = refused(
+            call("POST", "/v1/assets/$heater/season-mode", """{"seasonMode":"CALENDAR","seasonStartMmdd":"11-01","seasonEndMmdd":"03-31"}"""),
+            409, "SEASON_SYNC_ENABLED",
+        )
+        assertEquals(G1, error.message)
+        assertEquals(SeasonMode.MANUAL, runBlocking { graph.assets.get(AssetId(heater))!!.seasonMode })
+        assertEquals(before, activations(heater))
+    }
+
+    /** C-3, a pin: the asset PATCH's legacy pair is not asked (a synced asset is MANUAL) and keeps the shipped 422. */
+    @Test fun theLegacyPairOnASyncedAssetStays422LegacyWriteCannotRepresent() {
+        val heater = api.asset("Example Heater")
+        linked(heater)
+        refused(
+            call("PATCH", "/v1/assets/$heater", """{"name":"Example Heater","seasonStartMmdd":"04-01","seasonEndMmdd":"10-31"}"""),
+            422, "LEGACY_WRITE_CANNOT_REPRESENT",
+        )
+    }
+
+    /** A stopped binding refuses nothing: the season routes answer as they did before #16. */
+    @Test fun aStoppedBindingAnswersAsBefore() {
+        val heater = api.asset("Example Heater")
+        linked(heater)
+        runBlocking { graph.stopSeasonSync.run(AssetId(heater)) }
+
+        val ended = call("POST", "/v1/assets/$heater/season", """{"action":"END"}""")
+        assertEquals(ended.bodyText(), 201, ended.status)
+        refused(call("POST", "/v1/assets/$heater/season", """{"action":"END"}"""), 409, "SEASON_ALREADY_ENDED")
+        val calendar = call(
+            "POST", "/v1/assets/$heater/season-mode",
+            """{"seasonMode":"CALENDAR","seasonStartMmdd":"11-01","seasonEndMmdd":"03-31"}""",
+        )
+        assertEquals(calendar.bodyText(), 200, calendar.status)
+    }
+
+    private companion object {
+        /** G1, verbatim. */
+        const val G1 = "this asset's season follows Home Assistant; stop its season sync on the phone first"
     }
 }
