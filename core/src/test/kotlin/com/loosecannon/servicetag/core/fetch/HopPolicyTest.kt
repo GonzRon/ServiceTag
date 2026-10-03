@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.fetch
 
+import com.loosecannon.servicetag.core.seasonsync.HaEndpointPolicy
 import com.loosecannon.servicetag.core.testing.FakeHostResolver
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,6 +45,14 @@ class HopPolicyTest {
             "joplin://x-callback-url/openNote?id=1",
         ),
     )
+
+    /** #16 row 14 (H8): the Home Assistant rule admits these; the downloader's rule stays https-only. */
+    @Test
+    fun httpToAPrivateLiteralIsStillNotHttps() {
+        val urls = listOf("http://192.168.0.10:8123", "http://10.0.0.1/", "http://172.16.0.1:8123")
+        for (url in urls) assertNull(HaEndpointPolicy.check(url), "#16's rule admits <$url>")
+        assertEach(FetchProblem.NotHttps, urls)
+    }
 
     @Test
     fun userinfoIsHasCredentials() = assertEach(
