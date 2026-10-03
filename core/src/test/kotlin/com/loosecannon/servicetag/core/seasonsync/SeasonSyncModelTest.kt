@@ -1,15 +1,21 @@
 package com.loosecannon.servicetag.core.seasonsync
 
+import com.loosecannon.servicetag.core.testing.InMemoryHaConnectionRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonSyncRepository
 import com.loosecannon.servicetag.core.testing.ScriptedHaStateReader
+import com.loosecannon.servicetag.core.testing.haConnectionOf
 import java.io.File
+import java.lang.reflect.Modifier
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * #16 (C4; rows 7–8) — the entity id is one URL path segment, the token prints as nothing, and no model type holds
- * a token. Every value is fictional.
+ * #16 (C4, C4a; rows 7, 8 and 73) — the entity id is one URL path segment, the token prints as nothing, no model
+ * type holds a token, and the connection's settings are exactly the contract's. Every value is fictional.
  */
 class SeasonSyncModelTest {
 
@@ -75,13 +81,15 @@ class SeasonSyncModelTest {
         .map { it.name.substringAfter('-') }
         .toSet()
 
-    /** Every field typed [Secret], and every getter or component that answers one, declared on [type]. */
+    /**
+     * Every getter or component declared on [type] that answers a [Secret]. Fields are not checked: a property typed
+     * [Secret] or `Secret?` compiles to a field of the underlying `String`, so only its getter's name shows the type.
+     */
     private fun secretMembersOf(type: Class<*>): List<String> =
-        type.declaredFields.filter { it.type == Secret::class.java }.map { "${type.name}.${it.name}" } +
-            type.declaredMethods
-                .filter { it.parameterCount == 0 && (it.name.startsWith("get") || it.name.startsWith("component")) }
-                .filter { it.name.substringAfter('-', missingDelimiterValue = "") in secretSuffixes }
-                .map { "${type.name}.${it.name}" }
+        type.declaredMethods
+            .filter { it.parameterCount == 0 && (it.name.startsWith("get") || it.name.startsWith("component")) }
+            .filter { it.name.substringAfter('-', missingDelimiterValue = "") in secretSuffixes }
+            .map { "${type.name}.${it.name}" }
 
     @Test
     fun noModelTypeHasASecretField() {
@@ -101,6 +109,44 @@ class SeasonSyncModelTest {
         assertEquals(emptyList(), offenders, "no model type of $pkg holds a Secret")
     }
 
+    /** A `val` or `var` whose declared type names [Secret]: a property, a holder such as `List<Secret>`, or a local. */
+    private val secretDeclaration = Regex("""\b(?:val|var)\s+\w+\s*:\s*[^=\n]*\bSecret\b""")
+
+    /**
+     * What the reflection guard cannot see — a `private val` typed [Secret] has no getter, and a `List<Secret>`'s
+     * getter is not mangled — the main source shows: in `seasonsync` the token crosses core only as a function
+     * parameter, never in a `val` or `var` whose declared type names it. An inferred type stays unseen.
+     */
+    @Test
+    fun noMainSourceDeclaresAValOrVarOfASecretType() {
+        for (line in listOf(
+            "    private val token: Secret,",
+            "val tokens: List<Secret> = listOf()",
+            "var maybe: Secret?",
+        )) {
+            assertTrue(secretDeclaration.containsMatchIn(line), "the scan sees \"$line\"")
+        }
+        for (line in listOf(
+            "    suspend fun put(key: String, secret: Secret)",
+            "class SaveExample(private val store: SecretStore)",
+            "value class Secret(val value: String) {",
+        )) {
+            assertFalse(secretDeclaration.containsMatchIn(line), "the scan passes \"$line\"")
+        }
+
+        val relative = "kotlin/com/loosecannon/servicetag/core/seasonsync"
+        val dir = listOf(File("src/main/$relative"), File("core/src/main/$relative")).firstOrNull { it.isDirectory }
+            ?: error("cannot find src/main/$relative from ${File(".").absolutePath}")
+        val sources = dir.listFiles { file -> file.extension == "kt" }.orEmpty().sortedBy { it.name }
+        assertTrue(sources.any { it.name == "SeasonSyncModel.kt" }, "the scan reads the model: $sources")
+        val offenders = sources.flatMap { file ->
+            file.readLines().withIndex()
+                .filter { (_, line) -> secretDeclaration.containsMatchIn(line) }
+                .map { (index, line) -> "${file.name}:${index + 1}: ${line.trim()}" }
+        }
+        assertEquals(emptyList(), offenders, "no val or var in ${dir.path} is declared with a Secret type")
+    }
+
     // The closed sets and the columns.
 
     @Test
@@ -117,6 +163,16 @@ class SeasonSyncModelTest {
         assertEquals(listOf("ON", "OFF"), HaSwitchState.entries.map { it.name })
     }
 
+    /** The instance fields [type] declares, sorted: a companion's or a data object's static field is not a column. */
+    private fun instanceFieldsOf(type: Class<*>): List<String> =
+        type.declaredFields.filter { !Modifier.isStatic(it.modifiers) }.map { it.name }.sorted()
+
+    /** A column's Kotlin name: `snake_case` to `camelCase`. */
+    private fun camel(column: String): String {
+        val parts = column.split('_')
+        return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+    }
+
     @Test
     fun theBindingCarriesExactlyTheColumnsOfItsTable() {
         val columns = listOf(
@@ -124,12 +180,108 @@ class SeasonSyncModelTest {
             "observed_changed_at", "last_success_at", "last_attempt_at", "error_kind", "error_detail", "error_at",
             "applied_action", "applied_on", "applied_at", "created_at", "updated_at",
         )
-        val camel = columns.map { column -> column.split('_').let { it.first() + it.drop(1).joinToString("") { p -> p.replaceFirstChar(Char::uppercaseChar) } } }
-        assertEquals(camel.sorted(), SeasonSyncBinding::class.java.declaredFields.map { it.name }.sorted(), "season_sync_binding (C9)")
         assertEquals(
-            listOf("baseUrl", "createdAt", "id", "updatedAt"),
-            HaConnection::class.java.declaredFields.map { it.name }.sorted(),
-            "ha_connection (C9): no token, no display name, no secret marker",
+            columns.map(::camel).sorted(),
+            instanceFieldsOf(SeasonSyncBinding::class.java),
+            "season_sync_binding (C9)",
         )
+
+        val connectionColumns = listOf(
+            "id", "base_url", "cadence", "network_eligibility", "home_network_kind", "home_network_ssid", "created_at",
+            "updated_at",
+        )
+        // home_network_kind (WIFI | WIRED) and home_network_ssid are one field's two columns (C4a, C9).
+        val oneField = mapOf("home_network_kind" to "homeNetwork", "home_network_ssid" to "homeNetwork")
+        assertEquals(
+            connectionColumns.map { oneField[it] ?: camel(it) }.distinct().sorted(),
+            instanceFieldsOf(HaConnection::class.java),
+            "ha_connection (C9): its eight columns; no token, no display name, no secret marker",
+        )
+    }
+
+    // Row 73 — the connection's settings (C4a).
+
+    @Test
+    fun theCadenceIsExactlyFourWithTheirHours() {
+        assertEquals(
+            listOf("EVERY_12_HOURS" to 12L, "DAILY" to 24L, "WEEKLY" to 168L, "MONTHLY" to 720L),
+            SyncCadence.entries.map { it.name to it.hours },
+        )
+        assertEquals(SyncCadence.DAILY, haConnectionOf().cadence, "the fixture checks daily, as a new connection does")
+    }
+
+    @Test
+    fun theHomeNetworkIsANameOrWiredAndNothingElse() {
+        assertEquals(listOf("ANY_NETWORK", "HOME_NETWORK_ONLY"), NetworkEligibility.entries.map { it.name })
+        assertEquals(listOf("Wifi", "Wired"), HomeNetwork::class.java.declaredClasses.map { it.simpleName }.sorted())
+        assertEquals(
+            listOf("ssid"),
+            instanceFieldsOf(HomeNetwork.Wifi::class.java),
+            "a name: never a BSSID, an address, a location or a time",
+        )
+        assertEquals(emptyList(), instanceFieldsOf(HomeNetwork.Wired::class.java), "Ethernet has no name")
+        assertEquals(
+            listOf("None", "Other", "Wifi", "WifiUnnamed", "Wired"),
+            CurrentNetwork::class.java.declaredClasses.map { it.simpleName }.sorted(),
+        )
+        assertEquals(listOf("ssid"), instanceFieldsOf(CurrentNetwork.Wifi::class.java))
+    }
+
+    @Test
+    fun eligibleNowFollowsTheMode() {
+        val homeWifi = CurrentNetwork.Wifi("ExampleHomeWifi")
+        val everyNetwork = listOf(
+            homeWifi,
+            CurrentNetwork.Wifi("ExampleCafeWifi"),
+            CurrentNetwork.Wifi("examplehomewifi"),
+            CurrentNetwork.Wifi("\"ExampleHomeWifi\""),
+            CurrentNetwork.WifiUnnamed,
+            CurrentNetwork.Wired,
+            CurrentNetwork.Other,
+            CurrentNetwork.None,
+        )
+        val anyNetwork =
+            haConnectionOf(baseUrl = "https://ha.example:8123", networkEligibility = NetworkEligibility.ANY_NETWORK)
+        val onHomeWifi = haConnectionOf()
+        val onWired = haConnectionOf(homeNetwork = HomeNetwork.Wired)
+        val nothingCaptured = haConnectionOf(homeNetwork = null)
+
+        val expected = everyNetwork.map { Triple("any network", anyNetwork, it) to true } +
+            everyNetwork.map { Triple("the home Wi-Fi", onHomeWifi, it) to (it == homeWifi) } +
+            everyNetwork.map { Triple("wired", onWired, it) to (it == CurrentNetwork.Wired) } +
+            everyNetwork.map { Triple("nothing captured", nothingCaptured, it) to false }
+        val wrong = expected
+            .filter { (case, eligible) -> eligibleNow(case.second, case.third) != eligible }
+            .map { (case, eligible) -> "${case.first} × ${case.third}: expected $eligible" }
+        assertEquals(emptyList(), wrong, "a hidden name, another name, a case variant or a quoted name is never home")
+    }
+
+    @Test
+    fun theDoubleRefusesHomeWithoutANetworkAndHttpWithAnyNetwork() = runTest {
+        val connections = InMemoryHaConnectionRepository(InMemorySeasonSyncRepository())
+        val https = "https://ha.example:8123"
+        val refused = listOf(
+            "the home network with nothing captured" to haConnectionOf(homeNetwork = null),
+            "any network with a captured network" to haConnectionOf(
+                baseUrl = https,
+                networkEligibility = NetworkEligibility.ANY_NETWORK,
+                homeNetwork = HomeNetwork.Wired,
+            ),
+            "http with any network" to haConnectionOf(networkEligibility = NetworkEligibility.ANY_NETWORK),
+        )
+        for ((why, connection) in refused) {
+            assertFailsWith<AssertionError>(why) { connections.upsert(connection) }
+        }
+        assertEquals(null, connections.get(), "nothing refused was kept")
+
+        for (connection in listOf(
+            haConnectionOf(),
+            haConnectionOf(homeNetwork = HomeNetwork.Wired),
+            haConnectionOf(baseUrl = https),
+            haConnectionOf(baseUrl = https, networkEligibility = NetworkEligibility.ANY_NETWORK),
+        )) {
+            connections.upsert(connection)
+            assertEquals(connection, connections.get())
+        }
     }
 }

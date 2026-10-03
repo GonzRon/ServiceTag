@@ -8,14 +8,86 @@ import com.loosecannon.servicetag.core.model.SeasonAction
  * `scheme://host[:port]`: lowercase scheme and host, no path, no trailing slash. There is no token here and no
  * marker of one: whether a token exists is the [SecretStore]'s answer alone (C9, C18), keyed by [id].
  *
+ * The connection's three settings (C4a, R16-Q-D) are the installation's, not a binding's: [cadence], how often it
+ * is checked; [networkEligibility], where the token may be sent from; and [homeNetwork], the network captured at
+ * setup (C32). Every stored row keeps two invariants, which C17's writers hold: [NetworkEligibility.HOME_NETWORK_ONLY]
+ * exactly when [homeNetwork] is not null, and an `http` [baseUrl] only with [NetworkEligibility.HOME_NETWORK_ONLY].
+ *
  * Device-local configuration: never in a ServiceTag backup, export, merge or pack (R16-Q-E).
  */
 data class HaConnection(
     val id: String,
     val baseUrl: String,
+    val cadence: SyncCadence,
+    val networkEligibility: NetworkEligibility,
+    val homeNetwork: HomeNetwork?,
     val createdAt: Long,
     val updatedAt: Long,
 )
+
+/**
+ * #16 (C4a, R16-Q-D) — how often the connection is checked: exactly these four, and no other period exists. [hours]
+ * is the requested period of the background work (C22), which may run late and is never a deadline, and the stale
+ * threshold (C21, C27). A new connection gets [DAILY] (C17).
+ */
+enum class SyncCadence(val hours: Long) {
+    EVERY_12_HOURS(12),
+    DAILY(24),
+    WEEKLY(168),
+    MONTHLY(720),
+}
+
+/**
+ * #16 (C4a, R16-Q-D) — where the token may be sent from. [ANY_NETWORK]: from any network, to an https origin the
+ * owner made reachable themselves (limit 18). [HOME_NETWORK_ONLY]: only while this phone is on the network captured
+ * at setup, [HaConnection.homeNetwork]; the one mode an http address is allowed in (C8, C19).
+ */
+enum class NetworkEligibility { ANY_NETWORK, HOME_NETWORK_ONLY }
+
+/**
+ * #16 (C4a, C32, R16-21) — the home network's identity, captured at setup: the Wi-Fi network's name as Android
+ * reports it, without its quotes, compared exactly; or [Wired] for Ethernet, which has no name. Never a BSSID, an
+ * address, a location or a time.
+ */
+sealed interface HomeNetwork {
+    data class Wifi(val ssid: String) : HomeNetwork
+
+    data object Wired : HomeNetwork
+}
+
+/**
+ * #16 (C4a, C32) — the network this phone is on as C32's reader saw it, once, just before a request: a Wi-Fi
+ * network and its name; a Wi-Fi network whose name Android hid ([WifiUnnamed]); [Wired]; [Other], any other
+ * transport; or [None], no network at all.
+ */
+sealed interface CurrentNetwork {
+    data class Wifi(val ssid: String) : CurrentNetwork
+
+    data object WifiUnnamed : CurrentNetwork
+
+    data object Wired : CurrentNetwork
+
+    data object Other : CurrentNetwork
+
+    data object None : CurrentNetwork
+}
+
+/**
+ * #16 (C4a, C19 step 1a, I10) — whether [connection]'s token may be sent from [current].
+ * [NetworkEligibility.ANY_NETWORK] is true on every network. [NetworkEligibility.HOME_NETWORK_ONLY] is true only on a
+ * Wi-Fi network whose name equals the captured one exactly, or on a wired network when the captured one is
+ * [HomeNetwork.Wired]. A hidden name is never eligible, and neither is a home-network connection with nothing
+ * captured. A name match narrows where the token goes; it cannot prove which network this is (limit 15).
+ */
+fun eligibleNow(connection: HaConnection, current: CurrentNetwork): Boolean =
+    when (connection.networkEligibility) {
+        NetworkEligibility.ANY_NETWORK -> true
+        NetworkEligibility.HOME_NETWORK_ONLY -> when (current) {
+            is CurrentNetwork.Wifi -> connection.homeNetwork == HomeNetwork.Wifi(current.ssid)
+            CurrentNetwork.Wired -> connection.homeNetwork == HomeNetwork.Wired
+            CurrentNetwork.WifiUnnamed, CurrentNetwork.Other, CurrentNetwork.None -> false
+        }
+    }
 
 /** #16 (C1) — who decides a linked asset's season: Home Assistant's answer, or the owner's forced phase. */
 enum class SyncMode { FOLLOW, FORCE_IN, FORCE_OUT }

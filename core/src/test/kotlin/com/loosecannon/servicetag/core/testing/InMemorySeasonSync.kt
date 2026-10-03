@@ -6,10 +6,13 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaStateReader
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
+import com.loosecannon.servicetag.core.seasonsync.HomeNetwork
+import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
@@ -79,7 +82,9 @@ class InMemorySeasonSyncRepository : SeasonSyncRepository, Rollbackable, Witness
 
 /**
  * #16 (C7) — the one connection in memory. [get] fails loudly if a writer ever left two rows, which R16-10 rules
- * out. [delete] hands the id to [bindings], the schema's CASCADE from `ha_connection`.
+ * out. [upsert] refuses a row that breaks C4a's two invariants, which C17's writers keep: a home-network connection
+ * exactly when a network is captured, and an http address only on the home network. [delete] hands the id to
+ * [bindings], the schema's CASCADE from `ha_connection`.
  */
 class InMemoryHaConnectionRepository(
     private val bindings: InMemorySeasonSyncRepository,
@@ -97,6 +102,17 @@ class InMemoryHaConnectionRepository(
     }
 
     override suspend fun upsert(connection: HaConnection) {
+        val eligibility = connection.networkEligibility
+        val home = when (eligibility) {
+            NetworkEligibility.ANY_NETWORK -> false
+            NetworkEligibility.HOME_NETWORK_ONLY -> true
+        }
+        if (home != (connection.homeNetwork != null)) {
+            throw AssertionError("ha_connection: $eligibility with the captured network ${connection.homeNetwork}")
+        }
+        if (connection.baseUrl.startsWith("http://") && !home) {
+            throw AssertionError("ha_connection: an http address with $eligibility")
+        }
         rows[connection.id] = connection
     }
 
@@ -160,12 +176,27 @@ class ScriptedHaStateReader : HaStateReader {
     }
 }
 
-/** A fictional connection: the canonical http fixture (C-7). */
+/**
+ * A fictional connection: the canonical http fixture (C-7), checked daily, only on the fictional home Wi-Fi (C4a).
+ * With [NetworkEligibility.ANY_NETWORK] the captured network defaults to none.
+ */
 fun haConnectionOf(
     id: String = "conn-1",
     baseUrl: String = "http://192.168.0.10:8123",
+    cadence: SyncCadence = SyncCadence.DAILY,
+    networkEligibility: NetworkEligibility = NetworkEligibility.HOME_NETWORK_ONLY,
+    homeNetwork: HomeNetwork? =
+        if (networkEligibility == NetworkEligibility.HOME_NETWORK_ONLY) HomeNetwork.Wifi("ExampleHomeWifi") else null,
     at: Long = 1_759_000_000_000L,
-): HaConnection = HaConnection(id = id, baseUrl = baseUrl, createdAt = at, updatedAt = at)
+): HaConnection = HaConnection(
+    id = id,
+    baseUrl = baseUrl,
+    cadence = cadence,
+    networkEligibility = networkEligibility,
+    homeNetwork = homeNetwork,
+    createdAt = at,
+    updatedAt = at,
+)
 
 /** A fictional binding as a link leaves it: FOLLOW, enabled, revision 1, no status yet (C16). */
 fun seasonSyncBindingOf(
