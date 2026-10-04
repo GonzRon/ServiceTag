@@ -8,7 +8,7 @@ This document explains that boundary and the Android capabilities ServiceTag ask
 
 The core rules are:
 
-- NFC tags identify Assets; they do not contain the Asset database.
+- NFC tags identify Assets; they do not contain the Asset database. The physical tag is passive, battery-free, and has no internet connection; see [NFC tag privacy and passive power](nfc-privacy.md).
 - Maintenance history remains local and auditable.
 - Derived schedule state and health are recomputed from canonical facts.
 - Files are ordinary managed files in storage controlled by the owner.
@@ -17,6 +17,12 @@ The core rules are:
 - Local scheduling and reminders are canonical; an external reminder provider is not required.
 
 ServiceTag is distinct from [NoteTag](https://github.com/GonzRon/NoteTag). ServiceTag tags identify physical Assets. NoteTag handles the separate tag-to-note/link use case.
+
+## NFC tag privacy
+
+The physical NFC tag is not an internet-connected device. It contains only a ServiceTag marker and opaque tag identity used to resolve a record in this phone's local database. Someone else who reads the tag does not receive the Asset's private record, although ordinary NFC identifiers should be treated as readable rather than secret.
+
+See [NFC tag privacy and how passive tags work](nfc-privacy.md).
 
 ## Network use
 
