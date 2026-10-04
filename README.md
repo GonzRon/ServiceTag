@@ -8,129 +8,25 @@ Put a small NFC tag on a generator, furnace, hot tub, mower, snowblower, water s
 
 The tag itself carries only a stable ServiceTag identity. The useful information stays in ServiceTag's local database, so the equipment record can grow over years without trying to squeeze mutable data onto the NFC tag. Backups preserve those identities, which means the same physical tags can keep working after a phone replacement, reinstall, or restore.
 
-ServiceTag is **local-first**. It does not require an account or a cloud service to identify equipment, keep maintenance history, calculate due work, or deliver local reminders. The phone remains the source of truth. Files can live in a folder you choose, backups can be exported and restored, and a deliberately narrow local Developer API and MCP bridge make it possible to automate larger maintenance inventories without turning the app into a hosted service.
+ServiceTag is **local-first**. It does not require an account or a cloud service to identify equipment, keep maintenance history, calculate due work, or deliver local reminders. The phone remains the source of truth. Files can live in storage you control, backups are portable, and a deliberately narrow local Developer API and MCP bridge make larger maintenance inventories automatable without turning the app into a hosted service.
 
-## More than an NFC label
+The current **ServiceTag 1.7.0** release includes maintenance scheduling and reminders, operating seasons and maintenance policy, condition and derived health, lending and ownership handoff, SupplyItems, fitted Installed Components and replacement history, documents/references on Assets and their supporting records, and optional Home Assistant operating-season synchronization.
 
-The NFC tag is the doorway; the Asset record is the product.
+## Learn more
 
-A ServiceTag Asset can describe a complete system or a child Asset that belongs to another Asset. Its Service Record keeps an auditable history of maintenance events, repairs, replacements, notes, typed measurements, meter readings, materials used, photos, manuals, receipts, and references. Quick actions make recurring work fast to record, while custom readings and profiles let different equipment collect the information that actually matters.
+ServiceTag's documentation uses **progressive disclosure**: start here, then open only the level of detail you need.
 
-Maintenance is modeled separately from history. A schedule can repeat by calendar time, by meter usage, or by whichever comes first. Related equipment can be maintained as a group. Local notifications can surface due work and let you complete, snooze, or open it from the reminder.
+- **[What ServiceTag can do today](docs/capabilities.md)** — the released feature set and product boundaries.
+- **[Local-first design, privacy, and Android permissions](docs/local-first-and-permissions.md)** — where data lives, when ServiceTag uses the network, and why permissions exist.
+- **[Home Assistant season sync](docs/home-assistant-season-sync.md)** — setup, behavior, network choices, and security boundaries.
+- **[Developer API v1](docs/api/v1.md)** and **[MCP tools](tools/servicetag-mcp/README.md)** — local workstation automation.
+- **[Building and testing](docs/building-and-testing.md)** — clone, build, JVM gates, and emulator tests.
+- **[Documentation index](docs/README.md)** — architecture, design, specifications, releases, and deeper references.
 
-ServiceTag 1.4 added the next layer of real-world equipment behavior:
+## Project status
 
-- **Operating seasons** can be year-round, calendar-based, or started and ended manually.
-- **Maintenance policy** is separate from operating season, so work can happen before a season, when a season starts, while equipment is in service, or whenever it is due.
-- **Maintenance breaks** can suppress routine work without pretending it was completed.
-- **Condition** records whether an Asset is operational, degraded, or down, with an immutable history.
-- **Health** is derived from things such as age and overdue maintenance and remains separate from condition.
-- Dashboard, maintenance, scan, and Asset-detail views consume the same canonical schedule, season, condition, and health state.
+Latest released baseline: **[ServiceTag 1.7.0](https://github.com/GonzRon/ServiceTag/releases/tag/servicetag-v1.7.0)**  
+Release details: **[1.7.0 release notes](docs/releases/1.7.0.md)**  
+Current roadmap and release sequencing: **[issue #104](https://github.com/GonzRon/ServiceTag/issues/104)**
 
-That separation matters. A snowblower may need service before winter, a hot tub may need weekly care only while its manually activated season is running, and a UPS can be marked down because of a failed battery without ServiceTag inventing a maintenance completion.
-
-## What it does today
-
-- **NFC identity and binding** — create Assets, write and verify ServiceTag tags, safely rebind or replace tags, and scan directly into the correct Asset.
-- **Asset records and hierarchy** — identity, category, make/model/serial, location, purchase/warranty information, parent systems and child Assets, archive/retirement state, operating season, condition, and health.
-- **Lending** — lend an Asset to a person or organisation picked from Android Contacts, with an optional due-back reminder; the Asset shows who has it and when it is due back, an overdue loan reaches the Dashboard, and "Mark returned" keeps the loan as history.
-- **Replace asset** — replace an Asset with a distinct successor: the old Asset is retired with its history intact, you review what carries forward, the NFC tags you choose move, and each Asset links to the other ("Replaced by …" / "Replaces …").
-- **Service history and measurements** — maintenance journal, repairs, replacements, notes, typed readings, meters, derived readings, consumables recorded on events, and configurable quick-action profiles.
-- **Maintenance scheduling and local reminders** — time and meter rules, maintenance groups, due/overdue state, snooze/postpone, seasonal service policy, maintenance breaks, completion flows, and reminder-health diagnostics.
-- **Supply items** — a catalog of the products your equipment takes, such as filters, batteries, belts, cartridges, chemicals and fluids, each with its part number, preferred unit and specifications; an Asset says which supply items it takes and in what role, and a quick action's or journal entry's material line can name one.
-- **Installed components** — record what is fitted inside an Asset, one unit inside another, with its install date, the supply item it is and what it is made of; replacing or removing one keeps it as history.
-- **Documents and references** — attach photos, manuals, receipts and other files; save web/reference links; share a document, image, URL, or note into an Asset from Android's share sheet, and a document, image or URL into a supply item or an installed component too. Files and links belong to an Asset, a supply item or an installed component; a supply item's are kept once and reached from everywhere it is used.
-- **Save as document** — turn an Asset's https web link into a real attachment: ServiceTag downloads it when you tap it on the phone, or when your paired workstation asks through the Developer API while its screen is open, checks that its contents match a supported format (PDF; PNG, JPEG, GIF, WebP; RTF; DOC, XLS, PPT; DOCX, XLSX, PPTX; ODT, ODS, ODP; TXT, Markdown, CSV, TSV), and keeps where it came from; a web or login page is never saved.
-- **Backup, restore, and merge foundations** — export logical backups with stable IDs and attachment artifacts, restore onto a replacement installation, and use conflict-safe additive merge machinery without silently overwriting existing rows.
-- **Transfer Packs** — when equipment changes hands, select the Assets that are leaving, export their history, documents and NFC identities as a Transfer Pack, share it to another ServiceTag that imports it, and mark them transferred out here; a later pack can bring an Asset back.
-- **Local automation** — a loopback-only Developer API while its screen is open, plus the workstation-side MCP tooling under [`tools/servicetag-mcp/`](tools/servicetag-mcp/README.md). A paired workstation can also add, read and amend an Asset's documents, replace an Asset, and ask the phone to Save as document — so a workstation that can create a web link can have the phone download any public https document, under Save as document's rules ([Developer API v1](docs/api/v1.md)).
-
-## Where it is going
-
-The roadmap of record is [issue #76](https://github.com/GonzRon/ServiceTag/issues/76).
-
-ServiceTag 1.5.0 completed the post-1.4 work: reminder and developer-surface reliability, better handling when an existing Asset becomes seasonal, UI/NFC polish, persistent Asset categories and filters, clearer health/NFC status in the Assets list, better key-document handling, and the **Lending**, **Transfer Packs**, **Replace asset** and **Save as document** capabilities listed above ([release notes](docs/releases/1.5.0.md)).
-
-Transfer Packs, shipped in 1.5.0, cover cases such as selling a house where some equipment stays behind (see **Transfer Packs** above). They reuse the existing backup, artifact, merge, and NFC identity machinery rather than a second synchronization system.
-
-ServiceTag 1.6.0 lets a paired workstation do the jobs that used to need the phone in hand — an Asset's documents, Save as document and Replace asset — gives a web link a document role, and starts a share into ServiceTag with the Assets tab's own searchable list ([release notes](docs/releases/1.6.0.md)).
-
-ServiceTag 1.7.0 adds a catalog of supply items with the assets that take them, installed components — what is fitted inside an Asset, with its replacement history — files and links that belong to a supply item or an installed component, with Share to all three, and an operating season that can follow Home Assistant ([release notes](docs/releases/1.7.0.md)).
-
-Larger ideas such as richer backup conflict resolution, telemetry/BLE ingestion, Home Assistant integrations beyond the season sync below, and LLM-assisted equipment research remain later work rather than prerequisites for the core maintenance app.
-
-## Local-first by design
-
-ServiceTag is intentionally useful on one phone with no account and no backend.
-
-That means:
-
-- NFC tags identify Assets; they do not contain the Asset database.
-- Maintenance history remains local and auditable.
-- Derived schedule state and health are recomputed from canonical facts rather than authored as mutable history.
-- Files are ordinary files in storage you control.
-- Backups are explicit and portable.
-- Automation uses the same application use cases as the UI instead of bypassing them.
-- External reminder-provider/Todoist support is not part of the active roadmap; ServiceTag's local scheduler and reminders are canonical.
-
-ServiceTag is also distinct from [NoteTag](https://github.com/GonzRon/NoteTag). ServiceTag tags identify physical Assets. NoteTag handles the separate tag-to-note/link use case.
-
-### Home Assistant season sync
-
-An Asset's operating season can follow one Home Assistant on/off helper — a heater's heating season, say, set by your own automation. It is optional and does nothing until you connect: Settings › Utilities › **Home Assistant** takes the server address and a long-lived access token from a Home Assistant user made for ServiceTag, without administrator rights; then **Link to Home Assistant** on an Asset's season card takes the helper's entity ID.
-
-- **What the phone reads.** One entity's state, by an authenticated `GET` from the phone to the address you entered — outbound only. `on` starts the season and `off` ends it through the ordinary Start season and End season, dated the day the phone applies it, and only when the answer differs from the Asset's season today; any other answer changes nothing, and the season card says why. **Follow Home Assistant**, **Force in season** and **Force out of season** choose who decides, and **Sync now** checks at once.
-- **How often.** Every 12 hours, Once a day (the default), Once a week or Once a month — a requested interval, never a deadline. The phone checks when you open or return to the app and the interval has passed without a successful check, on Sync now, and by Android's periodic background work where your settings allow it.
-- **Where.** **Any network** is for an https:// address you have made reachable from outside your home, and asks Android for nothing. **Only on this home Wi-Fi** sends the token only after the phone confirms it is on the Wi-Fi you captured, and is the one choice that allows http:// (to a private IPv4 address); it needs precise location, because Android shows a Wi-Fi network's name only with it. Under it, **Background checks on this home network** is Off by default; On asks for background location as well, and refused or withdrawn it falls back to Off's behaviour.
-- **The token** stays on this phone, encrypted with a key in the Android Keystore, in storage Android never backs up. It is in no ServiceTag backup, export, merge or Transfer Pack, on no API or MCP answer, and in no log; the connection and the links are this phone's own as well. After a restore through Android's own backup, the phone asks for the token again and sends nothing until it has it.
-- **From a workstation**, the read-only `GET /v1/assets/{id}/season-sync` ([Developer API v1](docs/api/v1.md)) and the MCP tool `get_season_sync` show a link's state — never the address, the home Wi-Fi's name or the token.
-
-The setup, a fictional example and the limits are in [Home Assistant season sync](docs/home-assistant-season-sync.md).
-
-### Permissions
-
-- **Notifications** (`POST_NOTIFICATIONS`) — asked at the point of need since 1.2, never at launch.
-- **NFC** and **RECEIVE_BOOT_COMPLETED** — declared, with no runtime request: NFC reads and writes tags, and the boot broadcast re-arms the daily reminder check.
-- **INTERNET** — used by the Developer API, because Android gates creating even a loopback socket on it, and by ServiceTag's two outbound uses: **Save as document**, an https download of a reference's document, made when you tap it on the phone, or when your paired workstation asks through the Developer API while its screen is open; and the **Home Assistant season sync** (Settings › Utilities › Home Assistant, [above](#home-assistant-season-sync)), authenticated reads at the address you entered: one on/off entity's state, or the API root for Test connection. On standard Android it is install-time and cannot be denied; some hardened Android builds let the user revoke it. There is no runtime request: the Developer API screen, Save as document and the Home Assistant screen each explain a denial and link to the app's settings page.
-- **Precise and approximate location** (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`) — asked together, by the Home Assistant screen (and again from an Asset's season card, Allow again, after a withdrawal), only when you choose "Only on this home Wi-Fi": Android shows the connected Wi-Fi's name only to an app with precise location, and ServiceTag reads that name, never where you are. An approximate grant counts as none. "Any network" asks for nothing.
-- **Background location** (`ACCESS_BACKGROUND_LOCATION`) — asked only when you turn "Background checks on this home network" On, after the precise-location grant; on Android 11 and later you choose "Allow all the time" on the app's settings page. Refused or withdrawn, background checks pause and ServiceTag checks when you open it and on Sync now.
-- **ACCESS_WIFI_STATE** — declared, install-time, with no runtime request: the other half of reading the connected Wi-Fi's name for "Only on this home Wi-Fi".
-- **The attachments folder** — not a permission but a folder-picker grant, for the folder you choose and nothing else.
-- **A shared file** — not a permission but a temporary read grant that comes with the share.
-- **Merged from libraries** — `FOREGROUND_SERVICE`, `WAKE_LOCK` and `ACCESS_NETWORK_STATE` (WorkManager's backstop for reminders; ServiceTag also declares `ACCESS_NETWORK_STATE` itself, install-time, for the Home Assistant season sync's network check), and AndroidX's signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. None is requested at runtime.
-- **ACCESS_LOCAL_NETWORK** — Android 17 adds and grants it implicitly to an app that declares INTERNET and targets API 36, as ServiceTag does; ServiceTag never requests it.
-
-## Build
-
-ServiceTag is an Android/Compose application with a pure-Kotlin `:core` domain module and the shared `nfc-tag-core` library as a git submodule.
-
-```bash
-git clone --recurse-submodules https://github.com/GonzRon/ServiceTag.git
-cd ServiceTag
-./gradlew :app:assembleDebug
-```
-
-The main local/CI gate is:
-
-```bash
-./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug
-```
-
-Instrumented tests run on an emulator, not on a phone holding real data:
-
-```bash
-ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest
-```
-
-## Project references
-
-- [Post-1.4 roadmap — #76](https://github.com/GonzRon/ServiceTag/issues/76)
-- [Developer API v1](docs/api/v1.md)
-- [ServiceTag MCP tools](tools/servicetag-mcp/README.md)
-- [Home Assistant season sync](docs/home-assistant-season-sync.md)
-- [1.4 seasons, service policy, condition and health specification](docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md)
-- [1.3 Android share-intake specification](docs/superpowers/specs/2026-09-23-servicetag-share-intake.md)
-- [1.2 operational-maintenance specification](docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md)
-- [Versioning and release policy](docs/versioning.md)
-
-ServiceTag began as the maintenance half of the older noteNFC project. The 2026 product split moved note/link tagging into NoteTag and the shared NFC mechanics into `nfc-tag-core`, leaving ServiceTag focused on one job: giving physical equipment a durable identity and a maintenance memory that stays useful over its lifetime.
+ServiceTag is distinct from [NoteTag](https://github.com/GonzRon/NoteTag): ServiceTag tags identify physical equipment and open its maintenance record; NoteTag handles the separate tag-to-note/link use case.
