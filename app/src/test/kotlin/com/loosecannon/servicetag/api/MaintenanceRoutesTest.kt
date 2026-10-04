@@ -1836,6 +1836,39 @@ class MaintenanceRoutesTest {
         assertEquals("bad_request", nowhere.code())
     }
 
+    /**
+     * #94 (1.7.1): a schedule body with a key and no value is the shipped 400 `bad_request` on the
+     * create and on the PATCH — never the 500 the raw map read used to throw — and nothing is
+     * written. A missing comma between two pairs was already the 400 on these two routes (the raw
+     * read refused it before the typed decoder could take it) and stays one; a body that is JSON but
+     * not an object keeps the shipped 400 too.
+     */
+    @Test fun aMalformedScheduleBodyIs400OnCreateAndPatchAndWritesNothing() {
+        val asset = createAsset("Pump A")
+        val id = created(scheduleBody(asset))
+        val before = runBlocking { graph.schedules.all() }
+
+        val keyWithNoValue = listOf("""{"title":}""", """{"title": }""", """{"providers":}""")
+        val missingComma = listOf(
+            """{"title":"Filter change" "targetAssetId":"$asset"}""",
+            """{"providers":null "title":"Filter change"}""",
+        )
+        val notAnObject = listOf("[]", "\"x\"", "null", "1")
+        for (body in keyWithNoValue + missingComma + notAnObject) {
+            val create = call("POST", "/v1/schedules", body)
+            assertEquals(body + " " + create.text(), 400, create.status)
+            assertEquals(body, "bad_request", create.code())
+            val patch = call("PATCH", "/v1/schedules/$id", body)
+            assertEquals(body + " " + patch.text(), 400, patch.status)
+            assertEquals(body, "bad_request", patch.code())
+        }
+        // The 400 for a non-object body is the map decoder's own, as it was before #94.
+        val list = call("POST", "/v1/schedules", "[]")
+        assertTrue(list.text(), "Expected start of the object" in list.errorDetail().message)
+
+        assertEquals(before, runBlocking { graph.schedules.all() })
+    }
+
     // --- 1.4.1 (#80, R2): the provider repair's two routes ------------------------------------
 
     private val repairPlanPath = "/v1/repairs/schedule-providers/plan"

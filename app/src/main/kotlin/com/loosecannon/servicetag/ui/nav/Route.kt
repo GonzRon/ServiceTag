@@ -131,10 +131,24 @@ sealed interface Route : NavKey {
 
     /**
      * 1.2 — the Maintenance destination (spec §2.6, the navigation ruling): due work, schedules
-     * including the paused ones the dashboard deliberately omits, maintenance groups and reminder
-     * health. The third and last tab.
+     * including the paused ones the dashboard deliberately omits, and since 1.7.1 (#103) one grouped
+     * section whose three rows push [MaintenanceGroups], [Supplies] and [InstalledComponents]. The
+     * third and last tab. Reminder health is no longer a row of it; its health badge still pushes
+     * [ReminderHealth], as the Dashboard's does.
      */
     @Serializable data object Maintenance : Route
+
+    /**
+     * #103 (1.7.1) — every maintenance group, archived included, with the create row; the list B15 drew
+     * inline on the Maintenance tab, pushed from the tab's groups row. Never a fourth tab.
+     */
+    @Serializable data object MaintenanceGroups : Route
+
+    /**
+     * #103 (1.7.1) — every current installed component of every asset, read-only, pushed from the
+     * Maintenance tab's third row; a row opens its asset's detail, where the component is managed.
+     */
+    @Serializable data object InstalledComponents : Route
 
     /**
      * One schedule, in full. Reached from a due row, the Schedules list and the schedule deep link.
@@ -179,7 +193,11 @@ sealed interface Route : NavKey {
     /** #15 (C31) — the SupplyItem editor; new when [id] is null. */
     @Serializable data class SupplyEdit(val id: String?) : Route
 
-    /** #27's findings and their repairs, under Maintenance. */
+    /**
+     * #27's findings and their repairs. Since 1.7.1 (#103) a pushed destination reached from
+     * Settings › Utilities › Reminder health and from the Dashboard's and the Maintenance tab's
+     * health badge — no longer a row of the Maintenance tab.
+     */
     @Serializable data object ReminderHealth : Route
 
     /**

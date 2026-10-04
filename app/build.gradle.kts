@@ -199,6 +199,9 @@ tasks.withType<Test>().configureEach {
         // VersionAgreementTest reads these too. Without them a README-only commit was answered by
         // the cached result: 966aa91 broke three of its cases while CI stayed green.
         root.file("README.md"),
+        // 1.7.1: the capability lines moved from the README to this page on 2026-10-04, and the
+        // cases that read them moved with it.
+        root.file("docs/capabilities.md"),
         root.file("docs/versioning.md"),
         root.dir("docs/design").asFileTree,
         root.dir("docs/api").asFileTree,

@@ -8,6 +8,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.maintenance.REMINDER_HEALTH_TITLE
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -26,6 +27,9 @@ import org.junit.runner.RunWith
  * the only way to start the listener at all — there is deliberately no deep link to it.
  *
  * #74 adds a fourth, Categories: the one way to rename or delete the owner's own categories.
+ *
+ * #103 (1.7.1) adds a fifth, Reminder health: the page left the Maintenance tab, so this row and
+ * the health badge are its only doors.
  */
 @RunWith(AndroidJUnit4::class)
 class SettingsBackupEntryTest {
@@ -45,6 +49,7 @@ class SettingsBackupEntryTest {
                     onBackup = { backupTapped++ },
                     onDeveloperApi = {},
                     onCategories = {},
+                    onReminderHealth = {},
                     onHomeAssistant = {},
                 )
             }
@@ -70,6 +75,7 @@ class SettingsBackupEntryTest {
                     onBackup = {},
                     onDeveloperApi = { apiTapped++ },
                     onCategories = {},
+                    onReminderHealth = {},
                     onHomeAssistant = {},
                 )
             }
@@ -98,6 +104,7 @@ class SettingsBackupEntryTest {
                     onBackup = {},
                     onDeveloperApi = {},
                     onCategories = { categoriesTapped++ },
+                    onReminderHealth = {},
                     onHomeAssistant = {},
                 )
             }
@@ -109,5 +116,33 @@ class SettingsBackupEntryTest {
         rule.onNodeWithText("Categories").performScrollTo().performClick()
 
         assertEquals(1, categoriesTapped)
+    }
+
+    /** #103 (1.7.1; P171-2): the fifth Utilities row, after Categories, calls its seam. */
+    @Test fun reminderHealthRowIsPresentAndInvokesOnReminderHealth() {
+        val graph = AppGraph(ApplicationProvider.getApplicationContext())
+        var healthTapped = 0
+
+        rule.setContent {
+            ServiceTagTheme {
+                SettingsScreen(
+                    graph = graph,
+                    onBack = {},
+                    onReadTag = {},
+                    onBackup = {},
+                    onDeveloperApi = {},
+                    onCategories = {},
+                    onReminderHealth = { healthTapped++ },
+                    onHomeAssistant = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        // Below the fold, like Categories: scrolled to first.
+        rule.onNodeWithText(REMINDER_HEALTH_TITLE).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText(REMINDER_HEALTH_TITLE).performScrollTo().performClick()
+
+        assertEquals(1, healthTapped)
     }
 }
