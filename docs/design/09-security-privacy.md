@@ -8,12 +8,16 @@ local-first app; nothing enterprise-grade is proposed.
 The adversary is (a) anyone who can present an NFC tag or send an intent to the phone, (b) any
 app on the same phone that can register a custom scheme or read exported components, (c) whoever
 obtains a backup file or the phone's storage, and (d) the user's own mistakes. There is no
-server, no account, and no multi-user sharing, so network-facing risk is limited to the optional
-Todoist client.
+ServiceTag backend, no required account, and no multi-user sharing. The original design's network-facing
+surface was the optional Todoist client.
 
-> **Amended 2026-10-03 (#16).** The optional Home Assistant season sync adds a network-facing surface: an
-> authenticated read from the owner's own Home Assistant, which the owner sets up and can disconnect at any time
-> (the **Home Assistant token** and **Location permissions** rows below).
+> **Amended 2026-10-04 (#85, #16, #101).** The released app has two additional intentional outbound
+> network surfaces. **Save as document** (#85) performs an explicit HTTPS download of a reference only when
+> the owner asks ServiceTag to materialize it (or when the owner's paired workstation asks through the
+> foreground Developer API). **Home Assistant season sync** (#16) performs authenticated reads from the
+> Home Assistant address the owner configured. Neither changes the local-first source-of-truth model; the
+> Developer API listener itself remains loopback-only. See the current user-facing network/permission inventory
+> in `docs/local-first-and-permissions.md`.
 
 ## Surface-by-surface analysis
 
@@ -41,10 +45,13 @@ Todoist client.
 ## Privacy statement to include in the app
 
 - No account, no server, no telemetry.
-- Data leaves the device only when the user exports a backup, attaches a cloud folder, or connects
-  Todoist (task titles, due dates, and a deep link are sent; measurements are not).
-- **Amended 2026-10-03 (#16):** data also leaves the device when the owner connects Home Assistant: the access token
-  and a linked entity ID go to the Home Assistant address the owner entered, to read that entity's on/off state.
+- Data leaves the device when the user explicitly exports/shares data or enables a network-backed workflow.
+  Historical examples include an exported backup, a cloud-backed attachment destination, or Todoist where configured.
+- **Amended 2026-10-04 (#85, #16, #101):** **Save as document** sends an HTTPS request to the reference URL
+  the owner chose in order to download that document; **Home Assistant season sync** sends the access token
+  and linked entity ID only to the Home Assistant address the owner configured in order to read that entity's
+  on/off state. These are optional, user-initiated/configured outbound flows; ordinary NFC identification,
+  maintenance history, scheduling and reminders do not require a ServiceTag cloud service.
 - NFC tags contain an opaque identifier only.
 
 ## Items deliberately not done
