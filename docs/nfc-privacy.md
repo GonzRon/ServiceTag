@@ -109,7 +109,22 @@ For the broader application/network boundary, see [Local-first design, privacy, 
 
 ServiceTag's ordinary NFC tags are designed as convenient physical identifiers, not high-security authentication tokens.
 
-If another person can physically get close enough to the tag with an NFC reader, you should assume they can read the tag's non-secret identifier. With ordinary writable NFC tags, a person with physical access and suitable NFC-writing software may also be able to alter or overwrite the tag.
+If another person can physically get close enough to the tag with an NFC reader, you should assume they can read the tag's non-secret identifier.
+
+By default, an ordinary writable NFC tag can also be rewritten by someone who has physical access and suitable NFC-writing software. **ServiceTag can prevent that on compatible tags by permanently locking the tag read-only when you write it.** The Write Tag screen offers **Lock permanently** and gives an explicit irreversible warning before enabling it.
+
+ServiceTag does not lock first and hope the write succeeded. It writes the intended ServiceTag record, reads it back and verifies it, and only then applies the permanent read-only lock. If the tag first has to be formatted, ServiceTag waits until the later verified write before locking it.
+
+Once successfully locked:
+
+- the ServiceTag identifier can still be read normally;
+- the tag continues to work as a ServiceTag tag;
+- its NFC contents can no longer be rewritten or reused;
+- ServiceTag itself will also treat it as read-only.
+
+This is a useful option for a tag that is being installed permanently on equipment and whose identity should not be casually replaced. **The tradeoff is permanent:** a locked tag cannot later be repurposed for a different Asset. Not every NFC tag supports the Android read-only operation, so ServiceTag can only lock tags whose hardware reports that capability.
+
+Locking protects the tag against later rewriting; it does **not** make the identifier secret. Anyone close enough with a compatible NFC reader may still read the tag's non-secret ServiceTag identifier.
 
 That does **not** give them the ServiceTag database on your phone.
 
@@ -117,7 +132,7 @@ It does mean you should think of the NFC tag the same way ServiceTag does:
 
 > **The tag tells your phone which local record to open. It is not where the private record lives.**
 
-If a tag is damaged, removed, or overwritten, the Asset's maintenance history remains in ServiceTag. The tag can be replaced or rebound through ServiceTag's NFC workflows.
+If an **unlocked** tag is damaged, removed, or overwritten, the Asset's maintenance history remains in ServiceTag. The tag can be replaced or rebound through ServiceTag's NFC workflows. If you permanently locked the old tag, its contents cannot be changed; replacing the physical tag is the appropriate path if you later need a different tag.
 
 ## What protects the private information?
 
