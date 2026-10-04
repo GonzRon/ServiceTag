@@ -16,6 +16,11 @@
     <!-- localizedMonthDay: the same date without the year ("1 Mar"). -->
     <string name="format_date_month_day">d MMM</string>
     <!--
+      localizedDateTime: a moment the owner reads (the last backup, the last Home Assistant check), as a
+      java.time pattern. The language's own date order and its usual clock; never a numeric ISO-style stamp.
+    -->
+    <string name="format_date_time_display">d MMM uuuu, HH:mm</string>
+    <!--
       Not words: the ISO 639 code of the language this directory is written in ("en" here, "ru" in values-ru). The
       app picks plural forms by this language's rules (AndroidLocalizedText), so a phone set to a language without
       its own pack, which shows these English words, still reads "21 days" and never "21 day".

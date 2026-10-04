@@ -49,6 +49,11 @@ data class TransferImportState(
     val duplicates: List<String> = emptyList(),
     /** P77-43; or P77-44 and a P77-45 per bound tag; or a P77-67 per asset not brought back. */
     val outcome: List<String> = emptyList(),
+    /**
+     * What [outcome] says, as the use case decided it. The screen styles the lines by this and never by their words
+     * (#102): "already here" is information, a conflict or an asset not brought back is a refusal.
+     */
+    val outcomeKind: TransferImportOutcome = TransferImportOutcome.READY,
     val importEnabled: Boolean = false,
     val refusal: String? = null,
     val done: String? = null,
@@ -131,6 +136,7 @@ class TransferImportViewModel(
                 comingBack = preview.returning.map { asset -> TransferImportStrings.comingBack(asset.name) },
                 duplicates = preview.duplicates.map { d -> TransferImportStrings.duplicate(d.incoming, d.local) },
                 outcome = outcome,
+                outcomeKind = preview.outcome,
                 importEnabled = preview.importable,
             )
         }

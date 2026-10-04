@@ -58,6 +58,37 @@ class UiLiteralGuardTest {
         )
     }
 
+    /**
+     * #102 (PR #106 review): behaviour never keys on rendered text. A comparison with a localized getter — the screen
+     * styling a line because it equals "Already here", a picker mapping a chosen label back to a value — reads the
+     * owner's language as data: it breaks when a name happens to match the words, and when a retained view model
+     * holds a sentence rendered in the language before a change. Carry a typed value and render it at the edge.
+     * A qualifier that is an enum class (`TransferImportOutcome.ALREADY_HERE`) is a value, not words, and is allowed.
+     */
+    @Test fun noBehaviourKeysOnRenderedText() {
+        val app = sources.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        val core = listOf(File(CORE_SOURCES), File("../$CORE_SOURCES"))
+            .firstOrNull { it.isDirectory }?.walkTopDown()?.filter { it.isFile && it.extension == "kt" }?.toList().orEmpty()
+        val getters = app.flatMap { file -> GETTER.findAll(file.readText()).map { it.groupValues[1] } }.toSet()
+        val enums = (app + core).flatMap { file -> ENUM.findAll(file.readText()).map { it.groupValues[1] } }.toSet()
+        assertTrue("the scan found no localized getters; it would prove nothing", getters.size > 100)
+
+        val names = getters.joinToString("|")
+        val comparison = Regex("""(?:==|!=)\s*(?:(\w+)\.)?($names)\b|(?<![\w.])(?:(\w+)\.)?($names)\s*(?:==|!=)""")
+        val offenders = app.sortedBy { it.path }.flatMap { file ->
+            file.readLines().withIndex()
+                .filterNot { (_, line) -> COMMENT_LINE.containsMatchIn(line) }
+                .filter { (_, line) ->
+                    comparison.findAll(line).any { match ->
+                        val qualifier = match.groupValues[1].ifEmpty { match.groupValues[3] }
+                        qualifier.isEmpty() || qualifier !in enums
+                    }
+                }
+                .map { (at, line) -> "${file.relativeTo(sources).invariantSeparatorsPath}:${at + 1}: ${line.trim()}" }
+        }
+        assertEquals("compare typed values, never rendered words (#102)", emptyList<String>(), offenders)
+    }
+
     @Test fun theHeuristicFlagsProseAndSparesCode() {
         assertEquals(listOf("Delete schedule"), flagged("""    Text("Delete schedule")"""))
         assertEquals(listOf("Cancel"), flagged("""internal const val CANCEL = "Cancel""""))
@@ -73,6 +104,11 @@ class UiLiteralGuardTest {
 
     private companion object {
         const val SOURCES = "src/main/kotlin/com/loosecannon/servicetag"
+        const val CORE_SOURCES = "core/src/main/kotlin"
+
+        /** A catalog entry that renders words: `val NAME: String get() = localized(...)`. */
+        val GETTER = Regex("""\bval ([A-Z][A-Z0-9_]+): String get\(\) = localized""")
+        val ENUM = Regex("""\benum class (\w+)""")
 
         /** Packages whose values are wire, storage or codec values, never words (#102). */
         val LANGUAGE_NEUTRAL = setOf("api", "data")

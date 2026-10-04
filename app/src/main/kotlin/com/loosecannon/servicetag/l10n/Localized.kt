@@ -4,7 +4,10 @@ import androidx.annotation.BoolRes
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import com.loosecannon.servicetag.R
+import java.math.BigDecimal
+import java.text.DecimalFormatSymbols
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.ServiceLoader
@@ -86,6 +89,19 @@ fun localizedDate(date: LocalDate): String {
     return date.format(DateTimeFormatter.ofPattern(text.string(R.string.format_date_display), text.locale))
 }
 
+/** A stored ISO day ("2026-04-15") drawn with [localizedDate]; text that is not an ISO day is shown as it is. */
+fun localizedDate(isoDay: String): String =
+    runCatching { localizedDate(LocalDate.parse(isoDay)) }.getOrDefault(isoDay)
+
+/**
+ * A moment the owner reads — the last backup, the last Home Assistant check — in the language's own
+ * `format_date_time_display` pattern ("1 Mar 2026, 09:30" in English), never a numeric ISO-style stamp.
+ */
+fun localizedDateTime(dateTime: LocalDateTime): String {
+    val text = AppText.current
+    return dateTime.format(DateTimeFormatter.ofPattern(text.string(R.string.format_date_time_display), text.locale))
+}
+
 /** A day and month without the year, [localizedDate]'s companion ("1 Mar" in English). */
 fun localizedMonthDay(date: LocalDate): String {
     val text = AppText.current
@@ -98,3 +114,41 @@ fun localizedMonthDay(date: LocalDate): String {
  */
 fun localizedList(items: Iterable<String>): String =
     items.joinToString(AppText.current.string(R.string.format_list_separator))
+
+/** The rendering language's decimal separator: "." in English, "," in German, French or Russian. */
+fun localizedDecimalSeparator(): Char = DecimalFormatSymbols.getInstance(AppText.current.locale).decimalSeparator
+
+/**
+ * A number the owner reads — a reading, a quantity, a file size — with the language's decimal separator and no
+ * grouping: [decimals] digits after the separator, or as few as the value needs when null ("7.25" in English, "7,25"
+ * in German). Storage, the API and tags keep the number itself and never come through here.
+ */
+fun localizedDecimal(value: Double, decimals: Int? = null): String {
+    if (!value.isFinite()) return value.toString()
+    val locale = AppText.current.locale
+    if (decimals != null) return String.format(locale, "%.${decimals.coerceAtLeast(0)}f", value)
+    val plain = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
+    return plain.replace('.', DecimalFormatSymbols.getInstance(locale).decimalSeparator)
+}
+
+/**
+ * Owner-typed decimal text as a number, or null when it is not one. The language's own separator is read ("0,5" in
+ * German, "0.5" in English), so whatever [localizedDecimal] drew reads back. Where the separator is a comma, a dot
+ * is also read as the decimal point unless it could be a thousands mark: "0.5" is a half, but "45.000" — forty-five
+ * thousand to a German reader — is refused rather than misread as 45. Grouping is never read.
+ */
+fun parseLocalizedDecimal(text: String): Double? {
+    val trimmed = text.trim()
+    val separator = localizedDecimalSeparator()
+    if (separator == '.') return trimmed.toDoubleOrNull()
+    val normalized = when {
+        separator in trimmed -> if ('.' in trimmed) return null else trimmed.replace(separator, '.')
+        '.' in trimmed -> {
+            val after = trimmed.substringAfterLast('.')
+            if (trimmed.count { it == '.' } > 1 || (after.length == 3 && after.all(Char::isDigit))) return null
+            trimmed
+        }
+        else -> trimmed
+    }
+    return normalized.toDoubleOrNull()
+}

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.usecase.TransferImportOutcome
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.share.IntakeStrings
 import com.loosecannon.servicetag.ui.asset.FieldLabel
@@ -134,7 +135,8 @@ private fun Preview(state: TransferImportState, onImport: () -> Unit, onCancel: 
     state.comingBack.forEach { QuietLine(it) }
     state.duplicates.forEach { QuietLine(it) }
     state.outcome.forEach { line ->
-        if (line == TransferImportStrings.ALREADY_HERE) {
+        // By what the outcome is, never by its words (#102): "already here" informs, the rest refuse.
+        if (state.outcomeKind == TransferImportOutcome.ALREADY_HERE) {
             Text(text = line, style = MaterialTheme.typography.bodyMedium)
         } else {
             ErrorLine(line)

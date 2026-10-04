@@ -118,10 +118,14 @@ class LocalizationCoverageTest {
         val day = LocalDate.of(2026, 3, 1)
         assertEquals("1 Mar 2026", day.format(DateTimeFormatter.ofPattern(english.strings.getValue("format_date_display"), english.locale)))
         assertEquals("1 Mar", day.format(DateTimeFormatter.ofPattern(english.strings.getValue("format_date_month_day"), english.locale)))
+        assertEquals(
+            "1 Mar 2026, 09:30",
+            day.atTime(9, 30).format(DateTimeFormatter.ofPattern(english.strings.getValue("format_date_time_display"), english.locale)),
+        )
         val problems = packs.flatMap { pack ->
-            listOf("format_date_display", "format_date_month_day").mapNotNull { name ->
+            listOf("format_date_display", "format_date_month_day", "format_date_time_display").mapNotNull { name ->
                 val pattern = pack.strings[name] ?: return@mapNotNull null
-                runCatching { day.format(DateTimeFormatter.ofPattern(pattern, pack.locale)) }
+                runCatching { day.atTime(9, 30).format(DateTimeFormatter.ofPattern(pattern, pack.locale)) }
                     .fold({ if (it.isBlank()) "${pack.locale.toLanguageTag()}/$name renders nothing" else null }) {
                         "${pack.locale.toLanguageTag()}/$name is not a date pattern: ${it.message}"
                     }

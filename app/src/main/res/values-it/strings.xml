@@ -3,6 +3,7 @@
 <resources>
     <string name="format_date_display">d MMM uuuu</string>
     <string name="format_date_month_day">d MMM</string>
+    <string name="format_date_time_display">d MMM uuuu, HH:mm</string>
     <string name="format_language">it</string>
     <string name="format_list_separator">", "</string>
 </resources>

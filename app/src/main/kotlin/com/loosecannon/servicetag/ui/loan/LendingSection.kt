@@ -110,7 +110,7 @@ private fun OpenLoan(
     val (lentTo, lentOn, due) = block.lines
     BodyLine(lentTo)
     QuietLine(lentOn)
-    if (due == NO_DUE_DATE) QuietLine(due) else BodyLine(due)
+    if (block.hasDueDate) BodyLine(due) else QuietLine(due)
     block.reminderLine?.let { QuietLine(it) }
     block.notes.takeIf { it.isNotBlank() }?.let { BodyLine(it) }
     if (LoanAction.OPEN_CONTACT in block.actions) {

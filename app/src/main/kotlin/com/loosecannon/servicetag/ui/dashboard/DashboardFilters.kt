@@ -162,20 +162,22 @@ fun DashboardFilterRow(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // #102: each picker hands back the value picked — null for "All" — and never its words, so an owner's
+        // category named like the "All" choice, or a language change while the menu is open, cannot be misread.
         FilterPicker(
             label = CATEGORY_LABEL,
-            value = filters.category ?: ALL_CATEGORIES,
-            options = listOf(ALL_CATEGORIES) + filters.categories,
-            onPick = { picked -> onCategory(picked.takeIf { it != ALL_CATEGORIES }) },
+            value = filters.category,
+            options = listOf<String?>(null) + filters.categories,
+            labelOf = { it ?: ALL_CATEGORIES },
+            onPick = onCategory,
             modifier = Modifier.weight(1f),
         )
         FilterPicker(
             label = STATUS_LABEL,
-            value = filters.status?.let(::statusLabel) ?: ALL_STATUSES,
-            options = listOf(ALL_STATUSES) + FILTERABLE_STATUSES.map(::statusLabel),
-            onPick = { picked ->
-                onStatus(FILTERABLE_STATUSES.firstOrNull { statusLabel(it) == picked })
-            },
+            value = filters.status,
+            options = listOf<DueStatus?>(null) + FILTERABLE_STATUSES,
+            labelOf = { it?.let(::statusLabel) ?: ALL_STATUSES },
+            onPick = onStatus,
             modifier = Modifier.weight(1f),
         )
     }
@@ -208,17 +210,18 @@ fun ConditionChipRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterPicker(
+private fun <T> FilterPicker(
     label: String,
-    value: String,
-    options: List<String>,
-    onPick: (String) -> Unit,
+    value: T,
+    options: List<T>,
+    labelOf: (T) -> String,
+    onPick: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = modifier) {
         OutlinedTextField(
-            value = value,
+            value = labelOf(value),
             onValueChange = {},
             readOnly = true,
             singleLine = true,
@@ -235,7 +238,7 @@ private fun FilterPicker(
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
+                    text = { Text(labelOf(option)) },
                     onClick = {
                         open = false
                         onPick(option)
