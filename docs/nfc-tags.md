@@ -4,7 +4,11 @@ You do not need to be an NFC expert to use ServiceTag.
 
 If you have ever tapped your phone at a payment terminal to use Google Wallet or another contactless-payment service, you have already used NFC. Most modern Android phones have an NFC reader built in. ServiceTag uses that same general tap-and-read idea, but instead of paying for something, the phone reads a small tag attached to your equipment and opens that equipment's ServiceTag record.
 
-The NFC tag does **not** need a battery, charger, Wi-Fi connection, or Bluetooth pairing. You simply attach the tag to the equipment and tap it with your phone when you want to open that Asset in ServiceTag.
+The NFC tag does **not** need a battery, charger, Wi-Fi connection, internet connection, or Bluetooth pairing. It is a passive chip and antenna: when you bring the phone close, the phone's NFC field powers the tag just long enough to read or write its small memory. When the phone moves away, the tag has no power again. There is no battery to run down or replace.
+
+The physical tag cannot phone home, track its location, or connect to a ServiceTag server. ServiceTag stores only a small opaque tag identity on it; the Asset's useful information remains in the local database on your phone. See [NFC tag privacy and how passive tags work](nfc-privacy.md) for what another person could—and could not—learn by scanning one.
+
+You simply attach the tag to the equipment and tap it with your phone when you want to open that Asset in ServiceTag.
 
 ## What an NFC tag looks like
 
@@ -118,4 +122,6 @@ A practical starter set is:
 
 Create one Asset, write one tag, attach it, and try scanning it for a few days. Once you know what physical tag style works best for your equipment and your phone, it is easy to expand from there.
 
-The important idea is simple: **the NFC tag is just the physical shortcut. ServiceTag is where the maintenance record lives.**
+The important idea is simple: **the NFC tag is just the passive physical shortcut. ServiceTag is where the maintenance record lives.**
+
+For a plain-English explanation of the tag's power, internet, tracking, and privacy boundaries, see [NFC tag privacy and how passive tags work](nfc-privacy.md).
