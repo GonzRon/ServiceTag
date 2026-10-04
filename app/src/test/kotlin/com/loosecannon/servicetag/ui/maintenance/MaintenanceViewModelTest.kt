@@ -7,7 +7,6 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
-import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +31,7 @@ import org.junit.Test
  * The Maintenance destination's state. The rules about what is due and in what order belong to the
  * projection and are proved in `DueReadModelTest`; what is proved here is the one thing this
  * destination does that the dashboard deliberately does not — list a **paused** schedule — and the
- * three other sections' contents.
+ * header facts. The group rows left this state with #103 (1.7.1): `MaintenanceGroupsViewModelTest`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MaintenanceViewModelTest {
@@ -115,58 +114,6 @@ class MaintenanceViewModelTest {
         val state = vm.state.first { it.schedules.isNotEmpty() }
         assertEquals(listOf("Blade sharpen"), state.schedules.map { it.title })
         assertEquals(emptyList<String>(), state.dueWork.filter { it.title == "Retired work" }.map { it.title })
-    }
-
-    /**
-     * Every group is listed, **archived ones included and marked** (master plan decision 39), and
-     * the count is the windows that are open now.
-     *
-     * What archiving takes away is the group's due work, which the projection drops; the group
-     * itself stays findable, because #55 requires an archived group to keep its maintenance history
-     * and history nobody can reach is not kept.
-     */
-    @Test fun everyGroupIsListedAndAnArchivedOneIsMarked() = runTest {
-        val heads = (1..3).map { graph.createAsset.run(AssetCommand(name = "Sprinkler $it", category = "Irrigation")) }
-        graph.groups.upsert(
-            groupOf(
-                "g1",
-                name = "North run",
-                members = heads.mapIndexed { index, asset ->
-                    Triple(asset.id.value, "2026-01-01", if (index == 2) "2026-03-01" else null)
-                },
-            ),
-        )
-        graph.groups.upsert(groupOf("g2", name = "Old run", archivedAt = 5_000L))
-
-        val vm = viewModel()
-        backgroundScope.launch { vm.state.collect() }
-
-        val state = vm.state.first { it.groups.isNotEmpty() }
-        assertEquals(listOf("North run", "Old run"), state.groups.map { it.name })
-        assertEquals(listOf(false, true), state.groups.map { it.archived })
-        val live = state.groups.single { it.name == "North run" }
-        assertEquals("the removed window is history, not membership", 2, live.memberCount)
-    }
-
-    /**
-     * C5 (controller ruling, 2026-09-22): a phone with no groups is **a list with nothing in it**,
-     * not the absence of a list — the group section is drawn either way, because its create
-     * affordance is the only in-app way to make the first group.
-     *
-     * What the JVM can pin is the state the section is drawn from: `loaded` true with an empty
-     * [MaintenanceState.groups], which is distinguishable from "not read yet" and is therefore a
-     * state the screen can draw a section for. That the section really is on screen with its
-     * affordance is a composition fact and is proved on the device by `MaintenanceTabTest`, since
-     * this module has no JVM Compose runtime.
-     */
-    @Test fun aPhoneWithNoGroupsIsAListWithNothingInItRatherThanNoList() = runTest {
-        val vm = viewModel()
-        assertFalse("nothing has been read yet", vm.state.value.loaded)
-
-        backgroundScope.launch { vm.state.collect() }
-        val loaded = vm.state.first { it.loaded }
-        assertEquals(emptyList<MaintenanceGroupRow>(), loaded.groups)
-        assertTrue("and the phone has nothing scheduled either", loaded.isEmpty)
     }
 
     /**

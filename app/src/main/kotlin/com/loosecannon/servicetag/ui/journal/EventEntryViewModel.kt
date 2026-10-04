@@ -715,8 +715,8 @@ class EventEntryViewModel(
     private companion object {
         const val TAG = "EventEntry"
         val NO_EVENT = EventId("")
-        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd")
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd") // l10n-ok: the date field's ISO value, which the owner edits and core reads
+        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm") // l10n-ok: the time field's HH:mm value, which core reads
     }
 }
 

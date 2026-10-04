@@ -57,8 +57,30 @@
     <string name="maintenance_section_schedules">Schedules</string>
     <!-- RATIFIED (§17.1f): the section listing maintenance groups (also on the asset screen). -->
     <string name="maintenance_section_groups">Maintenance groups</string>
-    <!-- RATIFIED (§17.1f): the row opening reminder health, and that screen's title. -->
-    <string name="maintenance_section_reminders">Reminders</string>
+    <!-- RATIFIED (#103, P171-1): the heading over the Maintenance tab's three peer rows - Maintenance groups, Supplies, Installed components. Named for all three so it cannot be read as more maintenance work. -->
+    <string name="maintenance_section_groups_supplies_components">Groups, supplies and components</string>
+    <!-- RATIFIED (#103, P171-2/P171-3): the Settings › Utilities row that opens the reminder diagnostics page, and that page's title - one name for both. -->
+    <string name="maintenance_health_title">Reminder health</string>
+    <!-- RATIFIED (#103, P171-4): the reminder health page's healthy state, drawn only once a check has run and found nothing. -->
+    <string name="maintenance_health_no_problems">No problems found.</string>
+    <!-- RATIFIED (#103, P171-5): under the healthy state. %1$s is the check's date (the app's display date), %2$s its time (the phone's short time). -->
+    <string name="maintenance_health_last_checked">Last checked %1$s at %2$s</string>
+    <!-- RATIFIED (#103, P171-6): the heading over the checks that passed. -->
+    <string name="maintenance_health_checks_passed">Checks that passed</string>
+    <!-- RATIFIED (#103, P171-7a): a passed check, the positive of the notifications-blocked finding. -->
+    <string name="maintenance_health_passed_notifications">Notifications are allowed</string>
+    <!-- RATIFIED (#103, P171-7b): a passed check, the positive of the reminders-off finding. -->
+    <string name="maintenance_health_passed_reminders_on">Reminders are turned on</string>
+    <!-- RATIFIED (#103, P171-7c): a passed check, the positive of the daily-check-missing finding. -->
+    <string name="maintenance_health_passed_digest_alarm">The daily reminder check is scheduled</string>
+    <!-- RATIFIED (#103, P171-7d): a passed check, the positive of the background-check-missing finding. -->
+    <string name="maintenance_health_passed_backstop">The background safety check is running</string>
+    <!-- RATIFIED (#103, P171-7e): a passed check, the positive of the app-restricted finding. -->
+    <string name="maintenance_health_passed_app_restriction">This phone is not holding ServiceTag back in the background</string>
+    <!-- RATIFIED (#103, P171-7f): a passed check: no schedule with reminders lacks a working delivery. -->
+    <string name="maintenance_health_passed_delivery">Every schedule with reminders can deliver them</string>
+    <!-- RATIFIED (#103, P171-7g): a passed check: no meter schedule is waiting for its first reading. -->
+    <string name="maintenance_health_passed_meter_baselines">Every meter schedule has a baseline reading</string>
     <!-- RATIFIED (§17.1f): the empty state when there are no schedules at all. -->
     <string name="maintenance_no_schedules_yet">No maintenance schedules yet. Add one from an asset or a maintenance group.</string>
     <!-- RATIFIED (D-22): the dismissible line shown while notification permission is denied. -->

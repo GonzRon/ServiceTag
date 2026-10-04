@@ -36,6 +36,7 @@ import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.installed.INSTALLED_COMPONENTS_SECTION
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -49,8 +50,10 @@ import org.junit.runner.RunWith
  * The shell B15, B10, B14 and B09 land inside, and the bottom bar that reaches it.
  *
  * Two things only a real Compose tree shows: that the bar really draws three items with the
- * ratified label, and that the destination's four sections each reach something — a shell with
- * three working sections is how 1.2 would ship an engine nobody can drive.
+ * ratified label, and that the destination's sections each reach something — a shell with
+ * three working sections is how 1.2 would ship an engine nobody can drive. Since 1.7.1 (#103) the
+ * sections are Due work, Schedules and the grouped section's three peer rows; the Reminders row is
+ * gone, and the group list is a pushed screen of its own.
  *
  * Emulator only — the suite wipes app data.
  */
@@ -115,9 +118,9 @@ class MaintenanceShellTest {
                 MaintenanceScreen(
                     graph = graph,
                     onOpenSchedule = { record += "schedule:$it" },
-                    onOpenGroup = { record += "group:$it" },
-                    onNewGroup = { record += "new-group" },
+                    onOpenGroups = { record += "groups" },
                     onOpenSupplies = { record += "supplies" },
+                    onOpenInstalledComponents = { record += "components" },
                     onReminderHealth = { record += "health" },
                     onScanTag = { record += "scan" },
                     onAddAsset = { record += "asset" },
@@ -129,21 +132,22 @@ class MaintenanceShellTest {
     }
 
     /**
-     * **Five** navigations from one screen, one out of each section: a Due-work row and a
-     * Schedules-only row both to a schedule, a group row to its group, #15's Supplies row (P15-1,
-     * C29) to the Supplies list, and the Reminders row to reminder health.
+     * **Five** navigations from one screen (#103's layout): a Due-work row and a Schedules-only row
+     * both to a schedule, then the grouped section's three peer rows — Maintenance groups to the
+     * pushed group list, #15's Supplies row (P15-1, C29) to the Supplies list, and Installed
+     * components to the cross-asset list. No Reminders row remains: reminder health is under
+     * Settings › Utilities, and this screen reaches it only through its badge.
      *
      * The two schedule taps are told apart by the id each one reports, which is why the second is
      * the **paused** schedule — it is listed under Schedules and nowhere else, so tapping it can
      * only have come from that section. Both call the same `onOpenSchedule` seam, as they should.
      */
-    @Test fun theFiveSectionsEachReachSomething() {
+    @Test fun theSectionsEachReachSomethingAndNoRemindersRowRemains() {
         val record = mutableListOf<String>()
         aStoreWithWork(record)
 
         rule.awaitText("Due work")
         rule.onNodeWithText("Schedules").assertIsDisplayed()
-        rule.onNodeWithText("Maintenance groups").assertIsDisplayed()
 
         // A due row. The title appears twice — once under Due work, once under Schedules — so the
         // first node is taken deliberately rather than by an ambiguous single-match lookup.
@@ -151,20 +155,24 @@ class MaintenanceShellTest {
         // The paused row exists only under Schedules, and it carries the ratified PAUSED word.
         rule.awaitText("PAUSED")
         rule.onAllNodes(hasText("Winter service") and hasClickAction())[0].performClick()
-        rule.onAllNodes(hasText("North run") and hasClickAction())[0].performClick()
-        // The fifth section is one row after the groups and before Reminders, with no heading. The
-        // two last rows are scrolled to, because the fifth row moves Reminders down by one row.
+        // The grouped section: its ratified heading, then its three rows, scrolled to because they
+        // sit under however many schedules the store holds.
+        rule.onNodeWithText(GROUPS_SUPPLIES_COMPONENTS_SECTION).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Maintenance groups").performScrollTo().assertIsDisplayed().performClick()
         rule.onNodeWithText("Supplies").performScrollTo().assertIsDisplayed().performClick()
-        rule.onNodeWithText("Reminders").performScrollTo().assertIsDisplayed().performClick()
+        rule.onNodeWithText(INSTALLED_COMPONENTS_SECTION).performScrollTo().assertIsDisplayed().performClick()
+        // The group seeded by the fixture is not drawn inline any more, and neither is a Reminders row.
+        rule.onAllNodes(hasText("North run") and hasClickAction()).assertCountEquals(0)
+        rule.onAllNodesWithText("Reminders").assertCountEquals(0)
 
         rule.runOnIdle {
             check(record.size == 5) { "five navigations, not $record" }
             check(record[0].startsWith("schedule:")) { "the due row opens a schedule, not ${record[0]}" }
             check(record[1].startsWith("schedule:")) { "the schedules row opens a schedule, not ${record[1]}" }
             check(record[0] != record[1]) { "the two rows are different schedules: $record" }
-            check(record[2].startsWith("group:")) { "the group row opens a group, not ${record[2]}" }
+            check(record[2] == "groups") { "the groups row opens the group list, not ${record[2]}" }
             check(record[3] == "supplies") { "the Supplies row opens the Supplies list, not ${record[3]}" }
-            check(record[4] == "health") { "the Reminders row opens reminder health, not ${record[4]}" }
+            check(record[4] == "components") { "the Installed components row opens the components list, not ${record[4]}" }
         }
     }
 
@@ -230,9 +238,9 @@ class MaintenanceShellTest {
                 MaintenanceScreen(
                     graph = graph,
                     onOpenSchedule = { record += "schedule:$it" },
-                    onOpenGroup = { record += "group:$it" },
-                    onNewGroup = { record += "new-group" },
+                    onOpenGroups = { record += "groups" },
                     onOpenSupplies = { record += "supplies" },
+                    onOpenInstalledComponents = { record += "components" },
                     onReminderHealth = { record += "health" },
                     onScanTag = {},
                     onAddAsset = {},
@@ -287,9 +295,9 @@ class MaintenanceShellTest {
                 MaintenanceScreen(
                     graph = graph,
                     onOpenSchedule = { record += "schedule:$it" },
-                    onOpenGroup = { record += "group:$it" },
-                    onNewGroup = { record += "new-group" },
+                    onOpenGroups = { record += "groups" },
                     onOpenSupplies = { record += "supplies" },
+                    onOpenInstalledComponents = { record += "components" },
                     onReminderHealth = { record += "health" },
                     onScanTag = {},
                     onAddAsset = {},
@@ -299,9 +307,12 @@ class MaintenanceShellTest {
         }
 
         rule.awaitText("No maintenance schedules yet. Add one from an asset or a maintenance group.")
-        // Reminders is still reachable: a phone with no schedules can still have blocked ones.
-        rule.onNodeWithText("Reminders").performClick()
-        rule.runOnIdle { check(record == listOf("health")) { "unexpected navigation: $record" } }
+        // The three peer rows are still reachable with nothing scheduled — the ratified empty line
+        // sends the owner to "a maintenance group", and the groups row is the way there (C5).
+        rule.onAllNodesWithText("Reminders").assertCountEquals(0)
+        rule.onNodeWithText("Maintenance groups").performScrollTo().performClick()
+        rule.onNodeWithText(INSTALLED_COMPONENTS_SECTION).performScrollTo().performClick()
+        rule.runOnIdle { check(record == listOf("groups", "components")) { "unexpected navigation: $record" } }
     }
 
 
@@ -312,9 +323,9 @@ class MaintenanceShellTest {
                 MaintenanceScreen(
                     graph = graph,
                     onOpenSchedule = {},
-                    onOpenGroup = {},
-                    onNewGroup = {},
+                    onOpenGroups = {},
                     onOpenSupplies = {},
+                    onOpenInstalledComponents = {},
                     onReminderHealth = {},
                     onScanTag = {},
                     onAddAsset = {},
@@ -489,15 +500,18 @@ class MaintenanceTabTest {
 
         // The destination's own title: "Maintenance" now appears twice — the tab and the title —
         // which is what the count asserts. This install is fresh, so what the destination shows is
-        // its ratified empty state, the groups section and the Reminders row.
+        // its ratified empty state and the grouped section's three rows (#103); no Reminders row.
         rule.awaitText("Maintenance", count = 2)
         rule.awaitText("No maintenance schedules yet. Add one from an asset or a maintenance group.")
-        rule.awaitText("Reminders")
+        rule.awaitText(GROUPS_SUPPLIES_COMPONENTS_SECTION)
+        rule.onAllNodesWithText("Reminders").assertCountEquals(0)
 
-        // C5 (controller ruling): the groups section is drawn even with no groups, because its
-        // create affordance is the only in-app way to make the first one — and the ratified empty
-        // state above points the owner at exactly that. Tapping it reaches the group form.
-        rule.awaitText("Maintenance groups")
+        // C5 (controller ruling): the group list is drawn even with no groups, because its create
+        // affordance is the only in-app way to make the first one — and the ratified empty state
+        // above points the owner at exactly that. Since #103 the list is one tap away, on its own
+        // pushed screen, and tapping the create row there reaches the group form.
+        rule.onNodeWithText("Maintenance groups").performScrollTo().performClick()
+        rule.awaitText("Maintenance group")
         rule.onAllNodesWithText("Maintenance group").assertCountEquals(1)
         rule.onNodeWithText("Maintenance group").performClick()
         rule.awaitText("Name")

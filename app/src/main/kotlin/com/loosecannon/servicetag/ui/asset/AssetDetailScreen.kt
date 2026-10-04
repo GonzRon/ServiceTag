@@ -1596,10 +1596,10 @@ private fun categoryIcon(category: String): ImageVector {
 
 /** Any leap year: a stored `MM-DD` window edge drawn as a day and month, so 29 February keeps its day. */
 private const val ANY_LEAP_YEAR = 2000
-private val ledgerDay = DateTimeFormatter.ofPattern("dd")
+private val ledgerDay = DateTimeFormatter.ofPattern("dd") // l10n-ok: a day number
 // The month's name is the rendering language's (#102): `withLocale(AppText.current.locale)` where it is formatted.
-private val ledgerMonth = DateTimeFormatter.ofPattern("MMM")
-private val ledgerYear = DateTimeFormatter.ofPattern("uuuu")
+private val ledgerMonth = DateTimeFormatter.ofPattern("MMM") // l10n-ok: formatted withLocale(AppText.current.locale)
+private val ledgerYear = DateTimeFormatter.ofPattern("uuuu") // l10n-ok: a year number
 
 private fun Long.zoned() = Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault())
 

@@ -62,7 +62,7 @@ class SafBackupSetWriter(
 /** `ServiceTag-data-<stamp>.zip` and `ServiceTag-artifacts-<stamp>.zip`, stamp = local `yyyyMMdd-HHmmss`. */
 object BackupSetNames {
     fun stamp(at: Long): String =
-        SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(at))
+        SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(at)) // l10n-ok: backup file names stay language-neutral
 
     fun data(stamp: String): String = "ServiceTag-data-$stamp.zip"
 

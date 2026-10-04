@@ -170,7 +170,7 @@ internal object TransferStrings {
     /** P77-70 (R77-B2a-MARK; ratified) — marking refused: the estate left behind would be entangled. */
     val MARK_ENTANGLED: String get() = localized(R.string.transfer_mark_entangled)
 
-    private val FILE_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.ROOT)
+    private val FILE_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.ROOT) // l10n-ok: Transfer Pack file names stay ISO
 
     /** P77-33's and P77-37's `<date>`: the display date in [zone] (English `d MMM uuuu`), through [localizedDate]. */
     fun day(at: Long, zone: ZoneId): String = localizedDate(Instant.ofEpochMilli(at).atZone(zone).toLocalDate())

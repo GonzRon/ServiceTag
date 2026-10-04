@@ -117,12 +117,24 @@ emulator, add **English (XA)** under Languages and open the screen: every string
 longer, so anything that clips or overlaps shows at once. The shipped packs are checked the same way by choosing the
 language, ideally German or Russian for length and Japanese or Chinese for line breaking.
 
+## Keeping new work localized
+
+The unit tests are the gate, and CI runs them on every pull request: a change that writes English in Kotlin, adds an
+English string without every pack, compares rendered words or draws a date or number in a fixed format fails
+`UiLiteralGuardTest` or `LocalizationCoverageTest` before review. What the tests cannot see, a plan has to carry:
+
+- **Copy is ratified as resources.** A plan that ratifies new words (a `P<n>-<m>` id) lands them in
+  `values/strings_<area>.xml` with the id in the comment, and in every pack in the same change.
+- **A branch cut before the resource layer** (1.7.1 was) brings its words in on merge: each new constant becomes a
+  resource and a getter, with nine translations, before the merge is pushed.
+- **A translation is a draft until a native speaker reviews it**; say so in the pull request when a change adds one.
+
 ## Tests
 
 | Test | Proves |
 |---|---|
 | `LocalizationCoverageTest` | every pack has every English name and no other; placeholders match; each language's plural forms exist and show their number; every string formats in its language; date patterns are valid; product names and URL schemes survive; `locales_config.xml` lists exactly the shipped packs |
-| `UiLiteralGuardTest` | no user-visible English literal is left in Kotlin outside `api/` and `data/`; the API and Room never read UI text; no behaviour compares rendered text (a typed value decides, the words only draw it) |
+| `UiLiteralGuardTest` | no user-visible English literal is left in Kotlin outside `api/` and `data/`; the API and Room never read UI text; no behaviour compares rendered text (a typed value decides, the words only draw it); no date pattern, fixed locale or `toDoubleOrNull()` outside `l10n/` without an `// l10n-ok:` reason |
 | `LocalizedFormatsTest` | dates, moments and decimals follow the language (English and German side by side); typed decimals read back what was drawn, and "45.000" is refused in a comma language rather than read as 45 |
 | `LayoutDirectionGuardTest` | no layout assumes left-to-right |
 | `EnglishResources` / `ResourcePack` | not tests: the unit tests read `res/values` (or any pack) the way Android does, so a view-model test asserts the same ratified English it did before the words moved |

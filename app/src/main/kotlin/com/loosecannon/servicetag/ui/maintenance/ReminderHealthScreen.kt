@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import java.time.ZoneId
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.appDetails
 import com.loosecannon.servicetag.ui.components.open
@@ -57,7 +59,8 @@ import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 fun healthIconTag(code: String): String = "health-icon-$code"
 
 /**
- * #27's Health section, inside the Maintenance destination.
+ * #27's Reminder health page — under Settings › Utilities since 1.7.1 (#103), and still the page the
+ * Dashboard's and the Maintenance tab's badge opens.
  *
  * Every finding is drawn with **an icon, explicit wording and a position** — worst first, from the
  * check's own ordering — and never by colour alone (D12 §5): the three severities have three
@@ -70,13 +73,13 @@ fun healthIconTag(code: String): String = "health-icon-$code"
  * not `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, which is the request this brief refuses to
  * make.
  *
- * **What this screen deliberately does not say.** #27 asks it to explain two platform realities
- * even when no finding is active — an OEM holding the app back, and Android 17 not dispatching NFC
- * to an app in the stopped state — and a phone with no findings at all wants a line too. §17
- * ratifies **no** string for any of the three: the one `APP_RESTRICTED` sentence it does ratify is
- * conditional by construction and would be false on an unrestricted phone. So this screen draws
- * nothing for them and drafts nothing (controller ruling, 2026-09-22); the three strings are
- * recorded for the owner.
+ * **The healthy state (#103, 1.7.1).** A run that found nothing used to leave the screen empty, which
+ * read as broken. It now draws P171-4, the run's own instant as P171-5 (owner ruling Q4: never the
+ * time the screen opened) and, under P171-6, the ratified line of every check that passed — only
+ * when the run has answered and found nothing; with any finding the rows are drawn as before and
+ * none of the healthy lines is. The two platform realities #27 asked to be explained even on a
+ * healthy phone — an OEM holding the app back, and Android 17 not dispatching NFC to a stopped app —
+ * still have no ratified sentence and are still not drawn (controller ruling, 2026-09-22).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,9 +103,8 @@ fun ReminderHealthScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                // The RATIFIED section label (§17.1f) is the destination's name: the row that
-                // opened it says the same word, and §17 ratifies no second title for it.
-                title = { Text(REMINDERS_SECTION) },
+                // P171-3: the page is named by the Utilities row that opens it (#103).
+                title = { Text(REMINDER_HEALTH_TITLE) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.maintenance_back))
@@ -116,6 +118,9 @@ fun ReminderHealthScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            if (state.healthy) {
+                HealthyState(checkedAt = state.checkedAt, passed = state.passed)
+            }
             state.rows.forEachIndexed { index, row ->
                 if (index > 0) {
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -137,6 +142,34 @@ fun ReminderHealthScreen(
                     },
                 )
             }
+        }
+    }
+}
+
+/**
+ * The ratified healthy state (#103): P171-4, then P171-5 when a run's instant is known (it always is
+ * once `loaded`, but the state type allows otherwise and this draws nothing rather than a guess), then
+ * P171-6 over one quiet line per check that passed, in the enum's order. Every line is a plain
+ * statement; no icon, because there is no severity to carry.
+ */
+@Composable
+private fun HealthyState(checkedAt: Long?, passed: List<HealthCheck>) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = NO_PROBLEMS_FOUND,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+        if (checkedAt != null) {
+            QuietLine(
+                lastCheckedLine(checkedAt, ZoneId.systemDefault()),
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+        MaintenanceSectionTitle(CHECKS_THAT_PASSED)
+        passed.forEach { check ->
+            QuietLine(check.passedLine, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         }
     }
 }

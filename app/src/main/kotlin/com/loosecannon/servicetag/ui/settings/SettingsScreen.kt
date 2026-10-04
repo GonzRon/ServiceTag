@@ -62,6 +62,7 @@ import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.homeassistant.HA_TITLE
+import com.loosecannon.servicetag.ui.maintenance.REMINDER_HEALTH_TITLE
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import kotlinx.coroutines.launch
 
@@ -98,6 +99,8 @@ fun SettingsScreen(
     onBackup: () -> Unit,
     onDeveloperApi: () -> Unit,
     onCategories: () -> Unit,
+    /** #103 (1.7.1): the Reminder health row, opening the page by its existing route. No default: a wiring that forgets it does not compile. */
+    onReminderHealth: () -> Unit,
     onHomeAssistant: () -> Unit,
 ) {
     val activity = LocalActivity.current
@@ -270,6 +273,13 @@ fun SettingsScreen(
                 icon = ServiceTagIcons.Label,
                 label = stringResource(R.string.settings_categories),
                 onClick = onCategories,
+            )
+            // #103 (1.7.1; P171-2): the diagnostics-and-repair tool lives with the other tools, not on
+            // the Maintenance tab. Same page, same route, as the Dashboard badge opens.
+            UtilityRow(
+                icon = ServiceTagIcons.NotificationsActive,
+                label = REMINDER_HEALTH_TITLE,
+                onClick = onReminderHealth,
             )
             UtilityRow(
                 icon = Icons.Outlined.Home,

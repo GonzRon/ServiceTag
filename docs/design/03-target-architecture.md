@@ -322,6 +322,15 @@ A red badge on Home appears when any finding has severity ≥ WARN.
 > "After every sync" is Phase 5. In 1.2 the check runs at **app launch**
 > (`app/.../ServiceTagApp.kt` calls `reminderHealth.refresh()`), from the backstop worker and from
 > the Maintenance and Health surfaces; the ≥ WARN badge ships, on the dashboard and on Maintenance.
+>
+> **Amended at implementation (2026-10-04, ServiceTag 1.7.1 / #103).** The Health screen is **no
+> longer a row of the Maintenance tab**: it is reached from **Settings › Utilities › Reminder
+> health** (and still from the ≥ WARN badge on the dashboard and on Maintenance), by the same
+> `Route.ReminderHealth`. A run that finds nothing no longer leaves the screen empty: it draws
+> "No problems found.", the run's own completion instant as "Last checked <date> at <time>" (the
+> instant is cached beside the run's findings and never moved by opening the screen), and, under
+> "Checks that passed", one ratified line per check the run raised nothing for — seven checks, the
+> two delivery codes counting as one. The checks, the repairs and the badge are unchanged.
 
 ## 8. Todoist adapter boundary (Phase 5)
 

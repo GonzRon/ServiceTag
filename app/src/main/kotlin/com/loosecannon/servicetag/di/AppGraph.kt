@@ -1084,7 +1084,8 @@ class AppGraph(private val context: Context) {
      * its own summary to the screen instead (see `DashboardScreen`'s `health` parameter), which is
      * the seam that cannot be raced.
      */
-    val reminderHealth: ReminderHealth = ReminderHealth(reminderHealthCheck)
+    // #103 (1.7.1, owner ruling Q4): the run's own instant is cached beside its findings, from the graph's clock.
+    val reminderHealth: ReminderHealth = ReminderHealth(reminderHealthCheck) { clock.nowMillis() }
     val healthSummary: HealthSummary = reminderHealth
 
     /**

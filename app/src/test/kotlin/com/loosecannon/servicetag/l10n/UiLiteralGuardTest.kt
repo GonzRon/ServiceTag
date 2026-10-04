@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.l10n
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -16,6 +17,8 @@ import java.io.File
  * 2. The Developer API and Room never read UI text: they carry enum names, ids and the owner's own words, so a
  *    language change cannot change what is stored, backed up or served (#102, acceptance 7). `:core` — the domain,
  *    the backup and Transfer Pack codecs — has no Android resources to read in the first place.
+ * 3. Behaviour never keys on rendered words, and no date or number the owner reads or types takes a fixed pattern or
+ *    locale (PR #106 review): both go through a typed value or `l10n/Localized.kt`.
  *
  * A heuristic, deliberately: it reads source lines, not a syntax tree, and errs towards flagging.
  */
@@ -89,6 +92,43 @@ class UiLiteralGuardTest {
         assertEquals("compare typed values, never rendered words (#102)", emptyList<String>(), offenders)
     }
 
+    /**
+     * #102 (PR #106 review): a date, a moment or a number the owner reads or types follows the rendering language. A
+     * fixed pattern or locale is how an ISO stamp and an English decimal point reached the screen, and how "0,5" was
+     * refused: `ofPattern(…)`, `Locale.US`, `Locale.getDefault()`, `toDoubleOrNull()`. Draw with `localizedDate`,
+     * `localizedDateTime` and `localizedDecimal` and read with `parseLocalizedDecimal` (`l10n/Localized.kt`, which is
+     * where the fixed formats live). A fixed format that never reaches the owner as words — a file name, an ISO form
+     * value — says why on its line with `// l10n-ok: <reason>`.
+     */
+    @Test fun noFixedFormatReachesTheOwner() {
+        val files = sources.walkTopDown().filter { it.isFile && it.extension == "kt" }
+            .filterNot { it.relativeTo(sources).invariantSeparatorsPath.substringBefore('/') in LANGUAGE_NEUTRAL + "l10n" }
+            .toList()
+        assertTrue("the scan found no Kotlin under ${sources.path}; it would prove nothing", files.size > 50)
+
+        val offenders = files.sortedBy { it.path }.flatMap { file ->
+            file.readLines().withIndex()
+                .filter { (_, line) -> fixedFormat(line) }
+                .map { (at, line) -> "${file.relativeTo(sources).invariantSeparatorsPath}:${at + 1}: ${line.trim()}" }
+        }
+        assertEquals(
+            "dates and numbers the owner reads or types go through l10n/Localized.kt (docs/localization.md); a fixed " +
+                "format that is not drawn says so on its line with `// l10n-ok: <reason>`",
+            emptyList<String>(),
+            offenders,
+        )
+    }
+
+    @Test fun theFormatHeuristicFlagsFixedFormatsAndSparesTheExempt() {
+        assertTrue(fixedFormat("""    val stamp = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")"""))
+        assertTrue(fixedFormat("""    String.format(Locale.US, "%.1f KB", kb)"""))
+        assertTrue(fixedFormat("""    val value = text.trim().toDoubleOrNull()"""))
+        assertTrue(fixedFormat("""    val day = date.format(formatter.withLocale(Locale.getDefault()))"""))
+        assertFalse(fixedFormat("""    val name = DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.ROOT) // l10n-ok: file names"""))
+        assertFalse(fixedFormat("""    // ofPattern("d MMM uuuu") is what localizedDate replaced."""))
+        assertFalse(fixedFormat("""    val leadDays = text.trim().toIntOrNull() ?: 0"""))
+    }
+
     @Test fun theHeuristicFlagsProseAndSparesCode() {
         assertEquals(listOf("Delete schedule"), flagged("""    Text("Delete schedule")"""))
         assertEquals(listOf("Cancel"), flagged("""internal const val CANCEL = "Cancel""""))
@@ -123,6 +163,12 @@ class UiLiteralGuardTest {
         val TEMPLATE = Regex("""\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_.]*""")
         val TWO_WORDS = Regex("""[A-Za-z][a-z']+[,.;:!?]?\s+[A-Za-z(]""")
         val ONE_WORD = Regex("""[A-Z][a-z]{2,}[.!?…]?""")
+
+        val FIXED_FORMAT = Regex("""\.to(Double|Float)OrNull\(|\bLocale\.(US|UK|ENGLISH|ROOT|getDefault\(\))|\bofPattern\(|\bSimpleDateFormat\(""")
+
+        /** Whether [line]'s code fixes a date pattern, a locale or an English number parse, and does not say why. */
+        fun fixedFormat(line: String): Boolean =
+            !COMMENT_LINE.containsMatchIn(line) && "l10n-ok" !in line && FIXED_FORMAT.containsMatchIn(line.substringBefore(" // "))
 
         /** The literals on [line] that read as prose, with interpolations left in place. */
         fun flagged(line: String): List<String> {

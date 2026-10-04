@@ -1017,7 +1017,7 @@ private fun MonthDayField(
             initial = "",
             onDismiss = { picking = false },
             onPicked = { date ->
-                onValueChange(String.format(Locale.US, "%02d-%02d", date.monthValue, date.dayOfMonth))
+                onValueChange(String.format(Locale.US, "%02d-%02d", date.monthValue, date.dayOfMonth)) // l10n-ok: the MM-DD field's stored value
                 picking = false
             },
         )

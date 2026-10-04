@@ -18,7 +18,10 @@ import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
+import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.testing.supplyItemOf
@@ -30,6 +33,7 @@ import com.loosecannon.servicetag.core.transfer.TransferFixtures.HEATER
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.OPENER
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.serialization.descriptors.elementNames
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -67,18 +71,44 @@ class TransferGraphRetainTest {
     }
 
     /**
-     * mn-2: holding nothing keeps everything. The fixture fills every list the archive has, so a list that
-     * `retain` forgets or filters wrongly — #15's tables and every later one included — fails here.
+     * mn-2: holding nothing keeps everything. The fixture fills **every** list the archive has, so a list that
+     * `retain` forgets or filters wrongly fails here — and the check that it does is structural (#99, 1.7.1):
+     * the fixture is encoded with `encodeDefaults = true`, so an empty defaulted list is a key with an empty
+     * array rather than an omitted key, and the key set is asserted equal to `BackupData`'s own element names,
+     * so a list added to the archive and not to this fixture fails the "fills every list" line rather than
+     * passing in silence. Before #99 the default `Json` omitted the four lists `estate()` never fills —
+     * `supplyItems`, `assetSupplies`, `assetSuccessions`, `transferRecords` — and the identity held for them
+     * vacuously; `installedComponents` was covered only by #47's explicit presence assertion.
+     *
+     * The rows live on this test's own copy rather than in `estate()`, which six other suites read as the
+     * sender's estate: a transfer record or a succession on a fixture asset would change what `select` and
+     * `droppedBy` answer for every one of them.
      */
     @Test
     fun retainingNothingIsTheIdentity() {
-        // #47 (C13): one installed component on the heater, so `installedComponents` is a list this identity checks.
         val fitted = estate.copy(
+            // #15 (C13): one SupplyItem, and one applicability row naming it from the heater.
+            supplyItems = listOf(supplyItemOf("s1", "Example 12 V Battery").toDto()),
+            assetSupplies = listOf(assetSupplyOf("as1", assetId = HEATER, supplyId = "s1", role = "Battery").toDto()),
+            // #86: a succession between two assets, both in the file.
+            assetSuccessions = listOf(successionOf("su1", predecessor = COMPRESSOR, successor = OPENER).toDto()),
+            // #77: one record of an asset that came in by pack; an ordinary backup carries every record.
+            transferRecords = listOf(
+                TransferRecord(
+                    id = "tr1", assetId = AssetId(COMPRESSOR), kind = TransferKind.IN, packId = "example-pack",
+                    lineage = listOf("example-pack"), at = 100L, packSha256 = "0".repeat(64),
+                    nameSnapshot = "Example Compressor", note = "",
+                ).toDto(),
+            ),
+            // #47 (C13): one installed component on the heater.
             installedComponents = listOf(installedComponentOf("c1", assetId = HEATER, name = "Example Element").toDto()),
         )
-        val lists = Json.encodeToJsonElement(BackupData.serializer(), fitted).jsonObject
+        val lists = Json { encodeDefaults = true }.encodeToJsonElement(BackupData.serializer(), fitted).jsonObject
+        assertEquals(BackupData.serializer().descriptor.elementNames.toSet(), lists.keys, "every list the archive has is encoded")
         assertEquals(emptyList(), lists.filterValues { it.jsonArray.isEmpty() }.keys.toList(), "the fixture fills every list")
-        assertEquals(true, "installedComponents" in lists, "the installed components are among them")
+        listOf("supplyItems", "assetSupplies", "assetSuccessions", "transferRecords", "installedComponents").forEach {
+            assertEquals(true, it in lists, "$it is among them")
+        }
 
         assertEquals(TransferRetention.Retained(fitted), TransferGraph.retain(fitted, emptySet()))
     }

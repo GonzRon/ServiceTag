@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasNoClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -46,8 +47,10 @@ private const val FIX_DELIVERY = "Fix reminder delivery"
 /**
  * #27's Health section, on a device — the four things no JVM test can show.
  *
- * That it is **reachable**: through the real bottom bar, the real Maintenance destination and the
- * real Navigation 3 back stack, which until this brief popped straight back off a placeholder.
+ * That it is **reachable**: since 1.7.1 (#103) through the Dashboard's Settings door, the real
+ * Settings screen's Utilities row and the real Navigation 3 back stack — the Maintenance tab no
+ * longer has a Reminders row — where until B10 `Route.ReminderHealth` popped straight back off a
+ * placeholder.
  * That it **lists** a real finding read from the real platform. And that tapping an **`Automatic`**
  * repair really re-arms the real `AlarmManager` alarm, so the finding is gone on the next run —
  * which is the one claim whose mechanism is entirely `PendingIntent.FLAG_NO_CREATE` and cannot be
@@ -88,31 +91,29 @@ class ReminderHealthScreenTest {
     }
 
     private fun openHealth() {
-        rule.onNode(hasText("Maintenance") and hasClickAction()).performClick()
-        rule.awaitText(REMINDERS_SECTION)
-        // The row is the **last** thing in a scrolling destination, so on a store carrying due work
-        // it sits below the fold — and a node that is in the tree but off screen takes a click that
-        // goes nowhere, which reads exactly like a route that failed to open. A fresh install still
-        // has no due work of its own, but the layout fact holds regardless of what the store
-        // contains: scroll to it, the way a person would, rather than assume it is on screen.
-        rule.onNode(hasText(REMINDERS_SECTION) and hasClickAction()).performScrollTo().performClick()
+        // #103: Settings › Utilities › Reminder health. The row sits below the fold on a settings
+        // screen, and a node that is in the tree but off screen takes a click that goes nowhere,
+        // which reads exactly like a route that failed to open: scroll to it, the way a person would.
+        rule.onNodeWithContentDescription("Settings").performClick()
+        rule.awaitText("Utilities")
+        rule.onNode(hasText(REMINDER_HEALTH_TITLE) and hasClickAction()).performScrollTo().performClick()
         rule.awaitText(ALARM_FINDING)
     }
 
     /**
      * Reachable, and listing.
      *
-     * The ratified section label is both the row that opens the screen and the screen's own title,
-     * so "Reminders" alone proves nothing — the assertion is that it is now a **title** and no
-     * longer a clickable row, which is only true once the destination is really up. Until this
-     * brief `Route.ReminderHealth` popped itself off the stack a frame after being pushed, and the
-     * shell's clickable row would still have been there to find.
+     * The ratified word is both the Utilities row that opens the screen and the screen's own title
+     * (P171-2, P171-3), so the word alone proves nothing — the assertion is that it is now a
+     * **title** and no longer a clickable row, which is only true once the destination is really up.
+     * Until B10 `Route.ReminderHealth` popped itself off the stack a frame after being pushed, and
+     * the clickable row would still have been there to find.
      */
-    @Test fun theHealthSectionIsReachableFromMaintenanceAndListsItsFindings() {
+    @Test fun theHealthPageIsReachableFromSettingsAndListsItsFindings() {
         openHealth()
 
-        rule.onNode(hasText(REMINDERS_SECTION) and hasNoClickAction()).assertIsDisplayed()
-        rule.onAllNodesWithText(REMINDERS_SECTION).assertCountEquals(1)
+        rule.onNode(hasText(REMINDER_HEALTH_TITLE) and hasNoClickAction()).assertIsDisplayed()
+        rule.onAllNodesWithText(REMINDER_HEALTH_TITLE).assertCountEquals(1)
         rule.onNodeWithText(ALARM_FINDING).assertIsDisplayed()
         // The icon beside the wording: D12 §5's acceptance is that the hierarchy survives grayscale,
         // so the glyph is asserted to exist rather than the tint to be a particular colour.

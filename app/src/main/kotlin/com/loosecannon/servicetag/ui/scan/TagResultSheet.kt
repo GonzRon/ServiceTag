@@ -337,7 +337,7 @@ internal fun NfcSheet(
                 }
                 Text(
                     // The eyebrow's capitals follow the rules of the language it is written in (#102).
-                    text = eyebrow.uppercase(LocalConfiguration.current.locales[0] ?: Locale.getDefault()),
+                    text = eyebrow.uppercase(LocalConfiguration.current.locales[0] ?: Locale.getDefault()), // l10n-ok: casing follows the configuration's locale
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = accent,
                 )

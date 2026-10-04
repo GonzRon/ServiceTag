@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.maintenance
 
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.R
@@ -8,6 +9,7 @@ import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.RepairAction
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.AppText
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.reminders.ReminderHealthCheck
@@ -15,12 +17,66 @@ import com.loosecannon.servicetag.reminders.ReminderHealthRun
 import com.loosecannon.servicetag.reminders.ReminderRepair
 import com.loosecannon.servicetag.reminders.repairActionOf
 import com.loosecannon.servicetag.reminders.repairTargetOf
+import com.loosecannon.servicetag.ui.condition.displayDate
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * #103 (1.7.1; P171-2 and P171-3, RATIFIED 2026-10-04): the Settings › Utilities row and the page's
+ * title, one word for both, because the row that opens a page names it.
+ */
+val REMINDER_HEALTH_TITLE: String get() = localized(R.string.maintenance_health_title)
+
+/** #103 (P171-4, RATIFIED): the healthy state's one sentence, drawn only once a run has found nothing. */
+val NO_PROBLEMS_FOUND: String get() = localized(R.string.maintenance_health_no_problems)
+
+/** #103 (P171-6, RATIFIED): the heading over the checks that passed. */
+val CHECKS_THAT_PASSED: String get() = localized(R.string.maintenance_health_checks_passed)
+
+/**
+ * #103 (P171-5, RATIFIED): `Last checked <date> at <time>` — [checkedAt] being the run's own instant
+ * (owner ruling Q4), the date in the app's one display shape and the time in [locale]'s short form,
+ * the rendering language's unless a caller names another (#102).
+ */
+fun lastCheckedLine(checkedAt: Long, zone: ZoneId, locale: Locale = AppText.current.locale): String {
+    val at = Instant.ofEpochMilli(checkedAt).atZone(zone)
+    val time = at.toLocalTime().format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+    return localized(R.string.maintenance_health_last_checked, displayDate(at.toLocalDate()), time)
+}
+
+/**
+ * The seven checks the reminder-health run performs, in the order the healthy state lists them, each
+ * with the finding [codes] it raises and its RATIFIED passed line (#103; P171-7a…g, 2026-10-04). A
+ * check passed when the run raised none of its codes; [DELIVERY] owns two, the batch shape and the
+ * residual shape 1.4.1 split from it, because they are one question with two answers. Declared here,
+ * beside the labels, so the page's words have one home.
+ */
+enum class HealthCheck(val codes: Set<String>, @StringRes private val passedLineRes: Int) {
+    NOTIFICATIONS(setOf("NOTIFICATIONS_BLOCKED"), R.string.maintenance_health_passed_notifications),
+    REMINDERS_ON(setOf("REMINDERS_GLOBALLY_OFF"), R.string.maintenance_health_passed_reminders_on),
+    DIGEST_ALARM(setOf("DIGEST_ALARM_MISSING"), R.string.maintenance_health_passed_digest_alarm),
+    BACKSTOP(setOf("BACKSTOP_WORK_MISSING"), R.string.maintenance_health_passed_backstop),
+    APP_RESTRICTION(setOf("APP_RESTRICTED"), R.string.maintenance_health_passed_app_restriction),
+    DELIVERY(setOf("SCHEDULE_NO_PROVIDER", "SCHEDULE_PROVIDER_DISABLED"), R.string.maintenance_health_passed_delivery),
+    METER_BASELINES(setOf("NO_DATA"), R.string.maintenance_health_passed_meter_baselines),
+    ;
+
+    /** The ratified passed line, read when drawn (#102): the check is the value, its words are the language's. */
+    val passedLine: String get() = localized(passedLineRes)
+}
+
+/** The checks [findings] raised nothing for, in display order: derived from the run, never from a second check. */
+fun passedChecks(findings: List<ReminderHealthFinding>): List<HealthCheck> =
+    HealthCheck.entries.filter { check -> findings.none { it.code in check.codes } }
 
 /**
  * The eight RATIFIED repair labels, keyed by the action half of a repair's code: master plan
@@ -80,20 +136,34 @@ data class HealthRow(
 }
 
 /**
- * The Health section's state.
+ * The Health page's state.
  *
- * [loaded] distinguishes "nothing is wrong" from "nothing has been asked yet". The **screen** draws
- * the same thing either way — §17 ratifies no empty-state line, so there is nothing to say for
- * either — so it is the tests that read it, and it is what a future ratified empty state would be
- * gated on rather than on an empty list (fix round 1, nit 2).
+ * [loaded] distinguishes "nothing is wrong" from "nothing has been asked yet", and since 1.7.1 (#103)
+ * the screen draws the difference: [healthy] — loaded and no row — is the ratified healthy state,
+ * P171-4 over [checkedAt] and [passed]; "not asked yet" still draws nothing. [checkedAt] is the run's
+ * own instant (owner ruling Q4), carried from the cache and never moved by a read; [passed] is the
+ * checks that run raised nothing for, computed with the rows and always carried, drawn only when
+ * [healthy] — a half-healthy list under a finding has no ratified words.
  */
 data class HealthState(
     val rows: List<HealthRow> = emptyList(),
     val loaded: Boolean = false,
+    val checkedAt: Long? = null,
+    val passed: List<HealthCheck> = emptyList(),
 ) {
     /** The badge's own question, over the same findings the rows came from. */
     val worstSeverity: ReminderHealthSeverity? get() = rows.maxByOrNull { it.severity }?.severity
+
+    /** The ratified healthy state: a run has answered, and it found nothing. */
+    val healthy: Boolean get() = loaded && rows.isEmpty()
 }
+
+/**
+ * One run's answer as the cache holds it (#103, owner ruling Q4): its findings and the instant it
+ * completed, **published together** so no reader can pair one run's rows with another run's instant —
+ * the backstop worker and the screen both publish, and two separate fields would tear between them.
+ */
+data class HealthRun(val findings: List<ReminderHealthFinding>, val at: Long)
 
 /**
  * The real [HealthSummary] (B08's decision 28), and the one cache behind it.
@@ -105,18 +175,33 @@ data class HealthState(
  * of its own. Nothing cached means "not asked yet", which leaves the badge off: the honest answer
  * for a process that has not looked.
  */
-class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, ReminderHealthRun {
+class ReminderHealth(
+    private val check: ReminderHealthCheck,
+    /** The clock the run's instant is read from, once per publish. No default: a wiring that forgets it does not compile. */
+    private val now: () -> Long,
+) : HealthSummary, ReminderHealthRun {
 
     @Volatile
-    private var cached: List<ReminderHealthFinding>? = null
+    private var last: HealthRun? = null
+
+    /**
+     * #103 (owner ruling Q4): the instant the cached run completed — null until a run has — read off
+     * the one snapshot [publish] stores, so it belongs to the findings beside it and never advances
+     * because a screen opened or read it.
+     */
+    val checkedAt: Long? get() = last?.at
 
     private val _changes = MutableStateFlow(0)
     override val changes: StateFlow<Int> = _changes.asStateFlow()
 
-    override suspend fun worstSeverity(): ReminderHealthSeverity? = cached?.maxByOrNull { it.severity }?.severity
+    override suspend fun worstSeverity(): ReminderHealthSeverity? = last?.findings?.maxByOrNull { it.severity }?.severity
 
-    /** Runs the check and caches what it found. The Health screen's own refresh, and launch's. */
-    suspend fun refresh(): List<ReminderHealthFinding> = check.run().also(::publish)
+    /**
+     * Runs the check and caches what it found, answering the run as one snapshot — findings and
+     * instant together — so the screen draws both from the same run. The Health screen's own
+     * refresh, and launch's.
+     */
+    suspend fun refresh(): HealthRun = publish(check.run())
 
     /**
      * One pass for a background run: report, repair the unambiguous, and cache the result.
@@ -124,7 +209,7 @@ class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, Re
      * This — not the bare check — is what the backstop worker drives, so a repair it applies reaches
      * the badge instead of leaving it lit until the next launch (fix round 1, S3).
      */
-    override suspend fun runAndRepair(): List<ReminderHealthFinding> = check.runAndRepair().also(::publish)
+    override suspend fun runAndRepair(): List<ReminderHealthFinding> = publish(check.runAndRepair()).findings
 
     /** Applies one automatic repair, and nothing else; the caller refreshes after it. */
     suspend fun repair(finding: ReminderHealthFinding) = check.repair(finding)
@@ -133,14 +218,16 @@ class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, Re
      * The cache, then the tick — in that order, because a surface woken by the tick reads the cache,
      * and a tick published first is a wake-up to the previous answer.
      */
-    private fun publish(findings: List<ReminderHealthFinding>) {
-        cached = findings
+    private fun publish(findings: List<ReminderHealthFinding>): HealthRun {
+        val run = HealthRun(findings, now())
+        last = run
         _changes.update { it + 1 }
+        return run
     }
 }
 
 /**
- * The Health section inside the Maintenance destination (#27, spec §5.8).
+ * The Reminder health page (#27, spec §5.8; under Settings › Utilities since 1.7.1, #103).
  *
  * It reports and repairs and decides nothing: the findings, their severities and which of them may
  * be repaired automatically are all [ReminderHealthCheck]'s, and this turns each one into a row with
@@ -236,8 +323,14 @@ class ReminderHealthViewModel(
         resumeDelivery()
     }
 
-    private fun emit(findings: List<ReminderHealthFinding>) {
-        _state.value = HealthState(rows = findings.map(::rowOf), loaded = true)
+    /** One run becomes one state: its rows, its instant and its passed checks all from the same snapshot. */
+    private fun emit(run: HealthRun) {
+        _state.value = HealthState(
+            rows = run.findings.map(::rowOf),
+            loaded = true,
+            checkedAt = run.at,
+            passed = passedChecks(run.findings),
+        )
     }
 
     private fun rowOf(finding: ReminderHealthFinding): HealthRow {

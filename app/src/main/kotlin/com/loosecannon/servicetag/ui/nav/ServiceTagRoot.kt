@@ -35,12 +35,14 @@ import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
 import com.loosecannon.servicetag.ui.installed.InstalledComponentDetailScreen
+import com.loosecannon.servicetag.ui.installed.InstalledComponentsListScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.loan.LoanEditScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
+import com.loosecannon.servicetag.ui.maintenance.MaintenanceGroupsScreen
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceSheet
 import com.loosecannon.servicetag.ui.maintenance.ReminderHealthScreen
@@ -163,9 +165,10 @@ fun ServiceTagRoot(
                     MaintenanceScreen(
                         graph = graph,
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
-                        onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
-                        onNewGroup = { backStack.add(Route.GroupEdit(null)) },
+                        // #103: the three peer rows push their lists; the badge still opens reminder health.
+                        onOpenGroups = { backStack.add(Route.MaintenanceGroups) },
                         onOpenSupplies = { backStack.add(Route.Supplies) },
+                        onOpenInstalledComponents = { backStack.add(Route.InstalledComponents) },
                         onReminderHealth = { backStack.add(Route.ReminderHealth) },
                         // F4 reuses the shipped routes for two of the three actions.
                         onScanTag = { backStack.add(Route.Scan) },
@@ -492,6 +495,8 @@ fun ServiceTagRoot(
                         onBackup = { backStack.add(Route.Backup) },
                         onDeveloperApi = { backStack.add(Route.DeveloperApi) },
                         onCategories = { backStack.add(Route.Categories) },
+                        // #103 (1.7.1): reminder health is a Utilities row, by the route it always had.
+                        onReminderHealth = { backStack.add(Route.ReminderHealth) },
                         onHomeAssistant = { backStack.add(Route.HomeAssistant) },
                     )
                 }
@@ -587,7 +592,26 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
-                // #15 (C29, C30): the Supplies list and one SupplyItem, pushed from Maintenance's fifth row. The add
+                // #103 (1.7.1): the group list, pushed from the Maintenance tab's groups row, create row included; a
+                // new group opens on its own detail as before (the GroupEdit entry below).
+                entry<Route.MaintenanceGroups> {
+                    MaintenanceGroupsScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
+                        onNewGroup = { backStack.add(Route.GroupEdit(null)) },
+                    )
+                }
+                // #103 (1.7.1): every current installed component, pushed from the tab's third row; a row opens the
+                // asset's detail, the one place a component is managed (owner ruling Q2).
+                entry<Route.InstalledComponents> {
+                    InstalledComponentsListScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                    )
+                }
+                // #15 (C29, C30): the Supplies list and one SupplyItem, pushed from Maintenance's Supplies row. The add
                 // button and the detail's Edit push `Route.SupplyEdit`, the editor's key (C31).
                 entry<Route.Supplies> {
                     SupplyListScreen(

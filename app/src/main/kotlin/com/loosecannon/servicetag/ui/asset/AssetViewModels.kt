@@ -2896,7 +2896,7 @@ internal fun priceHint(currency: String): String {
 
 /** The device's currency where Android resolves one; blank where it does not (spec §9). */
 private fun localeCurrencyCode(): String = try {
-    Currency.getInstance(Locale.getDefault())?.currencyCode.orEmpty()
+    Currency.getInstance(Locale.getDefault())?.currencyCode.orEmpty() // l10n-ok: the device region's currency, a default code
 } catch (e: IllegalArgumentException) {
     ""
 } catch (e: NullPointerException) {
