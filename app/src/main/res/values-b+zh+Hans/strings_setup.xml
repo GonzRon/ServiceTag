@@ -145,4 +145,9 @@
     <string name="setup_problem_quantity_not_number">数量必须是数字，或留空</string>
     <string name="setup_failed_save_action">无法保存此操作。</string>
     <string name="setup_failed_delete_this_action">无法删除此操作。</string>
+
+    <string name="setup_problem_field_not_this_asset">不是此设备的读数定义</string>
+    <string name="setup_problem_field_derived">计算得出的值是算出来的，不能手动录入</string>
+    <string name="setup_problem_field_archived">已归档</string>
+    <string name="setup_problem_field_listed_twice">列出了两次</string>
 </resources>

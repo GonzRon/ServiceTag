@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_components_health.xml. -->
+<resources>
+    <string name="ui_action_cancel">Отмена</string>
+    <string name="ui_action_save">Сохранить</string>
+    <string name="ui_typed_confirm_label">Для подтверждения введите %1$s</string>
+
+    <string name="ui_instrument_header_reading">Показание</string>
+    <string name="ui_instrument_header_value">Значение</string>
+    <string name="ui_instrument_header_target">Норма</string>
+    <string name="ui_instrument_required">Обязательно</string>
+    <string name="ui_instrument_not_a_number">Не число</string>
+    <string name="ui_instrument_check_value">Проверьте это значение</string>
+    <string name="ui_instrument_yes">Да</string>
+    <string name="ui_instrument_no">Нет</string>
+
+    <string name="ui_ledger_day_month">%1$s %2$s</string>
+
+    <string name="condition_word_operational">РАБОТАЕТ</string>
+    <string name="condition_word_degraded">УХУДШЕНО</string>
+    <string name="condition_word_down">НЕ РАБОТАЕТ</string>
+    <string name="condition_not_recorded">Состояние не записано</string>
+    <string name="condition_option_operational">Работает</string>
+    <string name="condition_helper_operational">Доступно для обычного использования.</string>
+    <string name="condition_option_degraded">Ухудшено</string>
+    <string name="condition_helper_degraded">Работает, но с известной проблемой.</string>
+    <string name="condition_option_down">Не работает</string>
+    <string name="condition_helper_down">Недоступно для использования по назначению.</string>
+    <string name="condition_no_reason_given">Причина не указана</string>
+    <string name="condition_log_incident">Записать неисправность</string>
+    <string name="condition_since">с %1$s</string>
+    <string name="condition_component_line">%1$s %2$s — %3$s</string>
+
+    <string name="condition_title">Состояние</string>
+    <string name="condition_change">Изменить состояние</string>
+    <string name="condition_what_is_wrong">Что не так? (необязательно)</string>
+    <string name="condition_when_did_this_change">Когда это изменилось?</string>
+    <string name="condition_save">Сохранить состояние</string>
+    <string name="condition_date_not_later_than_today">Дата не может быть позже сегодняшней.</string>
+    <string name="condition_log_incident_details_question">Записать подробности неисправности?</string>
+    <string name="condition_log_incident_details_body">%1$s: %2$s. Записать в журнал обслуживания, что пошло не так?</string>
+    <string name="condition_log_incident_details">Записать подробности неисправности</string>
+    <string name="condition_save_only">Сохранить только состояние</string>
+    <string name="condition_saving_also_records">При сохранении для объекта «%1$s» также будет записано состояние %2$s.</string>
+
+    <string name="condition_mark_operational">Отметить как работающий</string>
+    <string name="condition_mark_operational_title">Отметить как работающий?</string>
+    <string name="condition_mark_operational_body">Прежняя запись о состоянии %1$s останется в истории.</string>
+    <string name="condition_operational_offer_body">Вы записали «%1$s». Объект «%2$s» снова работает нормально?</string>
+    <string name="condition_not_yet">Пока нет</string>
+    <string name="condition_start_season">Начать сезон</string>
+    <string name="condition_end_season">Завершить сезон</string>
+    <string name="condition_start_season_question">Начать сезон сейчас?</string>
+    <string name="condition_end_season_question">Завершить сезон сейчас?</string>
+    <string name="condition_you_logged">Вы записали «%1$s».</string>
+    <string name="condition_did_this_affect_use">Повлияло ли это на то, можно ли использовать объект?</string>
+    <string name="condition_mark_down">Отметить как неработающий</string>
+    <string name="condition_mark_degraded">Отметить ухудшение</string>
+    <string name="condition_no_change">Без изменений</string>
+
+    <string name="health_band_nominal">НОРМА</string>
+    <string name="health_band_warning">ПРЕДУПРЕЖДЕНИЕ</string>
+    <string name="health_band_critical">КРИТИЧНО</string>
+    <string name="health_not_tracked">НЕ ОТСЛЕЖИВАЕТСЯ</string>
+    <string name="health_badge_label">%1$s %2$d</string>
+    <string name="health_replaced">Заменено %1$s, %2$s назад</string>
+    <string name="health_no_replacement_recorded">Замена ещё не записана</string>
+    <string name="health_replacement_action_removed">Быстрое действие замены удалено.</string>
+    <string name="health_up_to_date">%1$s: всё в срок</string>
+    <string name="health_postponed">%1$s: перенесено на %2$s</string>
+    <string name="health_not_tracked_out_of_season">Не отслеживается вне сезона</string>
+    <string name="health_not_tracked_paused">Не отслеживается, пока график приостановлен</string>
+    <string name="health_not_tracked_link">Не отслеживается: у связанного графика нет правила по дате или он относится к другому объекту.</string>
+    <string name="health_subject_score">%1$s %2$d</string>
+    <string name="health_aggregate_line">%1$d — %2$s</string>
+    <string name="health_critical_line">Критично: %1$s %2$d</string>
+    <string name="health_dashboard_row">%1$s %2$s</string>
+
+    <string name="health_name">Название</string>
+    <string name="health_what_is_it">Что это?</string>
+    <string name="health_kind_whole_asset">Весь объект</string>
+    <string name="health_kind_part">Часть</string>
+    <string name="health_kind_medium">Что-то обслуживаемое, например вода</string>
+    <string name="health_what_wears_it_down">Что его изнашивает?</string>
+    <string name="health_driver_age">Время с последней замены</string>
+    <string name="health_driver_overdue">Просроченное обслуживание</string>
+    <string name="health_replacement_quick_action">Быстрое действие замены</string>
+    <string name="health_any_replacement">Любая замена</string>
+    <string name="health_maintenance_schedule">График обслуживания</string>
+    <string name="health_age_threshold_nominal">Как новое (дней)</string>
+    <string name="health_age_threshold_warning">Предупреждение через (дней)</string>
+    <string name="health_age_threshold_critical">Критично через (дней)</string>
+    <string name="health_overdue_threshold_grace">Льготный период (дней просрочки)</string>
+    <string name="health_overdue_threshold_warning">Предупреждение при (днях просрочки)</string>
+    <string name="health_overdue_threshold_critical">Критично при (днях просрочки)</string>
+    <string name="health_thresholds_must_rise">Каждое число должно быть больше предыдущего.</string>
+    <string name="health_enter_all_three_numbers">Введите все три числа или используйте начальные значения.</string>
+    <string name="health_use_a_starting_point">Использовать начальные значения</string>
+    <string name="health_starting_point_engine_service">Обслуживание двигателя: %1$d / %2$d / %3$d дн. просрочки</string>
+    <string name="health_starting_point_water_care">Уход за водой: %1$d / %2$d / %3$d дн. просрочки</string>
+    <string name="health_starting_points_not_safety_limits">Это начальные значения, а не пределы безопасности. Проверьте их для этого оборудования перед сохранением.</string>
+    <string name="health_use_these_numbers">Использовать эти числа</string>
+    <string name="health_weight">Вес</string>
+    <string name="health_schedule_already_drives_another">Этот график уже определяет другой показатель.</string>
+    <string name="health_archive_subject">Отправить показатель в архив</string>
+    <string name="health_restore_subject">Восстановить показатель</string>
+
+    <string name="dashboard_all_categories">Все категории</string>
+    <string name="dashboard_all_statuses">Все статусы</string>
+    <string name="dashboard_category_label">Категория</string>
+    <string name="dashboard_status_label">Статус обслуживания</string>
+    <string name="dashboard_chip_not_recorded">Не записано</string>
+    <string name="dashboard_settings">Настройки</string>
+    <string name="dashboard_child_assets_listed_on_parent">Дочерние объекты показаны в объекте, в который они входят.</string>
+    <string name="dashboard_nothing_matches">Ничего не найдено.</string>
+    <string name="dashboard_backup_eyebrow">РЕЗЕРВНАЯ КОПИЯ</string>
+    <string name="dashboard_no_backup_yet">Резервной копии пока нет</string>
+    <string name="dashboard_backup_why">Метки переживут смену телефона, только если она у вас есть.</string>
+    <string name="dashboard_export_now">Экспортировать</string>
+    <string name="dashboard_nothing_here_yet">Здесь пока ничего нет</string>
+    <string name="dashboard_add_first_asset">Добавьте первый объект</string>
+    <string name="dashboard_scan_a_tag">Сканировать метку</string>
+    <string name="dashboard_no_schedule_yet">Графика пока нет</string>
+</resources>

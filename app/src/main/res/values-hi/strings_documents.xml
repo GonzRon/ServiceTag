@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_documents.xml. -->
+<resources>
+    <string name="documents_header">दस्तावेज़</string>
+    <string name="documents_header_count">दस्तावेज़ · %1$d</string>
+    <string name="documents_empty">अभी कोई दस्तावेज़ नहीं</string>
+    <string name="documents_add_file">फ़ाइल जोड़ें</string>
+    <string name="documents_take_photo">फ़ोटो लें</string>
+    <string name="documents_storage_headline">अनुलग्नकों का स्टोरेज</string>
+    <string name="documents_storage_not_set_up">अनुलग्नकों का स्टोरेज सेट अप नहीं है</string>
+    <string name="documents_storage_detail">सेटिंग में एक फ़ोल्डर चुनें</string>
+    <string name="documents_open_settings">सेटिंग खोलें</string>
+    <string name="documents_no_app_can_pick_files">कोई भी ऐप फ़ाइलें नहीं चुन सकता</string>
+    <string name="documents_no_app_can_open_file">कोई भी ऐप यह फ़ाइल नहीं खोल सकता</string>
+    <string name="documents_no_camera_app">इस डिवाइस पर कोई कैमरा ऐप नहीं है</string>
+    <string name="documents_not_on_device">इस डिवाइस पर नहीं है</string>
+    <string name="documents_more_for">%1$s के लिए ज़्यादा विकल्प</string>
+    <string name="documents_more_for_role">%1$s (%2$s) के लिए ज़्यादा विकल्प</string>
+
+    <string name="documents_kind_photo">फ़ोटो</string>
+    <string name="documents_kind_label_photo">लेबल की फ़ोटो</string>
+    <string name="documents_kind_receipt">रसीद</string>
+    <string name="documents_kind_manual">मैनुअल</string>
+    <string name="documents_kind_warranty">वारंटी</string>
+    <string name="documents_kind_document">दस्तावेज़</string>
+    <string name="documents_kind_other">अन्य</string>
+
+    <string name="documents_size_bytes">%1$s बाइट</string>
+    <string name="documents_size_kb">%1$s KB</string>
+    <string name="documents_size_mb">%1$s MB</string>
+
+    <string name="attachments_name_label">नाम</string>
+    <string name="attachments_kind_header">किस्म</string>
+    <string name="attachments_notes_label">नोट</string>
+    <string name="attachments_cancel">रद्द करें</string>
+    <string name="attachments_save">सहेजें</string>
+    <string name="attachments_captured_on_label">कैप्चर करने की तारीख</string>
+    <string name="attachments_delete">मिटाएँ</string>
+    <string name="attachments_delete_title">फ़ाइल मिटाएँ?</string>
+    <string name="attachments_delete_body">%1$s मिटाएँ? फ़ाइल आपके अनुलग्नक फ़ोल्डर से हटा दी जाएगी।</string>
+
+    <string name="attachments_role_header">भूमिका</string>
+    <string name="attachments_role_purchase_invoice_or_receipt">खरीद का बिल या रसीद</string>
+    <string name="attachments_role_user_manual">यूज़र मैनुअल</string>
+    <string name="attachments_role_service_manual">सर्विस मैनुअल</string>
+    <string name="attachments_role_none">कोई भूमिका नहीं</string>
+    <string name="attachments_adding_progress">%2$d में से %1$d जोड़ी जा रही है…</string>
+    <string name="attachments_could_not_save">%1$s सहेजा नहीं जा सका</string>
+    <string name="attachments_could_not_delete">वह फ़ाइल मिटाई नहीं जा सकी</string>
+    <string name="attachments_could_not_add">%1$s जोड़ा नहीं जा सका</string>
+    <string name="attachments_blank_name">फ़ाइल को एक नाम दें</string>
+    <string name="attachments_no_store">पहले सेटिंग में एक अनुलग्नक फ़ोल्डर चुनें</string>
+    <string name="attachments_store_unavailable">अनुलग्नक फ़ोल्डर उपलब्ध नहीं है</string>
+    <string name="attachments_too_large">वह फ़ाइल 256 MB से बड़ी है</string>
+    <string name="attachments_owner_missing">वह फ़ाइल अब यहाँ नहीं है</string>
+    <string name="attachments_scan_failed">अनुलग्नक फ़ोल्डर की जाँच नहीं की जा सकी</string>
+    <string name="attachments_folder_fallback">फ़ोल्डर</string>
+
+    <string name="references_header">संदर्भ</string>
+    <string name="references_header_count">संदर्भ · %1$d</string>
+    <string name="references_empty">अभी कोई संदर्भ नहीं</string>
+    <string name="references_add_link">लिंक जोड़ें</string>
+    <string name="references_more">ज़्यादा</string>
+    <string name="references_open">खोलें</string>
+    <string name="references_edit">बदलाव करें</string>
+    <string name="references_remove">हटाएँ</string>
+    <string name="references_kind_web_link">वेब लिंक</string>
+    <string name="references_kind_note">नोट</string>
+    <string name="references_kind_other">अन्य</string>
+    <string name="references_blocked_at_open">ServiceTag इस तरह का लिंक नहीं खोलेगा।</string>
+    <string name="links_no_handler">कोई भी ऐप यह लिंक नहीं खोल सकता</string>
+
+    <string name="references_edit_title">संदर्भ में बदलाव करें</string>
+    <string name="references_link_label">लिंक</string>
+    <string name="references_name_label">नाम</string>
+    <string name="references_description_label">ब्यौरा</string>
+    <string name="references_cancel">रद्द करें</string>
+    <string name="references_save">सहेजें</string>
+    <string name="references_remove_title">यह संदर्भ हटाएँ?</string>
+    <string name="references_removed_from_asset">लिंक इस उपकरण से हटा दिया जाएगा। दूसरे ऐप में कुछ भी नहीं बदलेगा।</string>
+    <string name="references_removed_from_supply">लिंक इस आपूर्ति सामग्री से हटा दिया जाएगा। दूसरे ऐप में कुछ भी नहीं बदलेगा।</string>
+    <string name="references_removed_from_installed_component">लिंक इस लगे हुए पुर्ज़े से हटा दिया जाएगा। दूसरे ऐप में कुछ भी नहीं बदलेगा।</string>
+    <string name="references_unknown_scheme_title">यह लिंक सहेजें?</string>
+    <string name="references_unknown_scheme_body">ServiceTag \"%1$s\" लिंक को नहीं पहचानता। इसे जैसा लिखा है वैसा ही सहेजा जाएगा, और जो भी ऐप इसे खोलने का दावा करे, उसी से खोला जाएगा।</string>
+
+    <string name="references_blank_name">संदर्भ को एक नाम दें</string>
+    <string name="references_not_a_link">यह लिंक नहीं है।</string>
+    <string name="references_uri_too_long">वह लिंक सहेजने के लिए बहुत लंबा है।</string>
+    <string name="references_scheme_blocked">ServiceTag इस तरह का लिंक नहीं सहेजेगा।</string>
+    <string name="references_duplicate_on_asset">वह लिंक पहले से इस उपकरण पर है</string>
+    <string name="references_duplicate_on_supply">वह लिंक पहले से इस आपूर्ति सामग्री पर है</string>
+    <string name="references_duplicate_on_installed_component">वह लिंक पहले से इस लगे हुए पुर्ज़े पर है</string>
+
+    <string name="references_save_as_document">दस्तावेज़ के रूप में सहेजें</string>
+    <string name="references_downloading_from">%1$s से डाउनलोड हो रहा है…</string>
+    <string name="references_download_progress">%2$s में से %1$s</string>
+    <string name="references_from_host">%1$s से</string>
+    <string name="references_type_line">%1$s · %2$s</string>
+    <string name="references_saved_as_document">दस्तावेज़ के रूप में सहेजा गया</string>
+    <string name="references_saved_to_documents">“दस्तावेज़” में सहेजा गया</string>
+    <string name="references_downloaded_from">%2$s को %1$s से डाउनलोड किया गया</string>
+    <string name="references_open_source_link">स्रोत लिंक खोलें</string>
+    <string name="references_network_denied">ServiceTag को नेटवर्क इस्तेमाल करने की अनुमति नहीं है, इसलिए यह फ़ाइल डाउनलोड नहीं की जा सकती। ऐप की सेटिंग में नेटवर्क एक्सेस की अनुमति दें, फिर ServiceTag को बंद करके दोबारा खोलें।</string>
+    <string name="references_unreachable">%1$s तक नहीं पहुँचा जा सका। कनेक्शन जाँचें और फिर से कोशिश करें।</string>
+    <string name="references_timed_out">डाउनलोड में बहुत ज़्यादा समय लगा, इसलिए उसे रोक दिया गया।</string>
+    <string name="references_not_a_document">उस लिंक से कोई समर्थित दस्तावेज़ प्रकार नहीं मिला। यह लिंक ही रहेगा।</string>
+    <string name="references_needs_sign_in">उस फ़ाइल के लिए साइन इन ज़रूरी है, इसलिए ServiceTag उसे डाउनलोड नहीं कर सकता। यह लिंक ही रहेगा।</string>
+    <string name="references_server_error">सर्वर ने फ़ाइल नहीं भेजी (गड़बड़ी %1$d)।</string>
+    <string name="references_redirect_refused">वह लिंक ऐसी जगह रीडायरेक्ट करता है जहाँ ServiceTag नहीं जाएगा। यह लिंक ही रहेगा।</string>
+    <string name="references_already_have_on_asset">इस उपकरण में यह फ़ाइल पहले से है: %1$s।</string>
+    <string name="references_already_have_on_supply">इस आपूर्ति सामग्री में यह फ़ाइल पहले से है: %1$s।</string>
+    <string name="references_already_have_on_installed_component">इस लगे हुए पुर्ज़े में यह फ़ाइल पहले से है: %1$s।</string>
+    <string name="references_interrupted">डाउनलोड पूरा नहीं हो सका। फिर से कोशिश करें।</string>
+    <string name="references_local_address">वह लिंक लोकल नेटवर्क के पते पर रिज़ॉल्व होता है, इसलिए ServiceTag उसे डाउनलोड नहीं करेगा। यह लिंक ही रहेगा।</string>
+
+    <string name="contacts_no_app_can_open">कोई भी ऐप यह संपर्क नहीं खोल सकता</string>
+
+    <string name="share_title">ServiceTag में सहेजें</string>
+    <string name="share_received">मिला</string>
+    <string name="share_attach_to">इससे जोड़ें</string>
+    <string name="share_choose_asset">उपकरण चुनें</string>
+    <string name="share_name">नाम</string>
+    <string name="share_description">ब्यौरा (वैकल्पिक)</string>
+    <string name="share_type">प्रकार</string>
+    <string name="share_save">सहेजें</string>
+    <string name="share_cancel">रद्द करें</string>
+    <string name="share_close">बंद करें</string>
+    <string name="share_save_as_note">नोट के रूप में सहेजें</string>
+    <string name="share_not_a_link">यह लिंक नहीं है।</string>
+    <string name="share_no_assets">पहले ServiceTag में एक उपकरण जोड़ें, फिर इसे दोबारा शेयर करें।</string>
+    <string name="share_no_folder">ServiceTag की सेटिंग में एक अनुलग्नक फ़ोल्डर चुनें, फिर इसे दोबारा शेयर करें।</string>
+    <string name="share_stream_refused">जिस ऐप ने यह फ़ाइल शेयर की है, उससे यह फ़ाइल स्वीकार नहीं की जा सकती।</string>
+    <string name="share_unreadable">जो शेयर किया गया, उसे पढ़ा नहीं जा सका</string>
+    <string name="share_uri_too_long">वह लिंक सहेजने के लिए बहुत लंबा है।</string>
+    <string name="share_scheme_blocked">ServiceTag इस तरह का लिंक नहीं सहेजेगा।</string>
+    <string name="share_duplicate_uri">वह लिंक पहले से इस उपकरण पर है</string>
+    <string name="share_empty_file">वह फ़ाइल खाली है</string>
+    <string name="share_too_large">वह फ़ाइल 256 MB से बड़ी है</string>
+    <string name="share_blank_file_name">फ़ाइल को एक नाम दें</string>
+    <string name="share_blank_reference_name">संदर्भ को एक नाम दें</string>
+    <string name="share_confirm_title">यह लिंक सहेजें?</string>
+    <string name="share_confirm_body">ServiceTag \"%1$s\" लिंक को नहीं पहचानता। इसे जैसा लिखा है वैसा ही सहेजा जाएगा, और जो भी ऐप इसे खोलने का दावा करे, उसी से खोला जाएगा।</string>
+    <string name="share_change">बदलें</string>
+    <string name="share_no_active_assets">कोई सक्रिय उपकरण नहीं</string>
+    <string name="share_search_installed_components">लगे हुए पुर्ज़े खोजें</string>
+    <string name="share_search_supplies">आपूर्ति सामग्री खोजें</string>
+    <string name="share_path_step">%1$s › %2$s</string>
+    <string name="share_this_asset">यह उपकरण</string>
+    <string name="share_supply_shared">आपूर्ति सामग्री — कई जगह इस्तेमाल होती है</string>
+    <string name="share_show_inside">%1$s के अंदर क्या है, दिखाएँ</string>
+    <string name="share_on_supply">यह आपूर्ति सामग्री %1$s पर सहेजा जाएगा, और जहाँ भी वह आपूर्ति सामग्री इस्तेमाल होती है, वहाँ उपलब्ध रहेगा।</string>
+    <string name="share_saved_to_supply">आपूर्ति सामग्री %1$s में सहेजा गया।</string>
+    <string name="share_saved_to">%1$s में सहेजा गया</string>
+    <string name="share_back">वापस जाएँ</string>
+</resources>
