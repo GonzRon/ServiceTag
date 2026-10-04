@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_asset_edit.xml. -->
+<resources>
+    <string name="asset_edit_operating_season">使用季</string>
+    <string name="asset_edit_year_round">全年使用</string>
+    <string name="asset_edit_same_dates_every_year">每年日期相同</string>
+    <string name="asset_edit_started_and_ended_by_hand">手动开始和结束</string>
+    <string name="asset_edit_season_starts">使用季开始</string>
+    <string name="asset_edit_season_ends">使用季结束</string>
+    <string name="asset_edit_season_may_run_across_the_new_year">使用季可以跨年，例如从10月到次年4月。</string>
+    <string name="asset_edit_is_this_asset_in_season">此设备现在是否处于使用季内？</string>
+    <string name="asset_edit_in_season_now">使用季内</string>
+    <string name="asset_edit_out_of_season_now">使用季外</string>
+    <string name="asset_edit_you_start_and_end_the_season">使用季需手动开始和结束。设为跟随使用季的保养，在使用季结束期间会一直等待。</string>
+    <string name="asset_edit_season_strands">此设备的部分保养设为须在使用季之前就绪。请先修改：%1$s。</string>
+
+    <string name="asset_edit_maintenance_break">保养暂停期</string>
+    <string name="asset_edit_no_routine_maintenance_between_two_dates">在两个日期之间不进行例行保养</string>
+    <string name="asset_edit_break_starts">暂停期开始</string>
+    <string name="asset_edit_break_ends">暂停期结束</string>
+    <string name="asset_edit_break_helper">设为跟随使用季或须在其之前就绪的保养，不会在暂停期内到期。已逾期的工作仍为逾期，但不会再提醒。</string>
+    <string name="asset_edit_break_cannot_cover_the_year">暂停期不能覆盖全年。</string>
+    <string name="asset_edit_break_strands">此设备的部分保养设为须在暂停期之前就绪。请先修改：%1$s。</string>
+
+    <string name="asset_edit_health_subjects">健康指标</string>
+    <string name="asset_edit_add_health_subject">添加健康指标</string>
+    <string name="asset_edit_combine_health_by">健康度合并方式</string>
+    <string name="asset_edit_combine_worst">最差指标</string>
+    <string name="asset_edit_combine_one">单一指标</string>
+    <string name="asset_edit_combine_average">平均值</string>
+    <string name="asset_edit_combine_weighted">加权平均值</string>
+    <string name="asset_edit_which_subject">哪个指标？</string>
+
+    <plurals name="asset_edit_not_tied_to_season">
+        <item quantity="other">此设备有%1$d个保养计划未与其使用季关联。这些计划启用后，即使设备处于使用季外，也可能到期或保持到期，除非更改该保养的执行时间。</item>
+    </plurals>
+    <string name="asset_edit_review_maintenance_schedules">查看保养计划</string>
+    <string name="asset_edit_keep_schedules_as_is">保持计划不变</string>
+
+    <string name="asset_edit_key_documents">重要文档</string>
+    <string name="asset_edit_add_purchase_invoice_or_receipt">添加购买发票或收据</string>
+    <string name="asset_edit_add_user_manual">添加用户手册</string>
+    <string name="asset_edit_add_service_manual">添加维修手册</string>
+    <string name="asset_edit_attached_when_you_save">保存时附加</string>
+    <string name="asset_edit_remove">移除</string>
+    <string name="asset_edit_remove_file">移除%1$s</string>
+
+    <string name="asset_edit_name_field">名称</string>
+    <string name="asset_edit_manufacturer_field">制造商</string>
+    <string name="asset_edit_model_field">型号</string>
+    <string name="asset_edit_serial_number_field">序列号</string>
+    <string name="asset_edit_location_field">位置</string>
+    <string name="asset_edit_part_of_field">隶属于</string>
+    <string name="asset_edit_purchase_date_field">购买日期</string>
+    <string name="asset_edit_in_service_date_field">启用日期</string>
+    <string name="asset_edit_category_field">类别</string>
+    <string name="asset_edit_description_field">描述</string>
+    <string name="asset_edit_price_field">价格</string>
+    <string name="asset_edit_currency_field">货币</string>
+    <string name="asset_edit_vendor_field">商家</string>
+    <string name="asset_edit_warranty_expires_on">到期日期</string>
+    <string name="asset_edit_warranty_notes_field">保修备注</string>
+    <string name="asset_edit_notes_field">备注</string>
+
+    <string name="asset_edit_section_identity">基本信息</string>
+    <string name="asset_edit_section_placement">位置</string>
+    <string name="asset_edit_section_purchase">购买</string>
+    <string name="asset_edit_section_warranty">保修</string>
+    <string name="asset_edit_section_notes">备注</string>
+    <string name="asset_edit_section_template">模板</string>
+
+    <string name="asset_edit_title_edit">编辑设备</string>
+    <string name="asset_edit_cancel">取消</string>
+    <string name="asset_edit_save">保存</string>
+    <string name="asset_edit_save_asset">保存设备</string>
+    <string name="asset_edit_notifications_ok">确定</string>
+
+    <string name="asset_edit_date_placeholder">YYYY-MM-DD</string>
+    <string name="asset_edit_month_day_placeholder">MM-DD</string>
+    <string name="asset_edit_pick_date">选择%1$s</string>
+    <string name="asset_edit_calendar_ok">确定</string>
+    <string name="asset_edit_calendar_cancel">取消</string>
+
+    <string name="asset_edit_template_none">无 · 稍后设置</string>
+    <string name="asset_edit_template_helper">为设备预设读数和快捷操作。选择“无”可稍后再为设备决定。</string>
+
+    <string name="asset_model_condition_history">状况历史</string>
+    <string name="asset_model_linked_record_removed">关联的记录已被删除。</string>
+    <string name="asset_model_health_section">健康度</string>
+    <string name="asset_model_health_footer">健康度是根据日期和记录得出的估计，并非诊断。它绝不会改变设备状况。</string>
+    <string name="asset_model_health_fallback_to_worst">要跟随的指标已不存在，因此显示最差指标。</string>
+
+    <string name="asset_model_could_not_update">无法更新此设备。</string>
+    <string name="asset_model_could_not_retire">无法让此设备退役。</string>
+    <string name="asset_model_could_not_delete">无法删除此设备。</string>
+    <string name="asset_model_template_not_available">该模板不可用。</string>
+    <string name="asset_model_could_not_set_up">无法设置此设备。</string>
+    <string name="asset_model_already_set_up">此设备已完成设置。</string>
+
+    <string name="asset_model_could_not_save">无法保存此设备。</string>
+    <string name="asset_model_parent_cycle">%1$s已隶属于此设备。</string>
+    <string name="asset_model_no_parent">无</string>
+    <string name="asset_model_parent_archived">%1$s（已归档）</string>
+
+    <string name="asset_model_not_a_real_month_day">不是有效的月份和日期</string>
+    <string name="asset_model_name_required">请为设备命名</string>
+    <string name="asset_model_bad_date">请按 YYYY-MM-DD 格式输入日期</string>
+    <string name="asset_model_bad_currency">货币为三个字母的代码，如 USD</string>
+    <string name="asset_model_currency_required">填写价格时需要货币</string>
+    <string name="asset_model_price_negative">价格不能为负数</string>
+    <string name="asset_model_parent_gone">该设备已不存在</string>
+    <string name="asset_model_price_example">请输入价格，例如%1$s</string>
+    <string name="asset_model_price_hint_amount">金额</string>
+    <string name="asset_model_price_hint_whole">仅限整数</string>
+    <plurals name="asset_model_price_hint_decimals">
+        <item quantity="other">最多%1$d位小数</item>
+    </plurals>
+
+    <string name="season_in_season_word">使用季内</string>
+    <string name="season_start_title">开始使用季？</string>
+    <string name="season_start_body">设为跟随使用季的保养将从%1$s起重新生效。</string>
+    <string name="season_end_title">结束使用季？</string>
+    <string name="season_end_body">设为跟随使用季的保养会一直等待，直到再次开始使用季。不会将任何项目标记为完成。</string>
+    <string name="season_history_started">使用季已开始</string>
+    <string name="season_history_ended">使用季已结束</string>
+    <string name="season_history_section">使用季历史</string>
+    <string name="season_next_starts">下个使用季%1$s开始</string>
+    <string name="season_ends_on">使用季%1$s结束</string>
+    <string name="season_choose_date_from">请选择%1$s至今天之间的日期。</string>
+    <string name="season_already_running">使用季已在进行中。</string>
+    <string name="season_already_ended">使用季已经结束。</string>
+
+    <string name="season_sync_link">关联到 Home Assistant</string>
+    <string name="season_sync_follow">跟随 Home Assistant</string>
+    <string name="season_sync_force_in">强制设为使用季内</string>
+    <string name="season_sync_force_out">强制设为使用季外</string>
+    <string name="season_sync_now">立即同步</string>
+    <string name="season_sync_follows">跟随%1$s</string>
+    <string name="season_sync_forced_in">已强制设为使用季内。仍会检查%1$s，但在选择“跟随 Home Assistant”之前，它不会改变使用季。</string>
+    <string name="season_sync_forced_out">已强制设为使用季外。仍会检查%1$s，但在选择“跟随 Home Assistant”之前，它不会改变使用季。</string>
+    <string name="season_sync_last_success">上次成功检查：%1$s</string>
+    <string name="season_sync_no_reading_yet">尚未从 Home Assistant 获得读数。</string>
+    <string name="season_sync_not_checked_in_time">未能在所选间隔内成功检查。</string>
+    <string name="season_sync_changed_in_ha">在 Home Assistant 中的更改时间：%1$s</string>
+    <string name="season_sync_started_from_ha">于%1$s由 Home Assistant 开始</string>
+    <string name="season_sync_ended_from_ha">于%1$s由 Home Assistant 结束</string>
+    <string name="season_sync_forced_in_on">于%1$s强制设为使用季内</string>
+    <string name="season_sync_forced_out_on">于%1$s强制设为使用季外</string>
+    <string name="season_sync_not_maintained_here">此设备已不再在此处维护，因此 Home Assistant 不再更改其使用季。</string>
+    <string name="season_sync_date_before_history">此手机的日期早于最近一条使用季记录，因此在日期赶上之前，使用季保持不变。</string>
+    <string name="season_sync_not_manual">此设备的使用季已不再手动开始和结束，因此 Home Assistant 无法更改它。请选择“停止同步”，然后选择“恢复同步”。</string>
+    <string name="season_sync_stop">停止同步</string>
+    <string name="season_sync_resume">恢复同步</string>
+    <string name="season_sync_stopped">同步已停止。Home Assistant 不再更改此设备的使用季。</string>
+    <string name="season_sync_entity_id">实体 ID</string>
+    <string name="season_sync_entity_id_help">一个开关型辅助元素，在此设备处于使用季内时为开启状态，例如 input_boolean.example_heater_in_season。不是电器本身的电源开关。</string>
+    <string name="season_sync_link_calendar">将此设备关联到 Home Assistant 会替换其日历日期。从今天起，其使用季由 Home Assistant 决定何时开始和结束。从使用季开始起计算的保养将从今天开始计算。</string>
+    <string name="season_sync_link_year_round">此设备目前没有使用季。关联到 Home Assistant 后会为其设置使用季：从今天起处于使用季内，之后由 Home Assistant 决定何时开始和结束。从使用季开始起计算的保养将从今天开始计算。</string>
+    <string name="season_sync_link_manual">从现在起，由 Home Assistant 开始和结束此设备的使用季。其使用季历史保持不变。</string>
+    <string name="season_sync_follows_ha">此设备的使用季跟随 Home Assistant。如需在此处更改，请先在设备页面上选择“停止同步”。</string>
+    <string name="season_sync_bad_entity_id">请输入实体 ID，例如 input_boolean.example_heater_in_season：只能包含小写字母、数字和下划线，并带有一个点。</string>
+</resources>

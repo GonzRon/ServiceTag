@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_setup.xml. -->
+<resources>
+    <string name="setup_loading">読み込み中…</string>
+    <string name="setup_back">戻る</string>
+    <string name="setup_cancel">キャンセル</string>
+    <string name="setup_save">保存</string>
+    <string name="setup_more">その他</string>
+    <string name="setup_edit">編集</string>
+    <string name="setup_move_up">上へ移動</string>
+    <string name="setup_move_down">下へ移動</string>
+    <string name="setup_archive">アーカイブ</string>
+    <string name="setup_unarchive">アーカイブ解除</string>
+    <string name="setup_delete">削除</string>
+    <string name="setup_remove">外す</string>
+    <string name="setup_archived_badge">アーカイブ済み</string>
+    <string name="setup_ok">OK</string>
+
+    <string name="setup_title_fallback">測定値とアクション</string>
+    <string name="setup_eyebrow">測定値とアクション</string>
+    <string name="setup_readings_header">測定値</string>
+    <string name="setup_readings_empty">測定値はまだありません · 追加するとこの機器の測定を始められます</string>
+    <string name="setup_add_reading">測定値を追加</string>
+    <string name="setup_actions_header">アクション</string>
+    <string name="setup_actions_empty">アクションはまだありません · 追加するとこの機器をワンタップで記録できます</string>
+    <string name="setup_add_action">アクションを追加</string>
+    <string name="setup_delete_reading_title">この測定値を削除しますか？</string>
+    <string name="setup_delete_reading_body">この操作は元に戻せません。</string>
+    <string name="setup_delete_action_title">このアクションを削除しますか？</string>
+    <string name="setup_delete_action_body">過去の記録の測定値はそのまま残ります。</string>
+    <string name="setup_meter_tag">メーター</string>
+    <plurals name="setup_profile_row_meta">
+        <item quantity="other">%1$s · フィールド%2$d個</item>
+    </plurals>
+    <string name="setup_formula_percent_drop_line">= (%1$s − %2$s) / %1$s × 100</string>
+
+    <string name="setup_refusal_title">この測定値は削除できません</string>
+    <plurals name="setup_refusal_readings_logged">
+        <item quantity="other">記録済みの測定値%1$d件</item>
+    </plurals>
+    <string name="setup_refusal_used_by">%1$sで使用中</string>
+    <string name="setup_refusal_offered_by">%1$sのフィールドとして使用中</string>
+    <string name="setup_refusal_archive_hint">代わりにアーカイブすると、フォームから外して記録を残せます。</string>
+
+    <string name="setup_failed_reorder_readings">測定値を並べ替えられませんでした。</string>
+    <string name="setup_failed_reorder_actions">アクションを並べ替えられませんでした。</string>
+    <string name="setup_failed_change_reading">その測定値を変更できませんでした。</string>
+    <string name="setup_failed_change_action">そのアクションを変更できませんでした。</string>
+    <string name="setup_failed_delete_that_reading">その測定値を削除できませんでした。</string>
+    <string name="setup_failed_delete_that_action">そのアクションを削除できませんでした。</string>
+
+    <string name="setup_event_kind_maintenance">メンテナンス</string>
+    <string name="setup_event_kind_inspection">点検</string>
+    <string name="setup_event_kind_measurement">測定</string>
+    <string name="setup_event_kind_treatment">処理</string>
+    <string name="setup_event_kind_incident">障害</string>
+    <string name="setup_event_kind_replacement">交換</string>
+    <string name="setup_event_kind_season_start">シーズン開始</string>
+    <string name="setup_event_kind_season_end">シーズン終了</string>
+    <string name="setup_event_kind_note">メモ</string>
+    <string name="setup_event_kind_custom">カスタム</string>
+
+    <string name="setup_definition_title_edit">測定値を編集</string>
+    <string name="setup_definition_title_new">新しい測定値</string>
+    <string name="setup_definition_label">ラベル</string>
+    <string name="setup_definition_key">キー</string>
+    <string name="setup_definition_kind">種別</string>
+    <string name="setup_definition_kind_entered">入力値</string>
+    <string name="setup_definition_kind_derived">算出値</string>
+    <string name="setup_definition_type">値の型</string>
+    <string name="setup_value_type_number">数値</string>
+    <string name="setup_value_type_text">テキスト</string>
+    <string name="setup_value_type_boolean">はい / いいえ</string>
+    <string name="setup_definition_formula">計算式</string>
+    <string name="setup_formula_percent_drop">減少率：(A − B) / A × 100</string>
+    <string name="setup_definition_source_a">ソースA</string>
+    <string name="setup_definition_source_b">ソースB</string>
+    <string name="setup_definition_choose_source">測定値を選択</string>
+    <string name="setup_definition_sources_needed">算出値には、元になる数値の測定値が2つ必要です。先にそれらを追加してください。</string>
+    <string name="setup_definition_unit">単位</string>
+    <string name="setup_definition_decimals">小数点以下の桁数</string>
+    <string name="setup_definition_target">目標範囲</string>
+    <string name="setup_definition_target_low">下限</string>
+    <string name="setup_definition_target_high">上限</string>
+    <string name="setup_definition_meter">メーター（増加のみ）</string>
+    <string name="setup_definition_save">測定値を保存</string>
+    <plurals name="setup_definition_frozen">
+        <item quantity="other">%1$d件の記録で使用中</item>
+    </plurals>
+
+    <plurals name="setup_definition_in_use">
+        <item quantity="other">%1$d件の記録がすでにこの測定値を使用しているため、キー、種別、値の型は変更できません。</item>
+    </plurals>
+    <string name="setup_definition_breaks_derived">%1$sのソースとして使用されています — 先にその算出値を変更してください。</string>
+    <string name="setup_definition_breaks_profiles">%1$sでフィールドとして使用されています — 先にそのアクションから外してください。</string>
+    <string name="setup_another_reading">別の測定値</string>
+    <string name="setup_names_last_and">%1$sと%2$s</string>
+    <string name="setup_failed_save_reading">この測定値を保存できませんでした。</string>
+    <string name="setup_failed_delete_this_reading">この測定値を削除できませんでした。</string>
+
+    <string name="setup_problem_not_a_number">数値ではありません</string>
+    <string name="setup_problem_decimals_range">小数点以下の桁数は0〜4にしてください</string>
+    <string name="setup_problem_label_required">測定値にラベルを付けてください</string>
+    <string name="setup_problem_bad_key">キー：英小文字、数字、_のみ使用できます</string>
+    <string name="setup_problem_key_taken">このキーは別の測定値ですでに使われています</string>
+    <string name="setup_problem_range_order">下限は上限以下にしてください</string>
+    <string name="setup_problem_range_on_non_number">目標範囲を設定できるのは数値の測定値だけです</string>
+    <string name="setup_problem_meter_on_non_number">メーターにできるのは数値の測定値だけです</string>
+    <string name="setup_problem_two_sources">異なる2つの数値の測定値を選んでください</string>
+    <string name="setup_problem_unknown_source">その測定値はもう存在しません</string>
+    <string name="setup_problem_source_other_asset">ソースはこの機器の測定値である必要があります</string>
+    <string name="setup_problem_source_not_entered">ソースは入力する測定値である必要があります</string>
+    <string name="setup_problem_source_not_number">ソースは数値の測定値である必要があります</string>
+    <string name="setup_problem_source_is_meter">メーターはソースにできません</string>
+    <string name="setup_problem_derived_not_number">算出値は数値です</string>
+    <string name="setup_problem_derived_is_meter">算出値はメーターにできません</string>
+    <string name="setup_problem_spec_on_entered">入力値に計算式はありません</string>
+
+    <string name="setup_profile_eyebrow_edit">アクションを編集</string>
+    <string name="setup_profile_eyebrow_new">新しいアクション</string>
+    <string name="setup_profile_eyebrow_edit_asset">アクションを編集 · %1$s</string>
+    <string name="setup_profile_eyebrow_new_asset">新しいアクション · %1$s</string>
+    <string name="setup_profile_name">名前</string>
+    <string name="setup_profile_kind">種類</string>
+    <string name="setup_profile_default_title">既定のタイトル</string>
+    <string name="setup_profile_fields_header">フィールド</string>
+    <string name="setup_profile_fields_empty">フィールドはまだありません · このアクションは記録を追加するだけです</string>
+    <string name="setup_profile_add_field">フィールドを追加</string>
+    <string name="setup_profile_all_fields_used">この機器の入力する測定値は、すべてこのアクションに追加済みです。</string>
+    <string name="setup_field_required">必須</string>
+    <string name="setup_field_optional">任意</string>
+    <string name="setup_field_picker_title">フィールドを追加</string>
+    <string name="setup_profile_materials_header">資材</string>
+    <string name="setup_profile_materials_empty">おすすめの資材はありません · 記録フォームではどの資材でも入力できます</string>
+    <string name="setup_profile_add_material">資材を追加</string>
+    <string name="setup_material_name">資材</string>
+    <string name="setup_material_quantity">数量</string>
+    <string name="setup_material_unit">単位</string>
+    <string name="setup_material_remove">資材を削除</string>
+    <string name="setup_profile_save">アクションを保存</string>
+
+    <string name="setup_problem_action_name_required">アクションに名前を付けてください</string>
+    <string name="setup_problem_action_name_taken">この名前は別のアクションですでに使われています</string>
+    <string name="setup_problem_bad_material">名前と、0以上の数量が必要です</string>
+    <string name="setup_problem_quantity_not_number">数量は数値にするか、空欄にしてください</string>
+    <string name="setup_failed_save_action">このアクションを保存できませんでした。</string>
+    <string name="setup_failed_delete_this_action">このアクションを削除できませんでした。</string>
+
+    <string name="setup_problem_field_not_this_asset">この機器の定義ではありません</string>
+    <string name="setup_problem_field_derived">算出値は計算されるもので、入力はしません</string>
+    <string name="setup_problem_field_archived">アーカイブ済み</string>
+    <string name="setup_problem_field_listed_twice">2回指定されています</string>
+</resources>

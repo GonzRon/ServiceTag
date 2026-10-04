@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_asset_detail.xml. -->
+<resources>
+    <string name="common_cancel">Abbrechen</string>
+    <string name="common_back">Zurück</string>
+    <string name="common_more">Mehr</string>
+    <string name="common_ok">OK</string>
+    <string name="common_save">Speichern</string>
+    <string name="common_loading">Wird geladen…</string>
+
+    <string name="asset_detail_asset_word">Gerät</string>
+
+    <string name="asset_detail_retired_on">Ausgemustert am</string>
+    <string name="asset_detail_readings_and_actions">Messwerte &amp; Aktionen</string>
+    <string name="asset_detail_tags_section">Tags</string>
+
+    <string name="asset_detail_backup">Sicherung</string>
+    <string name="asset_detail_write_tag">Tag beschreiben</string>
+    <string name="asset_detail_edit">Bearbeiten</string>
+    <string name="asset_detail_set_up_from_template">Aus Vorlage einrichten</string>
+
+    <string name="asset_detail_current_readings">Aktuelle Messwerte</string>
+    <string name="asset_detail_derived">Berechnet</string>
+
+    <string name="asset_detail_service_record">Serviceprotokoll</string>
+    <string name="asset_detail_no_service_recorded">Noch kein Service erfasst</string>
+
+    <string name="asset_detail_archive">Archivieren</string>
+    <string name="asset_detail_unarchive">Archivierung aufheben</string>
+    <string name="asset_detail_retire">Ausmustern</string>
+    <string name="asset_detail_unretire">Wieder in Betrieb nehmen</string>
+    <string name="asset_detail_delete">Löschen</string>
+
+    <string name="asset_detail_delete_title">%1$s löschen?</string>
+    <string name="asset_detail_delete_body">Gib den Namen des Geräts ein, um es zu löschen. Seine Tags, Messwerte und sein Protokoll werden mitgelöscht. Einen automatischen Snapshot gibt es noch nicht.</string>
+    <string name="asset_detail_child_assets_first">Zuerst die Untergeräte</string>
+    <string name="asset_detail_child_assets_first_body">%1$s enthält noch %2$s. Verschiebe oder lösche sie zuerst, damit nichts automatisch mitgelöscht wird.</string>
+
+    <string name="asset_detail_retire_title">Dieses Gerät ausmustern?</string>
+    <string name="asset_detail_retire_body">Es behält sein Protokoll, und seine Tags führen weiterhin zu ihm.</string>
+
+    <string name="asset_detail_log_what_happened">Eintragen, was passiert ist?</string>
+    <string name="asset_detail_retired_either_way">Das Gerät ist so oder so ausgemustert.</string>
+    <string name="asset_detail_log_replacement">Austausch eintragen</string>
+    <string name="asset_detail_log_note">Notiz eintragen</string>
+    <string name="asset_detail_not_now">Nicht jetzt</string>
+
+    <string name="asset_detail_plate_model">Modell</string>
+    <string name="asset_detail_plate_serial">Seriennr.</string>
+    <string name="asset_detail_plate_location">Standort</string>
+    <string name="asset_detail_plate_purchased">Gekauft</string>
+    <string name="asset_detail_plate_in_service">In Betrieb</string>
+    <string name="asset_detail_plate_nfc_tag">NFC-Tag</string>
+
+    <string name="asset_detail_details">Details</string>
+    <string name="asset_detail_purchase_date">Kaufdatum</string>
+    <string name="asset_detail_purchase_document">Kaufbeleg</string>
+    <string name="asset_detail_price">Preis</string>
+    <string name="asset_detail_vendor">Händler</string>
+
+    <string name="asset_detail_child_assets">Untergeräte</string>
+    <string name="asset_detail_no_child_assets">Keine Untergeräte</string>
+    <string name="asset_detail_add_child_asset">+ Untergerät hinzufügen</string>
+    <string name="asset_detail_no_readings_out_of_range">Keine Messwerte außerhalb des Bereichs</string>
+    <plurals name="asset_detail_readings_out_of_range">
+        <item quantity="one">%1$d Messwert außerhalb des Bereichs</item>
+        <item quantity="other">%1$d Messwerte außerhalb des Bereichs</item>
+    </plurals>
+    <string name="asset_detail_category_and_readings">%1$s · %2$s</string>
+
+    <string name="asset_detail_no_tag_yet">Noch kein Tag · Mit „Tag beschreiben“ einen hinzufügen</string>
+    <string name="asset_detail_tag_written">Tag beschrieben</string>
+    <string name="asset_detail_tag_bound">Tag verknüpft</string>
+    <string name="asset_detail_tag_status_active">Aktiv</string>
+    <string name="asset_detail_tag_status_unbound">Frei</string>
+    <string name="asset_detail_tag_status_lost">Verloren</string>
+    <string name="asset_detail_tag_status_retired">Ausgemustert</string>
+    <string name="asset_detail_tag_placement">Tag-Position</string>
+
+    <string name="asset_detail_notes">Notizen</string>
+    <string name="asset_detail_no_notes">Keine Notizen</string>
+
+    <string name="asset_detail_no_schedule_yet">Noch kein Plan</string>
+
+    <string name="warranty_section">Garantie</string>
+    <string name="warranty_notes">Garantienotizen</string>
+    <string name="warranty_in_warranty">UNTER GARANTIE</string>
+    <string name="warranty_out_of_warranty">GARANTIE ABGELAUFEN</string>
+    <string name="warranty_not_recorded">Garantie nicht erfasst</string>
+    <string name="warranty_expires">Läuft ab am %1$s</string>
+    <string name="warranty_expired">Abgelaufen am %1$s</string>
+    <plurals name="warranty_reminder_days_before">
+        <item quantity="one">Erinnerung: %1$d Tag vorher</item>
+        <item quantity="other">Erinnerung: %1$d Tage vorher</item>
+    </plurals>
+    <string name="warranty_leave_blank_for_no_reminder">Leer lassen, wenn du keine Erinnerung möchtest.</string>
+    <string name="warranty_add_date_first">Gib zuerst das Datum ein, an dem die Garantie abläuft.</string>
+
+    <string name="assets_title">Geräte</string>
+    <string name="assets_add_asset">Gerät hinzufügen</string>
+    <string name="assets_no_assets_yet">Noch keine Geräte</string>
+    <plurals name="assets_no_active_assets">
+        <item quantity="one">Keine aktiven Geräte · %1$d archiviert</item>
+        <item quantity="other">Keine aktiven Geräte · %1$d archiviert</item>
+    </plurals>
+    <string name="assets_nothing_matches">Keine Treffer.</string>
+    <string name="assets_show_archived">Archivierte anzeigen</string>
+    <string name="assets_part_of">Teil von %1$s</string>
+    <string name="assets_nfc_tag_written">NFC-Tag beschrieben</string>
+    <string name="assets_badge_retired">Ausgemustert</string>
+    <string name="assets_badge_out_of_season">Außerhalb der Saison</string>
+
+    <string name="assets_filter_type">Typ</string>
+    <string name="assets_filter_all">Alle</string>
+    <string name="assets_filter_child_assets">Untergeräte</string>
+    <string name="assets_filter_archived">Archiviert</string>
+    <string name="assets_archived_hidden">Passende Geräte sind archiviert. Aktiviere „Archiviert“, um sie zu sehen.</string>
+    <string name="assets_child_assets_hidden">Passende Geräte sind Untergeräte. Aktiviere „Untergeräte“, um sie zu sehen.</string>
+    <string name="assets_both_hidden">Passende Geräte sind ausgeblendet. Aktiviere „Untergeräte“ und „Archiviert“, um sie zu sehen.</string>
+    <string name="assets_only_child_assets">Hier gibt es nur Untergeräte. Aktiviere „Untergeräte“, um sie zu sehen.</string>
+    <string name="assets_type_hidden">Passende Geräte haben einen anderen Typ. Setze „Typ“ auf „Alle“.</string>
+
+    <string name="assets_search_hint">Geräte suchen</string>
+    <string name="assets_clear_search">Suche löschen</string>
+</resources>

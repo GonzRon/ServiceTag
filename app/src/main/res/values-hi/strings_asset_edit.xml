@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_asset_edit.xml. -->
+<resources>
+    <string name="asset_edit_operating_season">संचालन मौसम</string>
+    <string name="asset_edit_year_round">पूरे साल</string>
+    <string name="asset_edit_same_dates_every_year">हर साल एक ही तारीखें</string>
+    <string name="asset_edit_started_and_ended_by_hand">मैन्युअल रूप से शुरू और खत्म</string>
+    <string name="asset_edit_season_starts">मौसम शुरू</string>
+    <string name="asset_edit_season_ends">मौसम खत्म</string>
+    <string name="asset_edit_season_may_run_across_the_new_year">मौसम नए साल के पार भी चल सकता है, जैसे अक्टूबर से अप्रैल तक।</string>
+    <string name="asset_edit_is_this_asset_in_season">क्या यह उपकरण अभी मौसम में है?</string>
+    <string name="asset_edit_in_season_now">मौसम में</string>
+    <string name="asset_edit_out_of_season_now">मौसम से बाहर</string>
+    <string name="asset_edit_you_start_and_end_the_season">आप मौसम खुद शुरू और खत्म करते हैं। मौसम के हिसाब से चलने के लिए सेट रखरखाव, मौसम खत्म रहने तक रुका रहता है।</string>
+    <string name="asset_edit_season_strands">इस उपकरण का कुछ रखरखाव इसके मौसम से पहले तैयार रहने के लिए सेट है। पहले उसे बदलें: %1$s।</string>
+
+    <string name="asset_edit_maintenance_break">रखरखाव विराम</string>
+    <string name="asset_edit_no_routine_maintenance_between_two_dates">दो तारीखों के बीच कोई नियमित रखरखाव नहीं</string>
+    <string name="asset_edit_break_starts">विराम शुरू</string>
+    <string name="asset_edit_break_ends">विराम खत्म</string>
+    <string name="asset_edit_break_helper">मौसम के हिसाब से चलने के लिए या मौसम से पहले तैयार रहने के लिए सेट रखरखाव, विराम के दौरान देय नहीं होता। जो काम पहले से अतिदेय है, वह अतिदेय ही रहता है, लेकिन उसके रिमाइंडर नहीं आते।</string>
+    <string name="asset_edit_break_cannot_cover_the_year">विराम पूरे साल का नहीं हो सकता।</string>
+    <string name="asset_edit_break_strands">इस उपकरण का कुछ रखरखाव विराम से पहले तैयार रहने के लिए सेट है। पहले उसे बदलें: %1$s।</string>
+
+    <string name="asset_edit_health_subjects">स्वास्थ्य संकेतक</string>
+    <string name="asset_edit_add_health_subject">स्वास्थ्य संकेतक जोड़ें</string>
+    <string name="asset_edit_combine_health_by">स्वास्थ्य कैसे जोड़ें</string>
+    <string name="asset_edit_combine_worst">सबसे खराब संकेतक</string>
+    <string name="asset_edit_combine_one">एक संकेतक</string>
+    <string name="asset_edit_combine_average">औसत</string>
+    <string name="asset_edit_combine_weighted">भारित औसत</string>
+    <string name="asset_edit_which_subject">कौन-सा संकेतक?</string>
+
+    <plurals name="asset_edit_not_tied_to_season">
+        <item quantity="one">इस उपकरण का %1$d रखरखाव शेड्यूल इसके संचालन मौसम से जुड़ा नहीं है। सक्रिय होने पर, उपकरण के मौसम से बाहर रहते हुए भी यह देय हो सकता है या देय बना रह सकता है, जब तक आप यह नहीं बदलते कि वह रखरखाव कब किया जाना चाहिए।</item>
+        <item quantity="other">इस उपकरण के %1$d रखरखाव शेड्यूल इसके संचालन मौसम से जुड़े नहीं हैं। सक्रिय होने पर, उपकरण के मौसम से बाहर रहते हुए भी ये देय हो सकते हैं या देय बने रह सकते हैं, जब तक आप यह नहीं बदलते कि वह रखरखाव कब किया जाना चाहिए।</item>
+    </plurals>
+    <string name="asset_edit_review_maintenance_schedules">रखरखाव शेड्यूल देखें</string>
+    <string name="asset_edit_keep_schedules_as_is">शेड्यूल जैसे हैं, वैसे रखें</string>
+
+    <string name="asset_edit_key_documents">मुख्य दस्तावेज़</string>
+    <string name="asset_edit_add_purchase_invoice_or_receipt">खरीद का बिल या रसीद जोड़ें</string>
+    <string name="asset_edit_add_user_manual">यूज़र मैनुअल जोड़ें</string>
+    <string name="asset_edit_add_service_manual">सर्विस मैनुअल जोड़ें</string>
+    <string name="asset_edit_attached_when_you_save">सहेजने पर जोड़ा जाएगा</string>
+    <string name="asset_edit_remove">हटाएँ</string>
+    <string name="asset_edit_remove_file">%1$s हटाएँ</string>
+
+    <string name="asset_edit_name_field">नाम</string>
+    <string name="asset_edit_manufacturer_field">निर्माता</string>
+    <string name="asset_edit_model_field">मॉडल</string>
+    <string name="asset_edit_serial_number_field">सीरियल नंबर</string>
+    <string name="asset_edit_location_field">जगह</string>
+    <string name="asset_edit_part_of_field">इसका हिस्सा</string>
+    <string name="asset_edit_purchase_date_field">खरीद की तारीख</string>
+    <string name="asset_edit_in_service_date_field">सेवा शुरू होने की तारीख</string>
+    <string name="asset_edit_category_field">श्रेणी</string>
+    <string name="asset_edit_description_field">ब्यौरा</string>
+    <string name="asset_edit_price_field">कीमत</string>
+    <string name="asset_edit_currency_field">मुद्रा</string>
+    <string name="asset_edit_vendor_field">विक्रेता</string>
+    <string name="asset_edit_warranty_expires_on">खत्म होने की तारीख</string>
+    <string name="asset_edit_warranty_notes_field">वारंटी नोट</string>
+    <string name="asset_edit_notes_field">नोट</string>
+
+    <string name="asset_edit_section_identity">पहचान</string>
+    <string name="asset_edit_section_placement">स्थान</string>
+    <string name="asset_edit_section_purchase">खरीद</string>
+    <string name="asset_edit_section_warranty">वारंटी</string>
+    <string name="asset_edit_section_notes">नोट</string>
+    <string name="asset_edit_section_template">टेम्प्लेट</string>
+
+    <string name="asset_edit_title_edit">उपकरण में बदलाव करें</string>
+    <string name="asset_edit_cancel">रद्द करें</string>
+    <string name="asset_edit_save">सहेजें</string>
+    <string name="asset_edit_save_asset">उपकरण सहेजें</string>
+    <string name="asset_edit_notifications_ok">ठीक है</string>
+
+    <string name="asset_edit_date_placeholder">YYYY-MM-DD</string>
+    <string name="asset_edit_month_day_placeholder">MM-DD</string>
+    <string name="asset_edit_pick_date">%1$s चुनें</string>
+    <string name="asset_edit_calendar_ok">ठीक है</string>
+    <string name="asset_edit_calendar_cancel">रद्द करें</string>
+
+    <string name="asset_edit_template_none">कोई नहीं · बाद में सेट अप करें</string>
+    <string name="asset_edit_template_helper">उपकरण को उसकी रीडिंग और त्वरित कार्यों के साथ शुरू करता है। उपकरण के बारे में बाद में तय करने के लिए “कोई नहीं” चुनें।</string>
+
+    <string name="asset_model_condition_history">स्थिति का इतिहास</string>
+    <string name="asset_model_linked_record_removed">जुड़ा हुआ रिकॉर्ड हटा दिया गया है।</string>
+    <string name="asset_model_health_section">स्वास्थ्य</string>
+    <string name="asset_model_health_footer">स्वास्थ्य तारीखों और रिकॉर्ड से लगाया गया एक अनुमान है, निदान नहीं। यह कभी भी स्थिति नहीं बदलता।</string>
+    <string name="asset_model_health_fallback_to_worst">जिस संकेतक के हिसाब से चलना था, वह मौजूद नहीं है, इसलिए सबसे खराब संकेतक दिखाया गया है।</string>
+
+    <string name="asset_model_could_not_update">इस उपकरण को अपडेट नहीं किया जा सका।</string>
+    <string name="asset_model_could_not_retire">इस उपकरण को सेवा से नहीं हटाया जा सका।</string>
+    <string name="asset_model_could_not_delete">इस उपकरण को मिटाया नहीं जा सका।</string>
+    <string name="asset_model_template_not_available">वह टेम्प्लेट उपलब्ध नहीं है।</string>
+    <string name="asset_model_could_not_set_up">इस उपकरण को सेट अप नहीं किया जा सका।</string>
+    <string name="asset_model_already_set_up">यह उपकरण पहले से सेट अप है।</string>
+
+    <string name="asset_model_could_not_save">इस उपकरण को सहेजा नहीं जा सका।</string>
+    <string name="asset_model_parent_cycle">%1$s पहले से ही इस उपकरण का हिस्सा है।</string>
+    <string name="asset_model_no_parent">कोई नहीं</string>
+    <string name="asset_model_parent_archived">%1$s (संग्रहित)</string>
+
+    <string name="asset_model_not_a_real_month_day">यह कोई सही महीना और दिन नहीं है</string>
+    <string name="asset_model_name_required">उपकरण को एक नाम दें</string>
+    <string name="asset_model_bad_date">तारीख YYYY-MM-DD के रूप में डालें</string>
+    <string name="asset_model_bad_currency">मुद्रा तीन अक्षरों का कोड होती है, जैसे USD</string>
+    <string name="asset_model_currency_required">कीमत के साथ मुद्रा ज़रूरी है</string>
+    <string name="asset_model_price_negative">कीमत शून्य से कम नहीं हो सकती</string>
+    <string name="asset_model_parent_gone">वह उपकरण अब मौजूद नहीं है</string>
+    <string name="asset_model_price_example">कीमत %1$s की तरह डालें</string>
+    <string name="asset_model_price_hint_amount">रकम</string>
+    <string name="asset_model_price_hint_whole">सिर्फ़ पूर्ण संख्याएँ</string>
+    <plurals name="asset_model_price_hint_decimals">
+        <item quantity="one">दशमलव के बाद ज़्यादा से ज़्यादा %1$d अंक</item>
+        <item quantity="other">दशमलव के बाद ज़्यादा से ज़्यादा %1$d अंक</item>
+    </plurals>
+
+    <string name="season_in_season_word">मौसम में</string>
+    <string name="season_start_title">मौसम शुरू करें?</string>
+    <string name="season_start_body">मौसम के हिसाब से चलने के लिए सेट रखरखाव %1$s से फिर से सक्रिय हो जाएगा।</string>
+    <string name="season_end_title">मौसम खत्म करें?</string>
+    <string name="season_end_body">मौसम के हिसाब से चलने के लिए सेट रखरखाव तब तक रुका रहेगा, जब तक आप मौसम फिर से शुरू नहीं करते। कुछ भी पूरा नहीं माना जाता।</string>
+    <string name="season_history_started">मौसम शुरू हुआ</string>
+    <string name="season_history_ended">मौसम खत्म हुआ</string>
+    <string name="season_history_section">मौसम का इतिहास</string>
+    <string name="season_next_starts">अगला मौसम %1$s को शुरू होगा</string>
+    <string name="season_ends_on">मौसम %1$s को खत्म होगा</string>
+    <string name="season_choose_date_from">%1$s से आज तक की कोई तारीख चुनें।</string>
+    <string name="season_already_running">मौसम पहले से चल रहा है।</string>
+    <string name="season_already_ended">मौसम पहले ही खत्म हो चुका है।</string>
+
+    <string name="season_sync_link">Home Assistant से लिंक करें</string>
+    <string name="season_sync_follow">Home Assistant के अनुसार चलें</string>
+    <string name="season_sync_force_in">ज़बरन मौसम में रखें</string>
+    <string name="season_sync_force_out">ज़बरन मौसम से बाहर रखें</string>
+    <string name="season_sync_now">अभी सिंक करें</string>
+    <string name="season_sync_follows">%1$s के अनुसार चलता है</string>
+    <string name="season_sync_forced_in">ज़बरन मौसम में रखा गया है। %1$s की जाँच अब भी होती है, लेकिन जब तक आप “Home Assistant के अनुसार चलें” नहीं चुनते, तब तक यह मौसम नहीं बदलता।</string>
+    <string name="season_sync_forced_out">ज़बरन मौसम से बाहर रखा गया है। %1$s की जाँच अब भी होती है, लेकिन जब तक आप “Home Assistant के अनुसार चलें” नहीं चुनते, तब तक यह मौसम नहीं बदलता।</string>
+    <string name="season_sync_last_success">पिछली सफल जाँच: %1$s</string>
+    <string name="season_sync_no_reading_yet">अभी तक Home Assistant से कोई रीडिंग नहीं मिली।</string>
+    <string name="season_sync_not_checked_in_time">चुने गए अंतराल में सफल जाँच नहीं हुई।</string>
+    <string name="season_sync_changed_in_ha">Home Assistant में %1$s को बदला गया</string>
+    <string name="season_sync_started_from_ha">%1$s को Home Assistant से शुरू किया गया</string>
+    <string name="season_sync_ended_from_ha">%1$s को Home Assistant से खत्म किया गया</string>
+    <string name="season_sync_forced_in_on">%1$s को ज़बरन मौसम में रखा गया</string>
+    <string name="season_sync_forced_out_on">%1$s को ज़बरन मौसम से बाहर रखा गया</string>
+    <string name="season_sync_not_maintained_here">इस उपकरण का रखरखाव अब यहाँ नहीं होता, इसलिए Home Assistant अब इसका मौसम नहीं बदलता।</string>
+    <string name="season_sync_date_before_history">इस फ़ोन की तारीख मौसम की सबसे नई प्रविष्टि से पहले की है, इसलिए जब तक तारीख वहाँ तक नहीं पहुँचती, मौसम जैसा है वैसा ही रहेगा।</string>
+    <string name="season_sync_not_manual">इस उपकरण का मौसम अब मैन्युअल रूप से शुरू और खत्म नहीं होता, इसलिए Home Assistant इसे नहीं बदल सकता। “सिंक करना बंद करें” चुनें, फिर “सिंक फिर शुरू करें” चुनें।</string>
+    <string name="season_sync_stop">सिंक करना बंद करें</string>
+    <string name="season_sync_resume">सिंक फिर शुरू करें</string>
+    <string name="season_sync_stopped">सिंक करना बंद है। Home Assistant अब इस उपकरण का मौसम नहीं बदलता।</string>
+    <string name="season_sync_entity_id">एंटिटी ID</string>
+    <string name="season_sync_entity_id_help">एक चालू/बंद हेल्पर, जो इस उपकरण के मौसम में रहने के दौरान चालू रहता है (उदाहरण: input_boolean.example_heater_in_season)। यह उपकरण का अपना पावर स्विच नहीं है।</string>
+    <string name="season_sync_link_calendar">इस उपकरण को Home Assistant से लिंक करने पर इसकी कैलेंडर तारीखों की जगह Home Assistant ले लेगा। आज से, इसका मौसम तब शुरू और खत्म होगा जब Home Assistant बताएगा। जो रखरखाव मौसम की शुरुआत से गिना जाता है, वह आज से गिना जाएगा।</string>
+    <string name="season_sync_link_year_round">इस उपकरण का अभी कोई संचालन मौसम नहीं है। इसे Home Assistant से लिंक करने पर इसे एक मौसम मिल जाएगा: आज से मौसम में, फिर Home Assistant के बताने पर शुरू और खत्म। जो रखरखाव मौसम की शुरुआत से गिना जाता है, वह आज से गिना जाएगा।</string>
+    <string name="season_sync_link_manual">अब से Home Assistant इस उपकरण का मौसम शुरू और खत्म करेगा। इसके मौसम का इतिहास जैसा है वैसा ही रहेगा।</string>
+    <string name="season_sync_follows_ha">इस उपकरण का मौसम Home Assistant के अनुसार चलता है। इसे यहाँ बदलने के लिए उपकरण के पेज पर “सिंक करना बंद करें” चुनें।</string>
+    <string name="season_sync_bad_entity_id">input_boolean.example_heater_in_season जैसी एंटिटी ID डालें: अंग्रेज़ी के छोटे अक्षर, अंक और अंडरस्कोर, एक बिंदु के साथ।</string>
+</resources>

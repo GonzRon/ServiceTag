@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_setup.xml. -->
+<resources>
+    <string name="setup_loading">Wird geladen…</string>
+    <string name="setup_back">Zurück</string>
+    <string name="setup_cancel">Abbrechen</string>
+    <string name="setup_save">Speichern</string>
+    <string name="setup_more">Mehr</string>
+    <string name="setup_edit">Bearbeiten</string>
+    <string name="setup_move_up">Nach oben</string>
+    <string name="setup_move_down">Nach unten</string>
+    <string name="setup_archive">Archivieren</string>
+    <string name="setup_unarchive">Archivierung aufheben</string>
+    <string name="setup_delete">Löschen</string>
+    <string name="setup_remove">Entfernen</string>
+    <string name="setup_archived_badge">Archiviert</string>
+    <string name="setup_ok">OK</string>
+
+    <string name="setup_title_fallback">Messwerte &amp; Aktionen</string>
+    <string name="setup_eyebrow">MESSWERTE &amp; AKTIONEN</string>
+    <string name="setup_readings_header">Messwerte</string>
+    <string name="setup_readings_empty">Noch keine Messwerte · füge einen hinzu, um an diesem Gerät Messungen zu erfassen</string>
+    <string name="setup_add_reading">Messwert hinzufügen</string>
+    <string name="setup_actions_header">Aktionen</string>
+    <string name="setup_actions_empty">Noch keine Aktionen · füge eine hinzu, um dieses Gerät mit einem Tippen zu protokollieren</string>
+    <string name="setup_add_action">Aktion hinzufügen</string>
+    <string name="setup_delete_reading_title">Diesen Messwert löschen?</string>
+    <string name="setup_delete_reading_body">Das kann nicht rückgängig gemacht werden.</string>
+    <string name="setup_delete_action_title">Diese Aktion löschen?</string>
+    <string name="setup_delete_action_body">Frühere Einträge behalten ihre Messwerte.</string>
+    <string name="setup_meter_tag">Zähler</string>
+    <plurals name="setup_profile_row_meta">
+        <item quantity="one">%1$s · %2$d Feld</item>
+        <item quantity="other">%1$s · %2$d Felder</item>
+    </plurals>
+    <string name="setup_formula_percent_drop_line">= (%1$s − %2$s) / %1$s × 100</string>
+
+    <string name="setup_refusal_title">Messwert kann nicht gelöscht werden</string>
+    <plurals name="setup_refusal_readings_logged">
+        <item quantity="one">%1$d Messwert erfasst</item>
+        <item quantity="other">%1$d Messwerte erfasst</item>
+    </plurals>
+    <string name="setup_refusal_used_by">Verwendet von %1$s</string>
+    <string name="setup_refusal_offered_by">Angeboten von %1$s</string>
+    <string name="setup_refusal_archive_hint">Archiviere ihn stattdessen: Dann verschwindet er aus den Formularen, und sein Verlauf bleibt erhalten.</string>
+
+    <string name="setup_failed_reorder_readings">Die Messwerte konnten nicht neu sortiert werden.</string>
+    <string name="setup_failed_reorder_actions">Die Aktionen konnten nicht neu sortiert werden.</string>
+    <string name="setup_failed_change_reading">Dieser Messwert konnte nicht geändert werden.</string>
+    <string name="setup_failed_change_action">Diese Aktion konnte nicht geändert werden.</string>
+    <string name="setup_failed_delete_that_reading">Dieser Messwert konnte nicht gelöscht werden.</string>
+    <string name="setup_failed_delete_that_action">Diese Aktion konnte nicht gelöscht werden.</string>
+
+    <string name="setup_event_kind_maintenance">Wartung</string>
+    <string name="setup_event_kind_inspection">Inspektion</string>
+    <string name="setup_event_kind_measurement">Messung</string>
+    <string name="setup_event_kind_treatment">Behandlung</string>
+    <string name="setup_event_kind_incident">Störung</string>
+    <string name="setup_event_kind_replacement">Austausch</string>
+    <string name="setup_event_kind_season_start">Saisonbeginn</string>
+    <string name="setup_event_kind_season_end">Saisonende</string>
+    <string name="setup_event_kind_note">Notiz</string>
+    <string name="setup_event_kind_custom">Benutzerdefiniert</string>
+
+    <string name="setup_definition_title_edit">Messwert bearbeiten</string>
+    <string name="setup_definition_title_new">Neuer Messwert</string>
+    <string name="setup_definition_label">Bezeichnung</string>
+    <string name="setup_definition_key">Schlüssel</string>
+    <string name="setup_definition_kind">Art</string>
+    <string name="setup_definition_kind_entered">Eingegeben</string>
+    <string name="setup_definition_kind_derived">Berechnet</string>
+    <string name="setup_definition_type">Typ</string>
+    <string name="setup_value_type_number">Zahl</string>
+    <string name="setup_value_type_text">Text</string>
+    <string name="setup_value_type_boolean">Ja / Nein</string>
+    <string name="setup_definition_formula">Formel</string>
+    <string name="setup_formula_percent_drop">Prozentuale Abnahme: (A − B) / A × 100</string>
+    <string name="setup_definition_source_a">Quelle A</string>
+    <string name="setup_definition_source_b">Quelle B</string>
+    <string name="setup_definition_choose_source">Messwert wählen</string>
+    <string name="setup_definition_sources_needed">Ein berechneter Messwert braucht zwei Zahlen-Messwerte als Grundlage. Füge sie zuerst hinzu.</string>
+    <string name="setup_definition_unit">Einheit</string>
+    <string name="setup_definition_decimals">Nachkommastellen</string>
+    <string name="setup_definition_target">Zielbereich</string>
+    <string name="setup_definition_target_low">Untergrenze</string>
+    <string name="setup_definition_target_high">Obergrenze</string>
+    <string name="setup_definition_meter">Zähler (zählt aufwärts)</string>
+    <string name="setup_definition_save">Messwert speichern</string>
+    <plurals name="setup_definition_frozen">
+        <item quantity="one">Von %1$d erfassten Messwert verwendet</item>
+        <item quantity="other">Von %1$d erfassten Messwerten verwendet</item>
+    </plurals>
+
+    <plurals name="setup_definition_in_use">
+        <item quantity="one">%1$d Eintrag verwendet diesen Messwert bereits, daher sind Schlüssel, Art und Typ festgelegt.</item>
+        <item quantity="other">%1$d Einträge verwenden diesen Messwert bereits, daher sind Schlüssel, Art und Typ festgelegt.</item>
+    </plurals>
+    <string name="setup_definition_breaks_derived">Wird von %1$s als Quelle verwendet — ändere zuerst diesen berechneten Messwert.</string>
+    <string name="setup_definition_breaks_profiles">Wird von %1$s als Feld angeboten — entferne ihn zuerst aus dieser Aktion.</string>
+    <string name="setup_another_reading">einem anderen Messwert</string>
+    <string name="setup_names_last_and">%1$s und %2$s</string>
+    <string name="setup_failed_save_reading">Dieser Messwert konnte nicht gespeichert werden.</string>
+    <string name="setup_failed_delete_this_reading">Dieser Messwert konnte nicht gelöscht werden.</string>
+
+    <string name="setup_problem_not_a_number">Keine Zahl</string>
+    <string name="setup_problem_decimals_range">Nachkommastellen müssen 0–4 sein</string>
+    <string name="setup_problem_label_required">Gib dem Messwert eine Bezeichnung</string>
+    <string name="setup_problem_bad_key">Schlüssel: nur Kleinbuchstaben, Ziffern und _</string>
+    <string name="setup_problem_key_taken">Ein anderer Messwert verwendet diesen Schlüssel bereits</string>
+    <string name="setup_problem_range_order">Die Untergrenze darf nicht über der Obergrenze liegen</string>
+    <string name="setup_problem_range_on_non_number">Nur ein Zahlen-Messwert hat einen Zielbereich</string>
+    <string name="setup_problem_meter_on_non_number">Nur ein Zahlen-Messwert kann ein Zähler sein</string>
+    <string name="setup_problem_two_sources">Wähle zwei verschiedene Zahlen-Messwerte</string>
+    <string name="setup_problem_unknown_source">Diesen Messwert gibt es nicht mehr</string>
+    <string name="setup_problem_source_other_asset">Eine Quelle muss zu diesem Gerät gehören</string>
+    <string name="setup_problem_source_not_entered">Eine Quelle muss ein Messwert sein, den jemand eingibt</string>
+    <string name="setup_problem_source_not_number">Eine Quelle muss ein Zahlen-Messwert sein</string>
+    <string name="setup_problem_source_is_meter">Ein Zähler kann keine Quelle sein</string>
+    <string name="setup_problem_derived_not_number">Ein berechneter Messwert ist eine Zahl</string>
+    <string name="setup_problem_derived_is_meter">Ein berechneter Messwert ist kein Zähler</string>
+    <string name="setup_problem_spec_on_entered">Ein eingegebener Messwert hat keine Formel</string>
+
+    <string name="setup_profile_eyebrow_edit">AKTION BEARBEITEN</string>
+    <string name="setup_profile_eyebrow_new">NEUE AKTION</string>
+    <string name="setup_profile_eyebrow_edit_asset">AKTION BEARBEITEN · %1$s</string>
+    <string name="setup_profile_eyebrow_new_asset">NEUE AKTION · %1$s</string>
+    <string name="setup_profile_name">Name</string>
+    <string name="setup_profile_kind">Art</string>
+    <string name="setup_profile_default_title">Standardtitel</string>
+    <string name="setup_profile_fields_header">Felder</string>
+    <string name="setup_profile_fields_empty">Noch keine Felder · diese Aktion erstellt nur einen Eintrag</string>
+    <string name="setup_profile_add_field">Feld hinzufügen</string>
+    <string name="setup_profile_all_fields_used">Jeder eingegebene Messwert dieses Geräts ist bereits in dieser Aktion.</string>
+    <string name="setup_field_required">Erforderlich</string>
+    <string name="setup_field_optional">Optional</string>
+    <string name="setup_field_picker_title">Ein Feld hinzufügen</string>
+    <string name="setup_profile_materials_header">Materialien</string>
+    <string name="setup_profile_materials_empty">Keine Materialien vorgeschlagen · das Eintragsformular nimmt trotzdem jedes an</string>
+    <string name="setup_profile_add_material">Material hinzufügen</string>
+    <string name="setup_material_name">Material</string>
+    <string name="setup_material_quantity">Menge</string>
+    <string name="setup_material_unit">Einheit</string>
+    <string name="setup_material_remove">Material entfernen</string>
+    <string name="setup_profile_save">Aktion speichern</string>
+
+    <string name="setup_problem_action_name_required">Gib der Aktion einen Namen</string>
+    <string name="setup_problem_action_name_taken">Eine andere Aktion verwendet diesen Namen bereits</string>
+    <string name="setup_problem_bad_material">Braucht einen Namen und eine Menge von 0 oder mehr</string>
+    <string name="setup_problem_quantity_not_number">Die Menge muss eine Zahl sein oder leer bleiben</string>
+    <string name="setup_failed_save_action">Diese Aktion konnte nicht gespeichert werden.</string>
+    <string name="setup_failed_delete_this_action">Diese Aktion konnte nicht gelöscht werden.</string>
+</resources>

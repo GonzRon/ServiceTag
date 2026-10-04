@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Italian translation of values/strings.xml. -->
+<resources>
+    <string name="format_date_display">d MMM uuuu</string>
+    <string name="format_date_month_day">d MMM</string>
+    <string name="format_language">it</string>
+    <string name="format_list_separator">", "</string>
+</resources>

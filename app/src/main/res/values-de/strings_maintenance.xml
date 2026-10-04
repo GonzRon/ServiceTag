@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_maintenance.xml. -->
+<resources>
+    <string name="maintenance_loading">Wird geladen…</string>
+    <string name="maintenance_back">Zurück</string>
+    <string name="maintenance_cancel">Abbrechen</string>
+    <string name="maintenance_save">Speichern</string>
+    <string name="maintenance_ok">OK</string>
+    <string name="maintenance_edit">Bearbeiten</string>
+    <string name="maintenance_more">Mehr</string>
+    <string name="maintenance_archive">Archivieren</string>
+    <string name="maintenance_unarchive">Archivierung aufheben</string>
+    <string name="maintenance_archived">Archiviert</string>
+    <string name="maintenance_date">Datum</string>
+    <string name="maintenance_pick_field">%1$s wählen</string>
+    <string name="maintenance_name">Name</string>
+    <string name="maintenance_description">Beschreibung</string>
+    <string name="maintenance_dismiss">Schließen</string>
+    <string name="maintenance_not_now">Nicht jetzt</string>
+
+    <string name="maintenance_title">Wartung</string>
+    <string name="maintenance_section_due_work">Fällige Arbeiten</string>
+    <string name="maintenance_section_schedules">Pläne</string>
+    <string name="maintenance_section_groups">Wartungsgruppen</string>
+    <string name="maintenance_section_reminders">Erinnerungen</string>
+    <string name="maintenance_no_schedules_yet">Noch keine Wartungspläne. Füge einen über ein Gerät oder eine Wartungsgruppe hinzu.</string>
+    <string name="maintenance_reminders_blocked">Erinnerungen sind aus, weil Benachrichtigungen blockiert sind.</string>
+    <string name="maintenance_reminder_failed">ERINNERUNG FEHLGESCHLAGEN</string>
+    <string name="maintenance_scan_tag">Tag scannen</string>
+    <string name="maintenance_add_asset">Gerät hinzufügen</string>
+    <string name="maintenance_log_maintenance">Wartung eintragen</string>
+
+    <string name="maintenance_status_ok">OK</string>
+    <string name="maintenance_status_due_soon">BALD FÄLLIG</string>
+    <string name="maintenance_status_due">FÄLLIG</string>
+    <string name="maintenance_status_overdue">ÜBERFÄLLIG</string>
+    <string name="maintenance_status_out_of_season">AUSSERHALB DER SAISON</string>
+    <string name="maintenance_status_paused">PAUSIERT</string>
+    <string name="maintenance_status_no_baseline">KEIN AUSGANGSWERT</string>
+    <string name="maintenance_status_deferred">ZURÜCKGESTELLT</string>
+    <string name="maintenance_dashboard_section_attention">ACHTUNG</string>
+    <string name="maintenance_dashboard_section_upcoming">DEMNÄCHST</string>
+    <string name="maintenance_dashboard_section_current">AKTUELL</string>
+    <string name="maintenance_dashboard_section_deferred">Zurückgestellt</string>
+    <string name="maintenance_dashboard_section_out_of_season">AUSSERHALB DER SAISON</string>
+
+    <string name="maintenance_log_meter_reading">Zählerstand eintragen</string>
+    <string name="maintenance_meter_line">Fällig bei %1$s %2$s, jetzt %3$s.</string>
+    <string name="maintenance_meter_line_no_unit">Fällig bei %1$s, jetzt %2$s.</string>
+    <string name="maintenance_snoozed_until">Zurückgestellt bis %1$s</string>
+    <string name="maintenance_progress">%1$d von %2$d erledigt</string>
+    <string name="maintenance_part_of">Teil von %1$s</string>
+    <string name="maintenance_promoted_subtitle">%1$s · %2$s</string>
+
+    <string name="maintenance_why_held_until">Wegen der Wartungspause bis %1$s zurückgehalten</string>
+    <string name="maintenance_why_before_season">Vor den Saisonbeginn vorgezogen</string>
+    <string name="maintenance_why_before_break">Vor die Wartungspause vorgezogen</string>
+    <string name="maintenance_why_moved_from">Vom %1$s verschoben, weil die Saison nicht lief</string>
+    <string name="maintenance_why_out_of_season_until">Außerhalb der Saison bis %1$s</string>
+    <string name="maintenance_why_until_you_start">Außerhalb der Saison, bis du sie startest</string>
+    <string name="maintenance_why_reminders_wait">Erinnerungen warten auf das Ende der Wartungspause</string>
+
+    <string name="maintenance_when_was_this_done">Wann wurde das erledigt?</string>
+    <string name="maintenance_time">Uhrzeit</string>
+    <string name="maintenance_time_placeholder">HH:MM</string>
+    <string name="maintenance_complete_all">Alle erledigen</string>
+    <string name="maintenance_complete_selected">Auswahl erledigen</string>
+    <string name="maintenance_close_this_round">Diese Runde schließen</string>
+    <string name="maintenance_close_this_round_confirmation">Diese Runde schließen? Die Mitglieder, die nicht als erledigt markiert sind, werden nicht als gewartet erfasst.</string>
+
+    <string name="maintenance_group_noun">Wartungsgruppe</string>
+    <string name="maintenance_open_asset">Gerät öffnen</string>
+    <string name="maintenance_members_section">Geräte</string>
+
+    <string name="maintenance_sheet_open_asset">Gerät öffnen</string>
+    <string name="maintenance_review_maintenance">Wartung ansehen</string>
+    <string name="maintenance_tag_placement">Tag-Position</string>
+    <string name="maintenance_nothing_due">Nichts fällig</string>
+    <string name="maintenance_why_now_overdue_since">Überfällig seit %1$s.</string>
+    <string name="maintenance_why_now_due">Fällig am %1$s.</string>
+    <string name="maintenance_reading_with_unit">%1$s %2$s</string>
+
+    <string name="maintenance_snooze">Zurückstellen</string>
+    <string name="maintenance_postpone">Verschieben</string>
+    <string name="maintenance_remove">Entfernen</string>
+    <string name="maintenance_service_record">Serviceprotokoll</string>
+    <string name="maintenance_no_service_recorded">Noch kein Service erfasst</string>
+
+    <string name="maintenance_this_applies_to">Gilt für</string>
+    <string name="maintenance_one_asset">Ein Gerät</string>
+    <string name="maintenance_a_maintenance_group">Eine Wartungsgruppe</string>
+    <string name="maintenance_every_n">Alle N</string>
+    <string name="maintenance_repeats_from">Wiederholt sich ab</string>
+    <string name="maintenance_the_scheduled_date">dem geplanten Datum</string>
+    <string name="maintenance_when_i_complete_it">dem Tag der Erledigung</string>
+    <string name="maintenance_remind_me_n_days_early">N Tage vorher erinnern</string>
+    <string name="maintenance_also_due_by_use">Auch nach Nutzung fällig</string>
+    <string name="maintenance_every_n_unit_of_use">Alle &lt;n&gt; &lt;unit&gt; Nutzung</string>
+    <string name="maintenance_last_done_at">Zuletzt erledigt bei</string>
+    <string name="maintenance_remind_me_n_unit_early">&lt;n&gt; &lt;unit&gt; vorher erinnern</string>
+    <string name="maintenance_completing_this_takes">Zum Erledigen</string>
+    <string name="maintenance_one_tap">Ein Tippen</string>
+    <string name="maintenance_the_full_form">Das ganze Formular</string>
+    <string name="maintenance_use_this_form">Dieses Formular verwenden</string>
+    <string name="maintenance_quick_action">Schnellaktion</string>
+    <string name="maintenance_none">Keine</string>
+    <string name="maintenance_remind_me_through">Erinnern über</string>
+    <string name="maintenance_similar_through_a_group">Dieses Gerät hat über eine andere Gruppe bereits einen ähnlichen Plan.</string>
+    <string name="maintenance_no_target">Kein Ziel</string>
+    <string name="maintenance_unit_day">TAG</string>
+    <string name="maintenance_unit_week">WOCHE</string>
+    <string name="maintenance_unit_month">MONAT</string>
+    <string name="maintenance_unit_year">JAHR</string>
+
+    <string name="maintenance_when_should_this_be_done">Wann soll diese Wartung erledigt werden?</string>
+    <string name="maintenance_before_the_season_starts">Vor Saisonbeginn</string>
+    <string name="maintenance_when_the_season_starts">Zu Saisonbeginn</string>
+    <string name="maintenance_whenever_it_is_due">Immer wenn sie fällig ist</string>
+    <string name="maintenance_before_the_maintenance_break">Vor der Wartungspause</string>
+    <string name="maintenance_after_the_maintenance_break">Nach der Wartungspause</string>
+    <string name="maintenance_days_before_it_starts">Tage vor Beginn</string>
+    <string name="maintenance_days_after_it_starts">Tage nach Beginn</string>
+    <string name="maintenance_start_counting_from">Zählen ab</string>
+    <string name="maintenance_the_seasons_start">Saisonbeginn</string>
+    <string name="maintenance_its_own_date_not_before_the_season">Eigenes Datum, aber nicht vor Saisonbeginn</string>
+    <string name="maintenance_first_due_outside_the_season">Das erste Fälligkeitsdatum liegt außerhalb der Saison dieses Geräts. Daher wartet es auf den Saisonbeginn.</string>
+    <string name="maintenance_nothing_to_be_ready_before">Dieses Gerät hat weder eine Saison noch eine Wartungspause, vor der etwas erledigt sein müsste. Daher ist dies fällig, sobald sein Datum kommt.</string>
+    <string name="maintenance_helper_before_the_season">Ein Datum in der Saison oder in der Wartungspause wird an einem erlaubten Tag vor Saisonbeginn fällig.</string>
+    <string name="maintenance_helper_before_the_break">Ein Datum in der Wartungspause wird vor Beginn der Pause fällig.</string>
+    <string name="maintenance_helper_when_the_season_starts">Diese Wartung ruht, solange die Saison aus ist, und wird zu Saisonbeginn wieder aktiv.</string>
+    <string name="maintenance_helper_after_the_break">Ein Datum in der Wartungspause wird auf den ersten Tag danach verschoben.</string>
+    <string name="maintenance_helper_whenever_it_is_due">Saison und Wartungspause ändern nie, wann dies fällig ist.</string>
+    <string name="maintenance_enter_the_number_of_days">Gib die Anzahl der Tage ein.</string>
+    <string name="maintenance_after_the_season_ends">Das liegt nach dem Saisonende, daher würde dies nie fällig.</string>
+
+    <string name="maintenance_the_subject_health_follows">Diesem Kriterium folgt die Gesundheit des Geräts. Wähle zuerst eine andere Art, die Gesundheit zusammenzufassen.</string>
+    <string name="maintenance_schedule_drives_subject">Dieser Plan bestimmt das Gesundheitskriterium %1$s. Dieses Kriterium ebenfalls archivieren?</string>
+    <string name="maintenance_archive_both">Beide archivieren</string>
+
+    <string name="maintenance_repair_open_notification_settings">Benachrichtigungseinstellungen öffnen</string>
+    <string name="maintenance_repair_reschedule_check">Prüfung neu planen</string>
+    <string name="maintenance_repair_restart_check">Prüfung neu starten</string>
+    <string name="maintenance_repair_open_battery_settings">Akku-Einstellungen öffnen</string>
+    <string name="maintenance_repair_turn_reminders_on">Erinnerungen einschalten</string>
+    <string name="maintenance_repair_open_schedule">Plan öffnen</string>
+    <string name="maintenance_repair_fix_delivery">Erinnerungszustellung reparieren</string>
+</resources>

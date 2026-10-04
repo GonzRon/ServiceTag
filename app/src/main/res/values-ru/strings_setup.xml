@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_setup.xml. -->
+<resources>
+    <string name="setup_loading">Загрузка…</string>
+    <string name="setup_back">Назад</string>
+    <string name="setup_cancel">Отмена</string>
+    <string name="setup_save">Сохранить</string>
+    <string name="setup_more">Ещё</string>
+    <string name="setup_edit">Изменить</string>
+    <string name="setup_move_up">Переместить вверх</string>
+    <string name="setup_move_down">Переместить вниз</string>
+    <string name="setup_archive">В архив</string>
+    <string name="setup_unarchive">Из архива</string>
+    <string name="setup_delete">Удалить</string>
+    <string name="setup_remove">Убрать</string>
+    <string name="setup_archived_badge">В архиве</string>
+    <string name="setup_ok">ОК</string>
+
+    <string name="setup_title_fallback">Показания и действия</string>
+    <string name="setup_eyebrow">ПОКАЗАНИЯ И ДЕЙСТВИЯ</string>
+    <string name="setup_readings_header">Показания</string>
+    <string name="setup_readings_empty">Показаний пока нет · добавьте показание, чтобы начать измерять этот объект</string>
+    <string name="setup_add_reading">Добавить показание</string>
+    <string name="setup_actions_header">Действия</string>
+    <string name="setup_actions_empty">Действий пока нет · добавьте действие, чтобы делать записи об этом объекте одним нажатием</string>
+    <string name="setup_add_action">Добавить действие</string>
+    <string name="setup_delete_reading_title">Удалить это показание?</string>
+    <string name="setup_delete_reading_body">Отменить это будет нельзя.</string>
+    <string name="setup_delete_action_title">Удалить это действие?</string>
+    <string name="setup_delete_action_body">Прошлые записи сохранят свои показания.</string>
+    <string name="setup_meter_tag">Счётчик</string>
+    <plurals name="setup_profile_row_meta">
+        <item quantity="one">%1$s · %2$d поле</item>
+        <item quantity="few">%1$s · %2$d поля</item>
+        <item quantity="many">%1$s · %2$d полей</item>
+        <item quantity="other">%1$s · %2$d поля</item>
+    </plurals>
+    <string name="setup_formula_percent_drop_line">= (%1$s − %2$s) / %1$s × 100</string>
+
+    <string name="setup_refusal_title">Нельзя удалить это показание</string>
+    <plurals name="setup_refusal_readings_logged">
+        <item quantity="one">Записано %1$d показание</item>
+        <item quantity="few">Записано %1$d показания</item>
+        <item quantity="many">Записано %1$d показаний</item>
+        <item quantity="other">Записано %1$d показания</item>
+    </plurals>
+    <string name="setup_refusal_used_by">Используется в: %1$s</string>
+    <string name="setup_refusal_offered_by">Предлагается в: %1$s</string>
+    <string name="setup_refusal_archive_hint">Вместо этого отправьте его в архив: оно исчезнет из форм, а история сохранится.</string>
+
+    <string name="setup_failed_reorder_readings">Не удалось изменить порядок показаний.</string>
+    <string name="setup_failed_reorder_actions">Не удалось изменить порядок действий.</string>
+    <string name="setup_failed_change_reading">Не удалось изменить это показание.</string>
+    <string name="setup_failed_change_action">Не удалось изменить это действие.</string>
+    <string name="setup_failed_delete_that_reading">Не удалось удалить это показание.</string>
+    <string name="setup_failed_delete_that_action">Не удалось удалить это действие.</string>
+
+    <string name="setup_event_kind_maintenance">Обслуживание</string>
+    <string name="setup_event_kind_inspection">Осмотр</string>
+    <string name="setup_event_kind_measurement">Измерение</string>
+    <string name="setup_event_kind_treatment">Обработка</string>
+    <string name="setup_event_kind_incident">Неисправность</string>
+    <string name="setup_event_kind_replacement">Замена</string>
+    <string name="setup_event_kind_season_start">Начало сезона</string>
+    <string name="setup_event_kind_season_end">Конец сезона</string>
+    <string name="setup_event_kind_note">Заметка</string>
+    <string name="setup_event_kind_custom">Другое</string>
+
+    <string name="setup_definition_title_edit">Изменить показание</string>
+    <string name="setup_definition_title_new">Новое показание</string>
+    <string name="setup_definition_label">Подпись</string>
+    <string name="setup_definition_key">Ключ</string>
+    <string name="setup_definition_kind">Вид</string>
+    <string name="setup_definition_kind_entered">Вводимое</string>
+    <string name="setup_definition_kind_derived">Расчётное</string>
+    <string name="setup_definition_type">Тип</string>
+    <string name="setup_value_type_number">Число</string>
+    <string name="setup_value_type_text">Текст</string>
+    <string name="setup_value_type_boolean">Да / нет</string>
+    <string name="setup_definition_formula">Формула</string>
+    <string name="setup_formula_percent_drop">Снижение в процентах: (A − B) / A × 100</string>
+    <string name="setup_definition_source_a">Источник A</string>
+    <string name="setup_definition_source_b">Источник B</string>
+    <string name="setup_definition_choose_source">Выберите показание</string>
+    <string name="setup_definition_sources_needed">Для расчётного показания нужны два числовых показания. Сначала добавьте их.</string>
+    <string name="setup_definition_unit">Единица</string>
+    <string name="setup_definition_decimals">Знаки после запятой</string>
+    <string name="setup_definition_target">Норма</string>
+    <string name="setup_definition_target_low">Минимум</string>
+    <string name="setup_definition_target_high">Максимум</string>
+    <string name="setup_definition_meter">Счётчик (только растёт)</string>
+    <string name="setup_definition_save">Сохранить показание</string>
+    <plurals name="setup_definition_frozen">
+        <item quantity="one">Уже записано %1$d показание</item>
+        <item quantity="few">Уже записано %1$d показания</item>
+        <item quantity="many">Уже записано %1$d показаний</item>
+        <item quantity="other">Уже записано %1$d показания</item>
+    </plurals>
+
+    <plurals name="setup_definition_in_use">
+        <item quantity="one">Это показание уже используется в %1$d записи, поэтому его ключ, вид и тип изменить нельзя.</item>
+        <item quantity="few">Это показание уже используется в %1$d записях, поэтому его ключ, вид и тип изменить нельзя.</item>
+        <item quantity="many">Это показание уже используется в %1$d записях, поэтому его ключ, вид и тип изменить нельзя.</item>
+        <item quantity="other">Это показание уже используется в %1$d записи, поэтому его ключ, вид и тип изменить нельзя.</item>
+    </plurals>
+    <string name="setup_definition_breaks_derived">Используется как источник для: %1$s — сначала измените это расчётное показание.</string>
+    <string name="setup_definition_breaks_profiles">Предлагается как поле в: %1$s — сначала уберите его из этого действия.</string>
+    <string name="setup_another_reading">другое показание</string>
+    <string name="setup_names_last_and">%1$s и %2$s</string>
+    <string name="setup_failed_save_reading">Не удалось сохранить это показание.</string>
+    <string name="setup_failed_delete_this_reading">Не удалось удалить это показание.</string>
+
+    <string name="setup_problem_not_a_number">Не число</string>
+    <string name="setup_problem_decimals_range">Знаков после запятой: от 0 до 4</string>
+    <string name="setup_problem_label_required">Дайте показанию подпись</string>
+    <string name="setup_problem_bad_key">Ключ: только строчные буквы, цифры и _</string>
+    <string name="setup_problem_key_taken">Этот ключ уже использует другое показание</string>
+    <string name="setup_problem_range_order">Минимум не может быть больше максимума</string>
+    <string name="setup_problem_range_on_non_number">Норма бывает только у числового показания</string>
+    <string name="setup_problem_meter_on_non_number">Счётчиком может быть только числовое показание</string>
+    <string name="setup_problem_two_sources">Выберите два разных числовых показания</string>
+    <string name="setup_problem_unknown_source">Этого показания больше нет</string>
+    <string name="setup_problem_source_other_asset">Источник должен относиться к этому объекту</string>
+    <string name="setup_problem_source_not_entered">Источником должно быть вводимое показание</string>
+    <string name="setup_problem_source_not_number">Источником должно быть числовое показание</string>
+    <string name="setup_problem_source_is_meter">Счётчик не может быть источником</string>
+    <string name="setup_problem_derived_not_number">Расчётное показание — это число</string>
+    <string name="setup_problem_derived_is_meter">Расчётное показание не бывает счётчиком</string>
+    <string name="setup_problem_spec_on_entered">У вводимого показания нет формулы</string>
+
+    <string name="setup_profile_eyebrow_edit">ИЗМЕНИТЬ ДЕЙСТВИЕ</string>
+    <string name="setup_profile_eyebrow_new">НОВОЕ ДЕЙСТВИЕ</string>
+    <string name="setup_profile_eyebrow_edit_asset">ИЗМЕНИТЬ ДЕЙСТВИЕ · %1$s</string>
+    <string name="setup_profile_eyebrow_new_asset">НОВОЕ ДЕЙСТВИЕ · %1$s</string>
+    <string name="setup_profile_name">Название</string>
+    <string name="setup_profile_kind">Вид</string>
+    <string name="setup_profile_default_title">Заголовок по умолчанию</string>
+    <string name="setup_profile_fields_header">Поля</string>
+    <string name="setup_profile_fields_empty">Полей пока нет · это действие просто создаёт запись</string>
+    <string name="setup_profile_add_field">Добавить поле</string>
+    <string name="setup_profile_all_fields_used">Все вводимые показания этого объекта уже есть в этом действии.</string>
+    <string name="setup_field_required">Обязательное</string>
+    <string name="setup_field_optional">Необязательное</string>
+    <string name="setup_field_picker_title">Добавить поле</string>
+    <string name="setup_profile_materials_header">Материалы</string>
+    <string name="setup_profile_materials_empty">Материалы не предложены · в форме записи можно указать любые</string>
+    <string name="setup_profile_add_material">Добавить материал</string>
+    <string name="setup_material_name">Материал</string>
+    <string name="setup_material_quantity">Кол-во</string>
+    <string name="setup_material_unit">Ед.</string>
+    <string name="setup_material_remove">Убрать материал</string>
+    <string name="setup_profile_save">Сохранить действие</string>
+
+    <string name="setup_problem_action_name_required">Дайте действию название</string>
+    <string name="setup_problem_action_name_taken">Это название уже использует другое действие</string>
+    <string name="setup_problem_bad_material">Нужно название и количество не меньше 0</string>
+    <string name="setup_problem_quantity_not_number">Количество должно быть числом или пустым</string>
+    <string name="setup_failed_save_action">Не удалось сохранить это действие.</string>
+    <string name="setup_failed_delete_this_action">Не удалось удалить это действие.</string>
+
+    <string name="setup_problem_field_not_this_asset">не показание этого объекта</string>
+    <string name="setup_problem_field_derived">расчётные значения вычисляются, а не вводятся</string>
+    <string name="setup_problem_field_archived">в архиве</string>
+    <string name="setup_problem_field_listed_twice">указано дважды</string>
+</resources>

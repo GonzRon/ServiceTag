@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Italian translation of values/strings_asset_detail.xml. -->
+<resources>
+    <string name="common_cancel">Annulla</string>
+    <string name="common_back">Indietro</string>
+    <string name="common_more">Altro</string>
+    <string name="common_ok">OK</string>
+    <string name="common_save">Salva</string>
+    <string name="common_loading">Caricamento…</string>
+
+    <string name="asset_detail_asset_word">Attrezzatura</string>
+
+    <string name="asset_detail_retired_on">Data di dismissione</string>
+    <string name="asset_detail_readings_and_actions">Letture e azioni</string>
+    <string name="asset_detail_tags_section">Tag</string>
+
+    <string name="asset_detail_backup">Backup</string>
+    <string name="asset_detail_write_tag">Scrivi tag</string>
+    <string name="asset_detail_edit">Modifica</string>
+    <string name="asset_detail_set_up_from_template">Configura da modello</string>
+
+    <string name="asset_detail_current_readings">Letture attuali</string>
+    <string name="asset_detail_derived">Calcolata</string>
+
+    <string name="asset_detail_service_record">Registro interventi</string>
+    <string name="asset_detail_no_service_recorded">Ancora nessun intervento registrato</string>
+
+    <string name="asset_detail_archive">Archivia</string>
+    <string name="asset_detail_unarchive">Togli dall\'archivio</string>
+    <string name="asset_detail_retire">Dismetti</string>
+    <string name="asset_detail_unretire">Rimetti in servizio</string>
+    <string name="asset_detail_delete">Elimina</string>
+
+    <string name="asset_detail_delete_title">Eliminare %1$s?</string>
+    <string name="asset_detail_delete_body">Digita il nome dell\'attrezzatura per eliminarla. Con essa vengono eliminati anche i suoi tag, le letture e il registro. Non esiste ancora un\'istantanea automatica.</string>
+    <string name="asset_detail_child_assets_first">Prima le attrezzature collegate</string>
+    <string name="asset_detail_child_assets_first_body">%1$s ha ancora %2$s. Spostale o eliminale prima, così nulla sparisce a cascata.</string>
+
+    <string name="asset_detail_retire_title">Dismettere questa attrezzatura?</string>
+    <string name="asset_detail_retire_body">Conserva il suo registro e i suoi tag continuano ad aprirla.</string>
+
+    <string name="asset_detail_log_what_happened">Registrare cosa è successo?</string>
+    <string name="asset_detail_retired_either_way">L\'attrezzatura è dismessa in ogni caso.</string>
+    <string name="asset_detail_log_replacement">Registra sostituzione</string>
+    <string name="asset_detail_log_note">Registra nota</string>
+    <string name="asset_detail_not_now">Non ora</string>
+
+    <string name="asset_detail_plate_model">Modello</string>
+    <string name="asset_detail_plate_serial">N. di serie</string>
+    <string name="asset_detail_plate_location">Posizione</string>
+    <string name="asset_detail_plate_purchased">Acquisto</string>
+    <string name="asset_detail_plate_in_service">In servizio</string>
+    <string name="asset_detail_plate_nfc_tag">Tag NFC</string>
+
+    <string name="asset_detail_details">Dettagli</string>
+    <string name="asset_detail_purchase_date">Data di acquisto</string>
+    <string name="asset_detail_purchase_document">Documento di acquisto</string>
+    <string name="asset_detail_price">Prezzo</string>
+    <string name="asset_detail_vendor">Venditore</string>
+
+    <string name="asset_detail_child_assets">Attrezzature collegate</string>
+    <string name="asset_detail_no_child_assets">Nessuna attrezzatura collegata</string>
+    <string name="asset_detail_add_child_asset">+ Aggiungi attrezzatura collegata</string>
+    <string name="asset_detail_no_readings_out_of_range">Nessuna lettura fuori intervallo</string>
+    <plurals name="asset_detail_readings_out_of_range">
+        <item quantity="one">%1$d lettura fuori intervallo</item>
+        <item quantity="other">%1$d letture fuori intervallo</item>
+    </plurals>
+    <string name="asset_detail_category_and_readings">%1$s · %2$s</string>
+
+    <string name="asset_detail_no_tag_yet">Ancora nessun tag · Usa “Scrivi tag” per aggiungerne uno</string>
+    <string name="asset_detail_tag_written">Tag scritto</string>
+    <string name="asset_detail_tag_bound">Tag associato</string>
+    <string name="asset_detail_tag_status_active">Attivo</string>
+    <string name="asset_detail_tag_status_unbound">Non associato</string>
+    <string name="asset_detail_tag_status_lost">Perso</string>
+    <string name="asset_detail_tag_status_retired">Dismesso</string>
+    <string name="asset_detail_tag_placement">Posizione del tag</string>
+
+    <string name="asset_detail_notes">Note</string>
+    <string name="asset_detail_no_notes">Nessuna nota</string>
+
+    <string name="asset_detail_no_schedule_yet">Ancora nessun piano</string>
+
+    <string name="warranty_section">Garanzia</string>
+    <string name="warranty_notes">Note sulla garanzia</string>
+    <string name="warranty_in_warranty">IN GARANZIA</string>
+    <string name="warranty_out_of_warranty">FUORI GARANZIA</string>
+    <string name="warranty_not_recorded">Garanzia non registrata</string>
+    <string name="warranty_expires">Scade il %1$s</string>
+    <string name="warranty_expired">Scaduta il %1$s</string>
+    <plurals name="warranty_reminder_days_before">
+        <item quantity="one">Promemoria: %1$d giorno prima</item>
+        <item quantity="other">Promemoria: %1$d giorni prima</item>
+    </plurals>
+    <string name="warranty_leave_blank_for_no_reminder">Lascia vuoto per non ricevere promemoria.</string>
+    <string name="warranty_add_date_first">Aggiungi prima la data di scadenza della garanzia.</string>
+
+    <string name="assets_title">Attrezzature</string>
+    <string name="assets_add_asset">Aggiungi attrezzatura</string>
+    <string name="assets_no_assets_yet">Ancora nessuna attrezzatura</string>
+    <plurals name="assets_no_active_assets">
+        <item quantity="one">Nessuna attrezzatura attiva · %1$d in archivio</item>
+        <item quantity="other">Nessuna attrezzatura attiva · %1$d in archivio</item>
+    </plurals>
+    <string name="assets_nothing_matches">Nessun risultato.</string>
+    <string name="assets_show_archived">Mostra in archivio</string>
+    <string name="assets_part_of">Fa parte di %1$s</string>
+    <string name="assets_nfc_tag_written">Tag NFC scritto</string>
+    <string name="assets_badge_retired">Dismessa</string>
+    <string name="assets_badge_out_of_season">Fuori stagione</string>
+
+    <string name="assets_filter_type">Tipo</string>
+    <string name="assets_filter_all">Tutti</string>
+    <string name="assets_filter_child_assets">Collegate</string>
+    <string name="assets_filter_archived">In archivio</string>
+    <string name="assets_archived_hidden">Le attrezzature trovate sono in archivio. Attiva “In archivio” per vederle.</string>
+    <string name="assets_child_assets_hidden">Le attrezzature trovate sono attrezzature collegate. Attiva “Collegate” per vederle.</string>
+    <string name="assets_both_hidden">Le attrezzature trovate sono nascoste. Attiva “Collegate” e “In archivio” per vederle.</string>
+    <string name="assets_only_child_assets">Qui ci sono solo attrezzature collegate. Attiva “Collegate” per vederle.</string>
+    <string name="assets_type_hidden">Le attrezzature trovate sono di un altro tipo. Imposta “Tipo” su “Tutti”.</string>
+
+    <string name="assets_search_hint">Cerca attrezzature</string>
+    <string name="assets_clear_search">Cancella ricerca</string>
+</resources>

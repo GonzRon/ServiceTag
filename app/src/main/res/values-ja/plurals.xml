@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/plurals.xml. -->
+<resources>
+    <plurals name="health_age_days">
+        <item quantity="other">%1$d日</item>
+    </plurals>
+    <plurals name="health_days_overdue">
+        <item quantity="other">%1$sは期限を%2$d日過ぎています</item>
+    </plurals>
+    <plurals name="health_grace_period">
+        <item quantity="other">%1$d日間の猶予期間内</item>
+    </plurals>
+</resources>

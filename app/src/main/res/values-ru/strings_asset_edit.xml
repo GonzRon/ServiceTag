@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_asset_edit.xml. -->
+<resources>
+    <string name="asset_edit_operating_season">Сезон эксплуатации</string>
+    <string name="asset_edit_year_round">Круглый год</string>
+    <string name="asset_edit_same_dates_every_year">Каждый год в одни и те же даты</string>
+    <string name="asset_edit_started_and_ended_by_hand">Начинается и завершается вручную</string>
+    <string name="asset_edit_season_starts">Начало сезона</string>
+    <string name="asset_edit_season_ends">Конец сезона</string>
+    <string name="asset_edit_season_may_run_across_the_new_year">Сезон может переходить через Новый год, например с октября по апрель.</string>
+    <string name="asset_edit_is_this_asset_in_season">Этот объект сейчас в сезоне?</string>
+    <string name="asset_edit_in_season_now">В сезоне</string>
+    <string name="asset_edit_out_of_season_now">Вне сезона</string>
+    <string name="asset_edit_you_start_and_end_the_season">Вы сами начинаете и завершаете сезон. Обслуживание, привязанное к сезону, ждёт, пока сезон завершён.</string>
+    <string name="asset_edit_season_strands">Часть обслуживания этого объекта настроена на выполнение до начала сезона. Сначала измените её: %1$s.</string>
+
+    <string name="asset_edit_maintenance_break">Перерыв в обслуживании</string>
+    <string name="asset_edit_no_routine_maintenance_between_two_dates">Без планового обслуживания между двумя датами</string>
+    <string name="asset_edit_break_starts">Начало перерыва</string>
+    <string name="asset_edit_break_ends">Конец перерыва</string>
+    <string name="asset_edit_break_helper">Для обслуживания, привязанного к сезону или настроенного на выполнение до его начала, срок во время перерыва не наступает. Уже просроченные работы остаются просроченными, но без напоминаний.</string>
+    <string name="asset_edit_break_cannot_cover_the_year">Перерыв не может занимать весь год.</string>
+    <string name="asset_edit_break_strands">Часть обслуживания этого объекта настроена на выполнение до перерыва. Сначала измените её: %1$s.</string>
+
+    <string name="asset_edit_health_subjects">Показатели здоровья</string>
+    <string name="asset_edit_add_health_subject">Добавить показатель здоровья</string>
+    <string name="asset_edit_combine_health_by">Как объединять здоровье</string>
+    <string name="asset_edit_combine_worst">Худший показатель</string>
+    <string name="asset_edit_combine_one">Один показатель</string>
+    <string name="asset_edit_combine_average">Среднее</string>
+    <string name="asset_edit_combine_weighted">Взвешенное среднее</string>
+    <string name="asset_edit_which_subject">Какой показатель?</string>
+
+    <plurals name="asset_edit_not_tied_to_season">
+        <item quantity="one">У этого объекта %1$d график обслуживания, не привязанный к сезону эксплуатации. Пока такой график активен, срок по нему может наступить или сохраняться, когда объект вне сезона, если вы не измените, когда нужно выполнять это обслуживание.</item>
+        <item quantity="few">У этого объекта %1$d графика обслуживания, не привязанных к сезону эксплуатации. Пока такие графики активны, срок по ним может наступить или сохраняться, когда объект вне сезона, если вы не измените, когда нужно выполнять это обслуживание.</item>
+        <item quantity="many">У этого объекта %1$d графиков обслуживания, не привязанных к сезону эксплуатации. Пока такие графики активны, срок по ним может наступить или сохраняться, когда объект вне сезона, если вы не измените, когда нужно выполнять это обслуживание.</item>
+        <item quantity="other">У этого объекта %1$d графика обслуживания, не привязанных к сезону эксплуатации. Пока такие графики активны, срок по ним может наступить или сохраняться, когда объект вне сезона, если вы не измените, когда нужно выполнять это обслуживание.</item>
+    </plurals>
+    <string name="asset_edit_review_maintenance_schedules">Проверить графики обслуживания</string>
+    <string name="asset_edit_keep_schedules_as_is">Оставить графики как есть</string>
+
+    <string name="asset_edit_key_documents">Основные документы</string>
+    <string name="asset_edit_add_purchase_invoice_or_receipt">Добавить счёт или чек о покупке</string>
+    <string name="asset_edit_add_user_manual">Добавить руководство пользователя</string>
+    <string name="asset_edit_add_service_manual">Добавить сервисное руководство</string>
+    <string name="asset_edit_attached_when_you_save">Будет прикреплён при сохранении</string>
+    <string name="asset_edit_remove">Убрать</string>
+    <string name="asset_edit_remove_file">Убрать файл «%1$s»</string>
+
+    <string name="asset_edit_name_field">Название</string>
+    <string name="asset_edit_manufacturer_field">Производитель</string>
+    <string name="asset_edit_model_field">Модель</string>
+    <string name="asset_edit_serial_number_field">Серийный номер</string>
+    <string name="asset_edit_location_field">Местоположение</string>
+    <string name="asset_edit_part_of_field">Входит в</string>
+    <string name="asset_edit_purchase_date_field">Дата покупки</string>
+    <string name="asset_edit_in_service_date_field">Дата ввода в эксплуатацию</string>
+    <string name="asset_edit_category_field">Категория</string>
+    <string name="asset_edit_description_field">Описание</string>
+    <string name="asset_edit_price_field">Цена</string>
+    <string name="asset_edit_currency_field">Валюта</string>
+    <string name="asset_edit_vendor_field">Продавец</string>
+    <string name="asset_edit_warranty_expires_on">Действует до</string>
+    <string name="asset_edit_warranty_notes_field">Заметки о гарантии</string>
+    <string name="asset_edit_notes_field">Заметки</string>
+
+    <string name="asset_edit_section_identity">Идентификация</string>
+    <string name="asset_edit_section_placement">Размещение</string>
+    <string name="asset_edit_section_purchase">Покупка</string>
+    <string name="asset_edit_section_warranty">Гарантия</string>
+    <string name="asset_edit_section_notes">Заметки</string>
+    <string name="asset_edit_section_template">Шаблон</string>
+
+    <string name="asset_edit_title_edit">Изменить объект</string>
+    <string name="asset_edit_cancel">Отмена</string>
+    <string name="asset_edit_save">Сохранить</string>
+    <string name="asset_edit_save_asset">Сохранить объект</string>
+    <string name="asset_edit_notifications_ok">ОК</string>
+
+    <string name="asset_edit_date_placeholder">ГГГГ-ММ-ДД</string>
+    <string name="asset_edit_month_day_placeholder">ММ-ДД</string>
+    <string name="asset_edit_pick_date">Выбрать: %1$s</string>
+    <string name="asset_edit_calendar_ok">ОК</string>
+    <string name="asset_edit_calendar_cancel">Отмена</string>
+
+    <string name="asset_edit_template_none">Без шаблона · настроить позже</string>
+    <string name="asset_edit_template_helper">Объект сразу получит показания и быстрые действия шаблона. Выберите «Без шаблона», чтобы решить позже.</string>
+
+    <string name="asset_model_condition_history">История состояния</string>
+    <string name="asset_model_linked_record_removed">Связанная запись удалена.</string>
+    <string name="asset_model_health_section">Здоровье</string>
+    <string name="asset_model_health_footer">Здоровье — это оценка по датам и записям, а не диагноз. Оно никогда не меняет состояние.</string>
+    <string name="asset_model_health_fallback_to_worst">Показатель, по которому рассчитывается здоровье, отсутствует, поэтому показан худший показатель.</string>
+
+    <string name="asset_model_could_not_update">Не удалось обновить этот объект.</string>
+    <string name="asset_model_could_not_retire">Не удалось списать этот объект.</string>
+    <string name="asset_model_could_not_delete">Не удалось удалить этот объект.</string>
+    <string name="asset_model_template_not_available">Этот шаблон недоступен.</string>
+    <string name="asset_model_could_not_set_up">Не удалось настроить этот объект.</string>
+    <string name="asset_model_already_set_up">Этот объект уже настроен.</string>
+
+    <string name="asset_model_could_not_save">Не удалось сохранить этот объект.</string>
+    <string name="asset_model_parent_cycle">%1$s уже входит в этот объект.</string>
+    <string name="asset_model_no_parent">Нет</string>
+    <string name="asset_model_parent_archived">%1$s (в архиве)</string>
+
+    <string name="asset_model_not_a_real_month_day">Такого месяца и дня нет</string>
+    <string name="asset_model_name_required">Дайте объекту название</string>
+    <string name="asset_model_bad_date">Введите дату в формате ГГГГ-ММ-ДД</string>
+    <string name="asset_model_bad_currency">Валюта — это трёхбуквенный код, например USD</string>
+    <string name="asset_model_currency_required">Для цены нужна валюта</string>
+    <string name="asset_model_price_negative">Цена не может быть отрицательной</string>
+    <string name="asset_model_parent_gone">Этого объекта больше нет</string>
+    <string name="asset_model_price_example">Введите цену, например %1$s</string>
+    <string name="asset_model_price_hint_amount">Сумма</string>
+    <string name="asset_model_price_hint_whole">Только целые числа</string>
+    <plurals name="asset_model_price_hint_decimals">
+        <item quantity="one">До %1$d знака после запятой</item>
+        <item quantity="few">До %1$d знаков после запятой</item>
+        <item quantity="many">До %1$d знаков после запятой</item>
+        <item quantity="other">До %1$d знака после запятой</item>
+    </plurals>
+
+    <string name="season_in_season_word">В СЕЗОНЕ</string>
+    <string name="season_start_title">Начать сезон?</string>
+    <string name="season_start_body">Обслуживание, привязанное к сезону, снова станет активным с %1$s.</string>
+    <string name="season_end_title">Завершить сезон?</string>
+    <string name="season_end_body">Обслуживание, привязанное к сезону, будет ждать, пока вы снова не начнёте сезон. Ничего не отмечается как выполненное.</string>
+    <string name="season_history_started">Сезон начат</string>
+    <string name="season_history_ended">Сезон завершён</string>
+    <string name="season_history_section">История сезонов</string>
+    <string name="season_next_starts">Следующий сезон начнётся %1$s</string>
+    <string name="season_ends_on">Сезон завершится %1$s</string>
+    <string name="season_choose_date_from">Выберите дату от %1$s до сегодняшнего дня.</string>
+    <string name="season_already_running">Сезон уже идёт.</string>
+    <string name="season_already_ended">Сезон уже завершён.</string>
+
+    <string name="season_sync_link">Связать с Home Assistant</string>
+    <string name="season_sync_follow">Следовать Home Assistant</string>
+    <string name="season_sync_force_in">Принудительно в сезоне</string>
+    <string name="season_sync_force_out">Принудительно вне сезона</string>
+    <string name="season_sync_now">Синхронизировать</string>
+    <string name="season_sync_follows">Следует за %1$s</string>
+    <string name="season_sync_forced_in">Принудительно в сезоне. %1$s по-прежнему проверяется, но не меняет сезон, пока вы не выберете «Следовать Home Assistant».</string>
+    <string name="season_sync_forced_out">Принудительно вне сезона. %1$s по-прежнему проверяется, но не меняет сезон, пока вы не выберете «Следовать Home Assistant».</string>
+    <string name="season_sync_last_success">Последняя успешная проверка: %1$s</string>
+    <string name="season_sync_no_reading_yet">От Home Assistant пока нет данных.</string>
+    <string name="season_sync_not_checked_in_time">Нет успешной проверки за выбранный интервал.</string>
+    <string name="season_sync_changed_in_ha">Изменено в Home Assistant: %1$s</string>
+    <string name="season_sync_started_from_ha">Начат по данным Home Assistant %1$s</string>
+    <string name="season_sync_ended_from_ha">Завершён по данным Home Assistant %1$s</string>
+    <string name="season_sync_forced_in_on">Принудительно переведён в сезон %1$s</string>
+    <string name="season_sync_forced_out_on">Принудительно выведен из сезона %1$s</string>
+    <string name="season_sync_not_maintained_here">Этот объект здесь больше не обслуживается, поэтому Home Assistant больше не меняет его сезон.</string>
+    <string name="season_sync_date_before_history">Дата на этом телефоне раньше последней записи о сезоне, поэтому сезон не изменится, пока дата её не догонит.</string>
+    <string name="season_sync_not_manual">Сезон этого объекта больше не начинается и не завершается вручную, поэтому Home Assistant не может его изменить. Выберите «Остановить синхронизацию», затем «Возобновить синхронизацию».</string>
+    <string name="season_sync_stop">Остановить синхронизацию</string>
+    <string name="season_sync_resume">Возобновить синхронизацию</string>
+    <string name="season_sync_stopped">Синхронизация остановлена. Home Assistant больше не меняет сезон этого объекта.</string>
+    <string name="season_sync_entity_id">ID сущности</string>
+    <string name="season_sync_entity_id_help">Вспомогательный переключатель (вкл./выкл.), который включён, пока этот объект в сезоне, например input_boolean.example_heater_in_season. Не собственный выключатель питания прибора.</string>
+    <string name="season_sync_link_calendar">Связь этого объекта с Home Assistant заменяет его календарные даты. С сегодняшнего дня сезон начинается и завершается, когда так сообщает Home Assistant. Обслуживание, которое отсчитывается от начала сезона, будет отсчитываться от сегодняшнего дня.</string>
+    <string name="season_sync_link_year_round">Сейчас у этого объекта нет сезона эксплуатации. Связь с Home Assistant его задаст: объект будет в сезоне с сегодняшнего дня, а дальше сезон начинается и завершается, когда так сообщает Home Assistant. Обслуживание, которое отсчитывается от начала сезона, будет отсчитываться от сегодняшнего дня.</string>
+    <string name="season_sync_link_manual">С этого момента Home Assistant начинает и завершает сезон этого объекта. История сезонов остаётся без изменений.</string>
+    <string name="season_sync_follows_ha">Сезон этого объекта следует за Home Assistant. Чтобы изменить его здесь, выберите «Остановить синхронизацию» на странице объекта.</string>
+    <string name="season_sync_bad_entity_id">Введите ID сущности, например input_boolean.example_heater_in_season: строчные буквы, цифры и подчёркивания, с одной точкой.</string>
+</resources>

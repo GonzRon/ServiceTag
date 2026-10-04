@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_asset_edit.xml. -->
+<resources>
+    <string name="asset_edit_operating_season">Saison d\'utilisation</string>
+    <string name="asset_edit_year_round">Toute l\'année</string>
+    <string name="asset_edit_same_dates_every_year">Mêmes dates chaque année</string>
+    <string name="asset_edit_started_and_ended_by_hand">Démarrée et terminée à la main</string>
+    <string name="asset_edit_season_starts">Début de saison</string>
+    <string name="asset_edit_season_ends">Fin de saison</string>
+    <string name="asset_edit_season_may_run_across_the_new_year">La saison peut chevaucher deux années, par exemple d\'octobre à avril.</string>
+    <string name="asset_edit_is_this_asset_in_season">Cet équipement est-il en saison en ce moment ?</string>
+    <string name="asset_edit_in_season_now">En saison</string>
+    <string name="asset_edit_out_of_season_now">Hors saison</string>
+    <string name="asset_edit_you_start_and_end_the_season">Vous démarrez et terminez la saison vous-même. L\'entretien réglé pour suivre la saison attend tant qu\'elle est terminée.</string>
+    <string name="asset_edit_season_strands">Certains entretiens de cet équipement sont réglés pour être prêts avant sa saison. Modifiez-les d\'abord : %1$s.</string>
+
+    <string name="asset_edit_maintenance_break">Pause d\'entretien</string>
+    <string name="asset_edit_no_routine_maintenance_between_two_dates">Pas d\'entretien courant entre deux dates</string>
+    <string name="asset_edit_break_starts">Début de la pause</string>
+    <string name="asset_edit_break_ends">Fin de la pause</string>
+    <string name="asset_edit_break_helper">L\'entretien réglé pour suivre la saison, ou pour être prêt avant elle, n\'arrive pas à échéance pendant la pause. Le travail déjà en retard reste en retard, sans rappels.</string>
+    <string name="asset_edit_break_cannot_cover_the_year">La pause ne peut pas couvrir toute l\'année.</string>
+    <string name="asset_edit_break_strands">Certains entretiens de cet équipement sont réglés pour être prêts avant la pause. Modifiez-les d\'abord : %1$s.</string>
+
+    <string name="asset_edit_health_subjects">Indicateurs de santé</string>
+    <string name="asset_edit_add_health_subject">Ajouter un indicateur de santé</string>
+    <string name="asset_edit_combine_health_by">Combiner la santé selon</string>
+    <string name="asset_edit_combine_worst">Pire indicateur</string>
+    <string name="asset_edit_combine_one">Un seul indicateur</string>
+    <string name="asset_edit_combine_average">Moyenne</string>
+    <string name="asset_edit_combine_weighted">Moyenne pondérée</string>
+    <string name="asset_edit_which_subject">Quel indicateur ?</string>
+
+    <plurals name="asset_edit_not_tied_to_season">
+        <item quantity="one">Cet équipement a %1$d plan d\'entretien qui n\'est pas lié à sa saison d\'utilisation. S\'il est actif, il peut arriver à échéance ou rester à faire pendant que l\'équipement est hors saison, sauf si vous modifiez le moment où cet entretien doit être effectué.</item>
+        <item quantity="other">Cet équipement a %1$d plans d\'entretien qui ne sont pas liés à sa saison d\'utilisation. S\'ils sont actifs, ils peuvent arriver à échéance ou rester à faire pendant que l\'équipement est hors saison, sauf si vous modifiez le moment où cet entretien doit être effectué.</item>
+    </plurals>
+    <string name="asset_edit_review_maintenance_schedules">Revoir les plans d\'entretien</string>
+    <string name="asset_edit_keep_schedules_as_is">Garder les plans tels quels</string>
+
+    <string name="asset_edit_key_documents">Documents clés</string>
+    <string name="asset_edit_add_purchase_invoice_or_receipt">Ajouter une facture ou un reçu d\'achat</string>
+    <string name="asset_edit_add_user_manual">Ajouter le manuel d\'utilisation</string>
+    <string name="asset_edit_add_service_manual">Ajouter le manuel d\'entretien</string>
+    <string name="asset_edit_attached_when_you_save">Joint à l\'enregistrement</string>
+    <string name="asset_edit_remove">Retirer</string>
+    <string name="asset_edit_remove_file">Retirer %1$s</string>
+
+    <string name="asset_edit_name_field">Nom</string>
+    <string name="asset_edit_manufacturer_field">Fabricant</string>
+    <string name="asset_edit_model_field">Modèle</string>
+    <string name="asset_edit_serial_number_field">Numéro de série</string>
+    <string name="asset_edit_location_field">Emplacement</string>
+    <string name="asset_edit_part_of_field">Fait partie de</string>
+    <string name="asset_edit_purchase_date_field">Date d\'achat</string>
+    <string name="asset_edit_in_service_date_field">Date de mise en service</string>
+    <string name="asset_edit_category_field">Catégorie</string>
+    <string name="asset_edit_description_field">Description</string>
+    <string name="asset_edit_price_field">Prix</string>
+    <string name="asset_edit_currency_field">Devise</string>
+    <string name="asset_edit_vendor_field">Vendeur</string>
+    <string name="asset_edit_warranty_expires_on">Expire le</string>
+    <string name="asset_edit_warranty_notes_field">Notes de garantie</string>
+    <string name="asset_edit_notes_field">Notes</string>
+
+    <string name="asset_edit_section_identity">Identité</string>
+    <string name="asset_edit_section_placement">Emplacement</string>
+    <string name="asset_edit_section_purchase">Achat</string>
+    <string name="asset_edit_section_warranty">Garantie</string>
+    <string name="asset_edit_section_notes">Notes</string>
+    <string name="asset_edit_section_template">Modèle</string>
+
+    <string name="asset_edit_title_edit">Modifier l\'équipement</string>
+    <string name="asset_edit_cancel">Annuler</string>
+    <string name="asset_edit_save">Enregistrer</string>
+    <string name="asset_edit_save_asset">Enregistrer l\'équipement</string>
+    <string name="asset_edit_notifications_ok">OK</string>
+
+    <string name="asset_edit_date_placeholder">AAAA-MM-JJ</string>
+    <string name="asset_edit_month_day_placeholder">MM-JJ</string>
+    <string name="asset_edit_pick_date">%1$s : ouvrir le calendrier</string>
+    <string name="asset_edit_calendar_ok">OK</string>
+    <string name="asset_edit_calendar_cancel">Annuler</string>
+
+    <string name="asset_edit_template_none">Aucun · configurer plus tard</string>
+    <string name="asset_edit_template_helper">Démarre l\'équipement avec ses relevés et ses actions rapides. Choisissez « Aucun » pour en décider plus tard, depuis l\'équipement.</string>
+
+    <string name="asset_model_condition_history">Historique de l\'état</string>
+    <string name="asset_model_linked_record_removed">L\'entrée liée a été supprimée.</string>
+    <string name="asset_model_health_section">Santé</string>
+    <string name="asset_model_health_footer">La santé est une estimation fondée sur les dates et les entrées, pas un diagnostic. Elle ne modifie jamais l\'état.</string>
+    <string name="asset_model_health_fallback_to_worst">L\'indicateur à suivre est introuvable : le pire indicateur est donc affiché.</string>
+
+    <string name="asset_model_could_not_update">Impossible de mettre à jour cet équipement.</string>
+    <string name="asset_model_could_not_retire">Impossible de retirer cet équipement du service.</string>
+    <string name="asset_model_could_not_delete">Impossible de supprimer cet équipement.</string>
+    <string name="asset_model_template_not_available">Ce modèle n\'est pas disponible.</string>
+    <string name="asset_model_could_not_set_up">Impossible de configurer cet équipement.</string>
+    <string name="asset_model_already_set_up">Cet équipement est déjà configuré.</string>
+
+    <string name="asset_model_could_not_save">Impossible d\'enregistrer cet équipement.</string>
+    <string name="asset_model_parent_cycle">%1$s fait déjà partie de cet équipement.</string>
+    <string name="asset_model_no_parent">Aucun</string>
+    <string name="asset_model_parent_archived">%1$s (archivé)</string>
+
+    <string name="asset_model_not_a_real_month_day">Ce mois et ce jour n\'existent pas</string>
+    <string name="asset_model_name_required">Donnez un nom à l\'équipement</string>
+    <string name="asset_model_bad_date">Saisissez une date au format AAAA-MM-JJ</string>
+    <string name="asset_model_bad_currency">La devise est un code à trois lettres, comme USD</string>
+    <string name="asset_model_currency_required">Un prix nécessite une devise</string>
+    <string name="asset_model_price_negative">Le prix ne peut pas être négatif</string>
+    <string name="asset_model_parent_gone">Cet équipement n\'existe plus</string>
+    <string name="asset_model_price_example">Saisissez un prix comme %1$s</string>
+    <string name="asset_model_price_hint_amount">Montant</string>
+    <string name="asset_model_price_hint_whole">Nombres entiers uniquement</string>
+    <plurals name="asset_model_price_hint_decimals">
+        <item quantity="one">Jusqu\'à %1$d décimale</item>
+        <item quantity="other">Jusqu\'à %1$d décimales</item>
+    </plurals>
+
+    <string name="season_in_season_word">EN SAISON</string>
+    <string name="season_start_title">Démarrer la saison ?</string>
+    <string name="season_start_body">L\'entretien réglé pour suivre la saison redevient actif à partir du %1$s.</string>
+    <string name="season_end_title">Terminer la saison ?</string>
+    <string name="season_end_body">L\'entretien réglé pour suivre la saison attend que vous la redémarriez. Rien n\'est marqué comme fait.</string>
+    <string name="season_history_started">Saison démarrée</string>
+    <string name="season_history_ended">Saison terminée</string>
+    <string name="season_history_section">Historique des saisons</string>
+    <string name="season_next_starts">La prochaine saison commence le %1$s</string>
+    <string name="season_ends_on">La saison se termine le %1$s</string>
+    <string name="season_choose_date_from">Choisissez une date entre le %1$s et aujourd\'hui.</string>
+    <string name="season_already_running">La saison est déjà en cours.</string>
+    <string name="season_already_ended">La saison est déjà terminée.</string>
+
+    <string name="season_sync_link">Lier à Home Assistant</string>
+    <string name="season_sync_follow">Suivre Home Assistant</string>
+    <string name="season_sync_force_in">Forcer en saison</string>
+    <string name="season_sync_force_out">Forcer hors saison</string>
+    <string name="season_sync_now">Synchroniser maintenant</string>
+    <string name="season_sync_follows">Suit %1$s</string>
+    <string name="season_sync_forced_in">Forcé en saison. %1$s est toujours vérifié, mais ne change pas la saison tant que vous n\'avez pas choisi « Suivre Home Assistant ».</string>
+    <string name="season_sync_forced_out">Forcé hors saison. %1$s est toujours vérifié, mais ne change pas la saison tant que vous n\'avez pas choisi « Suivre Home Assistant ».</string>
+    <string name="season_sync_last_success">Dernière vérification réussie le %1$s</string>
+    <string name="season_sync_no_reading_yet">Aucun relevé de Home Assistant pour l\'instant.</string>
+    <string name="season_sync_not_checked_in_time">Aucune vérification réussie dans l\'intervalle choisi.</string>
+    <string name="season_sync_changed_in_ha">Modifié dans Home Assistant le %1$s</string>
+    <string name="season_sync_started_from_ha">Démarrée depuis Home Assistant le %1$s</string>
+    <string name="season_sync_ended_from_ha">Terminée depuis Home Assistant le %1$s</string>
+    <string name="season_sync_forced_in_on">Forcé en saison le %1$s</string>
+    <string name="season_sync_forced_out_on">Forcé hors saison le %1$s</string>
+    <string name="season_sync_not_maintained_here">Cet équipement n\'est plus géré ici : Home Assistant ne modifie donc plus sa saison.</string>
+    <string name="season_sync_date_before_history">La date de ce téléphone est antérieure à la dernière entrée de saison : la saison reste telle quelle jusqu\'à ce que la date la rattrape.</string>
+    <string name="season_sync_not_manual">La saison de cet équipement n\'est plus démarrée et terminée à la main : Home Assistant ne peut donc pas la modifier. Choisissez « Arrêter la synchronisation », puis « Reprendre la synchronisation ».</string>
+    <string name="season_sync_stop">Arrêter la synchronisation</string>
+    <string name="season_sync_resume">Reprendre la synchronisation</string>
+    <string name="season_sync_stopped">La synchronisation est arrêtée. Home Assistant ne modifie plus la saison de cet équipement.</string>
+    <string name="season_sync_entity_id">ID d\'entité</string>
+    <string name="season_sync_entity_id_help">Une entrée marche/arrêt activée tant que cet équipement est en saison, par exemple input_boolean.example_heater_in_season. Pas l\'interrupteur d\'alimentation de l\'appareil lui-même.</string>
+    <string name="season_sync_link_calendar">Lier cet équipement à Home Assistant remplace ses dates de calendrier. À partir d\'aujourd\'hui, sa saison démarre et se termine quand Home Assistant l\'indique. L\'entretien qui compte à partir du début de la saison comptera à partir d\'aujourd\'hui.</string>
+    <string name="season_sync_link_year_round">Cet équipement n\'a pas de saison d\'utilisation pour l\'instant. Le lier à Home Assistant lui en donne une : en saison à partir d\'aujourd\'hui, puis démarrée et terminée quand Home Assistant l\'indique. L\'entretien qui compte à partir du début de la saison comptera à partir d\'aujourd\'hui.</string>
+    <string name="season_sync_link_manual">Désormais, Home Assistant démarre et termine la saison de cet équipement. Son historique des saisons reste tel quel.</string>
+    <string name="season_sync_follows_ha">La saison de cet équipement suit Home Assistant. Choisissez « Arrêter la synchronisation » sur la page de l\'équipement pour la modifier ici.</string>
+    <string name="season_sync_bad_entity_id">Saisissez un ID d\'entité comme input_boolean.example_heater_in_season : lettres minuscules, chiffres et tirets bas, avec un seul point.</string>
+</resources>

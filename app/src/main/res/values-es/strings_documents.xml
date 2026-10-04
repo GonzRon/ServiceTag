@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Spanish translation of values/strings_documents.xml. -->
+<resources>
+    <string name="documents_header">Documentos</string>
+    <string name="documents_header_count">Documentos · %1$d</string>
+    <string name="documents_empty">Aún no hay documentos</string>
+    <string name="documents_add_file">Añadir archivo</string>
+    <string name="documents_take_photo">Hacer foto</string>
+    <string name="documents_storage_headline">Almacenamiento de adjuntos</string>
+    <string name="documents_storage_not_set_up">Almacenamiento de adjuntos sin configurar</string>
+    <string name="documents_storage_detail">Elige una carpeta en Ajustes</string>
+    <string name="documents_open_settings">Abrir ajustes</string>
+    <string name="documents_no_app_can_pick_files">Ninguna aplicación puede elegir archivos</string>
+    <string name="documents_no_app_can_open_file">Ninguna aplicación puede abrir este archivo</string>
+    <string name="documents_no_camera_app">No hay ninguna aplicación de cámara en este dispositivo</string>
+    <string name="documents_not_on_device">No está en este dispositivo</string>
+    <string name="documents_more_for">Más opciones para %1$s</string>
+    <string name="documents_more_for_role">Más opciones para %1$s, %2$s</string>
+
+    <string name="documents_kind_photo">Foto</string>
+    <string name="documents_kind_label_photo">Foto de la placa</string>
+    <string name="documents_kind_receipt">Recibo</string>
+    <string name="documents_kind_manual">Manual</string>
+    <string name="documents_kind_warranty">Garantía</string>
+    <string name="documents_kind_document">Documento</string>
+    <string name="documents_kind_other">Otro</string>
+
+    <string name="documents_size_bytes">%1$s B</string>
+    <string name="documents_size_kb">%1$s KB</string>
+    <string name="documents_size_mb">%1$s MB</string>
+
+    <string name="attachments_name_label">Nombre</string>
+    <string name="attachments_kind_header">Tipo</string>
+    <string name="attachments_notes_label">Notas</string>
+    <string name="attachments_cancel">Cancelar</string>
+    <string name="attachments_save">Guardar</string>
+    <string name="attachments_captured_on_label">Fecha de captura</string>
+    <string name="attachments_delete">Eliminar</string>
+    <string name="attachments_delete_title">¿Eliminar archivo?</string>
+    <string name="attachments_delete_body">¿Eliminar %1$s? El archivo se borra de tu carpeta de adjuntos.</string>
+
+    <string name="attachments_role_header">Función</string>
+    <string name="attachments_role_purchase_invoice_or_receipt">Factura o recibo de compra</string>
+    <string name="attachments_role_user_manual">Manual de usuario</string>
+    <string name="attachments_role_service_manual">Manual de servicio</string>
+    <string name="attachments_role_none">Sin función</string>
+    <string name="attachments_adding_progress">Añadiendo %1$d de %2$d…</string>
+    <string name="attachments_could_not_save">No se pudo guardar %1$s</string>
+    <string name="attachments_could_not_delete">No se pudo eliminar ese archivo</string>
+    <string name="attachments_could_not_add">No se pudo añadir %1$s</string>
+    <string name="attachments_blank_name">Ponle un nombre al archivo</string>
+    <string name="attachments_no_store">Primero elige una carpeta de adjuntos en Ajustes</string>
+    <string name="attachments_store_unavailable">La carpeta de adjuntos no está disponible</string>
+    <string name="attachments_too_large">Ese archivo supera los 256 MB</string>
+    <string name="attachments_owner_missing">Ese archivo ya no está aquí</string>
+    <string name="attachments_scan_failed">No se pudo comprobar la carpeta de adjuntos</string>
+    <string name="attachments_folder_fallback">Carpeta</string>
+
+    <string name="references_header">Referencias</string>
+    <string name="references_header_count">Referencias · %1$d</string>
+    <string name="references_empty">Aún no hay referencias</string>
+    <string name="references_add_link">Añadir enlace</string>
+    <string name="references_more">Más opciones</string>
+    <string name="references_open">Abrir</string>
+    <string name="references_edit">Editar</string>
+    <string name="references_remove">Quitar</string>
+    <string name="references_kind_web_link">Enlace web</string>
+    <string name="references_kind_note">Nota</string>
+    <string name="references_kind_other">Otro</string>
+    <string name="references_blocked_at_open">ServiceTag no abrirá ese tipo de enlace.</string>
+    <string name="links_no_handler">Ninguna aplicación puede abrir este enlace</string>
+
+    <string name="references_edit_title">Editar referencia</string>
+    <string name="references_link_label">Enlace</string>
+    <string name="references_name_label">Nombre</string>
+    <string name="references_description_label">Descripción</string>
+    <string name="references_cancel">Cancelar</string>
+    <string name="references_save">Guardar</string>
+    <string name="references_remove_title">¿Quitar esta referencia?</string>
+    <string name="references_removed_from_asset">El enlace se quita de este equipo. No se cambia nada en la otra aplicación.</string>
+    <string name="references_removed_from_supply">El enlace se quita de este suministro. No se cambia nada en la otra aplicación.</string>
+    <string name="references_removed_from_installed_component">El enlace se quita de este componente instalado. No se cambia nada en la otra aplicación.</string>
+    <string name="references_unknown_scheme_title">¿Guardar este enlace?</string>
+    <string name="references_unknown_scheme_body">ServiceTag no reconoce los enlaces de tipo “%1$s”. Se guardará tal como está escrito y se abrirá con la aplicación que lo reclame.</string>
+
+    <string name="references_blank_name">Ponle un nombre a la referencia</string>
+    <string name="references_not_a_link">Eso no es un enlace.</string>
+    <string name="references_uri_too_long">Ese enlace es demasiado largo para guardarlo.</string>
+    <string name="references_scheme_blocked">ServiceTag no guardará ese tipo de enlace.</string>
+    <string name="references_duplicate_on_asset">Ese enlace ya está en este equipo</string>
+    <string name="references_duplicate_on_supply">Ese enlace ya está en este suministro</string>
+    <string name="references_duplicate_on_installed_component">Ese enlace ya está en este componente instalado</string>
+
+    <string name="references_save_as_document">Guardar como documento</string>
+    <string name="references_downloading_from">Descargando de %1$s…</string>
+    <string name="references_download_progress">%1$s de %2$s</string>
+    <string name="references_from_host">De %1$s</string>
+    <string name="references_type_line">%1$s · %2$s</string>
+    <string name="references_saved_as_document">Guardado como documento</string>
+    <string name="references_saved_to_documents">Guardado en Documentos</string>
+    <string name="references_downloaded_from">Descargado de %1$s el %2$s</string>
+    <string name="references_open_source_link">Abrir enlace de origen</string>
+    <string name="references_network_denied">ServiceTag no tiene permiso para usar la red, así que no puede descargar este archivo. Permite el acceso a la red en los ajustes de la aplicación y, después, cierra ServiceTag y vuelve a abrirlo.</string>
+    <string name="references_unreachable">No se pudo contactar con %1$s. Comprueba la conexión y vuelve a intentarlo.</string>
+    <string name="references_timed_out">La descarga tardó demasiado y se detuvo.</string>
+    <string name="references_not_a_document">Ese enlace no lleva a un tipo de documento compatible. Se queda como enlace.</string>
+    <string name="references_needs_sign_in">Ese archivo requiere iniciar sesión, así que ServiceTag no puede descargarlo. Se queda como enlace.</string>
+    <string name="references_server_error">El servidor no envió el archivo (error %1$d).</string>
+    <string name="references_redirect_refused">Ese enlace redirige a un destino al que ServiceTag no lo seguirá. Se queda como enlace.</string>
+    <string name="references_already_have_on_asset">Este equipo ya tiene este archivo: %1$s.</string>
+    <string name="references_already_have_on_supply">Este suministro ya tiene este archivo: %1$s.</string>
+    <string name="references_already_have_on_installed_component">Este componente instalado ya tiene este archivo: %1$s.</string>
+    <string name="references_interrupted">No se pudo completar la descarga. Vuelve a intentarlo.</string>
+    <string name="references_local_address">Ese enlace se resuelve a una dirección de la red local, así que ServiceTag no lo descargará. Se queda como enlace.</string>
+
+    <string name="contacts_no_app_can_open">Ninguna aplicación puede abrir este contacto</string>
+
+    <string name="share_title">Guardar en ServiceTag</string>
+    <string name="share_received">Recibido</string>
+    <string name="share_attach_to">Adjuntar a</string>
+    <string name="share_choose_asset">Elegir equipo</string>
+    <string name="share_name">Nombre</string>
+    <string name="share_description">Descripción (opcional)</string>
+    <string name="share_type">Tipo</string>
+    <string name="share_save">Guardar</string>
+    <string name="share_cancel">Cancelar</string>
+    <string name="share_close">Cerrar</string>
+    <string name="share_save_as_note">Guardar como nota</string>
+    <string name="share_not_a_link">Eso no es un enlace.</string>
+    <string name="share_no_assets">Primero añade un equipo en ServiceTag y vuelve a compartir esto.</string>
+    <string name="share_no_folder">Elige una carpeta de adjuntos en los ajustes de ServiceTag y vuelve a compartir esto.</string>
+    <string name="share_stream_refused">No se puede aceptar ese archivo desde la aplicación que lo compartió.</string>
+    <string name="share_unreadable">No se pudo leer lo que se compartió</string>
+    <string name="share_uri_too_long">Ese enlace es demasiado largo para guardarlo.</string>
+    <string name="share_scheme_blocked">ServiceTag no guardará ese tipo de enlace.</string>
+    <string name="share_duplicate_uri">Ese enlace ya está en este equipo</string>
+    <string name="share_empty_file">Ese archivo está vacío</string>
+    <string name="share_too_large">Ese archivo supera los 256 MB</string>
+    <string name="share_blank_file_name">Ponle un nombre al archivo</string>
+    <string name="share_blank_reference_name">Ponle un nombre a la referencia</string>
+    <string name="share_confirm_title">¿Guardar este enlace?</string>
+    <string name="share_confirm_body">ServiceTag no reconoce los enlaces de tipo “%1$s”. Se guardará tal como está escrito y se abrirá con la aplicación que lo reclame.</string>
+    <string name="share_change">Cambiar</string>
+    <string name="share_no_active_assets">Ningún equipo activo</string>
+    <string name="share_search_installed_components">Buscar componentes instalados</string>
+    <string name="share_search_supplies">Buscar suministros</string>
+    <string name="share_path_step">%1$s › %2$s</string>
+    <string name="share_this_asset">Este equipo</string>
+    <string name="share_supply_shared">Suministro — compartido entre usos</string>
+    <string name="share_show_inside">Mostrar lo que hay dentro de %1$s</string>
+    <string name="share_on_supply">Se guardará en el suministro %1$s y estará disponible dondequiera que se use ese suministro.</string>
+    <string name="share_saved_to_supply">Guardado en el suministro %1$s.</string>
+    <string name="share_saved_to">Guardado en %1$s</string>
+    <string name="share_back">Atrás</string>
+</resources>

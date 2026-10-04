@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_maintenance.xml. -->
+<resources>
+    <string name="maintenance_loading">正在加载…</string>
+    <string name="maintenance_back">返回</string>
+    <string name="maintenance_cancel">取消</string>
+    <string name="maintenance_save">保存</string>
+    <string name="maintenance_ok">确定</string>
+    <string name="maintenance_edit">编辑</string>
+    <string name="maintenance_more">更多</string>
+    <string name="maintenance_archive">归档</string>
+    <string name="maintenance_unarchive">取消归档</string>
+    <string name="maintenance_archived">已归档</string>
+    <string name="maintenance_date">日期</string>
+    <string name="maintenance_pick_field">选择%1$s</string>
+    <string name="maintenance_name">名称</string>
+    <string name="maintenance_description">描述</string>
+    <string name="maintenance_dismiss">关闭</string>
+    <string name="maintenance_not_now">暂不</string>
+
+    <string name="maintenance_title">保养</string>
+    <string name="maintenance_section_due_work">到期工作</string>
+    <string name="maintenance_section_schedules">保养计划</string>
+    <string name="maintenance_section_groups">保养组</string>
+    <string name="maintenance_section_reminders">提醒</string>
+    <string name="maintenance_no_schedules_yet">尚无保养计划。可从设备或保养组中添加。</string>
+    <string name="maintenance_reminders_blocked">通知已被屏蔽，因此提醒已关闭。</string>
+    <string name="maintenance_reminder_failed">提醒失败</string>
+    <string name="maintenance_scan_tag">扫描标签</string>
+    <string name="maintenance_add_asset">添加设备</string>
+    <string name="maintenance_log_maintenance">记录保养</string>
+
+    <string name="maintenance_status_ok">正常</string>
+    <string name="maintenance_status_due_soon">即将到期</string>
+    <string name="maintenance_status_due">到期</string>
+    <string name="maintenance_status_overdue">已逾期</string>
+    <string name="maintenance_status_out_of_season">使用季外</string>
+    <string name="maintenance_status_paused">已暂停</string>
+    <string name="maintenance_status_no_baseline">无基准读数</string>
+    <string name="maintenance_status_deferred">已推迟</string>
+    <string name="maintenance_dashboard_section_attention">需要关注</string>
+    <string name="maintenance_dashboard_section_upcoming">即将到来</string>
+    <string name="maintenance_dashboard_section_current">正常</string>
+    <string name="maintenance_dashboard_section_deferred">已推迟</string>
+    <string name="maintenance_dashboard_section_out_of_season">使用季外</string>
+
+    <string name="maintenance_log_meter_reading">记录计数器读数</string>
+    <string name="maintenance_meter_line">达到%1$s %2$s时到期，当前为%3$s。</string>
+    <string name="maintenance_meter_line_no_unit">达到%1$s时到期，当前为%2$s。</string>
+    <string name="maintenance_snoozed_until">稍后提醒至%1$s</string>
+    <string name="maintenance_progress">已完成%1$d/%2$d</string>
+    <string name="maintenance_part_of">隶属于%1$s</string>
+    <string name="maintenance_promoted_subtitle">%1$s · %2$s</string>
+
+    <string name="maintenance_why_held_until">因保养暂停期而延至%1$s</string>
+    <string name="maintenance_why_before_season">已提前至使用季开始前到期</string>
+    <string name="maintenance_why_before_break">已提前至保养暂停期前到期</string>
+    <string name="maintenance_why_moved_from">因当时不在使用季内，已从%1$s改期</string>
+    <string name="maintenance_why_out_of_season_until">处于使用季外，直至%1$s</string>
+    <string name="maintenance_why_until_you_start">处于使用季外，直至手动开始使用季</string>
+    <string name="maintenance_why_reminders_wait">提醒会等到保养暂停期结束后再发送</string>
+
+    <string name="maintenance_when_was_this_done">这项工作何时完成？</string>
+    <string name="maintenance_time">时间</string>
+    <string name="maintenance_time_placeholder">HH:MM</string>
+    <string name="maintenance_complete_all">全部完成</string>
+    <string name="maintenance_complete_selected">完成所选项</string>
+    <string name="maintenance_close_this_round">结束此轮次</string>
+    <string name="maintenance_close_this_round_confirmation">结束此轮次？未标记为完成的成员将不会被记录为已保养。</string>
+
+    <string name="maintenance_group_noun">保养组</string>
+    <string name="maintenance_open_asset">打开设备</string>
+    <string name="maintenance_members_section">设备</string>
+
+    <string name="maintenance_sheet_open_asset">打开设备</string>
+    <string name="maintenance_review_maintenance">查看保养</string>
+    <string name="maintenance_tag_placement">标签位置</string>
+    <string name="maintenance_nothing_due">无到期项目</string>
+    <string name="maintenance_why_now_overdue_since">自%1$s起已逾期。</string>
+    <string name="maintenance_why_now_due">%1$s到期。</string>
+    <string name="maintenance_reading_with_unit">%1$s %2$s</string>
+
+    <string name="maintenance_snooze">稍后提醒</string>
+    <string name="maintenance_postpone">延期</string>
+    <string name="maintenance_remove">移除</string>
+    <string name="maintenance_service_record">服务记录</string>
+    <string name="maintenance_no_service_recorded">尚无服务记录</string>
+
+    <string name="maintenance_this_applies_to">适用于</string>
+    <string name="maintenance_one_asset">单个设备</string>
+    <string name="maintenance_a_maintenance_group">一个保养组</string>
+    <string name="maintenance_every_n">每 N</string>
+    <string name="maintenance_repeats_from">重复起算自</string>
+    <string name="maintenance_the_scheduled_date">计划日期</string>
+    <string name="maintenance_when_i_complete_it">我完成时</string>
+    <string name="maintenance_remind_me_n_days_early">提前 N 天提醒我</string>
+    <string name="maintenance_also_due_by_use">也按使用量到期</string>
+    <string name="maintenance_every_n_unit_of_use">每使用 &lt;n&gt; &lt;unit&gt;</string>
+    <string name="maintenance_last_done_at">上次完成时的读数</string>
+    <string name="maintenance_remind_me_n_unit_early">提前 &lt;n&gt; &lt;unit&gt; 提醒我</string>
+    <string name="maintenance_completing_this_takes">完成此项需要</string>
+    <string name="maintenance_one_tap">点按一次</string>
+    <string name="maintenance_the_full_form">完整表单</string>
+    <string name="maintenance_use_this_form">使用此表单</string>
+    <string name="maintenance_quick_action">快捷操作</string>
+    <string name="maintenance_none">无</string>
+    <string name="maintenance_remind_me_through">提醒我</string>
+    <string name="maintenance_similar_through_a_group">此设备已通过另一个保养组有类似的保养计划。</string>
+    <string name="maintenance_no_target">无目标</string>
+    <string name="maintenance_unit_day">天</string>
+    <string name="maintenance_unit_week">周</string>
+    <string name="maintenance_unit_month">月</string>
+    <string name="maintenance_unit_year">年</string>
+
+    <string name="maintenance_when_should_this_be_done">这项保养应在何时进行？</string>
+    <string name="maintenance_before_the_season_starts">使用季开始前</string>
+    <string name="maintenance_when_the_season_starts">使用季开始时</string>
+    <string name="maintenance_whenever_it_is_due">到期时即进行</string>
+    <string name="maintenance_before_the_maintenance_break">保养暂停期之前</string>
+    <string name="maintenance_after_the_maintenance_break">保养暂停期之后</string>
+    <string name="maintenance_days_before_it_starts">开始前天数</string>
+    <string name="maintenance_days_after_it_starts">开始后天数</string>
+    <string name="maintenance_start_counting_from">计算起点</string>
+    <string name="maintenance_the_seasons_start">使用季开始时</string>
+    <string name="maintenance_its_own_date_not_before_the_season">按其自身日期，但不早于使用季开始</string>
+    <string name="maintenance_first_due_outside_the_season">首个到期日期在此设备的使用季之外，因此会等到使用季开始。</string>
+    <string name="maintenance_nothing_to_be_ready_before">此设备没有需要提前就绪的使用季或保养暂停期，因此日期一到即到期。</string>
+    <string name="maintenance_helper_before_the_season">落在使用季或保养暂停期内的日期，会在使用季开始前的某个允许日期到期。</string>
+    <string name="maintenance_helper_before_the_break">落在保养暂停期内的日期，会在暂停期开始前到期。</string>
+    <string name="maintenance_helper_when_the_season_starts">这项保养在使用季未进行时会等待，并在使用季开始时重新生效。</string>
+    <string name="maintenance_helper_after_the_break">落在保养暂停期内的日期，会移到暂停期结束后的第一天。</string>
+    <string name="maintenance_helper_whenever_it_is_due">使用季和保养暂停期都不会改变此项的到期时间。</string>
+    <string name="maintenance_enter_the_number_of_days">请输入天数。</string>
+    <string name="maintenance_after_the_season_ends">该日期在使用季结束之后，因此此项永远不会到期。</string>
+
+    <string name="maintenance_the_subject_health_follows">这是设备健康度所跟随的指标。请先选择另一种健康度合并方式。</string>
+    <string name="maintenance_schedule_drives_subject">此保养计划决定健康指标%1$s。是否也归档该指标？</string>
+    <string name="maintenance_archive_both">两者都归档</string>
+
+    <string name="maintenance_repair_open_notification_settings">打开通知设置</string>
+    <string name="maintenance_repair_reschedule_check">重新安排检查</string>
+    <string name="maintenance_repair_restart_check">重新启动检查</string>
+    <string name="maintenance_repair_open_battery_settings">打开电池设置</string>
+    <string name="maintenance_repair_turn_reminders_on">开启提醒</string>
+    <string name="maintenance_repair_open_schedule">打开该计划</string>
+    <string name="maintenance_repair_fix_delivery">修复提醒发送</string>
+</resources>

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_setup.xml. -->
+<resources>
+    <string name="setup_loading">Chargement…</string>
+    <string name="setup_back">Retour</string>
+    <string name="setup_cancel">Annuler</string>
+    <string name="setup_save">Enregistrer</string>
+    <string name="setup_more">Plus d\'options</string>
+    <string name="setup_edit">Modifier</string>
+    <string name="setup_move_up">Monter</string>
+    <string name="setup_move_down">Descendre</string>
+    <string name="setup_archive">Archiver</string>
+    <string name="setup_unarchive">Désarchiver</string>
+    <string name="setup_delete">Supprimer</string>
+    <string name="setup_remove">Retirer</string>
+    <string name="setup_archived_badge">Archivé</string>
+    <string name="setup_ok">OK</string>
+
+    <string name="setup_title_fallback">Relevés et actions</string>
+    <string name="setup_eyebrow">RELEVÉS ET ACTIONS</string>
+    <string name="setup_readings_header">Relevés</string>
+    <string name="setup_readings_empty">Aucun relevé pour l\'instant · ajoutez-en un pour commencer à mesurer cet équipement</string>
+    <string name="setup_add_reading">Ajouter un relevé</string>
+    <string name="setup_actions_header">Actions</string>
+    <string name="setup_actions_empty">Aucune action pour l\'instant · ajoutez-en une pour noter un événement sur cet équipement en un appui</string>
+    <string name="setup_add_action">Ajouter une action</string>
+    <string name="setup_delete_reading_title">Supprimer ce relevé ?</string>
+    <string name="setup_delete_reading_body">Cette opération est irréversible.</string>
+    <string name="setup_delete_action_title">Supprimer cette action ?</string>
+    <string name="setup_delete_action_body">Les entrées passées conservent leurs relevés.</string>
+    <string name="setup_meter_tag">Compteur</string>
+    <plurals name="setup_profile_row_meta">
+        <item quantity="one">%1$s · %2$d champ</item>
+        <item quantity="other">%1$s · %2$d champs</item>
+    </plurals>
+    <string name="setup_formula_percent_drop_line">= (%1$s − %2$s) / %1$s × 100</string>
+
+    <string name="setup_refusal_title">Impossible de supprimer ce relevé</string>
+    <plurals name="setup_refusal_readings_logged">
+        <item quantity="one">%1$d relevé enregistré</item>
+        <item quantity="other">%1$d relevés enregistrés</item>
+    </plurals>
+    <string name="setup_refusal_used_by">Utilisé par %1$s</string>
+    <string name="setup_refusal_offered_by">Proposé par %1$s</string>
+    <string name="setup_refusal_archive_hint">Archivez-le plutôt : il sera retiré des formulaires et son historique sera conservé.</string>
+
+    <string name="setup_failed_reorder_readings">Impossible de réorganiser les relevés.</string>
+    <string name="setup_failed_reorder_actions">Impossible de réorganiser les actions.</string>
+    <string name="setup_failed_change_reading">Impossible de modifier ce relevé.</string>
+    <string name="setup_failed_change_action">Impossible de modifier cette action.</string>
+    <string name="setup_failed_delete_that_reading">Impossible de supprimer ce relevé.</string>
+    <string name="setup_failed_delete_that_action">Impossible de supprimer cette action.</string>
+
+    <string name="setup_event_kind_maintenance">Entretien</string>
+    <string name="setup_event_kind_inspection">Inspection</string>
+    <string name="setup_event_kind_measurement">Mesure</string>
+    <string name="setup_event_kind_treatment">Traitement</string>
+    <string name="setup_event_kind_incident">Incident</string>
+    <string name="setup_event_kind_replacement">Remplacement</string>
+    <string name="setup_event_kind_season_start">Début de saison</string>
+    <string name="setup_event_kind_season_end">Fin de saison</string>
+    <string name="setup_event_kind_note">Note</string>
+    <string name="setup_event_kind_custom">Personnalisé</string>
+
+    <string name="setup_definition_title_edit">Modifier le relevé</string>
+    <string name="setup_definition_title_new">Nouveau relevé</string>
+    <string name="setup_definition_label">Libellé</string>
+    <string name="setup_definition_key">Clé</string>
+    <string name="setup_definition_kind">Nature</string>
+    <string name="setup_definition_kind_entered">Saisi</string>
+    <string name="setup_definition_kind_derived">Calculé</string>
+    <string name="setup_definition_type">Type</string>
+    <string name="setup_value_type_number">Nombre</string>
+    <string name="setup_value_type_text">Texte</string>
+    <string name="setup_value_type_boolean">Oui / non</string>
+    <string name="setup_definition_formula">Formule</string>
+    <string name="setup_formula_percent_drop">Baisse en pourcentage : (A − B) / A × 100</string>
+    <string name="setup_definition_source_a">Source A</string>
+    <string name="setup_definition_source_b">Source B</string>
+    <string name="setup_definition_choose_source">Choisir un relevé</string>
+    <string name="setup_definition_sources_needed">Un relevé calculé a besoin de deux relevés numériques comme base. Ajoutez-les d\'abord.</string>
+    <string name="setup_definition_unit">Unité</string>
+    <string name="setup_definition_decimals">Décimales</string>
+    <string name="setup_definition_target">Cible</string>
+    <string name="setup_definition_target_low">Bas</string>
+    <string name="setup_definition_target_high">Haut</string>
+    <string name="setup_definition_meter">Compteur (toujours croissant)</string>
+    <string name="setup_definition_save">Enregistrer le relevé</string>
+    <plurals name="setup_definition_frozen">
+        <item quantity="one">Utilisé par %1$d relevé</item>
+        <item quantity="other">Utilisé par %1$d relevés</item>
+    </plurals>
+
+    <plurals name="setup_definition_in_use">
+        <item quantity="one">%1$d entrée utilise déjà ce relevé : sa clé, sa nature et son type sont donc figés.</item>
+        <item quantity="other">%1$d entrées utilisent déjà ce relevé : sa clé, sa nature et son type sont donc figés.</item>
+    </plurals>
+    <string name="setup_definition_breaks_derived">Utilisé comme source par %1$s — modifiez d\'abord ce relevé calculé.</string>
+    <string name="setup_definition_breaks_profiles">Proposé comme champ par %1$s — retirez-le d\'abord de cette action.</string>
+    <string name="setup_another_reading">un autre relevé</string>
+    <string name="setup_names_last_and">%1$s et %2$s</string>
+    <string name="setup_failed_save_reading">Impossible d\'enregistrer ce relevé.</string>
+    <string name="setup_failed_delete_this_reading">Impossible de supprimer ce relevé.</string>
+
+    <string name="setup_problem_not_a_number">Ce n\'est pas un nombre</string>
+    <string name="setup_problem_decimals_range">Les décimales doivent être comprises entre 0 et 4</string>
+    <string name="setup_problem_label_required">Donnez un libellé au relevé</string>
+    <string name="setup_problem_bad_key">Clé : lettres minuscules, chiffres et _ uniquement</string>
+    <string name="setup_problem_key_taken">Un autre relevé utilise déjà cette clé</string>
+    <string name="setup_problem_range_order">La valeur basse ne doit pas dépasser la valeur haute</string>
+    <string name="setup_problem_range_on_non_number">Seul un relevé numérique peut avoir une cible</string>
+    <string name="setup_problem_meter_on_non_number">Seul un relevé numérique peut être un compteur</string>
+    <string name="setup_problem_two_sources">Choisissez deux relevés numériques différents</string>
+    <string name="setup_problem_unknown_source">Ce relevé n\'existe plus</string>
+    <string name="setup_problem_source_other_asset">Une source doit appartenir à cet équipement</string>
+    <string name="setup_problem_source_not_entered">Une source doit être un relevé saisi par quelqu\'un</string>
+    <string name="setup_problem_source_not_number">Une source doit être un relevé numérique</string>
+    <string name="setup_problem_source_is_meter">Un compteur ne peut pas être une source</string>
+    <string name="setup_problem_derived_not_number">Un relevé calculé est un nombre</string>
+    <string name="setup_problem_derived_is_meter">Un relevé calculé n\'est pas un compteur</string>
+    <string name="setup_problem_spec_on_entered">Un relevé saisi n\'a pas de formule</string>
+
+    <string name="setup_profile_eyebrow_edit">MODIFIER L\'ACTION</string>
+    <string name="setup_profile_eyebrow_new">NOUVELLE ACTION</string>
+    <string name="setup_profile_eyebrow_edit_asset">MODIFIER L\'ACTION · %1$s</string>
+    <string name="setup_profile_eyebrow_new_asset">NOUVELLE ACTION · %1$s</string>
+    <string name="setup_profile_name">Nom</string>
+    <string name="setup_profile_kind">Nature</string>
+    <string name="setup_profile_default_title">Titre par défaut</string>
+    <string name="setup_profile_fields_header">Champs</string>
+    <string name="setup_profile_fields_empty">Aucun champ pour l\'instant · cette action note simplement une entrée</string>
+    <string name="setup_profile_add_field">Ajouter un champ</string>
+    <string name="setup_profile_all_fields_used">Tous les relevés saisis de cet équipement figurent déjà dans cette action.</string>
+    <string name="setup_field_required">Obligatoire</string>
+    <string name="setup_field_optional">Facultatif</string>
+    <string name="setup_field_picker_title">Ajouter un champ</string>
+    <string name="setup_profile_materials_header">Produits</string>
+    <string name="setup_profile_materials_empty">Aucun produit suggéré · le formulaire d\'entrée accepte quand même tout produit</string>
+    <string name="setup_profile_add_material">Ajouter un produit</string>
+    <string name="setup_material_name">Produit</string>
+    <string name="setup_material_quantity">Qté</string>
+    <string name="setup_material_unit">Unité</string>
+    <string name="setup_material_remove">Retirer le produit</string>
+    <string name="setup_profile_save">Enregistrer l\'action</string>
+
+    <string name="setup_problem_action_name_required">Donnez un nom à l\'action</string>
+    <string name="setup_problem_action_name_taken">Une autre action utilise déjà ce nom</string>
+    <string name="setup_problem_bad_material">Nom requis, et quantité de 0 ou plus</string>
+    <string name="setup_problem_quantity_not_number">La quantité doit être un nombre, ou rester vide</string>
+    <string name="setup_failed_save_action">Impossible d\'enregistrer cette action.</string>
+    <string name="setup_failed_delete_this_action">Impossible de supprimer cette action.</string>
+
+    <string name="setup_problem_field_not_this_asset">pas une définition de cet équipement</string>
+    <string name="setup_problem_field_derived">les valeurs calculées ne se saisissent pas</string>
+    <string name="setup_problem_field_archived">archivé</string>
+    <string name="setup_problem_field_listed_twice">présent deux fois</string>
+</resources>

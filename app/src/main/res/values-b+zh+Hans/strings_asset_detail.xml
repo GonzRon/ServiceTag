@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_asset_detail.xml. -->
+<resources>
+    <string name="common_cancel">取消</string>
+    <string name="common_back">返回</string>
+    <string name="common_more">更多</string>
+    <string name="common_ok">确定</string>
+    <string name="common_save">保存</string>
+    <string name="common_loading">正在加载…</string>
+
+    <string name="asset_detail_asset_word">设备</string>
+
+    <string name="asset_detail_retired_on">退役日期</string>
+    <string name="asset_detail_readings_and_actions">读数与操作</string>
+    <string name="asset_detail_tags_section">标签</string>
+
+    <string name="asset_detail_backup">备份</string>
+    <string name="asset_detail_write_tag">写入标签</string>
+    <string name="asset_detail_edit">编辑</string>
+    <string name="asset_detail_set_up_from_template">从模板设置</string>
+
+    <string name="asset_detail_current_readings">当前读数</string>
+    <string name="asset_detail_derived">计算得出</string>
+
+    <string name="asset_detail_service_record">服务记录</string>
+    <string name="asset_detail_no_service_recorded">尚无服务记录</string>
+
+    <string name="asset_detail_archive">归档</string>
+    <string name="asset_detail_unarchive">取消归档</string>
+    <string name="asset_detail_retire">退役</string>
+    <string name="asset_detail_unretire">取消退役</string>
+    <string name="asset_detail_delete">删除</string>
+
+    <string name="asset_detail_delete_title">删除%1$s？</string>
+    <string name="asset_detail_delete_body">输入设备名称即可将其删除。它的标签、读数和日志会一并删除。目前还没有自动快照。</string>
+    <string name="asset_detail_child_assets_first">请先处理子设备</string>
+    <string name="asset_detail_child_assets_first_body">%1$s下仍有%2$s。请先移动或删除它们，以免有内容被连带删除。</string>
+
+    <string name="asset_detail_retire_title">让此设备退役？</string>
+    <string name="asset_detail_retire_body">设备会保留日志，它的标签也仍可正常识别。</string>
+
+    <string name="asset_detail_log_what_happened">记录发生了什么？</string>
+    <string name="asset_detail_retired_either_way">无论是否记录，该设备都已退役。</string>
+    <string name="asset_detail_log_replacement">记录更换</string>
+    <string name="asset_detail_log_note">记录备注</string>
+    <string name="asset_detail_not_now">暂不</string>
+
+    <string name="asset_detail_plate_model">型号</string>
+    <string name="asset_detail_plate_serial">序列号</string>
+    <string name="asset_detail_plate_location">位置</string>
+    <string name="asset_detail_plate_purchased">购买日期</string>
+    <string name="asset_detail_plate_in_service">启用日期</string>
+    <string name="asset_detail_plate_nfc_tag">NFC 标签</string>
+
+    <string name="asset_detail_details">详细信息</string>
+    <string name="asset_detail_purchase_date">购买日期</string>
+    <string name="asset_detail_purchase_document">购买凭证</string>
+    <string name="asset_detail_price">价格</string>
+    <string name="asset_detail_vendor">商家</string>
+
+    <string name="asset_detail_child_assets">子设备</string>
+    <string name="asset_detail_no_child_assets">无子设备</string>
+    <string name="asset_detail_add_child_asset">+ 添加子设备</string>
+    <string name="asset_detail_no_readings_out_of_range">没有超出范围的读数</string>
+    <plurals name="asset_detail_readings_out_of_range">
+        <item quantity="other">%1$d项读数超出范围</item>
+    </plurals>
+    <string name="asset_detail_category_and_readings">%1$s · %2$s</string>
+
+    <string name="asset_detail_no_tag_yet">尚无标签 · 用“写入标签”添加一个</string>
+    <string name="asset_detail_tag_written">标签已写入</string>
+    <string name="asset_detail_tag_bound">标签已绑定</string>
+    <string name="asset_detail_tag_status_active">使用中</string>
+    <string name="asset_detail_tag_status_unbound">未绑定</string>
+    <string name="asset_detail_tag_status_lost">已丢失</string>
+    <string name="asset_detail_tag_status_retired">已退役</string>
+    <string name="asset_detail_tag_placement">标签位置</string>
+
+    <string name="asset_detail_notes">备注</string>
+    <string name="asset_detail_no_notes">无备注</string>
+
+    <string name="asset_detail_no_schedule_yet">尚无保养计划</string>
+
+    <string name="warranty_section">保修</string>
+    <string name="warranty_notes">保修备注</string>
+    <string name="warranty_in_warranty">保修期内</string>
+    <string name="warranty_out_of_warranty">已过保修期</string>
+    <string name="warranty_not_recorded">未记录保修信息</string>
+    <string name="warranty_expires">%1$s到期</string>
+    <string name="warranty_expired">已于%1$s到期</string>
+    <plurals name="warranty_reminder_days_before">
+        <item quantity="other">提醒：提前%1$d天</item>
+    </plurals>
+    <string name="warranty_leave_blank_for_no_reminder">留空则不提醒。</string>
+    <string name="warranty_add_date_first">请先添加保修到期日期。</string>
+
+    <string name="assets_title">设备</string>
+    <string name="assets_add_asset">添加设备</string>
+    <string name="assets_no_assets_yet">尚无设备</string>
+    <plurals name="assets_no_active_assets">
+        <item quantity="other">无在用设备 · %1$d台已归档</item>
+    </plurals>
+    <string name="assets_nothing_matches">没有匹配的结果。</string>
+    <string name="assets_show_archived">显示已归档</string>
+    <string name="assets_part_of">隶属于%1$s</string>
+    <string name="assets_nfc_tag_written">NFC 标签已写入</string>
+    <string name="assets_badge_retired">已退役</string>
+    <string name="assets_badge_out_of_season">使用季外</string>
+
+    <string name="assets_filter_type">类型</string>
+    <string name="assets_filter_all">全部</string>
+    <string name="assets_filter_child_assets">子设备</string>
+    <string name="assets_filter_archived">已归档</string>
+    <string name="assets_archived_hidden">匹配的设备已归档。开启“已归档”即可查看。</string>
+    <string name="assets_child_assets_hidden">匹配的设备是子设备。开启“子设备”即可查看。</string>
+    <string name="assets_both_hidden">匹配的设备已被隐藏。开启“子设备”和“已归档”即可查看。</string>
+    <string name="assets_only_child_assets">这里只有子设备。开启“子设备”即可查看。</string>
+    <string name="assets_type_hidden">匹配的设备属于其他类型。请将“类型”设为“全部”。</string>
+
+    <string name="assets_search_hint">搜索设备</string>
+    <string name="assets_clear_search">清除搜索</string>
+</resources>

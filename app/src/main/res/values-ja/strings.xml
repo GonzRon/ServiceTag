@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings.xml. -->
+<resources>
+    <string name="format_date_display">uuuu年M月d日</string>
+    <string name="format_date_month_day">M月d日</string>
+    <string name="format_language">ja</string>
+    <string name="format_list_separator">"、"</string>
+</resources>

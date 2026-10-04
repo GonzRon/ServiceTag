@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/plurals.xml. -->
+<resources>
+    <plurals name="health_age_days">
+        <item quantity="other">%1$d天</item>
+    </plurals>
+    <plurals name="health_days_overdue">
+        <item quantity="other">%1$s已逾期%2$d天</item>
+    </plurals>
+    <plurals name="health_grace_period">
+        <item quantity="other">处于%1$d天宽限期内</item>
+    </plurals>
+</resources>

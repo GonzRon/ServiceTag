@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_asset_detail.xml. -->
+<resources>
+    <string name="common_cancel">キャンセル</string>
+    <string name="common_back">戻る</string>
+    <string name="common_more">その他</string>
+    <string name="common_ok">OK</string>
+    <string name="common_save">保存</string>
+    <string name="common_loading">読み込み中…</string>
+
+    <string name="asset_detail_asset_word">機器</string>
+
+    <string name="asset_detail_retired_on">使用終了日</string>
+    <string name="asset_detail_readings_and_actions">測定値とアクション</string>
+    <string name="asset_detail_tags_section">タグ</string>
+
+    <string name="asset_detail_backup">バックアップ</string>
+    <string name="asset_detail_write_tag">タグを書き込む</string>
+    <string name="asset_detail_edit">編集</string>
+    <string name="asset_detail_set_up_from_template">テンプレートから設定</string>
+
+    <string name="asset_detail_current_readings">現在の測定値</string>
+    <string name="asset_detail_derived">算出値</string>
+
+    <string name="asset_detail_service_record">サービス記録</string>
+    <string name="asset_detail_no_service_recorded">サービスの記録はまだありません</string>
+
+    <string name="asset_detail_archive">アーカイブ</string>
+    <string name="asset_detail_unarchive">アーカイブ解除</string>
+    <string name="asset_detail_retire">使用終了</string>
+    <string name="asset_detail_unretire">使用再開</string>
+    <string name="asset_detail_delete">削除</string>
+
+    <string name="asset_detail_delete_title">%1$sを削除しますか？</string>
+    <string name="asset_detail_delete_body">削除するには機器の名前を入力してください。タグ、測定値、記録も一緒に削除されます。自動スナップショットはまだありません。</string>
+    <string name="asset_detail_child_assets_first">先に子機器を処理</string>
+    <string name="asset_detail_child_assets_first_body">%1$sにはまだ%2$sがあります。連鎖削除で何も消えないよう、先にそれらを移動または削除してください。</string>
+
+    <string name="asset_detail_retire_title">この機器を使用終了にしますか？</string>
+    <string name="asset_detail_retire_body">記録は残り、タグも引き続きこの機器に紐付いたままです。</string>
+
+    <string name="asset_detail_log_what_happened">何があったかを記録しますか？</string>
+    <string name="asset_detail_retired_either_way">記録してもしなくても、機器は使用終了になっています。</string>
+    <string name="asset_detail_log_replacement">交換を記録</string>
+    <string name="asset_detail_log_note">メモを記録</string>
+    <string name="asset_detail_not_now">今はしない</string>
+
+    <string name="asset_detail_plate_model">モデル</string>
+    <string name="asset_detail_plate_serial">シリアル</string>
+    <string name="asset_detail_plate_location">設置場所</string>
+    <string name="asset_detail_plate_purchased">購入日</string>
+    <string name="asset_detail_plate_in_service">使用開始</string>
+    <string name="asset_detail_plate_nfc_tag">NFCタグ</string>
+
+    <string name="asset_detail_details">詳細</string>
+    <string name="asset_detail_purchase_date">購入日</string>
+    <string name="asset_detail_purchase_document">購入ドキュメント</string>
+    <string name="asset_detail_price">価格</string>
+    <string name="asset_detail_vendor">購入先</string>
+
+    <string name="asset_detail_child_assets">子機器</string>
+    <string name="asset_detail_no_child_assets">子機器はありません</string>
+    <string name="asset_detail_add_child_asset">+ 子機器を追加</string>
+    <string name="asset_detail_no_readings_out_of_range">範囲外の測定値はありません</string>
+    <plurals name="asset_detail_readings_out_of_range">
+        <item quantity="other">範囲外の測定値%1$d件</item>
+    </plurals>
+    <string name="asset_detail_category_and_readings">%1$s · %2$s</string>
+
+    <string name="asset_detail_no_tag_yet">タグはまだありません · 「タグを書き込む」で追加できます</string>
+    <string name="asset_detail_tag_written">タグ書き込み済み</string>
+    <string name="asset_detail_tag_bound">タグ割り当て済み</string>
+    <string name="asset_detail_tag_status_active">使用中</string>
+    <string name="asset_detail_tag_status_unbound">未割り当て</string>
+    <string name="asset_detail_tag_status_lost">紛失</string>
+    <string name="asset_detail_tag_status_retired">使用終了</string>
+    <string name="asset_detail_tag_placement">タグの貼付位置</string>
+
+    <string name="asset_detail_notes">メモ</string>
+    <string name="asset_detail_no_notes">メモはありません</string>
+
+    <string name="asset_detail_no_schedule_yet">スケジュールはまだありません</string>
+
+    <string name="warranty_section">保証</string>
+    <string name="warranty_notes">保証メモ</string>
+    <string name="warranty_in_warranty">保証期間内</string>
+    <string name="warranty_out_of_warranty">保証期間外</string>
+    <string name="warranty_not_recorded">保証は未登録です</string>
+    <string name="warranty_expires">%1$sまで有効</string>
+    <string name="warranty_expired">%1$sに終了</string>
+    <plurals name="warranty_reminder_days_before">
+        <item quantity="other">リマインダー：%1$d日前</item>
+    </plurals>
+    <string name="warranty_leave_blank_for_no_reminder">リマインダーが不要な場合は空欄のままにしてください。</string>
+    <string name="warranty_add_date_first">先に保証の有効期限を入力してください。</string>
+
+    <string name="assets_title">機器</string>
+    <string name="assets_add_asset">機器を追加</string>
+    <string name="assets_no_assets_yet">機器はまだありません</string>
+    <plurals name="assets_no_active_assets">
+        <item quantity="other">有効な機器はありません · アーカイブ済み%1$d台</item>
+    </plurals>
+    <string name="assets_nothing_matches">一致するものはありません。</string>
+    <string name="assets_show_archived">アーカイブ済みを表示</string>
+    <string name="assets_part_of">所属：%1$s</string>
+    <string name="assets_nfc_tag_written">NFCタグ書き込み済み</string>
+    <string name="assets_badge_retired">使用終了</string>
+    <string name="assets_badge_out_of_season">シーズン外</string>
+
+    <string name="assets_filter_type">種類</string>
+    <string name="assets_filter_all">すべて</string>
+    <string name="assets_filter_child_assets">子機器</string>
+    <string name="assets_filter_archived">アーカイブ済み</string>
+    <string name="assets_archived_hidden">一致する機器はアーカイブ済みです。表示するには「アーカイブ済み」をオンにしてください。</string>
+    <string name="assets_child_assets_hidden">一致する機器は子機器です。表示するには「子機器」をオンにしてください。</string>
+    <string name="assets_both_hidden">一致する機器は非表示になっています。表示するには「子機器」と「アーカイブ済み」をオンにしてください。</string>
+    <string name="assets_only_child_assets">ここには子機器しかありません。表示するには「子機器」をオンにしてください。</string>
+    <string name="assets_type_hidden">一致する機器は別の種類です。「種類」を「すべて」にしてください。</string>
+
+    <string name="assets_search_hint">機器を検索</string>
+    <string name="assets_clear_search">検索をクリア</string>
+</resources>

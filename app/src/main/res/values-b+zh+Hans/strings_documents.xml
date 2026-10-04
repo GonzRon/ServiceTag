@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_documents.xml. -->
+<resources>
+    <string name="documents_header">文档</string>
+    <string name="documents_header_count">文档 · %1$d</string>
+    <string name="documents_empty">尚无文档</string>
+    <string name="documents_add_file">添加文件</string>
+    <string name="documents_take_photo">拍照</string>
+    <string name="documents_storage_headline">附件存储</string>
+    <string name="documents_storage_not_set_up">尚未设置附件存储</string>
+    <string name="documents_storage_detail">请在设置中选择文件夹</string>
+    <string name="documents_open_settings">打开设置</string>
+    <string name="documents_no_app_can_pick_files">没有可选择文件的应用</string>
+    <string name="documents_no_app_can_open_file">没有可打开此文件的应用</string>
+    <string name="documents_no_camera_app">此手机上没有相机应用</string>
+    <string name="documents_not_on_device">不在此手机上</string>
+    <string name="documents_more_for">%1$s的更多选项</string>
+    <string name="documents_more_for_role">%1$s（%2$s）的更多选项</string>
+
+    <string name="documents_kind_photo">照片</string>
+    <string name="documents_kind_label_photo">铭牌照片</string>
+    <string name="documents_kind_receipt">收据</string>
+    <string name="documents_kind_manual">手册</string>
+    <string name="documents_kind_warranty">保修</string>
+    <string name="documents_kind_document">文档</string>
+    <string name="documents_kind_other">其他</string>
+
+    <string name="documents_size_bytes">%1$s B</string>
+    <string name="documents_size_kb">%1$s KB</string>
+    <string name="documents_size_mb">%1$s MB</string>
+
+    <string name="attachments_name_label">名称</string>
+    <string name="attachments_kind_header">种类</string>
+    <string name="attachments_notes_label">备注</string>
+    <string name="attachments_cancel">取消</string>
+    <string name="attachments_save">保存</string>
+    <string name="attachments_captured_on_label">拍摄或文档日期</string>
+    <string name="attachments_delete">删除</string>
+    <string name="attachments_delete_title">删除文件？</string>
+    <string name="attachments_delete_body">删除%1$s？该文件会从附件文件夹中移除。</string>
+
+    <string name="attachments_role_header">用途</string>
+    <string name="attachments_role_purchase_invoice_or_receipt">购买发票或收据</string>
+    <string name="attachments_role_user_manual">用户手册</string>
+    <string name="attachments_role_service_manual">维修手册</string>
+    <string name="attachments_role_none">无用途</string>
+    <string name="attachments_adding_progress">正在添加第%1$d个，共%2$d个…</string>
+    <string name="attachments_could_not_save">无法保存%1$s</string>
+    <string name="attachments_could_not_delete">无法删除该文件</string>
+    <string name="attachments_could_not_add">无法添加%1$s</string>
+    <string name="attachments_blank_name">请为文件命名</string>
+    <string name="attachments_no_store">请先在设置中选择附件文件夹</string>
+    <string name="attachments_store_unavailable">附件文件夹不可用</string>
+    <string name="attachments_too_large">该文件大于 256 MB</string>
+    <string name="attachments_owner_missing">该文件已不在此处</string>
+    <string name="attachments_scan_failed">无法检查附件文件夹</string>
+    <string name="attachments_folder_fallback">文件夹</string>
+
+    <string name="references_header">参考链接</string>
+    <string name="references_header_count">参考链接 · %1$d</string>
+    <string name="references_empty">尚无参考链接</string>
+    <string name="references_add_link">添加链接</string>
+    <string name="references_more">更多</string>
+    <string name="references_open">打开</string>
+    <string name="references_edit">编辑</string>
+    <string name="references_remove">移除</string>
+    <string name="references_kind_web_link">网页链接</string>
+    <string name="references_kind_note">笔记</string>
+    <string name="references_kind_other">其他</string>
+    <string name="references_blocked_at_open">ServiceTag 不会打开此类链接。</string>
+    <string name="links_no_handler">没有可打开此链接的应用</string>
+
+    <string name="references_edit_title">编辑参考链接</string>
+    <string name="references_link_label">链接</string>
+    <string name="references_name_label">名称</string>
+    <string name="references_description_label">描述</string>
+    <string name="references_cancel">取消</string>
+    <string name="references_save">保存</string>
+    <string name="references_remove_title">移除此参考链接？</string>
+    <string name="references_removed_from_asset">该链接会从此设备中移除。其他应用中的内容不会有任何更改。</string>
+    <string name="references_removed_from_supply">该链接会从此耗材中移除。其他应用中的内容不会有任何更改。</string>
+    <string name="references_removed_from_installed_component">该链接会从此已安装部件中移除。其他应用中的内容不会有任何更改。</string>
+    <string name="references_unknown_scheme_title">保存此链接？</string>
+    <string name="references_unknown_scheme_body">ServiceTag 无法识别\"%1$s\"链接。它会按原样保存，并由声明可处理它的应用打开。</string>
+
+    <string name="references_blank_name">请为参考链接命名</string>
+    <string name="references_not_a_link">这不是链接。</string>
+    <string name="references_uri_too_long">该链接太长，无法保存。</string>
+    <string name="references_scheme_blocked">ServiceTag 不会保存此类链接。</string>
+    <string name="references_duplicate_on_asset">此设备上已有该链接</string>
+    <string name="references_duplicate_on_supply">此耗材上已有该链接</string>
+    <string name="references_duplicate_on_installed_component">此已安装部件上已有该链接</string>
+
+    <string name="references_save_as_document">另存为文档</string>
+    <string name="references_downloading_from">正在从%1$s下载…</string>
+    <string name="references_download_progress">%1$s / %2$s</string>
+    <string name="references_from_host">来自%1$s</string>
+    <string name="references_type_line">%1$s · %2$s</string>
+    <string name="references_saved_as_document">已另存为文档</string>
+    <string name="references_saved_to_documents">已保存到“文档”</string>
+    <string name="references_downloaded_from">于%2$s从%1$s下载</string>
+    <string name="references_open_source_link">打开来源链接</string>
+    <string name="references_network_denied">ServiceTag 未获准使用网络，因此无法下载此文件。请在应用设置中允许网络访问，然后关闭 ServiceTag 并重新打开。</string>
+    <string name="references_unreachable">无法连接到%1$s。请检查网络连接后重试。</string>
+    <string name="references_timed_out">下载耗时过长，已停止。</string>
+    <string name="references_not_a_document">该链接指向的不是受支持的文档类型。它仍会保留为链接。</string>
+    <string name="references_needs_sign_in">该文件需要登录，因此 ServiceTag 无法下载。它仍会保留为链接。</string>
+    <string name="references_server_error">服务器未发送该文件（错误%1$d）。</string>
+    <string name="references_redirect_refused">该链接会重定向到 ServiceTag 不会跟随的位置。它仍会保留为链接。</string>
+    <string name="references_already_have_on_asset">此设备已有此文件：%1$s。</string>
+    <string name="references_already_have_on_supply">此耗材已有此文件：%1$s。</string>
+    <string name="references_already_have_on_installed_component">此已安装部件已有此文件：%1$s。</string>
+    <string name="references_interrupted">无法完成下载。请重试。</string>
+    <string name="references_local_address">该链接解析为本地网络地址，因此 ServiceTag 不会下载它。它仍会保留为链接。</string>
+
+    <string name="contacts_no_app_can_open">没有可打开此联系人的应用</string>
+
+    <string name="share_title">保存到 ServiceTag</string>
+    <string name="share_received">已接收</string>
+    <string name="share_attach_to">附加到</string>
+    <string name="share_choose_asset">选择设备</string>
+    <string name="share_name">名称</string>
+    <string name="share_description">描述（可选）</string>
+    <string name="share_type">类型</string>
+    <string name="share_save">保存</string>
+    <string name="share_cancel">取消</string>
+    <string name="share_close">关闭</string>
+    <string name="share_save_as_note">保存为备注</string>
+    <string name="share_not_a_link">这不是链接。</string>
+    <string name="share_no_assets">请先在 ServiceTag 中添加设备，然后再次分享。</string>
+    <string name="share_no_folder">请在 ServiceTag 的设置中选择附件文件夹，然后再次分享。</string>
+    <string name="share_stream_refused">无法接受来自该分享应用的文件。</string>
+    <string name="share_unreadable">无法读取分享的内容</string>
+    <string name="share_uri_too_long">该链接太长，无法保存。</string>
+    <string name="share_scheme_blocked">ServiceTag 不会保存此类链接。</string>
+    <string name="share_duplicate_uri">此设备上已有该链接</string>
+    <string name="share_empty_file">该文件为空</string>
+    <string name="share_too_large">该文件大于 256 MB</string>
+    <string name="share_blank_file_name">请为文件命名</string>
+    <string name="share_blank_reference_name">请为参考链接命名</string>
+    <string name="share_confirm_title">保存此链接？</string>
+    <string name="share_confirm_body">ServiceTag 无法识别\"%1$s\"链接。它会按原样保存，并由声明可处理它的应用打开。</string>
+    <string name="share_change">更改</string>
+    <string name="share_no_active_assets">无在用设备</string>
+    <string name="share_search_installed_components">搜索已安装部件</string>
+    <string name="share_search_supplies">搜索耗材</string>
+    <string name="share_path_step">%1$s › %2$s</string>
+    <string name="share_this_asset">此设备</string>
+    <string name="share_supply_shared">耗材 — 在多处共用</string>
+    <string name="share_show_inside">显示%1$s内含的内容</string>
+    <string name="share_on_supply">此内容将保存到耗材%1$s，凡是使用该耗材的地方均可查看。</string>
+    <string name="share_saved_to_supply">已保存到耗材%1$s。</string>
+    <string name="share_saved_to">已保存到%1$s</string>
+    <string name="share_back">返回</string>
+</resources>
