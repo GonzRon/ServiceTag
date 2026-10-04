@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
 import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.supplies.listRowsOf
@@ -346,7 +347,8 @@ class ProfileEditViewModel(
         val quantities = form.consumables.mapIndexed { index, row ->
             val text = row.quantity.trim()
             if (text.isEmpty()) return@mapIndexed null
-            val value = text.toDoubleOrNull()
+            // In the owner's decimal separator, as the field drew it (#102).
+            val value = parseLocalizedDecimal(text)
             if (value == null) local[ProfileForm.consumable(index)] = QUANTITY_COPY
             value
         }

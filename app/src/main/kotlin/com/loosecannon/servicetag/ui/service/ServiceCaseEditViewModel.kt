@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.usecase.suggestCoverage
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.BAD_CURRENCY
+import com.loosecannon.servicetag.ui.asset.parseAmount
 import com.loosecannon.servicetag.ui.asset.priceTextOf
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import kotlin.coroutines.cancellation.CancellationException
@@ -272,7 +273,7 @@ private fun costOf(cost: String, currency: String): Costed {
     if (text.isEmpty()) return Costed.Ok(null)
     if (code.isEmpty()) return Costed.Bad(mapOf(CaseField.CURRENCY to A_COST_NEEDS_A_CURRENCY))
     val digits = Money.fractionDigits(code) ?: return Costed.Bad(mapOf(CaseField.CURRENCY to BAD_CURRENCY))
-    val minor = Money.parse(text, code) ?: return Costed.Bad(mapOf(CaseField.COST to costExample(digits)))
+    val minor = parseAmount(text, code) ?: return Costed.Bad(mapOf(CaseField.COST to costExample(digits)))
     return Costed.Ok(minor)
 }
 

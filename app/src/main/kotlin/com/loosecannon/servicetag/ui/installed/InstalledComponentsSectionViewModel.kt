@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.ENTER_A_DATE_AS_YYYY_MM_DD
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.journal.formatNumber
+import com.loosecannon.servicetag.ui.journal.neutralNumber
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
@@ -500,22 +501,24 @@ class InstalledComponentsSectionViewModel(
     private suspend fun write(form: ComponentFormState): InstalledComponentResult {
         // An empty date field is an unknown install date: core reads "" as a malformed day.
         val installedOn = form.date.trim().ifEmpty { null }
+        // Quantities typed in the owner's decimal separator go on as the use case reads a number (#102).
+        val composition = form.composition.map { it.copy(quantity = neutralNumber(it.quantity)) }
         return when (val target = form.target) {
             is ComponentFormTarget.Install -> installComponent.run(
                 InstallComponentCommand(
-                    assetId, target.parentId, form.name, form.supplyId, form.composition, form.serialOrLot, installedOn,
+                    assetId, target.parentId, form.name, form.supplyId, composition, form.serialOrLot, installedOn,
                     form.notes, sortOrder = null,
                 ),
             )
             is ComponentFormTarget.Edit -> updateInstalledComponent.run(
                 target.id,
                 UpdateInstalledComponentCommand(
-                    form.name, form.supplyId, form.composition, form.serialOrLot, installedOn, form.notes, target.sortOrder,
+                    form.name, form.supplyId, composition, form.serialOrLot, installedOn, form.notes, target.sortOrder,
                 ),
             )
             is ComponentFormTarget.Replace -> replaceInstalledComponent.run(
                 target.id,
-                ReplaceComponentCommand(form.date.trim(), form.name, form.supplyId, form.composition, form.serialOrLot, form.notes),
+                ReplaceComponentCommand(form.date.trim(), form.name, form.supplyId, composition, form.serialOrLot, form.notes),
             )
         }
     }

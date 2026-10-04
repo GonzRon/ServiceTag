@@ -7,7 +7,10 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.EventCommand
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.testing.EnglishResources
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.ResourcePack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
@@ -97,6 +100,44 @@ class DefinitionEditViewModelTest {
         assertEquals(36.0, stored.rangeLow!!, 1e-9)
         assertEquals(40.0, stored.rangeHigh!!, 1e-9)
         assertEquals(listOf(stored.id), saved)
+    }
+
+    /**
+     * #102 (PR #106 review): a target is typed in the owner's language. Under German "0,5" is a half, stored as the
+     * number 0.5, and the edit form draws the stored bounds back as "0,5" and "1,5" so they read back unchanged.
+     * English never read a comma as a decimal point: there "0,5" is still not a number, and nothing is written.
+     */
+    @Test fun aTargetIsTypedWithTheLanguagesDecimalSeparator() = runTest {
+        val thing = graph.createAsset.run("Thing", "Misc")
+        AppText.install(ResourcePack.pack("de"))
+        try {
+            val vm = model(thing.id)
+            vm.state.first { it.loaded }
+            vm.onLabel("Chlorine")
+            vm.onRangeLow("0,5")
+            vm.onRangeHigh("1,5")
+            vm.save()
+            vm.state.first { !it.saving && it.problems.isEmpty() }
+
+            val stored = graph.definitions.forAsset(thing.id).single()
+            assertEquals(0.5, stored.rangeLow!!, 0.0)
+            assertEquals(1.5, stored.rangeHigh!!, 0.0)
+
+            val editing = model(thing.id, stored.id).state.first { it.loaded }
+            assertEquals("0,5", editing.rangeLow)
+            assertEquals("1,5", editing.rangeHigh)
+        } finally {
+            AppText.install(EnglishResources())
+        }
+
+        val english = model(thing.id)
+        english.state.first { it.loaded }
+        english.onLabel("Bromine")
+        english.onRangeLow("0,5")
+        english.save()
+        val refused = english.state.first { !it.saving && it.problems.isNotEmpty() }
+        assertEquals("Not a number", refused.problems["rangeLow"])
+        assertEquals(1, graph.definitions.forAsset(thing.id).size)
     }
 
     @Test fun typingAKeyStopsItFollowingTheLabel() = runTest {

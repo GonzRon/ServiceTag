@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.model.CaseType
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedPlural
+import com.loosecannon.servicetag.ui.asset.amountExample
 
 // ------------------------------------------------------------------------------------------------
 // #79 (Part B) — the service case surfaces' words, RATIFIED verbatim (plan §6, R79-21), each by its
@@ -83,9 +84,12 @@ val A_COST_NEEDS_A_CURRENCY: String get() = localized(R.string.service_cost_need
 /** P79-49. */
 val COST_CANNOT_BE_NEGATIVE: String get() = localized(R.string.service_cost_negative)
 
-/** P79-62, "Enter a cost like <example>": the price's own form, "123.45" for a two-digit currency. */
+/**
+ * P79-62, "Enter a cost like <example>": the price's own form, "123.45" for a two-digit currency, with the
+ * language's decimal separator (#102).
+ */
 fun costExample(digits: Int): String =
-    localized(R.string.service_cost_example, if (digits <= 0) "123" else "123." + "456789".take(digits))
+    localized(R.string.service_cost_example, amountExample(digits))
 
 /** P79-51, the editor's save. */
 val SAVE_CASE: String get() = localized(R.string.service_save_case)

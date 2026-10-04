@@ -125,8 +125,10 @@ import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
 import com.loosecannon.servicetag.core.usecase.liveContinuousCount
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDecimalSeparator
 import com.loosecannon.servicetag.l10n.localizedList
 import com.loosecannon.servicetag.l10n.localizedPlural
+import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.ui.attachments.AttachmentFailure
 import com.loosecannon.servicetag.ui.attachments.PickedFile
@@ -2841,22 +2843,47 @@ private fun priceOf(price: String, currency: String): Priced {
     if (text.isEmpty()) return Priced.Ok(null)
     if (code.isEmpty()) return Priced.Bad(mapOf(AssetField.CURRENCY to CURRENCY_REQUIRED))
     val digits = Money.fractionDigits(code) ?: return Priced.Bad(mapOf(AssetField.CURRENCY to BAD_CURRENCY))
-    val minor = Money.parse(text, code) ?: return Priced.Bad(mapOf(AssetField.PRICE to priceExample(digits)))
+    val minor = parseAmount(text, code) ?: return Priced.Bad(mapOf(AssetField.PRICE to priceExample(digits)))
     return Priced.Ok(minor)
 }
 
-/** A stored price as the form shows it: the amount without the code, which the field names. */
-internal fun priceTextOf(minor: Long?, code: String?): String {
-    if (minor == null || code == null) return ""
-    return runCatching { Money.format(minor, code).removeSuffix(" $code") }.getOrDefault("")
+/**
+ * Owner-typed amount text as minor units through [Money.parse], which reads the language-neutral "123.45" (#102).
+ * Where the language's decimal separator is not "." the text must first read as a number in that language
+ * ([parseLocalizedDecimal]: "12,50" in German, never grouping or an ambiguous "1.500"), then goes on with its
+ * separator as "."; the digits themselves never pass through a `Double`. English keeps [Money.parse]'s own rules.
+ */
+internal fun parseAmount(text: String, code: String): Long? {
+    val separator = localizedDecimalSeparator()
+    if (separator == '.') return Money.parse(text, code)
+    if (parseLocalizedDecimal(text) == null) return null
+    return Money.parse(text.trim().replace(separator, '.'), code)
 }
 
 /**
- * "123.45" for a two-digit currency, "123" for a zero-digit one: the shape, not an amount. The example is the form
- * `Money.parse` reads, so it is built here and only the words around it are the language's.
+ * A stored amount as the owner reads it (#102): [Money.format]'s digits and code with the language's decimal
+ * separator — "123.45 USD" in English, "123,45 USD" in German. The minor units and the code are never changed.
+ * Throws as [Money.format] does.
+ */
+internal fun amountLine(minor: Long, code: String): String =
+    Money.format(minor, code).replace('.', localizedDecimalSeparator())
+
+/** A stored price as the form shows it: the amount without the code, which the field names; [parseAmount] reads it back. */
+internal fun priceTextOf(minor: Long?, code: String?): String {
+    if (minor == null || code == null) return ""
+    return runCatching { amountLine(minor, code).removeSuffix(" $code") }.getOrDefault("")
+}
+
+/**
+ * "123.45" for a two-digit currency ("123,45" in German), "123" for a zero-digit one: the shape, not an amount. The
+ * example is the form [parseAmount] reads, so it is built here and only the words around it are the language's.
  */
 internal fun priceExample(digits: Int): String =
-    localized(R.string.asset_model_price_example, if (digits <= 0) "123" else "123." + "456789".take(digits))
+    localized(R.string.asset_model_price_example, amountExample(digits))
+
+/** The digits of [priceExample] and the service cost's example, with the language's decimal separator (#102). */
+internal fun amountExample(digits: Int): String =
+    if (digits <= 0) "123" else "123" + localizedDecimalSeparator() + "456789".take(digits)
 
 /** What the price field says before anything is wrong: how many decimals this currency has. */
 internal fun priceHint(currency: String): String {

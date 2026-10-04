@@ -45,6 +45,9 @@ import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDecimal
+import com.loosecannon.servicetag.l10n.localizedDecimalSeparator
+import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.EntryOffers
 import com.loosecannon.servicetag.ui.condition.EventOffer
@@ -80,10 +83,10 @@ data class FieldRow(
     val text: String,
     val problem: FieldProblem?,
 ) {
-    /** The badge while typing: a number reads against its target the moment it parses. */
+    /** The badge while typing: a number reads against its target the moment it parses, in the owner's language. */
     val liveState: RangeState?
         get() = if (definition.valueType == ValueType.NUMBER) {
-            text.trim().toDoubleOrNull()?.let { classify(it, definition.rangeLow, definition.rangeHigh) }
+            parseLocalizedDecimal(text)?.let { classify(it, definition.rangeLow, definition.rangeHigh) }
         } else {
             null
         }
@@ -375,7 +378,7 @@ class EventEntryViewModel(
         if (derivedDefinitions.isEmpty()) return emptyList()
         val typed = fields.mapIndexedNotNull { index, row ->
             if (row.definition.valueType != ValueType.NUMBER) return@mapIndexedNotNull null
-            val value = row.text.trim().toDoubleOrNull()?.takeIf { it.isFinite() }
+            val value = parseLocalizedDecimal(row.text)?.takeIf { it.isFinite() }
                 ?: return@mapIndexedNotNull null
             Measurement(
                 id = "",
@@ -515,9 +518,12 @@ class EventEntryViewModel(
                 occurredTime = form.occurredTime?.takeIf { it.isNotBlank() },
                 tzId = zone.id,
                 notes = form.notes,
+                // A number goes on as the use case reads it, whatever the owner's decimal separator (#102).
                 values = form.fields
                     .filter { it.text.isNotBlank() }
-                    .associate { it.definition.id to it.text },
+                    .associate {
+                        it.definition.id to if (it.definition.valueType == ValueType.NUMBER) neutralNumber(it.text) else it.text
+                    },
                 consumables = submitted.map { it.second },
             )
             val held = pending
@@ -704,7 +710,7 @@ class EventEntryViewModel(
         .filterNot { (_, row) ->
             row.name.isBlank() && row.quantity.isBlank() && row.unit.isBlank() && row.supplyId == null
         }
-        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit, row.supplyId) }
+        .map { (index, row) -> index to ConsumableInput(row.name, neutralNumber(row.quantity), row.unit, row.supplyId) }
 
     private companion object {
         const val TAG = "EventEntry"
@@ -758,7 +764,9 @@ internal val CANNOT_SAVE: String get() = localized(R.string.journal_cannot_save)
 
 /**
  * A stored value back as the text that produced it — the entry field holds what was typed, not a
- * formatted reading, so an edit that changes nothing else re-saves the same number.
+ * formatted reading, so an edit that changes nothing else re-saves the same number. Every digit it
+ * has, in the owner's decimal separator (#102), and a whole number keeps its one decimal ("2.0",
+ * "2,0" in German) where the definition has decimals.
  */
 private fun Measurement?.asText(definition: MeasurementDefinition): String {
     val m = this ?: return ""
@@ -766,7 +774,12 @@ private fun Measurement?.asText(definition: MeasurementDefinition): String {
         ValueType.TEXT -> m.valueText.orEmpty()
         ValueType.BOOLEAN -> if (m.valueNum == 1.0) "1" else "0"
         ValueType.NUMBER -> m.valueNum?.let { value ->
-            if (definition.decimals == 0) formatNumber(value) else value.toString()
+            if (definition.decimals == 0) {
+                formatNumber(value)
+            } else {
+                val separator = localizedDecimalSeparator()
+                localizedDecimal(value).let { if (separator in it) it else "$it${separator}0" }
+            }
         }.orEmpty()
     }
 }

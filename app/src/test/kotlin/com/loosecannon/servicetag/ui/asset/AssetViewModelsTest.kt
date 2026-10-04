@@ -53,8 +53,11 @@ import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.testing.EnglishResources
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.FakeAttachmentStorage
+import com.loosecannon.servicetag.testing.ResourcePack
 import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -746,6 +749,39 @@ class AssetViewModelsTest {
         // And back out as the form shows it: the amount without the code the next field names.
         val edit = editModel(stored.id)
         assertEquals("1234.50", edit.state.first { it.name == "Generator" }.price)
+    }
+
+    /**
+     * #102 (PR #106 review): the price is typed in the owner's language. Under German "1234,50" is twelve hundred
+     * and thirty-four euros fifty — never 123 450 — stored as the same minor units English stores, and drawn back as
+     * "1234,50"; an ambiguous "1.234" is refused with the German example rather than read as one euro twenty-three.
+     */
+    @Test fun aCommaDecimalLanguageTypesThePriceWithAComma() = runTest {
+        val german = ResourcePack.pack("de")
+        AppText.install(german)
+        try {
+            val vm = editModel()
+            vm.onName("Generator")
+            vm.onCurrency("EUR")
+            vm.onPrice("1.234")
+            vm.save()
+            assertEquals(
+                String.format(german.locale, german.stringNamed("asset_model_price_example"), "123,45"),
+                vm.state.first { !it.saving }.problems[AssetField.PRICE],
+            )
+            assertTrue(graph.assets.all().isEmpty())
+
+            vm.onPrice("1234,50")
+            vm.save()
+            vm.state.first { !it.saving }
+
+            val stored = graph.assets.all().single()
+            assertEquals(123_450L, stored.purchasePriceMinor)
+            assertEquals("EUR", stored.currency)
+            assertEquals("1234,50", editModel(stored.id).state.first { it.name == "Generator" }.price)
+        } finally {
+            AppText.install(EnglishResources())
+        }
     }
 
     /**

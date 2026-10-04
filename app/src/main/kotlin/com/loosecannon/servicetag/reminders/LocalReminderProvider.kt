@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.reminders.SubjectState
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDecimal
 import com.loosecannon.servicetag.prefs.AppPrefs
 import java.time.LocalDate
 
@@ -115,21 +116,14 @@ class ScheduleDeliveryFacts(
     }
 
     /**
-     * The same digits B08's dashboard row shows for the same two values, and **locale-independent**
-     * (fix round 1, nit 9).
-     *
-     * `"%.2f".format(v)` resolves `Locale.getDefault()`, so on a comma-decimal locale the ratified
-     * "Due at \<n\> \<unit\>, now \<n\>." would read "Due at 500,0 hours, now 512,0." — a comma
-     * inside a sentence whose own separator is a comma. `Long.toString` and `Double.toString` are
-     * locale-invariant, which is why this is the shape `ui/journal/JournalFormat.kt:70`'s
-     * `formatNumber` uses and the shape `ui/maintenance/DueItemRow.kt:141`'s `meterLine` renders
-     * this very string with. Transcribed rather than imported: the delivery path does not depend on
-     * a UI formatting file, and the two must agree — a reviewer changing one should change both.
+     * The same digits B08's dashboard row shows for the same two values (fix round 1, nit 9): only the
+     * decimals the number needs, "500" rather than "500.0", in the language the notification's own
+     * words are in (#102) — "512.5" in English, "512,5" in German, never the device default's
+     * `"%.2f"`. This is the shape `ui/journal/JournalFormat.kt`'s `formatNumber` uses and
+     * `ui/maintenance/DueItemRow.kt`'s `meterLine` renders this very string with; both go through
+     * [localizedDecimal], so the delivery path does not depend on a UI formatting file and the two agree.
      */
-    private fun format(value: Double): String {
-        val whole = value.toLong()
-        return if (value == whole.toDouble()) whole.toString() else value.toString()
-    }
+    private fun format(value: Double): String = localizedDecimal(value)
 }
 
 /**

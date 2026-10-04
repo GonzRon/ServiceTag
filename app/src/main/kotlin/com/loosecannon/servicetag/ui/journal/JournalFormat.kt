@@ -16,11 +16,13 @@ import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDecimal
+import com.loosecannon.servicetag.l10n.localizedDecimalSeparator
 import com.loosecannon.servicetag.l10n.localizedFlag
+import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.theme.ServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.StatusColor
-import java.util.Locale
 
 /**
  * How the journal reads on screen: a definition's target, a stored value at the precision its
@@ -67,13 +69,28 @@ fun formatValue(reading: Reading): String? =
     }
 
 /**
- * A number with only the decimals it needs: 1.0 as "1", 0.5 as "0.5". For the values no definition
- * bounds — a consumable's quantity, and a stored number typed back into an entry field.
+ * A number with only the decimals it needs: 1.0 as "1", 0.5 as "0.5" ("0,5" in German, #102). For the
+ * values no definition bounds — a consumable's quantity, and a stored number typed back into an entry
+ * field, which [neutralNumber] then reads back.
  */
-fun formatNumber(value: Double): String {
-    val whole = value.toLong()
-    return if (value == whole.toDouble()) whole.toString() else value.toString()
+fun formatNumber(value: Double): String = localizedDecimal(value)
+
+/**
+ * Owner-typed number text as the language-neutral text the use cases parse (#102): "0,5" typed in
+ * German goes on as "0.5", and in English the text goes on exactly as typed. Text that is not a
+ * number in the owner's language goes on as [NOT_A_NUMBER], which every use case refuses by its own
+ * rule against the field it came from — never as typed, where a German "45.000" (forty-five thousand)
+ * would be read as 45.
+ */
+internal fun neutralNumber(typed: String): String {
+    val separator = localizedDecimalSeparator()
+    if (separator == '.') return typed
+    if (parseLocalizedDecimal(typed) == null) return NOT_A_NUMBER
+    return typed.trim().replace(separator, '.')
 }
+
+/** What the use cases read as no finite number; never drawn, since a refused form keeps the owner's own text. */
+private const val NOT_A_NUMBER = "NaN" // l10n-ok: a wire value the use cases refuse, never shown
 
 fun stateLabel(state: RangeState): String = when (state) {
     RangeState.LOW -> localized(R.string.journal_state_low)
@@ -138,6 +155,6 @@ fun eventDetailLine(event: AssetEvent, definitions: Map<DefinitionId, Measuremen
 /** Three readings is what fits on one line on a phone without the title having to shrink. */
 private const val MAX_READINGS_IN_LINE = 3
 
-/** Locale-fixed so a comma decimal separator never reaches the mono column (D12 §6). */
+/** At the definition's decimals, with the language's own decimal separator and no grouping (#102). */
 private fun bound(value: Double, definition: MeasurementDefinition): String =
-    String.format(Locale.US, "%.${definition.decimals.coerceAtLeast(0)}f", value)
+    localizedDecimal(value, definition.decimals.coerceAtLeast(0))

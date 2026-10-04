@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import com.loosecannon.servicetag.ui.asset.LINKED_RECORD_REMOVED
+import com.loosecannon.servicetag.ui.asset.amountLine
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.journal.CANNOT_SAVE
@@ -379,11 +380,14 @@ private fun factsOf(case: ServiceCase): List<CaseFact> = buildList {
 private fun legOf(tracking: String, carrier: String): String? =
     listOf(tracking, carrier).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { null }
 
-/** The cost through [Money] — "0.00 USD" is no charge; null when none is recorded or it cannot be read. */
+/**
+ * The cost through [Money] — "0.00 USD" is no charge — in the language's decimal separator ([amountLine], #102);
+ * null when none is recorded or it cannot be read.
+ */
 private fun costOf(case: ServiceCase): String? {
     val minor = case.costMinor ?: return null
     val code = case.currency ?: return null
-    return runCatching { Money.format(minor, code) }.getOrNull()
+    return runCatching { amountLine(minor, code) }.getOrNull()
 }
 
 private fun linkOf(label: String, id: EventId, event: AssetEvent?, removable: Boolean) = CaseLink(

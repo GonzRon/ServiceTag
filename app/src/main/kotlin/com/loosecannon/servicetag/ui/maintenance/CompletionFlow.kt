@@ -42,6 +42,7 @@ import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.OfferBatch
 import com.loosecannon.servicetag.ui.condition.tapped
+import com.loosecannon.servicetag.ui.journal.neutralNumber
 import java.time.ZoneId
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -360,7 +361,8 @@ class CompletionFlow(
     }
 
     private fun CompletionAnswer.command(schedule: MaintenanceSchedule): CompletionCommand {
-        val reading = meterValue?.trim()?.takeIf { it.isNotEmpty() }
+        // Typed in the owner's decimal separator; it goes on as the use case reads a number (#102).
+        val reading = meterValue?.trim()?.takeIf { it.isNotEmpty() }?.let(::neutralNumber)
         val meterId = schedule.meterDefinitionId
         return CompletionCommand(
             occurredOn = occurredOn.trim(),

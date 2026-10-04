@@ -30,6 +30,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedList
 import com.loosecannon.servicetag.l10n.localizedPlural
+import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -335,11 +336,14 @@ class DefinitionEditViewModel(
     }
 }
 
-/** A blank target bound is no bound; anything else has to parse, and says so where it does not. */
+/**
+ * A blank target bound is no bound; anything else has to parse, in the owner's decimal separator (#102),
+ * and says so where it does not.
+ */
 private fun String.bound(field: String, into: MutableMap<String, String>): Double? {
     val text = trim()
     if (text.isEmpty()) return null
-    val value = text.toDoubleOrNull()
+    val value = parseLocalizedDecimal(text)
     if (value == null) into[field] = localized(R.string.setup_problem_not_a_number)
     return value
 }
