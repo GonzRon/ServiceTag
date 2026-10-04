@@ -2,6 +2,8 @@ package com.loosecannon.servicetag.backup
 
 import android.content.ContentResolver
 import android.net.Uri
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.core.ports.BackupIO
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
@@ -22,10 +24,10 @@ class SafBackupIO(
 
     override suspend fun read(): ByteArray = withContext(Dispatchers.IO) {
         resolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: error("cannot open $uri for reading")
+            ?: error(localized(R.string.backup_cannot_open_for_reading, uri))
     }
 
     override suspend fun openStream(): InputStream = withContext(Dispatchers.IO) {
-        resolver.openInputStream(uri) ?: error("cannot open $uri for reading")
+        resolver.openInputStream(uri) ?: error(localized(R.string.backup_cannot_open_for_reading, uri))
     }
 }

@@ -23,16 +23,18 @@ import java.util.Locale
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The plurals resource behind S99's `<age>` and S102 (plan decision 29), as a **framework contract**
- * with no navigation: [AndroidHealthPlurals] over the **app's** resources — the target context's, not
- * the test APK's — says "1 day" for one and the ratified "`<n>` days" otherwise. The JVM suites
- * cannot see `plurals.xml`; this is the one place it is read for real.
+ * The plurals resource behind S99's `<age>` and S102 (plan decision 29; #102), as a **framework
+ * contract** with no navigation: [AndroidHealthPlurals] over the **app's** resources — the target
+ * context's, not the test APK's — says "1 day" for one and the ratified "`<n>` days" otherwise. The JVM
+ * suites read `plurals.xml` through their own English reader; this is the one place Android's own
+ * plural selection reads it.
  *
  * Emulator only — the second case wipes app data.
  */
@@ -46,6 +48,9 @@ class HealthPluralsContractTest {
     private val plurals: AndroidHealthPlurals
         get() = AndroidHealthPlurals(InstrumentationRegistry.getInstrumentation().targetContext.resources)
 
+    /** Every run of digits in [text], in order. */
+    private fun numbersIn(text: String): List<String> = Regex("[0-9]+").findAll(text).map { it.value }.toList()
+
     @Test fun androidHealthPluralsSaysOneDayAndNDays() {
         assertEquals("1 day", plurals.ageDays(1))
         assertEquals("5 days", plurals.ageDays(5))
@@ -54,13 +59,14 @@ class HealthPluralsContractTest {
     }
 
     /**
-     * The ruling on B12's review, I-2: the form is chosen by **English** rules whatever the device
-     * language, because the ratified strings are English. French puts 0 in `one`, Russian puts 21 in
-     * `one`, and Japanese has no `one` at all — so on each, 0 still reads "0 days", 21 "21 days" and
-     * 1 "1 day", read straight from the four day-form strings. The reader changes nothing in the
-     * resources it is given: the rest of them stay in their own language.
+     * #102 (replacing the ruling on B12's review, I-2): the form is chosen by the **resources'
+     * language's** plural rules, which is safe because every form shows its number through a
+     * placeholder. French puts 0 in `one`, Russian puts 21 in `one`, and Japanese has no `one` at all —
+     * so on each, whichever form is selected, the only number in the line is the count itself: no form
+     * can say "1" for 0 or 21. The reader changes nothing in the resources it is given: the rest of them
+     * stay in their own language.
      */
-    @Test fun theFormFollowsEnglishRulesOnAnyDeviceLanguage() {
+    @Test fun everyFormShowsItsOwnNumberOnAnyDeviceLanguage() {
         val target = InstrumentationRegistry.getInstrumentation().targetContext
         listOf(Locale.FRENCH, Locale.forLanguageTag("ru"), Locale.JAPANESE).forEach { locale ->
             val config = Configuration(target.resources.configuration).apply { setLocale(locale) }
@@ -70,12 +76,13 @@ class HealthPluralsContractTest {
 
             val words = AndroidHealthPlurals(local)
 
-            assertEquals("$locale", "0 days", words.ageDays(0))
-            assertEquals("$locale", "1 day", words.ageDays(1))
-            assertEquals("$locale", "21 days", words.ageDays(21))
-            assertEquals("$locale", "Oil change is 0 days overdue", words.daysOverdue("Oil change", 0))
-            assertEquals("$locale", "Oil change is 1 day overdue", words.daysOverdue("Oil change", 1))
-            assertEquals("$locale", "Oil change is 21 days overdue", words.daysOverdue("Oil change", 21))
+            listOf(0L, 1L, 2L, 5L, 21L, 101L).forEach { n ->
+                val age = words.ageDays(n)
+                val overdue = words.daysOverdue("Oil change", n)
+                assertEquals("$locale: $age", listOf("$n"), numbersIn(age))
+                assertEquals("$locale: $overdue", listOf("$n"), numbersIn(overdue))
+                assertTrue("$locale: $overdue names the schedule", "Oil change" in overdue)
+            }
             assertEquals("$locale: the rest keeps its language", cancel, local.getString(android.R.string.cancel))
         }
     }

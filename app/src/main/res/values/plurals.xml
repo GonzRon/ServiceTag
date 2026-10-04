@@ -1,20 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The two quantity-bearing health substitutions (1.4 spec §10.7; plan decision 29, the controller's
-  ruling). Each `other` form is the RATIFIED text verbatim; each `one` form differs from it only by
-  the unit's "s" — an inflection of a ratified string, not a new one (master plan §17.2).
+  The quantity-bearing health lines (1.4 spec §10.7; plan decision 29), as Android plurals (#102). Each
+  `other` form is the RATIFIED text; English's `one` form differs from it only by the unit's "s" — an
+  inflection of a ratified string, not a new one (master plan §17.2).
 
-  The four forms are plain strings, each read by its own id (AndroidHealthPlurals). The ratified text
-  is English, so the app chooses the form by ENGLISH rules on every device — `one` exactly when the
-  number is 1 — and never through an Android plurals resource, which would apply the device
-  language's rules, under which 0 or 21 could select the `one` form and read "1 day" (the controller's
-  rulings on B12's review, I-2 and RS-3).
+  Every form, in every language, shows its number through a placeholder and never as a literal "1". That
+  is what makes it safe to let the device language's plural rules pick the form: `one` also covers 21, 31,
+  101 … in Russian and 0 in French, and Japanese has only `other`, so a form that wrote "1" would misreport
+  every one of those numbers. With the number always substituted, whichever form a language's rules select
+  says the right number, and each language pack gives the forms its own grammar needs.
 -->
 <resources>
-    <!-- S99's <age>: "Replaced <date>, <age> ago". -->
-    <string name="health_age_one_day">1 day</string>
-    <string name="health_age_n_days">%d days</string>
-    <!-- S102: "<schedule> is <n> days overdue". -->
-    <string name="health_one_day_overdue">%1$s is 1 day overdue</string>
-    <string name="health_n_days_overdue">%1$s is %2$d days overdue</string>
+    <!-- S99's <age>, inside "Replaced <date>, <age> ago" (health_replaced). %1$d: the age in days. -->
+    <plurals name="health_age_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <!-- S102: an overdue-driven subject's line. %1$s: the maintenance schedule's title as entered; %2$d: how many days overdue it is. -->
+    <plurals name="health_days_overdue">
+        <item quantity="one">%1$s is %2$d day overdue</item>
+        <item quantity="other">%1$s is %2$d days overdue</item>
+    </plurals>
+    <!-- S104: an overdue-driven subject inside its grace period. %1$d: the grace period's length in days. English says "14-day" in both forms; a language whose words agree with the number gives its own forms. -->
+    <plurals name="health_grace_period">
+        <item quantity="one">Within the %1$d-day grace period</item>
+        <item quantity="other">Within the %1$d-day grace period</item>
+    </plurals>
 </resources>

@@ -21,9 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.condition.conditionOption
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.statusLabel
@@ -31,13 +33,13 @@ import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /** The reset option of each control, and the two control labels. All four are RATIFIED (F2). */
-internal const val ALL_CATEGORIES = "All categories"
-internal const val ALL_STATUSES = "All statuses"
-internal const val CATEGORY_LABEL = "Category"
-internal const val STATUS_LABEL = "Maintenance status"
+internal val ALL_CATEGORIES: String get() = localized(R.string.dashboard_all_categories)
+internal val ALL_STATUSES: String get() = localized(R.string.dashboard_all_statuses)
+internal val CATEGORY_LABEL: String get() = localized(R.string.dashboard_category_label)
+internal val STATUS_LABEL: String get() = localized(R.string.dashboard_status_label)
 
 /** S26: the condition chip for an asset with no condition row. B13 owns it (master plan §19). */
-internal const val CHIP_NOT_RECORDED = "Not recorded"
+internal val CHIP_NOT_RECORDED: String get() = localized(R.string.dashboard_chip_not_recorded)
 
 /**
  * The four condition chips (master plan §13.2: S8, S10, S12, S26), drawn in spec §10.2's order —

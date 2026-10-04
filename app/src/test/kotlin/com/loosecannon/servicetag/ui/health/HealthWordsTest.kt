@@ -119,7 +119,8 @@ class HealthWordsTest {
         // The quantity itself reaches the plurals, so `one` and `other` are the resource's to pick.
         assertEquals(listOf(1L, 5L), ages)
         assertEquals(listOf("Oil change" to 1L, "Oil change" to 5L), overdue)
-        // S104 is singular-safe as written and needs no plural.
+        // S104 is singular-safe in English and does not go through [HealthPlurals]; #102 gives it a
+        // resource plural of its own (`health_grace_period`), so a language whose words agree with the number can.
         assertEquals("Within the 1-day grace period", driverLineText(DriverLine.Grace(1), recording, ::displayDate))
         assertEquals(2, overdue.size)
     }

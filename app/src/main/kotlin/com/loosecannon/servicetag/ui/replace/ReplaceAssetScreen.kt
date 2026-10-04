@@ -30,10 +30,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.di.AppGraph
@@ -101,7 +103,7 @@ fun ReplaceAssetScreen(graph: AppGraph, assetId: String, onBack: () -> Unit, onD
                 navigationIcon = {
                     // R86-B3-BACK: the shipped arrow and its shipped label, a reused convention rather than a P86 string.
                     IconButton(onClick = back, enabled = !state.saving) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.replace_back))
                     }
                 },
             )

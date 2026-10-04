@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.usecase.CreatedPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOutResult
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localizedList
 import com.loosecannon.servicetag.transfer.TransferPackWriter
 import com.loosecannon.servicetag.ui.attachments.asFileSize
 import com.loosecannon.servicetag.ui.backup.NoAttachmentFolder
@@ -163,7 +164,7 @@ class TransferPackViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: NoAttachmentFolder) {
-                Made.Refused(listOf(e.message!!))
+                Made.Refused(listOf(e.message))
             } catch (e: BackupSetIncomplete) {
                 Made.Refused(listOf(TransferStrings.notCreated(e.wording())))
             } catch (e: Exception) {
@@ -327,7 +328,7 @@ internal suspend fun refusalLineOf(
     groupNameOf: suspend (GroupId) -> String,
 ): String = when (refusal) {
     is TransferRefusal.MixedGroup ->
-        TransferStrings.mixedGroup(groupNameOf(GroupId(refusal.groupId)), refusal.stayingIds.map { nameOf(it) }.joinToString(", "))
+        TransferStrings.mixedGroup(groupNameOf(GroupId(refusal.groupId)), localizedList(refusal.stayingIds.map { nameOf(it) }))
     is TransferRefusal.ParentNotSelected -> TransferStrings.parentNotSelected(nameOf(refusal.childId), nameOf(refusal.parentId))
     is TransferRefusal.OpenLoan -> TransferStrings.lentOut(nameOf(refusal.assetId))
     is TransferRefusal.OutsideReference -> TransferStrings.outsideReference(nameOf(refusal.assetId))

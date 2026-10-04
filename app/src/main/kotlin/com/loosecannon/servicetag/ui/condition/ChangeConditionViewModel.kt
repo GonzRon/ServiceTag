@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetId
@@ -18,6 +19,7 @@ import com.loosecannon.servicetag.core.usecase.MAX_CONDITION_REASON
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.health.inService
 import java.time.LocalDate
 import java.time.ZoneId
@@ -32,7 +34,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** S25: the one refusal Change condition draws — a date later than today. */
-const val DATE_NOT_LATER_THAN_TODAY = "The date cannot be later than today."
+val DATE_NOT_LATER_THAN_TODAY: String get() = localized(R.string.condition_date_not_later_than_today)
 
 /**
  * #82 (R82-2): a DOWN or DEGRADED answer **held** while P82-1 is asked — nothing is written yet. [id]

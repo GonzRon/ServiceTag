@@ -1,83 +1,86 @@
 package com.loosecannon.servicetag.ui.transfer.`import`
 
+import androidx.annotation.PluralsRes
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedPlural
+
 /**
  * #77 (B3; plan §6, R77-24) — **every word the Transfer Pack import draws, verbatim from the ratified table**, one home
  * per literal. Nothing is paraphrased or composed from fragments beyond the placeholders the table names.
  *
  * [ASSET_TRANSFERRED_OUT] (P77-35) lands here for the share intake's refused write; B4's screens reuse it from here.
  * [countLines] are P77-6…11, which the review screen (B4) and P77-50 share.
+ *
+ * #102: the words live in `res/values/strings_transfer.xml` (`transfer_import_*` and the `transfer_count_*` plurals,
+ * each with its P77 id); every entry here is a getter or a function, so it is read in the current language when drawn.
  */
 internal object TransferImportStrings {
     /** P77-35 — a write refused because the asset was transferred out. */
-    const val ASSET_TRANSFERRED_OUT = "This asset was transferred out."
+    val ASSET_TRANSFERRED_OUT: String get() = localized(R.string.transfer_import_asset_transferred_out)
 
     /** P77-38 — the Backup screen's button and the import screen's title. */
-    const val TITLE = "Import Transfer Pack"
+    val TITLE: String get() = localized(R.string.transfer_import_title)
 
     /** P77-39. */
-    fun note(note: String): String = "Note: $note"
+    fun note(note: String): String = localized(R.string.transfer_import_note, note)
 
     /** P77-40. */
-    fun created(date: String): String = "Created $date"
+    fun created(date: String): String = localized(R.string.transfer_import_created, date)
 
     /** P77-41. */
-    const val CONTAINS = "Contains"
+    val CONTAINS: String get() = localized(R.string.transfer_import_contains)
 
     /** P77-42. */
-    const val IMPORT = "Import"
+    val IMPORT: String get() = localized(R.string.transfer_import_import)
 
     /** P77-43. */
-    const val ALREADY_HERE = "This Transfer Pack is already on this phone."
+    val ALREADY_HERE: String get() = localized(R.string.transfer_import_already_here)
 
     /** P77-44. */
-    const val CONFLICTS = "This Transfer Pack conflicts with records on this phone, so nothing was imported."
+    val CONFLICTS: String get() = localized(R.string.transfer_import_conflicts)
 
     /** P77-45. */
-    fun tagUsedHere(asset: String): String = "An NFC tag in this pack is already used for $asset here."
+    fun tagUsedHere(asset: String): String = localized(R.string.transfer_import_tag_used_here, asset)
 
     /** P77-46. */
-    fun duplicate(incoming: String, local: String): String = "$incoming may already be here as $local."
+    fun duplicate(incoming: String, local: String): String = localized(R.string.transfer_import_duplicate, incoming, local)
 
     /** P77-47. */
-    const val NOT_A_PACK = "This file is not a Transfer Pack."
+    val NOT_A_PACK: String get() = localized(R.string.transfer_import_not_a_pack)
 
     /** P77-48. */
-    const val NEWER = "This Transfer Pack needs a newer version of ServiceTag."
+    val NEWER: String get() = localized(R.string.transfer_import_newer)
 
     /** P77-49. */
-    const val DAMAGED = "This Transfer Pack is damaged and cannot be imported."
+    val DAMAGED: String get() = localized(R.string.transfer_import_damaged)
 
     /** P77-50 — anchored apart from the shipped `Imported: …`. */
-    fun imported(counts: String): String = "Transfer Pack imported: $counts"
+    fun imported(counts: String): String = localized(R.string.transfer_import_imported, counts)
 
     /** P77-52. */
-    const val COULD_NOT_IMPORT = "Could not import this Transfer Pack. Nothing was changed."
+    val COULD_NOT_IMPORT: String get() = localized(R.string.transfer_import_could_not_import)
 
     /** P77-66 (R77-25). */
-    fun comingBack(asset: String): String = "Coming back: $asset"
+    fun comingBack(asset: String): String = localized(R.string.transfer_import_coming_back, asset)
 
     /** P77-67. */
-    fun notBroughtBack(asset: String): String =
-        "$asset was transferred out from this phone, and this Transfer Pack does not bring it back."
+    fun notBroughtBack(asset: String): String = localized(R.string.transfer_import_not_brought_back, asset)
 
     /**
      * P77-6…11, in the table's order: `%d assets` · `%d NFC tags` · `%d records` · `%d schedules` ·
-     * `%d documents and photos` · `%d service cases`, each with its `1 …` singular; a zero line is hidden, except
-     * the assets'.
+     * `%d documents and photos` · `%d service cases`, each a plural (`1 …` its singular in English); a zero line is
+     * hidden, except the assets'.
      */
     fun countLines(assets: Int, tags: Int, records: Int, schedules: Int, documents: Int, cases: Int): List<String> =
         listOfNotNull(
-            if (assets == 1) "1 asset" else "$assets assets",
-            count(tags, "1 NFC tag", "NFC tags"),
-            count(records, "1 record", "records"),
-            count(schedules, "1 schedule", "schedules"),
-            count(documents, "1 document or photo", "documents and photos"),
-            count(cases, "1 service case", "service cases"),
+            localizedPlural(R.plurals.transfer_count_assets, assets, assets),
+            count(R.plurals.transfer_count_nfc_tags, tags),
+            count(R.plurals.transfer_count_records, records),
+            count(R.plurals.transfer_count_schedules, schedules),
+            count(R.plurals.transfer_count_documents, documents),
+            count(R.plurals.transfer_count_service_cases, cases),
         )
 
-    private fun count(n: Int, one: String, many: String): String? = when (n) {
-        0 -> null
-        1 -> one
-        else -> "$n $many"
-    }
+    private fun count(@PluralsRes line: Int, n: Int): String? = if (n == 0) null else localizedPlural(line, n, n)
 }

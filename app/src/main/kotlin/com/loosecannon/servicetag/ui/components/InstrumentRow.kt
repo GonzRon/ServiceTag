@@ -22,12 +22,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.FieldProblem
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.journal.FieldRow
 import com.loosecannon.servicetag.ui.journal.formatTarget
 import com.loosecannon.servicetag.ui.journal.stateColors
@@ -134,9 +137,9 @@ private val STATE_COLUMN = 72.dp
 @Composable
 fun InstrumentEntryHeader(modifier: Modifier = Modifier) {
     Row(modifier = modifier.padding(top = 10.dp, bottom = 2.dp), verticalAlignment = Alignment.Bottom) {
-        HeaderCell("Reading", Modifier.weight(1f))
-        HeaderCell("Value", Modifier.width(VALUE_COLUMN))
-        HeaderCell("Target", Modifier.width(STATE_COLUMN))
+        HeaderCell(stringResource(R.string.ui_instrument_header_reading), Modifier.weight(1f))
+        HeaderCell(stringResource(R.string.ui_instrument_header_value), Modifier.width(VALUE_COLUMN))
+        HeaderCell(stringResource(R.string.ui_instrument_header_target), Modifier.width(STATE_COLUMN))
     }
 }
 
@@ -195,7 +198,7 @@ fun InstrumentEntryRow(
                     )
                     // Said once, quietly, until it is filled: a required row is not an error yet.
                     row.required && row.text.isBlank() -> Text(
-                        text = "Required",
+                        text = stringResource(R.string.ui_instrument_required),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -266,13 +269,14 @@ fun InstrumentEntryRow(
 
 /** What a refused save says under the row it refused; the app bar says the first of them out loud. */
 private fun problemText(problem: FieldProblem): String = when (problem) {
-    is FieldProblem.Required -> "Required"
-    is FieldProblem.NotANumber -> "Not a number"
-    else -> "Check this value"
+    is FieldProblem.Required -> localized(R.string.ui_instrument_required)
+    is FieldProblem.NotANumber -> localized(R.string.ui_instrument_not_a_number)
+    else -> localized(R.string.ui_instrument_check_value)
 }
 
-/** Stored as 1/0 by the domain (§4), read as Yes/No by everyone else. */
-private val BOOLEAN_CHOICES = listOf("1" to "Yes", "0" to "No")
+/** Stored as 1/0 by the domain (§4), read as Yes/No by everyone else. The stored values are never words. */
+private val BOOLEAN_CHOICES: List<Pair<String, String>>
+    get() = listOf("1" to localized(R.string.ui_instrument_yes), "0" to localized(R.string.ui_instrument_no))
 
 /** The rail of D12 §9: a marker beside the row, never a fill behind it. */
 private val RAIL = 3.dp

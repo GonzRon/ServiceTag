@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: Transfer Packs, Replace asset, backup and restore — English source. Comments carry the ratification ids
+  (P77-xx for Transfer Packs, P86-xx for Replace asset) and what each string and placeholder is for. Asset, group and
+  file names are the owner's or the app's own and are passed in unchanged; Transfer Pack and backup file names
+  (servicetag-transfer-…zip, ServiceTag-data-…zip) are artifacts other devices read and never come from here.
+-->
+<resources>
+
+    <!-- ================================================================ Replace asset (#86, ui/replace) -->
+
+    <!-- P86-1: the detail overflow item, the Replace screen's top bar, and the review's confirm button. -->
+    <string name="replace_asset">Replace asset</string>
+    <!-- R86-B3-BACK: the Replace screen's top-bar back arrow, read by TalkBack (the shipped convention). -->
+    <string name="replace_back">Back</string>
+    <!-- P86-2: the form's section header over the asset being replaced. -->
+    <string name="replace_old_asset">Old asset</string>
+    <!-- P86-3: the form, the old asset not yet retired; shown above the "Retired on" field. %1$s: the old asset's name. -->
+    <string name="replace_will_be_retired">%1$s will be retired with its history, documents and service record kept as they are.</string>
+    <!-- P86-4: the form, the old asset already retired. %1$s: the old asset's name; %2$s: its retirement date. -->
+    <string name="replace_was_retired_on">%1$s was retired on %2$s. Its history, documents and service record are kept as they are.</string>
+    <!-- P86-5: the form's section header over the replacement; also the asset editor's create title. -->
+    <string name="replace_new_asset">New asset</string>
+    <!-- P86-6: the quiet line under P86-5. -->
+    <string name="replace_separate_asset">A separate asset with its own identity. None of the old asset\'s history is copied.</string>
+    <!-- P86-7: the form's section header over the items that can be copied; the review's label over them. -->
+    <string name="replace_carry_forward">Carry forward</string>
+    <!-- P86-8: the quiet line under P86-7. -->
+    <string name="replace_only_what_you_tick">Only what you tick is copied, as new records with no history.</string>
+    <!-- P86-9 (R86-13): the season checkbox; also a review line. -->
+    <string name="replace_season_and_break">Operating season and maintenance break</string>
+    <!-- P86-10: the notes checkbox; also a review line. -->
+    <string name="replace_description_and_notes">Description and notes</string>
+    <!-- P86-11 (R86-12): one checkbox per maintenance group; also a review line. %1$s: the group's name. -->
+    <string name="replace_add_to">Add to %1$s</string>
+    <!-- P86-12: the date field's label, shown when a ticked schedule repeats on a time rule. -->
+    <string name="replace_schedules_start_on">Copied schedules start on</string>
+    <!-- P86-13: under a schedule that needs "Readings & actions" ticked too (the name of that checkbox). -->
+    <string name="replace_needs_setup">Needs Readings &amp; actions.</string>
+    <!-- P86-14 (amended): under a pre-service schedule that needs the season ticked too (P86-9's words). -->
+    <string name="replace_needs_season">Needs Operating season and maintenance break.</string>
+    <!-- P86-15: a tag's radio button; the review's label over the tags that move. -->
+    <string name="replace_move_to_new">Move to the new asset</string>
+    <!-- P86-16: a tag's radio button, the default. -->
+    <string name="replace_leave_with_old">Leave with the old asset</string>
+    <!-- P86-17: the quiet line under the tags. -->
+    <string name="replace_moved_tag_not_rewritten">A moved tag is not rewritten. Scanning it opens the new asset.</string>
+    <!--
+      P86-18 (MN-8): the old asset's child assets, named and never moved. The quantity is the number of children.
+      %1$s: the children's names, sorted and joined as a list; %2$s: the old asset's name.
+    -->
+    <plurals name="replace_children_stay">
+        <item quantity="one">%1$s stays part of %2$s.</item>
+        <item quantity="other">%1$s stay part of %2$s.</item>
+    </plurals>
+    <!-- P86-19 (R86-6): an open loan, named and never moved. %1$s: the old asset's name. -->
+    <string name="replace_lent_out">%1$s is lent out. The loan stays with it.</string>
+    <!-- P86-20: the review's retirement line. %1$s: the old asset's name; %2$s: the replacement date. -->
+    <string name="replace_retire_on">Retire %1$s on %2$s</string>
+    <!-- P86-21: the review's line for an asset already retired. %1$s: the old asset's name; %2$s: its retirement date. -->
+    <string name="replace_stays_retired_from">%1$s stays retired from %2$s</string>
+    <!-- P86-22: the review's creation line. %1$s: the new asset's name. -->
+    <string name="replace_create">Create %1$s</string>
+    <!-- P86-23: the review's line under P86-7 when nothing is ticked. -->
+    <string name="replace_nothing_carried">Nothing carried forward</string>
+    <!-- P86-24: the replace failed. %1$s: the old asset's name. -->
+    <string name="replace_could_not_replace">Could not replace %1$s. Nothing was changed.</string>
+    <!-- P86-25 (amended): refused because something changed during the review; the form re-reads. -->
+    <string name="replace_changed_while_reviewing">The asset or related records changed while you were reviewing. Nothing was changed.</string>
+    <!-- P86-26: the old asset's detail line, tappable. %1$s: the new asset's name; %2$s: the replacement date. -->
+    <string name="replace_replaced_by">Replaced by %1$s on %2$s</string>
+    <!-- P86-27: the new asset's detail line, tappable. %1$s: the old asset's name. -->
+    <string name="replace_replaces">Replaces %1$s</string>
+    <!--
+      P86-28 (R86-13 amended): above the "In season now" / "Out of season now" choices when the season is copied from
+      an asset whose season is set by hand. %1$s: the replacement date.
+    -->
+    <string name="replace_was_in_season_on">Was the new asset in season on %1$s?</string>
+
+    <!-- ================================================================ Transfer Packs, sending (#77 B4, ui/transfer) -->
+
+    <!-- P77-1: the Assets list overflow, the asset detail overflow, and the selection's top bar. -->
+    <string name="transfer_assets">Transfer assets</string>
+    <!-- The Transfer and Import screens' top-bar back arrow, read by TalkBack. -->
+    <string name="transfer_back">Back</string>
+    <!-- P77-2: the selection's heading. -->
+    <string name="transfer_select_what_leaves">Select what is leaving this ServiceTag</string>
+    <!-- P77-3: the selection's quiet line. -->
+    <string name="transfer_components_go_with">Child assets go with the asset they belong to.</string>
+    <!-- P77-4: the selection's button (also Replace asset's form button). -->
+    <string name="transfer_review">Review</string>
+    <!-- P77-5: the review's section header; the file a transfer makes. -->
+    <string name="transfer_pack">Transfer Pack</string>
+    <!-- P77-12: the review's body line. -->
+    <string name="transfer_may_contain">These records may contain serial numbers, locations, purchase information, receipts and service history.</string>
+    <!-- P77-13: the note field's label. -->
+    <string name="transfer_note_label">Note for the new owner (optional)</string>
+    <!-- P77-14: the review's button. -->
+    <string name="transfer_create">Create Transfer Pack</string>
+    <!--
+      P77-15: refused, a maintenance group also covers assets that are not selected. %1$s: the group's name;
+      %2$s: the names of the assets staying here, joined as a list.
+    -->
+    <string name="transfer_mixed_group">%1$s also covers %2$s, which stay here. A group transfers only with every asset it has ever covered.</string>
+    <!-- P77-16: refused, a child asset without its parent. %1$s: the child asset's name; %2$s: the parent's name (twice). -->
+    <string name="transfer_parent_not_selected">%1$s is a child asset of %2$s. Select %2$s too.</string>
+    <!-- P77-17: refused, an open loan (also the marking refusal). %1$s: the asset's name. -->
+    <string name="transfer_lent_out">%1$s is lent out. Mark it returned first.</string>
+    <!-- P77-18: refused, a record pointing outside the pack. %1$s: the asset's name. -->
+    <string name="transfer_outside_reference">%1$s has a record that points outside this transfer.</string>
+    <!-- P77-19: creation's progress line. -->
+    <string name="transfer_creating">Creating Transfer Pack…</string>
+    <!--
+      P77-20: creation failed. %1$s: why, in the backup's own words for a missing or changed document
+      (e.g. "1 attachment file is missing").
+    -->
+    <string name="transfer_not_created">Transfer Pack not created: %1$s. Nothing was changed.</string>
+    <!-- P77-20, the entangled reason (R77-CREATE-SAFETY). -->
+    <string name="transfer_not_created_entangled">Transfer Pack not created: records on this phone still point to a transferred asset. Nothing was changed.</string>
+    <!-- P77-20, the generic reason: any other failure while the pack was being made. -->
+    <string name="transfer_not_created_generic">Transfer Pack not created: the file could not be written. Nothing was changed.</string>
+    <!-- P77-21: the ready screen's heading. -->
+    <string name="transfer_ready">Transfer Pack ready</string>
+    <!-- P77-22: the ready screen's button. -->
+    <string name="transfer_share">Share</string>
+    <!-- P77-23: the ready screen's button. -->
+    <string name="transfer_save_a_copy">Save a copy</string>
+    <!-- P77-24: the pack's size. %1$s: the size with its unit, already formatted (e.g. "1.2 MB"). -->
+    <string name="transfer_size">Size: %1$s</string>
+    <!-- P77-25: the system share chooser's title. -->
+    <string name="transfer_share_title">Share Transfer Pack</string>
+    <!-- P77-26: snackbar, the copy was saved. -->
+    <string name="transfer_saved">Saved</string>
+    <!-- P77-27: the mark question on the ready screen. -->
+    <string name="transfer_mark_question">Mark these assets transferred out on this phone?</string>
+    <!-- P77-28: the mark button. -->
+    <string name="transfer_mark">Mark transferred</string>
+    <!-- P77-30: under the mark question. -->
+    <string name="transfer_mark_consequence">Their reminders stop and they leave your lists. You can still open them under Archived.</string>
+    <!-- P77-31: the status badge on the list row and identity plate (drawn upper-case, read as written). -->
+    <string name="transfer_transferred">Transferred</string>
+    <!-- P77-32: the asset detail block's section header. -->
+    <string name="transfer_transferred_out">Transferred out</string>
+    <!-- P77-33: the detail block's date line. %1$s: the date. -->
+    <string name="transfer_transferred_on">Transferred on %1$s</string>
+    <!-- P77-34: the detail block's pack line. %1$s: the pack id's first eight characters. -->
+    <string name="transfer_pack_line">Transfer Pack %1$s</string>
+    <!-- P77-36: the scan sheet's title for a tag on an asset transferred out. -->
+    <string name="transfer_scan_title">Asset transferred out</string>
+    <!-- P77-37: the scan sheet's body. %1$s: the asset's name; %2$s: the date it left. -->
+    <string name="transfer_handed_over">%1$s was handed over on %2$s. This phone no longer maintains it.</string>
+    <!-- P77-51: marking refused, the asset changed after the pack was made (R77-16). %1$s: the asset's name. -->
+    <string name="transfer_changed_since">%1$s changed after this Transfer Pack was made. Create it again.</string>
+    <!-- P77-53: marking failed. -->
+    <string name="transfer_could_not_mark">Could not mark these assets. Nothing was changed.</string>
+    <!-- P77-55: snackbar, the copy could not be saved. -->
+    <string name="transfer_could_not_save">Could not save a copy.</string>
+    <!-- P77-56: the selection has nothing to offer. -->
+    <string name="transfer_nothing_to_offer">No assets can be transferred.</string>
+    <!-- P77-57: refused, the assets are already marked transferred out. -->
+    <string name="transfer_already_transferred">These assets are already marked transferred out.</string>
+    <!-- P77-59: refused, over the pack's data cap. -->
+    <string name="transfer_too_large">These assets have too many records for one Transfer Pack. Transfer fewer at a time.</string>
+    <!-- P77-60: a restored ready screen whose file is gone (R77-18). -->
+    <string name="transfer_pack_gone">This Transfer Pack is no longer on this phone. Create it again.</string>
+    <!-- P77-61: a forced child row's state description, read by TalkBack only. %1$s: the parent asset's name. -->
+    <string name="transfer_included_with">Included with %1$s</string>
+    <!-- P77-62: the detail block's text button. -->
+    <string name="transfer_withdraw_record">Withdraw transfer record</string>
+    <!-- P77-63: the withdrawal dialog's title. %1$s: the pack id's first eight characters. -->
+    <string name="transfer_withdraw_title">Withdraw the record for Transfer Pack %1$s?</string>
+    <!-- P77-64 (amended, R77-WITHDRAW): the withdrawal dialog's body. -->
+    <string name="transfer_withdraw_body">Use this only if this Transfer Pack did not leave, or another phone\'s record should stand. Its assets stay archived.</string>
+    <!-- P77-65: the withdrawal dialog's confirm button. -->
+    <string name="transfer_withdraw">Withdraw</string>
+    <!-- P77-71: the withdrawal failed. -->
+    <string name="transfer_could_not_withdraw">Could not withdraw this record. Nothing was changed.</string>
+    <!-- P77-72: the withdrawal refused, records would still point to a transferred asset (R77-WITHDRAW). -->
+    <string name="transfer_withdraw_entangled">Could not withdraw this record: records on this phone would still point to a transferred asset. Nothing was changed.</string>
+    <!-- P77-69 (R77-25): the ready screen's quiet line under P77-24; the pack is a bearer file. -->
+    <string name="transfer_bearer">Anyone with this file can import these assets. Share it only with the person or device that should receive them.</string>
+    <!-- P77-70 (R77-B2a-MARK): marking refused, records left behind would still point to a transferred asset. -->
+    <string name="transfer_mark_entangled">Could not mark these assets: records on this phone still point to a transferred asset. Nothing was changed.</string>
+
+    <!-- ================================================================ Transfer Packs, receiving (#77 B3, ui/transfer/import) -->
+
+    <!-- P77-35: a change refused because the asset was transferred out from this phone (shown across the app). -->
+    <string name="transfer_import_asset_transferred_out">This asset was transferred out.</string>
+    <!-- P77-38: the Backup screen's button and the import screen's title. -->
+    <string name="transfer_import_title">Import Transfer Pack</string>
+    <!-- P77-39: the sender's note. %1$s: the note, as the sender wrote it. -->
+    <string name="transfer_import_note">Note: %1$s</string>
+    <!-- P77-40: when the pack was made. %1$s: the date. -->
+    <string name="transfer_import_created">Created %1$s</string>
+    <!-- P77-41: the label over the count lines (P77-6…11). -->
+    <string name="transfer_import_contains">Contains</string>
+    <!-- P77-42: the import button. -->
+    <string name="transfer_import_import">Import</string>
+    <!-- P77-43: the pack was imported here before. -->
+    <string name="transfer_import_already_here">This Transfer Pack is already on this phone.</string>
+    <!-- P77-44: refused, a conflict with records here. -->
+    <string name="transfer_import_conflicts">This Transfer Pack conflicts with records on this phone, so nothing was imported.</string>
+    <!-- P77-45: under P77-44, one per NFC tag already bound here. %1$s: the local asset's name. -->
+    <string name="transfer_import_tag_used_here">An NFC tag in this pack is already used for %1$s here.</string>
+    <!-- P77-46: a possible duplicate. %1$s: the incoming asset's name; %2$s: the local asset's name. -->
+    <string name="transfer_import_duplicate">%1$s may already be here as %2$s.</string>
+    <!-- P77-47: refused, not a Transfer Pack. -->
+    <string name="transfer_import_not_a_pack">This file is not a Transfer Pack.</string>
+    <!-- P77-48: refused, the pack was made by a newer version. -->
+    <string name="transfer_import_newer">This Transfer Pack needs a newer version of ServiceTag.</string>
+    <!-- P77-49: refused, the pack is damaged. -->
+    <string name="transfer_import_damaged">This Transfer Pack is damaged and cannot be imported.</string>
+    <!-- P77-50: the import finished. %1$s: the count lines (P77-6…11), joined as a list. -->
+    <string name="transfer_import_imported">Transfer Pack imported: %1$s</string>
+    <!-- P77-52: the import failed. -->
+    <string name="transfer_import_could_not_import">Could not import this Transfer Pack. Nothing was changed.</string>
+    <!-- P77-66 (R77-25): an asset this phone sent out, coming back. %1$s: the asset's name. -->
+    <string name="transfer_import_coming_back">Coming back: %1$s</string>
+    <!-- P77-67: refused, the pack does not bring back an asset sent out from here. %1$s: the asset's name. -->
+    <string name="transfer_import_not_brought_back">%1$s was transferred out from this phone, and this Transfer Pack does not bring it back.</string>
+
+    <!--
+      P77-6…11, the count lines of a pack's contents, in the ratified table's order; the review and P77-50 share them.
+      Each shows its count as %1$d. A zero line is hidden, except the assets'.
+    -->
+    <!-- P77-6: assets. -->
+    <plurals name="transfer_count_assets">
+        <item quantity="one">%1$d asset</item>
+        <item quantity="other">%1$d assets</item>
+    </plurals>
+    <!-- P77-7: NFC tags. -->
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="one">%1$d NFC tag</item>
+        <item quantity="other">%1$d NFC tags</item>
+    </plurals>
+    <!-- P77-8: records (history entries). -->
+    <plurals name="transfer_count_records">
+        <item quantity="one">%1$d record</item>
+        <item quantity="other">%1$d records</item>
+    </plurals>
+    <!-- P77-9: maintenance schedules. -->
+    <plurals name="transfer_count_schedules">
+        <item quantity="one">%1$d schedule</item>
+        <item quantity="other">%1$d schedules</item>
+    </plurals>
+    <!-- P77-10: documents and photos (attachments). -->
+    <plurals name="transfer_count_documents">
+        <item quantity="one">%1$d document or photo</item>
+        <item quantity="other">%1$d documents and photos</item>
+    </plurals>
+    <!-- P77-11: service cases. -->
+    <plurals name="transfer_count_service_cases">
+        <item quantity="one">%1$d service case</item>
+        <item quantity="other">%1$d service cases</item>
+    </plurals>
+
+    <!-- ================================================================ Backup and restore (ui/backup, backup/) -->
+
+    <!-- The Backup screen's top-bar title. -->
+    <string name="backup_title">Backup</string>
+    <!-- The Backup screen's top-bar back arrow, read by TalkBack. -->
+    <string name="backup_back">Back</string>
+    <!-- Label of the last-backup line. -->
+    <string name="backup_last_backup">Last backup</string>
+    <!-- The last-backup line's value when there has never been one. -->
+    <string name="backup_never">Never</string>
+    <!-- The quiet line under the last backup. -->
+    <string name="backup_set_explained">A backup set is two files in the folder you pick: the data, and the attachment files beside it. It is the only copy off this phone.</string>
+    <!-- The export button. -->
+    <string name="backup_export_set">Export backup set</string>
+    <!-- Snackbar: the picked export folder cannot be used. -->
+    <string name="backup_folder_not_writable">That folder cannot be written to</string>
+    <!-- The section header over the two restore buttons. -->
+    <string name="backup_restore_section">Restore</string>
+    <!-- The quiet line above the Restore data button. -->
+    <string name="backup_restore_data_explained">Restoring the data deletes everything on this phone first, then loads the file.</string>
+    <!-- The restore-data button. -->
+    <string name="backup_restore_data">Restore data</string>
+    <!-- The quiet line above the Restore files button. -->
+    <string name="backup_restore_files_explained">Then restore the files archive of the same set to put the attachment files back. It adds files and deletes nothing.</string>
+    <!-- The restore-files button. -->
+    <string name="backup_restore_files">Restore files</string>
+    <!-- The confirmation dialog's title before a restore replaces the records on this phone. -->
+    <string name="backup_replace_title">Replace everything?</string>
+    <!-- The confirmation dialog's body. -->
+    <string name="backup_replace_body">Every asset, tag and link on this phone is deleted and replaced with what is in the file. This cannot be undone.</string>
+    <!--
+      The confirmation field's label. %1$s: the word the owner must type, REPLACE — always that English word, never
+      translated (it is a password, R-9).
+    -->
+    <string name="backup_replace_type_word">Type %1$s to confirm</string>
+    <!-- The confirmation dialog's confirm button. -->
+    <string name="backup_replace_confirm">Replace</string>
+    <!-- The confirmation dialogs' dismiss button. -->
+    <string name="backup_cancel">Cancel</string>
+    <!-- The confirmation dialog's title when this phone holds no records yet (#40). -->
+    <string name="backup_restore_empty_title">Restore this backup?</string>
+    <!-- That dialog's body. -->
+    <string name="backup_restore_empty_body">This phone has no records yet, so there is nothing to replace.</string>
+    <!-- That dialog's confirm button. -->
+    <string name="backup_restore_confirm">Restore</string>
+
+    <!-- Export or restore refused because no attachment folder is chosen (Settings' own wording). -->
+    <string name="backup_no_attachment_folder">Choose an attachment folder in Settings first</string>
+    <!-- Snackbar after an export. %1$s: the two file names written, e.g. "ServiceTag-data-….zip + ServiceTag-artifacts-….zip". -->
+    <string name="backup_exported_as">Exported as %1$s</string>
+
+    <!--
+      An export that failed, without its closing sentence: shown on its own, or followed by backup_nothing_saved or
+      backup_left_behind. P77-58: records here still name a transferred asset's graph.
+    -->
+    <string name="backup_export_failed_entangled">Export failed: records on this phone still point to a transferred asset</string>
+    <!-- An export that failed writing the attachment-files archive (see backup_export_failed_entangled). -->
+    <string name="backup_export_failed_files_archive">Export failed: the files archive could not be written</string>
+    <!-- Any other export failure (see backup_export_failed_entangled). %1$s: the system's description of the error. -->
+    <string name="backup_export_failed">Export failed: %1$s</string>
+    <!-- An export that failed and left nothing behind. %1$s: one of the "Export failed: …" lines above. -->
+    <string name="backup_nothing_saved">%1$s. Nothing was saved.</string>
+    <!-- An export refused because attachment files are missing or changed. %1$s: what (backup_incomplete_*). -->
+    <string name="backup_not_saved">Backup not saved: %1$s</string>
+    <!--
+      A failed export whose files could not all be removed again. The quantity is the number of files left.
+      %1$s: why the export failed (one of the lines above, without its closing period); %2$s: the file names, joined
+      as a list.
+    -->
+    <plurals name="backup_left_behind">
+        <item quantity="one">%1$s. Could not remove %2$s — delete it yourself.</item>
+        <item quantity="other">%1$s. Could not remove %2$s — delete them yourself.</item>
+    </plurals>
+    <!-- Why a backup set is incomplete: attachment files missing. %1$d: how many. -->
+    <plurals name="backup_incomplete_missing">
+        <item quantity="one">%1$d attachment file is missing</item>
+        <item quantity="other">%1$d attachment files are missing</item>
+    </plurals>
+    <!-- Why a backup set is incomplete: attachment files changed. %1$d: how many. -->
+    <plurals name="backup_incomplete_changed">
+        <item quantity="one">%1$d attachment file has changed since it was added</item>
+        <item quantity="other">%1$d attachment files have changed since they were added</item>
+    </plurals>
+    <!-- Both reasons at once. %1$s: the missing line; %2$s: the changed line. -->
+    <string name="backup_incomplete_both">%1$s and %2$s</string>
+    <!-- Why a backup set is incomplete when no file is named: the archive fell short of the plan. -->
+    <string name="backup_incomplete_not_covered">the file archive did not cover every attachment</string>
+
+    <!--
+      Snackbar after restoring the data archive: the counts restored. %1$s, %2$s, %3$s: backup_restored_assets,
+      backup_restored_tags and backup_restored_links.
+    -->
+    <string name="backup_restored_data">Imported: %1$s, %2$s, %3$s</string>
+    <!-- The same, when the archive listed attachments. %4$s: backup_restored_attachments_listed. -->
+    <string name="backup_restored_data_attachments">Imported: %1$s, %2$s, %3$s · %4$s</string>
+    <!-- Part of backup_restored_data. %1$d: how many assets. (The shipped English keeps the plural noun for one.) -->
+    <plurals name="backup_restored_assets">
+        <item quantity="one">%1$d assets</item>
+        <item quantity="other">%1$d assets</item>
+    </plurals>
+    <!-- Part of backup_restored_data. %1$d: how many NFC tags. (English keeps the plural noun for one.) -->
+    <plurals name="backup_restored_tags">
+        <item quantity="one">%1$d tags</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
+    <!-- Part of backup_restored_data. %1$d: how many tag links. (English keeps the plural noun for one.) -->
+    <plurals name="backup_restored_links">
+        <item quantity="one">%1$d links</item>
+        <item quantity="other">%1$d links</item>
+    </plurals>
+    <!--
+      Part of backup_restored_data_attachments: what is still to do. %1$d: how many attachments the archive listed.
+      (English keeps the plural noun for one.)
+    -->
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="one">%1$d attachments listed; restore the files archive to get their contents</item>
+        <item quantity="other">%1$d attachments listed; restore the files archive to get their contents</item>
+    </plurals>
+
+    <!--
+      Snackbar after restoring the files archive: its parts joined by backup_report_separator. The quantity is the
+      files restored. %1$d: files restored; %2$d: files skipped. (English keeps the plural noun for one.)
+    -->
+    <plurals name="backup_restored_files">
+        <item quantity="one">Restored %1$d files, skipped %2$d</item>
+        <item quantity="other">Restored %1$d files, skipped %2$d</item>
+    </plurals>
+    <!-- Between the parts of the files-restore report. The quotes keep the trailing space. -->
+    <string name="backup_report_separator">"; "</string>
+    <!-- A part of the files-restore report. %1$d: files that were already here and right. -->
+    <plurals name="backup_files_already_present">
+        <item quantity="one">%1$d already present</item>
+        <item quantity="other">%1$d already present</item>
+    </plurals>
+    <!-- A part of the files-restore report. %1$d: files the archive listed but did not carry. (English keeps the plural.) -->
+    <plurals name="backup_files_missing_entries">
+        <item quantity="one">%1$d listed files were not in the archive</item>
+        <item quantity="other">%1$d listed files were not in the archive</item>
+    </plurals>
+    <!-- A part of the files-restore report. %1$d: files the archive carried but never listed. (English keeps the plural.) -->
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="one">%1$d files in the archive were not listed</item>
+        <item quantity="other">%1$d files in the archive were not listed</item>
+    </plurals>
+    <!-- The files archive belongs to another backup set. %1$s: the archive's set id (8 characters); %2$s: the expected one. -->
+    <string name="backup_set_mismatch">Those files belong to backup set %1$s, not %2$s</string>
+    <!-- A restore failed. %1$s: the system's description of the error. -->
+    <string name="backup_restore_failed">Restore failed: %1$s</string>
+    <!--
+      P77-68 (R77-13): the restore refused a backup that still holds one asset this phone transferred out.
+      %1$s: the asset's name, as it left.
+    -->
+    <string name="backup_restore_transferred_out_one">Restore failed: this backup still contains %1$s, which was transferred out from this phone. Nothing was replaced.</string>
+    <!--
+      P77-68, several assets. %1$d: how many. English shows this only for two or more (one asset is named instead,
+      backup_restore_transferred_out_one), so both English forms are the ratified plural sentence.
+    -->
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="one">Restore failed: this backup still contains %1$d assets that were transferred out from this phone. Nothing was replaced.</item>
+        <item quantity="other">Restore failed: this backup still contains %1$d assets that were transferred out from this phone. Nothing was replaced.</item>
+    </plurals>
+
+    <!-- The folder refused a new file; shown after "Export failed: ". %1$s: the file name. -->
+    <string name="backup_cannot_create">cannot create %1$s in the chosen folder</string>
+    <!-- A file could not be opened for writing; shown after "Export failed: ". %1$s: the file name. -->
+    <string name="backup_cannot_open_for_writing">cannot open %1$s for writing</string>
+    <!-- The picked file could not be opened; shown after "Restore failed: ". %1$s: the file's address. -->
+    <string name="backup_cannot_open_for_reading">cannot open %1$s for reading</string>
+</resources>

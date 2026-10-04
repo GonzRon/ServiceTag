@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.health
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.health.HealthSubjectShape
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventKind
@@ -28,7 +29,7 @@ import com.loosecannon.servicetag.core.usecase.SUBJECT_NAME_LENGTH
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.hasTimeRule
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.ui.asset.ratifiedParts
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.requiredMark
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,8 @@ sealed interface Baseline {
 
 /**
  * The two starting points of spec §6.3 (Q-1), named by S128's two ratified parts, in S128's order.
+ * Each name says this point's own three numbers through its placeholders, so the words and the
+ * numbers S130 fills in cannot drift apart.
  * **Not defaults and not safety claims:** a starting point fills the three fields only after the owner
  * confirms S129 with S130 (inv. 121), and an AGE subject is offered none.
  */
@@ -61,7 +64,16 @@ enum class StartingPoint(val nominalUntil: Int, val warningFrom: Int, val critic
     ;
 
     /** This point's S128 words. */
-    val label: String get() = ratifiedParts(STARTING_POINT_NAMES)[ordinal]
+    val label: String
+        get() = localized(
+            when (this) {
+                ENGINE_SERVICE -> R.string.health_starting_point_engine_service
+                WATER_CARE -> R.string.health_starting_point_water_care
+            },
+            nominalUntil,
+            warningFrom,
+            criticalFrom,
+        )
 }
 
 /**
@@ -127,8 +139,8 @@ data class HealthSubjectEditState(
     /** S123's three labels for an age subject, S124's for an overdue one; none until S117 is answered. */
     val thresholdLabels: List<String>
         get() = when (driver) {
-            HealthDriver.AGE -> ratifiedParts(AGE_THRESHOLD_LABELS)
-            HealthDriver.MAINTENANCE_OVERDUE -> ratifiedParts(OVERDUE_THRESHOLD_LABELS)
+            HealthDriver.AGE -> AGE_THRESHOLD_LABELS
+            HealthDriver.MAINTENANCE_OVERDUE -> OVERDUE_THRESHOLD_LABELS
             null -> emptyList()
         }
 

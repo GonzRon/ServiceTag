@@ -14,7 +14,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
@@ -46,7 +48,7 @@ fun TypedConfirmDialog(
                     value = typed,
                     onValueChange = { typed = it },
                     singleLine = true,
-                    label = { Text("Type $expected to confirm") },
+                    label = { Text(stringResource(R.string.ui_typed_confirm_label, expected)) },
                     shape = ControlShape,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -57,6 +59,6 @@ fun TypedConfirmDialog(
                 Text(confirmLabel, color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_cancel)) } },
     )
 }

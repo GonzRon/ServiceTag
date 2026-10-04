@@ -8,12 +8,13 @@ import com.loosecannon.servicetag.core.usecase.TransferImportOutcome
 import com.loosecannon.servicetag.core.usecase.TransferImportPreview
 import com.loosecannon.servicetag.core.usecase.TransferImportResult
 import com.loosecannon.servicetag.core.transfer.TransferPackManifest
+import com.loosecannon.servicetag.l10n.localizedDate
+import com.loosecannon.servicetag.l10n.localizedList
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import java.io.File
 import java.io.FileInputStream
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -124,7 +125,7 @@ class TransferImportViewModel(
                 phase = TransferImportPhase.PREVIEW,
                 note = preview.manifest.note.takeIf { note -> note.isNotBlank() }?.let(TransferImportStrings::note),
                 created = TransferImportStrings.created(
-                    DISPLAY_DATE.format(Instant.ofEpochMilli(preview.manifest.createdAt).atZone(zone).toLocalDate()),
+                    localizedDate(Instant.ofEpochMilli(preview.manifest.createdAt).atZone(zone).toLocalDate()),
                 ),
                 contains = countsOf(preview.manifest),
                 comingBack = preview.returning.map { asset -> TransferImportStrings.comingBack(asset.name) },
@@ -161,7 +162,7 @@ class TransferImportViewModel(
                     _state.update {
                         it.copy(
                             phase = TransferImportPhase.DONE,
-                            done = TransferImportStrings.imported(countsOf(result.manifest).joinToString(", ")),
+                            done = TransferImportStrings.imported(localizedList(countsOf(result.manifest))),
                         )
                     }
                 }
@@ -243,6 +244,5 @@ class TransferImportViewModel(
 
     private companion object {
         const val TAG = "TransferImport"
-        val DISPLAY_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
     }
 }

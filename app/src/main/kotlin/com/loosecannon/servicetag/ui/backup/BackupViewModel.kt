@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.backup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.backup.BackupSetNames
 import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.ArtifactsSetMismatch
@@ -23,6 +24,9 @@ import com.loosecannon.servicetag.core.usecase.ImportReport
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedList
+import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.prefs.AppPrefs
 import java.io.OutputStream
 import kotlinx.coroutines.CancellationException
@@ -56,9 +60,12 @@ interface BackupSetSink {
 /**
  * The export refused before it wrote anything, because rows name bytes and no folder is chosen.
  * Its message is the one Settings' own wording, so the owner is told what to do rather than how
- * many files the archive could not find.
+ * many files the archive could not find. #102: the message is that sentence in the current
+ * language, read whenever it is asked for, because it is shown to the owner as it is.
  */
-class NoAttachmentFolder : Exception("Choose an attachment folder in Settings first")
+class NoAttachmentFolder : Exception() {
+    override val message: String get() = localized(R.string.backup_no_attachment_folder)
+}
 
 /**
  * A failed export the sink would not fully take back. [leftBehind] names the documents still in
@@ -177,7 +184,7 @@ class BackupViewModel(
                 // ruling keeps its own wording, and a cancellation is not a failure at all.
                 val failure = when (t) {
                     is BackupSetIncomplete, is CancellationException, is ArtifactsWriteFailed -> t
-                    else -> ArtifactsWriteFailed("the files archive could not be written", t)
+                    else -> ArtifactsWriteFailed("the files archive could not be written", t) // l10n-ok: exception message
                 }
                 // ...unless "the first half is gone again" is not true. A cancellation still
                 // travels as itself: nothing is reported for an operation nobody is waiting on.
@@ -228,7 +235,7 @@ class BackupViewModel(
 
     /** What the screen calls once the owner has picked a folder. */
     fun exportSetTo(sink: BackupSetSink) = once {
-        exportSet(sink).fold({ "Exported as $it" }, ::exportReason)
+        exportSet(sink).fold({ localized(R.string.backup_exported_as, it) }, ::exportReason)
     }
 
     fun restoreDataFrom(io: BackupIO) = once {
@@ -268,14 +275,17 @@ class BackupViewModel(
      * restore leaves every attachment row saying it is not on this device; that is a first-class
      * outcome rather than an error, so it is said plainly instead of being hidden.
      */
-    private fun restoredLine(report: ImportReport): String =
-        "Imported: ${report.assets} assets, ${report.tags} tags, ${report.links} links" +
-            if (report.attachments > 0) {
-                " · ${report.attachments} attachments listed; " +
-                    "restore the files archive to get their contents"
-            } else {
-                ""
-            }
+    private fun restoredLine(report: ImportReport): String {
+        val assets = localizedPlural(R.plurals.backup_restored_assets, report.assets, report.assets)
+        val tags = localizedPlural(R.plurals.backup_restored_tags, report.tags, report.tags)
+        val links = localizedPlural(R.plurals.backup_restored_links, report.links, report.links)
+        return if (report.attachments > 0) {
+            val listed = localizedPlural(R.plurals.backup_restored_attachments_listed, report.attachments, report.attachments)
+            localized(R.string.backup_restored_data_attachments, assets, tags, links, listed)
+        } else {
+            localized(R.string.backup_restored_data, assets, tags, links)
+        }
+    }
 
     /**
      * Restored and skipped, then the rows whose bytes were already here and right — a second
@@ -284,42 +294,50 @@ class BackupViewModel(
      * (those rows are still without bytes), and bytes the manifest never named. Reporting only the
      * first two numbers would call a damaged archive a clean restore.
      */
-    private fun restoredFilesLine(report: ArtifactsReport): String = buildString {
-        append("Restored ${report.restored} files, skipped ${report.skipped}")
-        if (report.alreadyPresent > 0) {
-            append("; ${report.alreadyPresent} already present")
-        }
-        if (report.missingEntries.isNotEmpty()) {
-            append("; ${report.missingEntries.size} listed files were not in the archive")
-        }
-        if (report.unexpectedEntries.isNotEmpty()) {
-            append("; ${report.unexpectedEntries.size} files in the archive were not listed")
-        }
-    }
+    private fun restoredFilesLine(report: ArtifactsReport): String = listOfNotNull(
+        localizedPlural(R.plurals.backup_restored_files, report.restored, report.restored, report.skipped),
+        report.alreadyPresent.takeIf { it > 0 }?.let { n ->
+            localizedPlural(R.plurals.backup_files_already_present, n, n)
+        },
+        report.missingEntries.size.takeIf { it > 0 }?.let { n ->
+            localizedPlural(R.plurals.backup_files_missing_entries, n, n)
+        },
+        report.unexpectedEntries.size.takeIf { it > 0 }?.let { n ->
+            localizedPlural(R.plurals.backup_files_unexpected_entries, n, n)
+        },
+    ).joinToString(localized(R.string.backup_report_separator))
 
     private fun exportReason(error: Throwable): String = when (error) {
         // The one case where "Nothing was saved" would be a lie: say what is still there, and
         // say it by the name the owner will see in their file manager.
-        is ExportLeftFilesBehind -> {
-            val base = exportReason(error.cause).removeSuffix(" Nothing was saved.").trimEnd('.')
-            val pronoun = if (error.leftBehind.size == 1) "it" else "them"
-            "$base. Could not remove ${error.leftBehind.joinToString(", ")} — delete $pronoun yourself."
-        }
-        is NoAttachmentFolder -> reason(error)
+        is ExportLeftFilesBehind -> localizedPlural(
+            R.plurals.backup_left_behind,
+            error.leftBehind.size,
+            exportFailure(error.cause).trimEnd('.'),
+            localizedList(error.leftBehind),
+        )
+        // These two say what to do, or what is missing, and nothing more.
+        is NoAttachmentFolder, is BackupSetIncomplete -> exportFailure(error)
+        else -> localized(R.string.backup_nothing_saved, exportFailure(error))
+    }
+
+    /**
+     * Why an export failed, without the closing "Nothing was saved." — which [exportReason] adds, or replaces with
+     * the files left behind.
+     */
+    private fun exportFailure(error: Throwable): String = when (error) {
+        is NoAttachmentFolder -> error.message
         // #77 (P77-58): a record here still names a transferred asset's graph; refused before any byte.
-        is TransferredGraphEntangled ->
-            "Export failed: records on this phone still point to a transferred asset. Nothing was saved."
-        is BackupSetIncomplete -> "Backup not saved: " + error.wording()
-        is ArtifactsWriteFailed ->
-            "Export failed: the files archive could not be written. Nothing was saved."
-        else -> "Export failed: ${reason(error)}. Nothing was saved."
+        is TransferredGraphEntangled -> localized(R.string.backup_export_failed_entangled)
+        is BackupSetIncomplete -> localized(R.string.backup_not_saved, error.wording())
+        is ArtifactsWriteFailed -> localized(R.string.backup_export_failed_files_archive)
+        else -> localized(R.string.backup_export_failed, reason(error))
     }
 
     private fun filesReason(error: Throwable): String = when (error) {
         is ArtifactsSetMismatch ->
-            "Those files belong to backup set ${error.found.take(SHORT_ID)}, " +
-                "not ${error.expected.take(SHORT_ID)}"
-        is StoreIoException -> "Choose an attachment folder in Settings first"
+            localized(R.string.backup_set_mismatch, error.found.take(SHORT_ID), error.expected.take(SHORT_ID))
+        is StoreIoException -> localized(R.string.backup_no_attachment_folder)
         else -> restoreReason(error)
     }
 
@@ -330,18 +348,18 @@ class BackupViewModel(
     private suspend fun transferredOutLine(error: TransferredOutInArchive): String {
         val ids = error.assetIds.distinct()
         if (ids.size != 1) {
-            return "Restore failed: this backup still contains ${ids.size} assets that were transferred out from this phone. Nothing was replaced."
+            return localizedPlural(R.plurals.backup_restore_transferred_out_many, ids.size, ids.size)
         }
         val name = transfers.forAsset(ids.single())
             .filter { it.kind == TransferKind.OUT }
             .maxWithOrNull(compareBy({ it.at }, { it.id }))
             ?.nameSnapshot
             ?: ids.single().value
-        return "Restore failed: this backup still contains $name, which was transferred out from this phone. Nothing was replaced."
+        return localized(R.string.backup_restore_transferred_out_one, name)
     }
 
     /** The export side's lead-in, on the restore side: a bare exception message is not news. */
-    private fun restoreReason(error: Throwable): String = "Restore failed: ${reason(error)}"
+    private fun restoreReason(error: Throwable): String = localized(R.string.backup_restore_failed, reason(error))
 
     private fun reason(error: Throwable): String = error.message ?: error.javaClass.simpleName
 
@@ -361,15 +379,19 @@ private suspend fun BackupSetSink.deleted(handle: String): Boolean =
  * The fallback is for the count-and-total half of `covers`: a write can fall short of the plan
  * with both lists empty, and "Backup not saved: " with nothing after it is not a sentence.
  */
-internal fun BackupSetIncomplete.wording(): String = listOfNotNull(
-    missing.size.takeIf { it > 0 }?.let { n ->
-        "$n attachment ${if (n == 1) "file is" else "files are"} missing"
-    },
-    mismatched.size.takeIf { it > 0 }?.let { n ->
-        "$n attachment ${if (n == 1) "file has" else "files have"} changed since " +
-            if (n == 1) "it was added" else "they were added"
-    },
-).joinToString(" and ").ifEmpty { "the file archive did not cover every attachment" }
+internal fun BackupSetIncomplete.wording(): String {
+    val missingLine = missing.size.takeIf { it > 0 }?.let { n ->
+        localizedPlural(R.plurals.backup_incomplete_missing, n, n)
+    }
+    val changedLine = mismatched.size.takeIf { it > 0 }?.let { n ->
+        localizedPlural(R.plurals.backup_incomplete_changed, n, n)
+    }
+    return if (missingLine != null && changedLine != null) {
+        localized(R.string.backup_incomplete_both, missingLine, changedLine)
+    } else {
+        missingLine ?: changedLine ?: localized(R.string.backup_incomplete_not_covered)
+    }
+}
 
 /**
  * `runCatching` catches everything, including the cancellation a cleared ViewModel throws at its

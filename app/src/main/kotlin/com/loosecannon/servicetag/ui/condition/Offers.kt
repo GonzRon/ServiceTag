@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
@@ -26,6 +27,7 @@ import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.impairmentOfferFor
 import com.loosecannon.servicetag.core.usecase.operationalOfferFor
 import com.loosecannon.servicetag.core.usecase.seasonOfferFor
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
 import java.time.DateTimeException
@@ -35,40 +37,40 @@ import java.time.format.DateTimeParseException
 
 /** S19, "You logged <event title>. Is <asset> working normally again?": the operational offer's body. */
 fun operationalOfferBody(eventTitle: String, assetName: String): String =
-    "You logged $eventTitle. Is $assetName working normally again?"
+    localized(R.string.condition_operational_offer_body, eventTitle, assetName)
 
 /** S20: the operational offer's dismiss. It writes nothing. */
-const val NOT_YET = "Not yet"
+val NOT_YET: String get() = localized(R.string.condition_not_yet)
 
 /** S40: accepting the start offer, and asset detail's action (B14). */
-const val START_SEASON = "Start season"
+val START_SEASON: String get() = localized(R.string.condition_start_season)
 
 /** S41: accepting the end offer, and asset detail's action (B14). */
-const val END_SEASON = "End season"
+val END_SEASON: String get() = localized(R.string.condition_end_season)
 
 /** S51. */
-const val START_THE_SEASON_NOW = "Start the season now?"
+val START_THE_SEASON_NOW: String get() = localized(R.string.condition_start_season_question)
 
 /** S52. */
-const val END_THE_SEASON_NOW = "End the season now?"
+val END_THE_SEASON_NOW: String get() = localized(R.string.condition_end_season_question)
 
 /**
  * S53, "You logged <event title>.": the season offer's body — and, re-ratified for #82 (S53 (re)),
  * the impairment offer's body too. One home for both.
  */
-fun seasonOfferBody(eventTitle: String): String = "You logged $eventTitle."
+fun seasonOfferBody(eventTitle: String): String = localized(R.string.condition_you_logged, eventTitle)
 
 /** #82's P82-6: the impairment offer's question, after a new Incident (Workflow B). */
-const val DID_THIS_AFFECT_USE = "Did this affect whether the asset can be used?"
+val DID_THIS_AFFECT_USE: String get() = localized(R.string.condition_did_this_affect_use)
 
 /** P82-7: its first answer; lower case like S7, not the badge word. */
-const val MARK_DOWN = "Mark down"
+val MARK_DOWN: String get() = localized(R.string.condition_mark_down)
 
 /** P82-8: its second answer. */
-const val MARK_DEGRADED = "Mark degraded"
+val MARK_DEGRADED: String get() = localized(R.string.condition_mark_degraded)
 
 /** P82-9: its third answer, and what dismissing it means. It writes nothing. */
-const val NO_CHANGE = "No change"
+val NO_CHANGE: String get() = localized(R.string.condition_no_change)
 
 /**
  * An offer made after an event (spec §3.3, §5.4): a question, never an action. Nothing is written
@@ -334,7 +336,7 @@ class EventOffers(
             is ImpairmentOfferPrompt -> {
                 val chosen = offer.chosen
                 require(chosen == OperationalCondition.DOWN || chosen == OperationalCondition.DEGRADED) {
-                    "the impairment offer is accepted only with DOWN or DEGRADED, not $chosen"
+                    "the impairment offer is accepted only with DOWN or DEGRADED, not $chosen" // l10n-ok: exception message
                 }
                 impairment.accept(offer, chosen)
             }

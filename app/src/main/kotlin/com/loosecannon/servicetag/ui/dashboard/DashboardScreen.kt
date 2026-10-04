@@ -127,7 +127,7 @@ fun DashboardScreen(
                         )
                     }
                     IconButton(onClick = onSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
+                        Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.dashboard_settings))
                     }
                 },
             )
@@ -159,7 +159,7 @@ fun DashboardScreen(
                 // new string, and the Dashboard has nowhere left to send that "Search".
                 if (state.hiddenComponents > 0) {
                     QuietLine(
-                        text = "Child assets are listed on the asset they belong to.",
+                        text = stringResource(R.string.dashboard_child_assets_listed_on_parent),
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
@@ -172,7 +172,7 @@ fun DashboardScreen(
                 } else if (state.filters.isActive) {
                     // Only ever an answer to something asked for (F1). An empty list under an active
                     // filter is reachable, and there is nothing else on screen to explain it away.
-                    QuietLine(text = "Nothing matches that.", modifier = Modifier.padding(16.dp))
+                    QuietLine(text = stringResource(R.string.dashboard_nothing_matches), modifier = Modifier.padding(16.dp))
                 }
             }
         }
@@ -452,18 +452,18 @@ private fun BackupNudge(onExport: () -> Unit, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "BACKUP",
+                text = stringResource(R.string.dashboard_backup_eyebrow),
                 style = Eyebrow,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(text = "No backup yet", style = MaterialTheme.typography.titleMedium)
-            QuietLine("Tags survive a phone change only if you have one.")
+            Text(text = stringResource(R.string.dashboard_no_backup_yet), style = MaterialTheme.typography.titleMedium)
+            QuietLine(stringResource(R.string.dashboard_backup_why))
             Button(
                 onClick = onExport,
                 shape = ControlShape,
                 modifier = Modifier.padding(top = 4.dp),
             ) {
-                Text("Export now")
+                Text(stringResource(R.string.dashboard_export_now))
             }
         }
     }
@@ -476,10 +476,10 @@ private fun FirstRun(onNewAsset: () -> Unit, onScan: () -> Unit) {
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        QuietLine("Nothing here yet")
+        QuietLine(stringResource(R.string.dashboard_nothing_here_yet))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onNewAsset, shape = ControlShape) { Text("Add your first asset") }
-            OutlinedButton(onClick = onScan, shape = ControlShape) { Text("Scan a tag") }
+            Button(onClick = onNewAsset, shape = ControlShape) { Text(stringResource(R.string.dashboard_add_first_asset)) }
+            OutlinedButton(onClick = onScan, shape = ControlShape) { Text(stringResource(R.string.dashboard_scan_a_tag)) }
         }
     }
 }
@@ -524,7 +524,7 @@ private fun CurrentRow(row: DashboardRow, onClick: () -> Unit) {
             if (row.parentName != null) {
                 QuietLine(partOfLine(row.parentName))
             } else if (!row.hasSchedule) {
-                QuietLine("No schedule yet")
+                QuietLine(stringResource(R.string.dashboard_no_schedule_yet))
             }
         }
         Icon(

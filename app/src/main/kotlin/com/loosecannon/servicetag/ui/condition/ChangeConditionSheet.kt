@@ -27,51 +27,54 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /** S5: the Change condition sheet's title, and asset detail's section (B14). */
-const val CONDITION_TITLE = "Condition"
+val CONDITION_TITLE: String get() = localized(R.string.condition_title)
 
 /** S6: the action that opens this sheet — on the scan sheet, and on asset detail (B14). */
-const val CHANGE_CONDITION = "Change condition"
+val CHANGE_CONDITION: String get() = localized(R.string.condition_change)
 
 /** S14. */
-const val WHAT_IS_WRONG = "What is wrong? (optional)"
+val WHAT_IS_WRONG: String get() = localized(R.string.condition_what_is_wrong)
 
 /** S15. */
-const val WHEN_DID_THIS_CHANGE = "When did this change?"
+val WHEN_DID_THIS_CHANGE: String get() = localized(R.string.condition_when_did_this_change)
 
 /** S16. */
-const val SAVE_CONDITION = "Save condition"
+val SAVE_CONDITION: String get() = localized(R.string.condition_save)
 
 /**
  * #82's P82-1: the question S16 asks, over this sheet, when DOWN or DEGRADED is saved for an asset in
  * service. Nothing is written until it is answered (R82-2).
  */
-const val LOG_INCIDENT_DETAILS_QUESTION = "Log incident details?"
+val LOG_INCIDENT_DETAILS_QUESTION: String get() = localized(R.string.condition_log_incident_details_question)
 
 /** P82-2, "<asset> is <DOWN/DEGRADED>. Record what went wrong in the service record?": its body. */
 fun logIncidentDetailsBody(assetName: String, condition: OperationalCondition): String =
-    "$assetName is ${conditionWord(condition)}. Record what went wrong in the service record?"
+    localized(R.string.condition_log_incident_details_body, assetName, conditionWord(condition))
 
 /** P82-3: its accept. It opens the Incident entry and writes nothing here. */
-const val LOG_INCIDENT_DETAILS = "Log incident details"
+val LOG_INCIDENT_DETAILS: String get() = localized(R.string.condition_log_incident_details)
 
 /** P82-4: its decline, which writes the held condition alone (R82-14; not "Done"). */
-const val SAVE_CONDITION_ONLY = "Save condition only"
+val SAVE_CONDITION_ONLY: String get() = localized(R.string.condition_save_only)
 
 /** P82-5, "Saving also records <asset> as <DOWN/DEGRADED>.": the combined entry's line under its eyebrow. */
 fun savingAlsoRecordsLine(assetName: String, condition: OperationalCondition): String =
-    "Saving also records $assetName as ${conditionWord(condition)}."
+    localized(R.string.condition_saving_also_records, assetName, conditionWord(condition))
 
 /**
  * **Change condition** (spec §5.4, §10.1), titled S5: the three options S8, S10 and S12, each with
@@ -198,7 +201,7 @@ private fun ChangeConditionForm(
         )
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onCancel, enabled = !state.saving) { Text("Cancel") }
+            TextButton(onClick = onCancel, enabled = !state.saving) { Text(stringResource(R.string.ui_action_cancel)) }
             Button(onClick = onSave, enabled = state.canSave, shape = ControlShape) { Text(SAVE_CONDITION) }
         }
         Spacer(Modifier.height(4.dp))
