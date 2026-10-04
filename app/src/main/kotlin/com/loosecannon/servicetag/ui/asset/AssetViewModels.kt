@@ -124,6 +124,7 @@ import com.loosecannon.servicetag.core.usecase.WarrantyReminderProblem
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
 import com.loosecannon.servicetag.core.usecase.liveContinuousCount
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.datePlaceholder
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedDecimalSeparator
 import com.loosecannon.servicetag.l10n.localizedList
@@ -1339,7 +1340,7 @@ class AssetDetailViewModel(
                     sweepOnce()
                     _prompt.update { DetailPrompt.LogWhatHappened }
                 }
-                is AssetValidation -> refuse(ENTER_A_DATE_AS_YYYY_MM_DD)
+                is AssetValidation -> refuse(ENTER_A_VALID_DATE)
                 is AssetTransferredOut -> refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
                 else -> refuse(localized(R.string.asset_model_could_not_retire))
             }
@@ -2916,7 +2917,7 @@ private fun markFor(problem: AssetProblem): Pair<String, String>? = when (proble
     AssetProblem.CurrencyRequired -> AssetField.CURRENCY to CURRENCY_REQUIRED
     AssetProblem.NegativePrice -> AssetField.PRICE to localized(R.string.asset_model_price_negative)
     AssetProblem.UnknownParent -> AssetField.PARENT to localized(R.string.asset_model_parent_gone)
-    is AssetProblem.BadDate -> problem.field to ENTER_A_DATE_AS_YYYY_MM_DD
+    is AssetProblem.BadDate -> problem.field to ENTER_A_VALID_DATE
     is AssetProblem.Season -> when (val season = problem.p) {
         SeasonWindow.Problem.BothOrNeither -> null
         is SeasonWindow.Problem.BadDate ->
@@ -2976,8 +2977,11 @@ internal fun breakStrands(titles: List<String>): String =
 /** #86 (plan §6, reused 16): the name refusal, hoisted byte-identical so Replace asset draws it from here. */
 val GIVE_THE_ASSET_A_NAME: String get() = localized(R.string.asset_model_name_required)
 
-/** #86 (plan §6, reused 17): every bad or blank required date, hoisted byte-identical. */
-val ENTER_A_DATE_AS_YYYY_MM_DD: String get() = localized(R.string.asset_model_bad_date)
+/**
+ * #86 (plan §6, reused 17): every bad or blank required date. Its example is the date field's own format in the
+ * phone's order ([datePlaceholder], #102), never the ISO the form stores.
+ */
+val ENTER_A_VALID_DATE: String get() = localized(R.string.asset_model_bad_date, datePlaceholder())
 
 /** Also the case editor's currency refusal (#79, C21): reused through this home. */
 internal val BAD_CURRENCY: String get() = localized(R.string.asset_model_bad_currency)

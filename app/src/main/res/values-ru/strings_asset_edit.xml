@@ -78,8 +78,6 @@
     <string name="asset_edit_save_asset">Сохранить объект</string>
     <string name="asset_edit_notifications_ok">ОК</string>
 
-    <string name="asset_edit_date_placeholder">ГГГГ-ММ-ДД</string>
-    <string name="asset_edit_month_day_placeholder">ММ-ДД</string>
     <string name="asset_edit_pick_date">Выбрать: %1$s</string>
     <string name="asset_edit_calendar_ok">ОК</string>
     <string name="asset_edit_calendar_cancel">Отмена</string>
@@ -107,7 +105,7 @@
 
     <string name="asset_model_not_a_real_month_day">Такого месяца и дня нет</string>
     <string name="asset_model_name_required">Дайте объекту название</string>
-    <string name="asset_model_bad_date">Введите дату в формате ГГГГ-ММ-ДД</string>
+    <string name="asset_model_bad_date">Введите дату в формате %1$s</string>
     <string name="asset_model_bad_currency">Валюта — это трёхбуквенный код, например USD</string>
     <string name="asset_model_currency_required">Для цены нужна валюта</string>
     <string name="asset_model_price_negative">Цена не может быть отрицательной</string>

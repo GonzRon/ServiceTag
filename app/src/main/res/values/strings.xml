@@ -28,4 +28,8 @@
     <string name="format_language">en</string>
     <!-- localizedList: between names in a run ("A, B, C"). The quotes keep the trailing space. -->
     <string name="format_list_separator">", "</string>
+    <!-- #102: the letters a date field's placeholder and its "Enter a date as" example are drawn with, in the order
+         day, month, year: exactly three characters ("DMY" draws "MM/DD/YYYY" on a US phone, "DD/MM/YYYY" on a British
+         one). The order and separators come from the phone's region, not from here. -->
+    <string name="format_date_input_letters">DMY</string>
 </resources>

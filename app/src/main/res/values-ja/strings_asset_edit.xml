@@ -75,8 +75,6 @@
     <string name="asset_edit_save_asset">機器を保存</string>
     <string name="asset_edit_notifications_ok">OK</string>
 
-    <string name="asset_edit_date_placeholder">YYYY-MM-DD</string>
-    <string name="asset_edit_month_day_placeholder">MM-DD</string>
     <string name="asset_edit_pick_date">%1$sを選択</string>
     <string name="asset_edit_calendar_ok">OK</string>
     <string name="asset_edit_calendar_cancel">キャンセル</string>
@@ -104,7 +102,7 @@
 
     <string name="asset_model_not_a_real_month_day">存在しない月日です</string>
     <string name="asset_model_name_required">機器に名前を付けてください</string>
-    <string name="asset_model_bad_date">日付はYYYY-MM-DDの形式で入力してください</string>
+    <string name="asset_model_bad_date">日付は%1$sの形式で入力してください</string>
     <string name="asset_model_bad_currency">通貨はUSDのような3文字のコードで入力してください</string>
     <string name="asset_model_currency_required">価格には通貨が必要です</string>
     <string name="asset_model_price_negative">価格をマイナスにすることはできません</string>

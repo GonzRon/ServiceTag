@@ -76,8 +76,6 @@
     <string name="asset_edit_save_asset">Salva attrezzatura</string>
     <string name="asset_edit_notifications_ok">OK</string>
 
-    <string name="asset_edit_date_placeholder">AAAA-MM-GG</string>
-    <string name="asset_edit_month_day_placeholder">MM-GG</string>
     <string name="asset_edit_pick_date">Scegli %1$s</string>
     <string name="asset_edit_calendar_ok">OK</string>
     <string name="asset_edit_calendar_cancel">Annulla</string>
@@ -105,7 +103,7 @@
 
     <string name="asset_model_not_a_real_month_day">Mese e giorno non validi</string>
     <string name="asset_model_name_required">Dai un nome all\'attrezzatura</string>
-    <string name="asset_model_bad_date">Inserisci una data nel formato AAAA-MM-GG</string>
+    <string name="asset_model_bad_date">Inserisci una data nel formato %1$s</string>
     <string name="asset_model_bad_currency">La valuta è un codice di tre lettere, ad esempio USD</string>
     <string name="asset_model_currency_required">Un prezzo richiede una valuta</string>
     <string name="asset_model_price_negative">Il prezzo non può essere negativo</string>

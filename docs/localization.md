@@ -21,7 +21,7 @@ each `values-<language>/` directory is a language pack carrying the same names. 
 
 | | |
 |---|---|
-| `values/strings.xml` | the app name and the language-dependent formats: the display date (`format_date_display`, English `d MMM uuuu`), the day-and-month date, the date and time (`format_date_time_display`, English `d MMM uuuu, HH:mm`), the list separator |
+| `values/strings.xml` | the app name and the language-dependent formats: the display date (`format_date_display`, English `d MMM uuuu`), the day-and-month date, the date and time (`format_date_time_display`, English `d MMM uuuu, HH:mm`), the letters a date field's placeholder is drawn with (`format_date_input_letters`, English `DMY`), the list separator |
 | `values/strings_<area>.xml` | one file per feature area; every name in a file starts with that area's prefix (`ha_`, `maintenance_`, `scan_`, …) |
 | `values/plurals.xml` | the health ages and overdue counts |
 | `values-<language>/` | the same files, translated |
@@ -39,6 +39,7 @@ id (`P16-12`) where the copy was ratified. They are a translator's only context:
 | a count | `localizedPlural(R.plurals.x, count, args…)` |
 | a date the owner reads | `localizedDate(date)` / `localizedMonthDay(date)` — never `ofPattern("d MMM uuuu")` |
 | a moment the owner reads (the last backup, the last check) | `localizedDateTime(dateTime)` — never an ISO stamp or a fixed `yyyy-MM-dd HH:mm` |
+| a date the owner types or edits | `DateField` (or `localizedDateText` / `localizedMonthDayText` for a field of its own): the form keeps ISO or `MM-DD`, the field draws and reads the phone's own order ("03/01/2026" in the US, "01.03.2026" in German) — never an ISO value bound to a text field |
 | a number the owner reads | `localizedDecimal(value)` (or `decimals = n`) — never `Locale.US` or a bare `toString()` |
 | a number the owner types | `parseLocalizedDecimal(text)` — never `toDoubleOrNull()`, which refuses "0,5"; hand `:core` the parsed number, not the typed text |
 | names joined into one run | `localizedList(names)` |
@@ -69,8 +70,8 @@ its English spelling (#74). Localizing them needs language-neutral keys for the 
 
 1. Create `values-<language>/` (or `values-b+<script tag>/`, as Simplified Chinese does) with every
    `strings*.xml` and `plurals.xml` translated, every plural form the language needs, and its own
-   `format_date_display`, `format_date_month_day`, `format_date_time_display`, `format_list_separator` and
-   `format_language` (its ISO 639
+   `format_date_display`, `format_date_month_day`, `format_date_time_display`, `format_date_input_letters`,
+   `format_list_separator` and `format_language` (its ISO 639
    code, which picks plural rules). Check `values/bools.xml` and override any rule its grammar needs.
 2. Add its tag to `xml/locales_config.xml`.
 3. Add its plural rule to `PluralRules` in the unit tests and a column to the glossary.
@@ -135,6 +136,7 @@ English string without every pack, compares rendered words or draws a date or nu
 |---|---|
 | `LocalizationCoverageTest` | every pack has every English name and no other; placeholders match; each language's plural forms exist and show their number; every string formats in its language; date patterns are valid; product names and URL schemes survive; `locales_config.xml` lists exactly the shipped packs |
 | `UiLiteralGuardTest` | no user-visible English literal is left in Kotlin outside `api/` and `data/`; the API and Room never read UI text; no behaviour compares rendered text (a typed value decides, the words only draw it); no date pattern, fixed locale or `toDoubleOrNull()` outside `l10n/` without an `// l10n-ok:` reason |
+| `DateInputTest` | date and season fields draw and read the phone's order (English month first, German day first, Japanese year first) while the form keeps ISO and `MM-DD`; what is not a date reaches the form as typed |
 | `LocalizedFormatsTest` | dates, moments and decimals follow the language (English and German side by side); typed decimals read back what was drawn, and "45.000" is refused in a comma language rather than read as 45 |
 | `LayoutDirectionGuardTest` | no layout assumes left-to-right |
 | `EnglishResources` / `ResourcePack` | not tests: the unit tests read `res/values` (or any pack) the way Android does, so a view-model test asserts the same ratified English it did before the words moved |

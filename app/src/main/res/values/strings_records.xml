@@ -127,8 +127,8 @@
     <string name="service_field_time">Time</string>
     <!-- The update sheet's time placeholder: the 24-hour form the field takes. -->
     <string name="service_time_placeholder">HH:MM</string>
-    <!-- Under a date field whose text is not a date (the shipped date refusal). -->
-    <string name="service_enter_a_date">Enter a date as YYYY-MM-DD</string>
+    <!-- Under a date field whose text is not a date (the shipped date refusal). %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="service_enter_a_date">Enter a date as %1$s</string>
     <!-- Under the update sheet's time field whose text is not a time. -->
     <string name="service_enter_a_time">Enter a time as HH:MM</string>
 
@@ -212,8 +212,8 @@
     <string name="loan_no_contact_picker">No app can pick a contact</string>
     <!-- P72-46: a picked contact that could not be read. -->
     <string name="loan_could_not_read_contact">Could not read this contact.</string>
-    <!-- Under a date field whose text is not a date (the shipped date refusal). -->
-    <string name="loan_enter_a_date">Enter a date as YYYY-MM-DD</string>
+    <!-- Under a date field whose text is not a date (the shipped date refusal). %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="loan_enter_a_date">Enter a date as %1$s</string>
     <!-- The lend form's close (✕) button, for TalkBack. -->
     <string name="loan_close">Close</string>
     <!-- The return dialog's cancel button. -->
@@ -285,8 +285,6 @@
     <string name="journal_logged">Logged</string>
     <!-- The entry form's date field. -->
     <string name="journal_field_date">Date</string>
-    <!-- The entry form's date placeholder: the ISO form the field takes. -->
-    <string name="journal_date_placeholder">YYYY-MM-DD</string>
     <!-- The entry form's time field. -->
     <string name="journal_field_time">Time</string>
     <!-- The entry form's time placeholder: the 24-hour form the field takes. -->
@@ -303,8 +301,8 @@
     <string name="journal_add_material">Add material</string>
     <!-- Snackbar: the entry being edited was deleted meanwhile. -->
     <string name="journal_entry_gone">This entry is no longer there.</string>
-    <!-- Snackbar: the entry's date is not a date. -->
-    <string name="journal_enter_a_date">Enter a date as YYYY-MM-DD</string>
+    <!-- Snackbar: the entry's date is not a date. %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="journal_enter_a_date">Enter a date as %1$s</string>
     <!-- Snackbar: the entry's time is not a time. -->
     <string name="journal_enter_a_time">Enter a time as HH:MM</string>
     <!-- Snackbar: an entry with no profile and a blank title. -->

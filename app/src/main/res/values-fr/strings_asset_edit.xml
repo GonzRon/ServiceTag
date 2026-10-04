@@ -76,8 +76,6 @@
     <string name="asset_edit_save_asset">Enregistrer l\'équipement</string>
     <string name="asset_edit_notifications_ok">OK</string>
 
-    <string name="asset_edit_date_placeholder">AAAA-MM-JJ</string>
-    <string name="asset_edit_month_day_placeholder">MM-JJ</string>
     <string name="asset_edit_pick_date">%1$s : ouvrir le calendrier</string>
     <string name="asset_edit_calendar_ok">OK</string>
     <string name="asset_edit_calendar_cancel">Annuler</string>
@@ -105,7 +103,7 @@
 
     <string name="asset_model_not_a_real_month_day">Ce mois et ce jour n\'existent pas</string>
     <string name="asset_model_name_required">Donnez un nom à l\'équipement</string>
-    <string name="asset_model_bad_date">Saisissez une date au format AAAA-MM-JJ</string>
+    <string name="asset_model_bad_date">Saisissez une date au format %1$s</string>
     <string name="asset_model_bad_currency">La devise est un code à trois lettres, comme USD</string>
     <string name="asset_model_currency_required">Un prix nécessite une devise</string>
     <string name="asset_model_price_negative">Le prix ne peut pas être négatif</string>

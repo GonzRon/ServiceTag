@@ -44,6 +44,7 @@ import com.loosecannon.servicetag.core.usecase.NoSuchEvent
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.datePlaceholder
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedDecimal
 import com.loosecannon.servicetag.l10n.localizedDecimalSeparator
@@ -263,7 +264,7 @@ class EventEntryViewModel(
 
     private val _state = MutableStateFlow(
         EventEntryState(
-            occurredOn = clock.nowMillis().at(zone).toLocalDate().format(DATE),
+            occurredOn = clock.nowMillis().at(zone).toLocalDate().toString(),
             occurredTime = clock.nowMillis().at(zone).toLocalTime().format(TIME),
             editing = eventId != null,
         ),
@@ -715,8 +716,7 @@ class EventEntryViewModel(
     private companion object {
         const val TAG = "EventEntry"
         val NO_EVENT = EventId("")
-        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd") // l10n-ok: the date field's ISO value, which the owner edits and core reads
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm") // l10n-ok: the time field's HH:mm value, which core reads
+        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm") // l10n-ok: the form's 24-hour HH:mm, the time field's shape in every language
     }
 }
 
@@ -742,7 +742,7 @@ private fun incidentDraft(reason: String): Pair<String?, String> {
 private fun List<FieldProblem>.firstProblemText(fields: List<FieldRow>): String {
     firstNotNullOfOrNull { problem ->
         when (problem) {
-            is FieldProblem.BadDate -> localized(R.string.journal_enter_a_date)
+            is FieldProblem.BadDate -> localized(R.string.journal_enter_a_date, datePlaceholder())
             is FieldProblem.BadTime -> localized(R.string.journal_enter_a_time)
             FieldProblem.TitleRequired -> localized(R.string.journal_title_required)
             is FieldProblem.BadConsumable -> localized(R.string.journal_check_material, problem.index + 1)

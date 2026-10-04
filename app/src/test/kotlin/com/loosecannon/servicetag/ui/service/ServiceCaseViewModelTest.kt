@@ -213,7 +213,7 @@ class ServiceCaseViewModelTest {
         model.onUpdateDate("2028-13-01")
         model.saveUpdate()
         model.sheet.first { it?.saving == false }
-        assertEquals(mapOf(UpdateField.DATE to "Enter a date as YYYY-MM-DD"), model.sheet.value!!.problems)
+        assertEquals(mapOf(UpdateField.DATE to "Enter a date as MM/DD/YYYY"), model.sheet.value!!.problems)
 
         model.onUpdateDate("2028-07-16")
         model.saveUpdate()

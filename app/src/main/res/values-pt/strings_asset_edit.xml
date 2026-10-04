@@ -76,8 +76,6 @@
     <string name="asset_edit_save_asset">Salvar equipamento</string>
     <string name="asset_edit_notifications_ok">OK</string>
 
-    <string name="asset_edit_date_placeholder">AAAA-MM-DD</string>
-    <string name="asset_edit_month_day_placeholder">MM-DD</string>
     <string name="asset_edit_pick_date">Escolher %1$s</string>
     <string name="asset_edit_calendar_ok">OK</string>
     <string name="asset_edit_calendar_cancel">Cancelar</string>
@@ -105,7 +103,7 @@
 
     <string name="asset_model_not_a_real_month_day">Mês e dia inválidos</string>
     <string name="asset_model_name_required">Dê um nome ao equipamento</string>
-    <string name="asset_model_bad_date">Digite a data no formato AAAA-MM-DD</string>
+    <string name="asset_model_bad_date">Digite a data no formato %1$s</string>
     <string name="asset_model_bad_currency">A moeda é um código de três letras, como USD</string>
     <string name="asset_model_currency_required">Um preço precisa de uma moeda</string>
     <string name="asset_model_price_negative">O preço não pode ser negativo</string>

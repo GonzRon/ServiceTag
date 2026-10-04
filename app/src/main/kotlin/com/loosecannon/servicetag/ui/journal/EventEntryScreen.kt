@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.datePlaceholder
 import com.loosecannon.servicetag.core.journal.Reading
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
@@ -56,6 +57,7 @@ import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.localizedDateText
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import com.loosecannon.servicetag.ui.condition.IncidentOfferDialog
@@ -272,7 +274,10 @@ private fun DerivedBlock(rows: List<Reading>, underInputs: Boolean) {
     }
 }
 
-/** When it happened, not when it was typed: the date is editable and backdating is expected (§4). */
+/**
+ * When it happened, not when it was typed: the date is editable and backdating is expected (§4).
+ * [occurredOn] is the form's ISO day; the field draws and reads the locale's own order (#102).
+ */
 @Composable
 private fun LoggedBlock(
     occurredOn: String,
@@ -280,14 +285,15 @@ private fun LoggedBlock(
     onDate: (String) -> Unit,
     onTime: (String?) -> Unit,
 ) {
+    val date = localizedDateText(occurredOn, onDate)
     Column {
         SectionHeader(title = stringResource(R.string.journal_logged))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(
-                value = occurredOn,
-                onValueChange = onDate,
+                value = date.text,
+                onValueChange = date.onTyped,
                 label = { Text(stringResource(R.string.journal_field_date)) },
-                placeholder = { Text(stringResource(R.string.journal_date_placeholder)) },
+                placeholder = { Text(datePlaceholder()) },
                 singleLine = true,
                 textStyle = MonoText,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

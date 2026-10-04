@@ -76,8 +76,6 @@
     <string name="asset_edit_save_asset">Gerät speichern</string>
     <string name="asset_edit_notifications_ok">OK</string>
 
-    <string name="asset_edit_date_placeholder">JJJJ-MM-TT</string>
-    <string name="asset_edit_month_day_placeholder">MM-TT</string>
     <string name="asset_edit_pick_date">%1$s wählen</string>
     <string name="asset_edit_calendar_ok">OK</string>
     <string name="asset_edit_calendar_cancel">Abbrechen</string>
@@ -105,7 +103,7 @@
 
     <string name="asset_model_not_a_real_month_day">Kein gültiger Monat und Tag</string>
     <string name="asset_model_name_required">Gib dem Gerät einen Namen</string>
-    <string name="asset_model_bad_date">Gib ein Datum als JJJJ-MM-TT ein</string>
+    <string name="asset_model_bad_date">Gib ein Datum als %1$s ein</string>
     <string name="asset_model_bad_currency">Die Währung ist ein Code aus drei Buchstaben wie USD</string>
     <string name="asset_model_currency_required">Ein Preis braucht eine Währung</string>
     <string name="asset_model_price_negative">Der Preis darf nicht negativ sein</string>

@@ -138,11 +138,6 @@
     <!-- P79-12's confirm button: asks Android for the notification permission. -->
     <string name="asset_edit_notifications_ok">OK</string>
 
-    <!-- Placeholder in a date field: the ISO date the field takes (year-month-day, digits and hyphens). A
-         translation may use its own letters for year, month and day but keeps this order and the hyphens. -->
-    <string name="asset_edit_date_placeholder">YYYY-MM-DD</string>
-    <!-- Placeholder in a month-day field: month then day, digits and a hyphen; same rule as the date's. -->
-    <string name="asset_edit_month_day_placeholder">MM-DD</string>
     <!-- Screen-reader name of the calendar button beside a date field. %1$s: the field's label ("Purchase date"). -->
     <string name="asset_edit_pick_date">Pick %1$s</string>
     <!-- The calendar dialog's buttons. -->
@@ -193,8 +188,8 @@
     <string name="asset_model_not_a_real_month_day">Not a real month and day</string>
     <!-- Under the Name field when it is blank. -->
     <string name="asset_model_name_required">Give the asset a name</string>
-    <!-- Under a date field that is not an ISO date. Keep YYYY-MM-DD as the asset_edit_date_placeholder text. -->
-    <string name="asset_model_bad_date">Enter a date as YYYY-MM-DD</string>
+    <!-- Under a date field whose text is not a date. %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="asset_model_bad_date">Enter a date as %1$s</string>
     <!-- Under the Currency field. USD is an ISO 4217 code and stays as it is. -->
     <string name="asset_model_bad_currency">Currency is a three-letter code like USD</string>
     <!-- Under the Currency field: a price is typed and the currency is blank. -->

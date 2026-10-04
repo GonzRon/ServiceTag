@@ -61,7 +61,7 @@
     <string name="service_field_date">日期</string>
     <string name="service_field_time">时间</string>
     <string name="service_time_placeholder">HH:MM</string>
-    <string name="service_enter_a_date">请按 YYYY-MM-DD 格式输入日期</string>
+    <string name="service_enter_a_date">请按 %1$s 格式输入日期</string>
     <string name="service_enter_a_time">请按 HH:MM 格式输入时间</string>
 
     <string name="loan_lent_out">已借出</string>
@@ -103,7 +103,7 @@
     <string name="loan_dashboard_line">借给%1$s · 应于%2$s归还</string>
     <string name="loan_no_contact_picker">没有可选择联系人的应用</string>
     <string name="loan_could_not_read_contact">无法读取此联系人。</string>
-    <string name="loan_enter_a_date">请按 YYYY-MM-DD 格式输入日期</string>
+    <string name="loan_enter_a_date">请按 %1$s 格式输入日期</string>
     <string name="loan_close">关闭</string>
     <string name="loan_cancel">取消</string>
     <string name="loan_ok">确定</string>
@@ -139,7 +139,6 @@
     <string name="journal_record_entry">添加记录</string>
     <string name="journal_logged">记录时间</string>
     <string name="journal_field_date">日期</string>
-    <string name="journal_date_placeholder">YYYY-MM-DD</string>
     <string name="journal_field_time">时间</string>
     <string name="journal_time_placeholder">HH:MM</string>
     <string name="journal_field_material">材料</string>
@@ -148,7 +147,7 @@
     <string name="journal_remove_material">移除材料</string>
     <string name="journal_add_material">添加材料</string>
     <string name="journal_entry_gone">此记录已不存在。</string>
-    <string name="journal_enter_a_date">请按 YYYY-MM-DD 格式输入日期</string>
+    <string name="journal_enter_a_date">请按 %1$s 格式输入日期</string>
     <string name="journal_enter_a_time">请按 HH:MM 格式输入时间</string>
     <string name="journal_title_required">请为记录添加标题</string>
     <string name="journal_check_material">请检查第%1$d项材料</string>

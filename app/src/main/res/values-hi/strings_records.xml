@@ -62,7 +62,7 @@
     <string name="service_field_date">तारीख</string>
     <string name="service_field_time">समय</string>
     <string name="service_time_placeholder">HH:MM</string>
-    <string name="service_enter_a_date">तारीख YYYY-MM-DD के रूप में डालें</string>
+    <string name="service_enter_a_date">तारीख %1$s के रूप में डालें</string>
     <string name="service_enter_a_time">समय HH:MM के रूप में डालें</string>
 
     <string name="loan_lent_out">उधार दिया गया</string>
@@ -104,7 +104,7 @@
     <string name="loan_dashboard_line">%1$s को उधार दिया गया · वापसी की तारीख %2$s</string>
     <string name="loan_no_contact_picker">कोई भी ऐप संपर्क नहीं चुन सकता</string>
     <string name="loan_could_not_read_contact">यह संपर्क पढ़ा नहीं जा सका।</string>
-    <string name="loan_enter_a_date">तारीख YYYY-MM-DD के रूप में डालें</string>
+    <string name="loan_enter_a_date">तारीख %1$s के रूप में डालें</string>
     <string name="loan_close">बंद करें</string>
     <string name="loan_cancel">रद्द करें</string>
     <string name="loan_ok">ठीक है</string>
@@ -140,7 +140,6 @@
     <string name="journal_record_entry">प्रविष्टि दर्ज करें</string>
     <string name="journal_logged">कब हुआ</string>
     <string name="journal_field_date">तारीख</string>
-    <string name="journal_date_placeholder">YYYY-MM-DD</string>
     <string name="journal_field_time">समय</string>
     <string name="journal_time_placeholder">HH:MM</string>
     <string name="journal_field_material">सामग्री</string>
@@ -149,7 +148,7 @@
     <string name="journal_remove_material">सामग्री हटाएँ</string>
     <string name="journal_add_material">सामग्री जोड़ें</string>
     <string name="journal_entry_gone">यह प्रविष्टि अब मौजूद नहीं है।</string>
-    <string name="journal_enter_a_date">तारीख YYYY-MM-DD के रूप में डालें</string>
+    <string name="journal_enter_a_date">तारीख %1$s के रूप में डालें</string>
     <string name="journal_enter_a_time">समय HH:MM के रूप में डालें</string>
     <string name="journal_title_required">प्रविष्टि को एक शीर्षक दें</string>
     <string name="journal_check_material">सामग्री %1$d जाँचें</string>

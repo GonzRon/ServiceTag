@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.l10n.dateFieldText
 import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.SupplyId
@@ -672,7 +673,8 @@ class InstalledComponentsSectionTest {
         rule.onNodeWithText(INSTALL_COMPONENT).assertIsDisplayed()
         rule.onAllNodesWithText(CHOOSE_A_SUPPLY).assertCountEquals(0)
         rule.onNode(hasSetTextAction() and hasText("Example Battery Pack")).assertExists()
-        rule.onNode(hasSetTextAction() and hasText("2026-01-05")).assertExists()
+        // The form keeps ISO; the field draws the device's own order (#102).
+        rule.onNode(hasSetTextAction() and hasText(dateFieldText("2026-01-05"))).assertExists()
         rule.onAllNodesWithContentDescription(REMOVE_FROM_COMPOSITION).assertCountEquals(1)
         rule.onNodeWithText("Example 12 V Battery").performScrollTo().assertIsDisplayed()
         assertEquals(0, dismissals)

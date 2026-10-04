@@ -111,7 +111,7 @@ class LoanReturnTest {
             return model.returning.first { it != null && !it.saving }!!.problem
         }
 
-        assertEquals("Enter a date as YYYY-MM-DD", refusedWith("20-09-2026"))
+        assertEquals("Enter a date as MM/DD/YYYY", refusedWith("20-09-2026"))
         assertEquals("The return date cannot be before the day it was lent.", refusedWith("2026-08-31"))
         assertEquals(DATE_NOT_LATER_THAN_TODAY, refusedWith("2026-09-21"))
         assertNull("still open", stored().returnedOn)

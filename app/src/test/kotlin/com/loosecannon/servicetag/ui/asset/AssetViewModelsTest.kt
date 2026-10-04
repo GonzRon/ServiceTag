@@ -825,9 +825,9 @@ class AssetViewModelsTest {
 
         val marked = vm.state.first { !it.saving }.problems
         assertEquals("Give the asset a name", marked[AssetField.NAME])
-        assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.PURCHASE_ON])
-        assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.IN_SERVICE_ON])
-        assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.WARRANTY_EXPIRES_ON])
+        assertEquals("Enter a date as MM/DD/YYYY", marked[AssetField.PURCHASE_ON])
+        assertEquals("Enter a date as MM/DD/YYYY", marked[AssetField.IN_SERVICE_ON])
+        assertEquals("Enter a date as MM/DD/YYYY", marked[AssetField.WARRANTY_EXPIRES_ON])
         assertTrue(graph.assets.all().isEmpty())
 
         vm.onPurchaseOn("2026-04-01")

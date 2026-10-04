@@ -77,8 +77,6 @@
     <string name="asset_edit_save_asset">Guardar equipo</string>
     <string name="asset_edit_notifications_ok">Aceptar</string>
 
-    <string name="asset_edit_date_placeholder">AAAA-MM-DD</string>
-    <string name="asset_edit_month_day_placeholder">MM-DD</string>
     <string name="asset_edit_pick_date">Elegir %1$s</string>
     <string name="asset_edit_calendar_ok">Aceptar</string>
     <string name="asset_edit_calendar_cancel">Cancelar</string>
@@ -106,7 +104,7 @@
 
     <string name="asset_model_not_a_real_month_day">No es un mes y día válidos</string>
     <string name="asset_model_name_required">Ponle un nombre al equipo</string>
-    <string name="asset_model_bad_date">Introduce la fecha como AAAA-MM-DD</string>
+    <string name="asset_model_bad_date">Introduce la fecha como %1$s</string>
     <string name="asset_model_bad_currency">La moneda es un código de tres letras, como USD</string>
     <string name="asset_model_currency_required">Un precio necesita una moneda</string>
     <string name="asset_model_price_negative">El precio no puede ser negativo</string>

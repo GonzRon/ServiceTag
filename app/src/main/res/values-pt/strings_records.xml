@@ -62,7 +62,7 @@
     <string name="service_field_date">Data</string>
     <string name="service_field_time">Hora</string>
     <string name="service_time_placeholder">HH:MM</string>
-    <string name="service_enter_a_date">Digite a data no formato AAAA-MM-DD</string>
+    <string name="service_enter_a_date">Digite a data no formato %1$s</string>
     <string name="service_enter_a_time">Digite a hora no formato HH:MM</string>
 
     <string name="loan_lent_out">Emprestado</string>
@@ -104,7 +104,7 @@
     <string name="loan_dashboard_line">Emprestado para %1$s · devolver até %2$s</string>
     <string name="loan_no_contact_picker">Nenhum app consegue escolher um contato</string>
     <string name="loan_could_not_read_contact">Não foi possível ler este contato.</string>
-    <string name="loan_enter_a_date">Digite a data no formato AAAA-MM-DD</string>
+    <string name="loan_enter_a_date">Digite a data no formato %1$s</string>
     <string name="loan_close">Fechar</string>
     <string name="loan_cancel">Cancelar</string>
     <string name="loan_ok">OK</string>
@@ -140,7 +140,6 @@
     <string name="journal_record_entry">Criar registro</string>
     <string name="journal_logged">Registrado em</string>
     <string name="journal_field_date">Data</string>
-    <string name="journal_date_placeholder">AAAA-MM-DD</string>
     <string name="journal_field_time">Hora</string>
     <string name="journal_time_placeholder">HH:MM</string>
     <string name="journal_field_material">Material</string>
@@ -149,7 +148,7 @@
     <string name="journal_remove_material">Remover material</string>
     <string name="journal_add_material">Adicionar material</string>
     <string name="journal_entry_gone">Este registro não existe mais.</string>
-    <string name="journal_enter_a_date">Digite a data no formato AAAA-MM-DD</string>
+    <string name="journal_enter_a_date">Digite a data no formato %1$s</string>
     <string name="journal_enter_a_time">Digite a hora no formato HH:MM</string>
     <string name="journal_title_required">Dê um título ao registro</string>
     <string name="journal_check_material">Verifique o material %1$d</string>

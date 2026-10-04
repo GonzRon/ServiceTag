@@ -63,7 +63,7 @@
     <string name="service_field_date">Fecha</string>
     <string name="service_field_time">Hora</string>
     <string name="service_time_placeholder">HH:MM</string>
-    <string name="service_enter_a_date">Introduce la fecha como AAAA-MM-DD</string>
+    <string name="service_enter_a_date">Introduce la fecha como %1$s</string>
     <string name="service_enter_a_time">Introduce la hora como HH:MM</string>
 
     <string name="loan_lent_out">Prestado</string>
@@ -105,7 +105,7 @@
     <string name="loan_dashboard_line">Prestado a %1$s · devolver antes del %2$s</string>
     <string name="loan_no_contact_picker">Ninguna aplicación puede elegir un contacto</string>
     <string name="loan_could_not_read_contact">No se pudo leer este contacto.</string>
-    <string name="loan_enter_a_date">Introduce la fecha como AAAA-MM-DD</string>
+    <string name="loan_enter_a_date">Introduce la fecha como %1$s</string>
     <string name="loan_close">Cerrar</string>
     <string name="loan_cancel">Cancelar</string>
     <string name="loan_ok">Aceptar</string>
@@ -141,7 +141,6 @@
     <string name="journal_record_entry">Registrar</string>
     <string name="journal_logged">Registrado</string>
     <string name="journal_field_date">Fecha</string>
-    <string name="journal_date_placeholder">AAAA-MM-DD</string>
     <string name="journal_field_time">Hora</string>
     <string name="journal_time_placeholder">HH:MM</string>
     <string name="journal_field_material">Material</string>
@@ -150,7 +149,7 @@
     <string name="journal_remove_material">Quitar material</string>
     <string name="journal_add_material">Añadir material</string>
     <string name="journal_entry_gone">Este registro ya no existe.</string>
-    <string name="journal_enter_a_date">Introduce la fecha como AAAA-MM-DD</string>
+    <string name="journal_enter_a_date">Introduce la fecha como %1$s</string>
     <string name="journal_enter_a_time">Introduce la hora como HH:MM</string>
     <string name="journal_title_required">Ponle un título al registro</string>
     <string name="journal_check_material">Revisa el material %1$d</string>

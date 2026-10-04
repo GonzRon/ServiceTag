@@ -62,7 +62,7 @@
     <string name="service_field_date">Datum</string>
     <string name="service_field_time">Uhrzeit</string>
     <string name="service_time_placeholder">HH:MM</string>
-    <string name="service_enter_a_date">Gib ein Datum als JJJJ-MM-TT ein</string>
+    <string name="service_enter_a_date">Gib ein Datum als %1$s ein</string>
     <string name="service_enter_a_time">Gib eine Uhrzeit als HH:MM ein</string>
 
     <string name="loan_lent_out">Verliehen</string>
@@ -104,7 +104,7 @@
     <string name="loan_dashboard_line">Verliehen an %1$s · Rückgabe bis %2$s</string>
     <string name="loan_no_contact_picker">Keine App kann einen Kontakt auswählen</string>
     <string name="loan_could_not_read_contact">Dieser Kontakt konnte nicht gelesen werden.</string>
-    <string name="loan_enter_a_date">Gib ein Datum als JJJJ-MM-TT ein</string>
+    <string name="loan_enter_a_date">Gib ein Datum als %1$s ein</string>
     <string name="loan_close">Schließen</string>
     <string name="loan_cancel">Abbrechen</string>
     <string name="loan_ok">OK</string>
@@ -140,7 +140,6 @@
     <string name="journal_record_entry">Eintrag erfassen</string>
     <string name="journal_logged">Zeitpunkt</string>
     <string name="journal_field_date">Datum</string>
-    <string name="journal_date_placeholder">JJJJ-MM-TT</string>
     <string name="journal_field_time">Uhrzeit</string>
     <string name="journal_time_placeholder">HH:MM</string>
     <string name="journal_field_material">Material</string>
@@ -149,7 +148,7 @@
     <string name="journal_remove_material">Material entfernen</string>
     <string name="journal_add_material">Material hinzufügen</string>
     <string name="journal_entry_gone">Diesen Eintrag gibt es nicht mehr.</string>
-    <string name="journal_enter_a_date">Gib ein Datum als JJJJ-MM-TT ein</string>
+    <string name="journal_enter_a_date">Gib ein Datum als %1$s ein</string>
     <string name="journal_enter_a_time">Gib eine Uhrzeit als HH:MM ein</string>
     <string name="journal_title_required">Gib dem Eintrag einen Titel</string>
     <string name="journal_check_material">Material %1$d prüfen</string>

@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.loan
 
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.datePlaceholder
 import com.loosecannon.servicetag.l10n.localized
 
 // #72, the phone's lending words, RATIFIED verbatim (R72-23; plan §6). Each literal has this one home
@@ -131,4 +132,4 @@ val NO_APP_CAN_PICK_A_CONTACT: String get() = localized(R.string.loan_no_contact
 val COULD_NOT_READ_THIS_CONTACT: String get() = localized(R.string.loan_could_not_read_contact)
 
 /** The shipped date refusal, inline as the shipped editors write it. */
-internal val ENTER_A_DATE: String get() = localized(R.string.loan_enter_a_date)
+internal val ENTER_A_DATE: String get() = localized(R.string.loan_enter_a_date, datePlaceholder())

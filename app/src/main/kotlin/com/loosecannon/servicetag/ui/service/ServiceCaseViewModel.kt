@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.ServiceCaseValidation
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.datePlaceholder
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
@@ -326,7 +327,7 @@ private fun ServiceCase.asCommand(resolution: EventId?) = ServiceCaseCommand(
 
 /** An update's refusal on its field, or null for one the sheet has no field for. */
 private fun entryMarkFor(problem: ServiceCaseProblem): Pair<String, String>? = when (problem) {
-    is ServiceCaseProblem.BadDate -> UpdateField.DATE to localized(R.string.service_enter_a_date)
+    is ServiceCaseProblem.BadDate -> UpdateField.DATE to localized(R.string.service_enter_a_date, datePlaceholder())
     ServiceCaseProblem.EntryAfterToday -> UpdateField.DATE to DATE_NOT_LATER_THAN_TODAY
     is ServiceCaseProblem.BadTime -> UpdateField.TIME to localized(R.string.service_enter_a_time)
     else -> null

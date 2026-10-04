@@ -68,8 +68,11 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.canonicalMonthDay
+import com.loosecannon.servicetag.l10n.datePlaceholder
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedPlural
+import com.loosecannon.servicetag.l10n.monthDayPlaceholder
 import com.loosecannon.servicetag.reminders.WARRANTY_NOTIFICATION_RATIONALE
 import com.loosecannon.servicetag.ui.attachments.NO_APP_CAN_PICK_FILES
 import com.loosecannon.servicetag.ui.attachments.NoAttachmentFolderCard
@@ -77,6 +80,8 @@ import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.attachments.rememberDocumentPicker
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.localizedDateText
+import com.loosecannon.servicetag.ui.components.localizedMonthDayText
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
@@ -88,7 +93,6 @@ import com.loosecannon.servicetag.ui.theme.MonoText
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 // The asset editor's season, break and health words (spec §10.7), RATIFIED, each by its S-number and
@@ -949,9 +953,13 @@ internal fun ChoiceField(
 }
 
 /**
- * An ISO date: typed, or picked from a calendar that writes the same `YYYY-MM-DD` text. Internal
- * rather than private because the retirement dialog of spec §7 asks for a date the same way, and
- * "how this app asks for a day" should have one owner.
+ * A calendar date: typed, or picked from a calendar. Internal rather than private because the
+ * retirement dialog of spec §7 asks for a date the same way, and "how this app asks for a day"
+ * should have one owner.
+ *
+ * [value] is the form's ISO text, which is what the form validates and stores; the owner reads and
+ * types the locale's own order (#102, PR #106 review: "01.03.2026" in German), and
+ * [localizedDateText] hands the form ISO back.
  */
 @Composable
 internal fun DateField(
@@ -961,12 +969,13 @@ internal fun DateField(
     problem: String? = null,
 ) {
     var picking by remember { mutableStateOf(false) }
+    val field = localizedDateText(value, onValueChange)
     FormField(
-        value = value,
-        onValueChange = onValueChange,
+        value = field.text,
+        onValueChange = field.onTyped,
         label = label,
         problem = problem,
-        placeholder = stringResource(R.string.asset_edit_date_placeholder),
+        placeholder = datePlaceholder(),
         mono = true,
         trailingIcon = {
             IconButton(onClick = { picking = true }) {
@@ -985,7 +994,9 @@ internal fun DateField(
 
 /**
  * A `MM-DD` boundary: the same calendar, with the year it hands back thrown away (spec §6). The
- * [input] carries its label with the required mark, its outline and its one shipped line.
+ * [input] carries its label with the required mark, its outline and its one shipped line. Its text
+ * is the form's `MM-DD`; the owner reads and types the locale's day and month ("01.03" in German,
+ * #102), and [localizedMonthDayText] hands the form `MM-DD` back.
  */
 @Composable
 private fun MonthDayField(
@@ -994,13 +1005,14 @@ private fun MonthDayField(
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     var picking by remember { mutableStateOf(false) }
+    val field = localizedMonthDayText(input.text, onValueChange)
     FormField(
-        value = input.text,
-        onValueChange = onValueChange,
+        value = field.text,
+        onValueChange = field.onTyped,
         label = input.drawnLabel,
         problem = input.problem,
         outlined = input.outlined,
-        placeholder = stringResource(R.string.asset_edit_month_day_placeholder),
+        placeholder = monthDayPlaceholder(),
         mono = true,
         modifier = modifier,
         trailingIcon = {
@@ -1017,7 +1029,7 @@ private fun MonthDayField(
             initial = "",
             onDismiss = { picking = false },
             onPicked = { date ->
-                onValueChange(String.format(Locale.US, "%02d-%02d", date.monthValue, date.dayOfMonth)) // l10n-ok: the MM-DD field's stored value
+                onValueChange(canonicalMonthDay(date))
                 picking = false
             },
         )

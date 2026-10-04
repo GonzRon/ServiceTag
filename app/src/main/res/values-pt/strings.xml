@@ -6,4 +6,5 @@
     <string name="format_date_time_display">d \'de\' MMM \'de\' uuuu, HH:mm</string>
     <string name="format_language">pt</string>
     <string name="format_list_separator">", "</string>
+    <string name="format_date_input_letters">DMA</string>
 </resources>

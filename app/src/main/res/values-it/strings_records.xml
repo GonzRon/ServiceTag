@@ -62,7 +62,7 @@
     <string name="service_field_date">Data</string>
     <string name="service_field_time">Ora</string>
     <string name="service_time_placeholder">HH:MM</string>
-    <string name="service_enter_a_date">Inserisci una data nel formato AAAA-MM-GG</string>
+    <string name="service_enter_a_date">Inserisci una data nel formato %1$s</string>
     <string name="service_enter_a_time">Inserisci un\'ora nel formato HH:MM</string>
 
     <string name="loan_lent_out">In prestito</string>
@@ -104,7 +104,7 @@
     <string name="loan_dashboard_line">Prestata a %1$s · da restituire entro il %2$s</string>
     <string name="loan_no_contact_picker">Nessuna app può scegliere un contatto</string>
     <string name="loan_could_not_read_contact">Impossibile leggere questo contatto.</string>
-    <string name="loan_enter_a_date">Inserisci una data nel formato AAAA-MM-GG</string>
+    <string name="loan_enter_a_date">Inserisci una data nel formato %1$s</string>
     <string name="loan_close">Chiudi</string>
     <string name="loan_cancel">Annulla</string>
     <string name="loan_ok">OK</string>
@@ -140,7 +140,6 @@
     <string name="journal_record_entry">Registra voce</string>
     <string name="journal_logged">Registrata</string>
     <string name="journal_field_date">Data</string>
-    <string name="journal_date_placeholder">AAAA-MM-GG</string>
     <string name="journal_field_time">Ora</string>
     <string name="journal_time_placeholder">HH:MM</string>
     <string name="journal_field_material">Materiale</string>
@@ -149,7 +148,7 @@
     <string name="journal_remove_material">Rimuovi materiale</string>
     <string name="journal_add_material">Aggiungi materiale</string>
     <string name="journal_entry_gone">Questa voce non esiste più.</string>
-    <string name="journal_enter_a_date">Inserisci una data nel formato AAAA-MM-GG</string>
+    <string name="journal_enter_a_date">Inserisci una data nel formato %1$s</string>
     <string name="journal_enter_a_time">Inserisci un\'ora nel formato HH:MM</string>
     <string name="journal_title_required">Dai un titolo alla voce</string>
     <string name="journal_check_material">Controlla il materiale %1$d</string>

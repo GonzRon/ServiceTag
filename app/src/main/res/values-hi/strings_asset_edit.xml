@@ -76,8 +76,6 @@
     <string name="asset_edit_save_asset">उपकरण सहेजें</string>
     <string name="asset_edit_notifications_ok">ठीक है</string>
 
-    <string name="asset_edit_date_placeholder">YYYY-MM-DD</string>
-    <string name="asset_edit_month_day_placeholder">MM-DD</string>
     <string name="asset_edit_pick_date">%1$s चुनें</string>
     <string name="asset_edit_calendar_ok">ठीक है</string>
     <string name="asset_edit_calendar_cancel">रद्द करें</string>
@@ -105,7 +103,7 @@
 
     <string name="asset_model_not_a_real_month_day">यह कोई सही महीना और दिन नहीं है</string>
     <string name="asset_model_name_required">उपकरण को एक नाम दें</string>
-    <string name="asset_model_bad_date">तारीख YYYY-MM-DD के रूप में डालें</string>
+    <string name="asset_model_bad_date">तारीख %1$s के रूप में डालें</string>
     <string name="asset_model_bad_currency">मुद्रा तीन अक्षरों का कोड होती है, जैसे USD</string>
     <string name="asset_model_currency_required">कीमत के साथ मुद्रा ज़रूरी है</string>
     <string name="asset_model_price_negative">कीमत शून्य से कम नहीं हो सकती</string>
