@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.l10n
 
+import androidx.annotation.BoolRes
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import com.loosecannon.servicetag.R
@@ -30,6 +31,9 @@ interface LocalizedText {
     fun format(@StringRes id: Int, args: Array<out Any?>): String
 
     fun plural(@PluralsRes id: Int, count: Int, args: Array<out Any?>): String
+
+    /** A language's own rule that is not words, such as whether a name may be lower-cased inside a sentence. */
+    fun flag(@BoolRes id: Int): Boolean
 }
 
 /**
@@ -68,6 +72,9 @@ fun localizedPlural(@PluralsRes id: Int, count: Int, vararg args: Any?): String 
 /** A [Long] count: plural rules only look at it through [Int], and no count the app shows comes near the limit. */
 fun localizedPlural(@PluralsRes id: Int, count: Long, vararg args: Any?): String =
     AppText.current.plural(id, count.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt(), args)
+
+/** A per-language rule from a `bools.xml` resource; a language without its own value takes English's. */
+fun localizedFlag(@BoolRes id: Int): Boolean = AppText.current.flag(id)
 
 /**
  * The display date: English keeps the shipped `d MMM uuuu` ("1 Mar 2026"), and each language pack gives its own

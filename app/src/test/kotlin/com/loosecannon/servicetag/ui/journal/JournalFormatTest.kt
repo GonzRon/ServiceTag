@@ -16,6 +16,9 @@ import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ValueType
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.testing.EnglishResources
+import com.loosecannon.servicetag.testing.ResourcePack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -131,6 +134,18 @@ class JournalFormatTest {
         assertEquals("Log TDS test", quickActionLabel(profile("TDS test")))
         assertEquals("Log UPS check", quickActionLabel(profile("UPS check")))
         assertEquals("Log note", quickActionLabel(profile("Note")))
+    }
+
+    /** #102: lower-casing is English's rule, not the owner's name: German nouns keep their capital. */
+    @Test fun germanKeepsTheActionNamesCapital() {
+        val german = ResourcePack.pack("de")
+        AppText.install(german)
+        try {
+            assertEquals(String.format(german.locale, german.stringNamed("journal_log_profile"), "Wassertest"), quickActionLabel(profile("Wassertest")))
+        } finally {
+            AppText.install(EnglishResources())
+        }
+        assertEquals("Log water test", quickActionLabel(profile("Water test")))
     }
 
     @Test fun theDetailLineFallsBackFromReadingsToMaterialsToNotes() {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: rules a language decides that are not words. A language pack overrides one only where its grammar differs
+  (values-<language>/bools.xml); otherwise it takes the value here.
+-->
+<resources>
+    <!--
+      Whether a quick action's button lower-cases the owner's action name inside its sentence: English "Log water
+      test" for an action named "Water test" (never an acronym: "Log TDS test"). German turns it off: its nouns keep
+      their capital ("Wassertest eintragen").
+    -->
+    <bool name="journal_lowercase_profile_name">true</bool>
+</resources>

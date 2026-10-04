@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_scan.xml. -->
+<resources>
+    <string name="nav_dashboard">Tableau de bord</string>
+    <string name="nav_assets">Équipements</string>
+    <string name="nav_maintenance">Entretien</string>
+    <string name="nav_link_points_nowhere">Ce lien ne mène à rien ici.</string>
+
+    <string name="scan_title">Lire / inspecter un tag</string>
+    <string name="scan_back">Retour</string>
+    <string name="scan_ready">PRÊT À SCANNER</string>
+    <string name="scan_reading">LECTURE DU TAG</string>
+    <string name="scan_hold_hint">Approchez le haut de votre téléphone du tag de l\'équipement.</string>
+    <string name="scan_needs_window">Le scan nécessite la fenêtre de l\'application elle-même.</string>
+    <string name="scan_read_failed">Impossible de lire ce tag. Tenez-le immobile et réessayez.</string>
+    <string name="scan_reason_no_ndef">ce tag ne prend pas en charge NDEF</string>
+
+    <string name="nfc_no_hardware">Ce téléphone n\'a pas de matériel NFC.</string>
+    <string name="nfc_turned_off">Le NFC est désactivé. Activez-le dans les paramètres du système, puis revenez.</string>
+    <string name="nfc_nothing_to_resolve">Rien à identifier.</string>
+    <string name="nfc_could_not_resolve">impossible d\'identifier ce tag : %1$s</string>
+
+    <string name="tag_eyebrow_reading">Lecture du tag</string>
+    <string name="tag_looking_up">Recherche de ce tag…</string>
+    <string name="tag_eyebrow_servicetag">Tag ServiceTag</string>
+    <string name="tag_open_asset">Ouvrir l\'équipement</string>
+    <string name="tag_cancel">Annuler</string>
+    <string name="tag_eyebrow_detected">Tag détecté</string>
+    <string name="tag_opening_asset">Ouverture de l\'équipement…</string>
+    <string name="tag_pre_split_link">Ce tag pointe vers un lien de note datant d\'avant la séparation des produits. ServiceTag n\'ouvre plus les liens ; NoteTag, si.</string>
+    <string name="tag_eyebrow_unregistered">Tag non enregistré</string>
+    <string name="tag_not_assigned">Ce tag n\'est encore attribué à rien.</string>
+    <string name="tag_bind_to_asset">Associer à un équipement</string>
+    <string name="tag_eyebrow_marked_lost">Tag signalé perdu</string>
+    <string name="tag_eyebrow_retired">Tag retiré</string>
+    <string name="tag_revoked_sentence">Ce tag a été mis hors service. L\'associer à nouveau le remet en service.</string>
+    <string name="tag_not_in_records">Ce tag ServiceTag ne figure pas dans les données de ce téléphone.</string>
+    <string name="tag_write_over_it">Écrire un nouveau tag par-dessus</string>
+    <string name="tag_eyebrow_not_ours">Pas un tag ServiceTag</string>
+    <string name="tag_holds_something_else">Ce tag contient autre chose.</string>
+    <string name="tag_placement">Emplacement du tag</string>
+    <string name="tag_picker_title">ASSOCIER CE TAG À</string>
+    <string name="tag_picker_new_asset">Nouvel équipement…</string>
+    <string name="tag_picker_new_asset_detail">Créez-le, puis scannez à nouveau ce tag</string>
+    <string name="tag_picker_empty">Rien à quoi l\'associer pour l\'instant</string>
+    <string name="tag_picker_asset">Équipement</string>
+    <string name="tag_bind_failed">Impossible d\'associer ce tag : %1$s</string>
+
+    <string name="tag_reason_empty">tag vide</string>
+    <string name="tag_reason_foreign">pas un tag ServiceTag : %1$s</string>
+    <string name="tag_reason_unreadable">enregistrement ServiceTag illisible : %1$s</string>
+    <string name="tag_reason_not_ours">pas un tag ServiceTag</string>
+    <string name="tag_reason_newer_app">écrit par une version plus récente de ServiceTag (format de données %1$d)</string>
+    <string name="tag_reason_unresolved">ce tag n\'a pas pu être identifié</string>
+
+    <string name="tag_write_title">Écrire un tag</string>
+    <string name="tag_write_close">Fermer</string>
+    <string name="tag_write_target">CIBLE</string>
+    <string name="tag_target_spare">rien pour l\'instant — un tag de réserve, associé lors de son premier scan</string>
+    <string name="tag_target_unnamed">cette cible</string>
+    <string name="tag_write_eyebrow_idle">Écrire un tag NFC</string>
+    <string name="tag_write_eyebrow_confirm">Écraser ce tag ?</string>
+    <string name="tag_write_answer_here">Répondez ici, puis approchez de nouveau le même tag du téléphone.</string>
+    <string name="tag_write_eyebrow_written">Tag écrit</string>
+    <string name="tag_written_locked">%1$s · verrouillé</string>
+    <string name="tag_written_rewritable">%1$s · réinscriptible</string>
+    <string name="tag_write_done">Terminé</string>
+    <string name="tag_write_eyebrow_error">Non écrit</string>
+    <string name="tag_write_verified">Relu à l\'identique, octet par octet</string>
+    <string name="tag_write_needs_window">L\'écriture nécessite la fenêtre de l\'application elle-même.</string>
+    <string name="tag_lock_switch">Verrouiller définitivement</string>
+    <string name="tag_lock_switch_hint">Un tag verrouillé ne peut plus jamais être réécrit.</string>
+    <string name="tag_lock_warning_title">Verrouiller définitivement ?</string>
+    <string name="tag_lock_warning_text">Un tag verrouillé ne peut plus jamais être réécrit ni réutilisé. Ne verrouillez que les tags installés pour de bon.</string>
+    <string name="tag_lock_warning_confirm">Verrouiller après l\'écriture</string>
+    <string name="tag_lock_warning_dismiss">Ne pas verrouiller</string>
+
+    <string name="tag_write_hold_blank">Approchez un tag vierge ou réutilisable du dos du téléphone.</string>
+    <string name="tag_write_read_failed">Impossible de lire le tag. Tenez-le immobile et réessayez.</string>
+    <string name="tag_write_no_ndef_hint">Ce tag ne prend pas en charge NDEF. Utilisez un NTAG213/215/216 ou équivalent.</string>
+    <string name="tag_write_no_ndef">Ce tag ne prend pas en charge NDEF.</string>
+    <string name="tag_write_read_only">Ce tag est en lecture seule (verrouillé). Rien n\'a été écrit.</string>
+    <string name="tag_write_too_small">Tag trop petit : il contient %1$d octets, le message en nécessite %2$d.</string>
+    <string name="tag_write_formatted">Formaté. Éloignez le tag, puis approchez-le de nouveau pour écrire.</string>
+    <string name="tag_write_format_failed">Impossible de formater le tag. Tenez-le immobile et réessayez.</string>
+    <string name="tag_write_format_unexpected">Résultat inattendu pendant le formatage. Tenez le tag immobile et réessayez.</string>
+    <string name="tag_write_unexpected">Résultat inattendu pendant l\'écriture. Tenez le tag immobile et réessayez.</string>
+    <string name="tag_write_verify_mismatch">La relecture diffère de ce qui a été écrit. Rien n\'a été enregistré — réessayez.</string>
+    <string name="tag_write_not_written">Rien n\'a été écrit (%1$s). Tenez le tag immobile et réessayez.</string>
+    <string name="tag_write_may_not_have_finished">L\'écriture n\'est peut-être pas terminée (%1$s). Éloignez le tag, puis approchez-le de nouveau du téléphone.</string>
+    <string name="tag_write_overwrite_confirmed">Écrasement confirmé. Approchez de nouveau le même tag du téléphone pour écrire.</string>
+    <string name="tag_write_kept">Rien n\'a été écrit. Le tag a été laissé tel quel.</string>
+
+    <string name="tag_overwrite_title">ÉCRASER CE TAG ?</string>
+    <string name="tag_overwrite_explanation">Si vous le remplacez, le tag identifiera %1$s. L\'ancien contenu sera perdu. Après confirmation, approchez de nouveau le même tag du téléphone pour écrire.</string>
+    <string name="tag_overwrite_confirm">Écraser</string>
+    <string name="tag_overwrite_keep">Conserver</string>
+    <string name="tag_overwrite_identifies">Ce tag identifie actuellement %1$s.</string>
+    <string name="tag_overwrite_not_assigned">Ce tag figure dans les données de ce téléphone, mais n\'est encore attribué à rien.</string>
+    <string name="tag_overwrite_marked_lost">Ce tag a été signalé perdu et mis hors service.</string>
+    <string name="tag_overwrite_retired">Ce tag a été retiré et mis hors service.</string>
+    <string name="tag_overwrite_could_not_check">C\'est un tag ServiceTag, mais son enregistrement n\'a pas pu être vérifié pour le moment.</string>
+    <string name="tag_overwrite_holds_newer">Le tag contient déjà des données ServiceTag écrites par une version plus récente de l\'application (format %1$s).</string>
+    <string name="tag_overwrite_holds_foreign">Le tag contient déjà un contenu NDEF tiers (%1$s).</string>
+    <string name="tag_overwrite_holds_unreadable">Le tag contient déjà un contenu NDEF illisible (%1$s).</string>
+</resources>

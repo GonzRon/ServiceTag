@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_supplies_reminders.xml. -->
+<resources>
+    <string name="supplies_section">消耗品</string>
+    <string name="supplies_supply_item">消耗品</string>
+    <string name="supplies_no_supplies_yet">消耗品はまだありません。</string>
+    <string name="supplies_part_number_field">部品番号</string>
+    <string name="supplies_preferred_unit_field">標準の単位</string>
+    <string name="supplies_specifications_section">仕様</string>
+    <string name="supplies_add_specification">仕様を追加</string>
+    <string name="supplies_remove_specification">仕様を削除</string>
+    <string name="supplies_no_specifications">仕様はありません</string>
+    <string name="supplies_used_by_section">使用している機器</string>
+    <string name="supplies_not_used_by_any_asset">どの機器にも使用されていません</string>
+    <string name="supplies_specification_needs_label_and_value">各仕様にはラベルと値が必要です。</string>
+    <string name="supplies_add_supply">消耗品を追加</string>
+    <string name="supplies_no_supplies">消耗品はありません</string>
+    <string name="supplies_choose_a_supply">消耗品を選択</string>
+    <string name="supplies_no_supply_items_yet">消耗品はまだありません。「メンテナンス › 消耗品」から追加してください。</string>
+    <string name="supplies_edit_role">役割を編集</string>
+    <string name="supplies_role_taken">この機器には、同じ役割でその消耗品がすでにあります。</string>
+    <string name="supplies_item_gone">その消耗品はもう利用できません。</string>
+    <string name="supplies_link_supply">消耗品をリンク</string>
+    <string name="supplies_linked_to">%1$sにリンク済み</string>
+    <string name="supplies_remove_link">リンクを解除</string>
+
+    <string name="supplies_item_archived_badge">アーカイブ済み</string>
+    <string name="supplies_more">その他</string>
+    <string name="supplies_remove_row">削除</string>
+    <string name="supplies_back">戻る</string>
+    <string name="supplies_cancel">キャンセル</string>
+    <string name="supplies_save">保存</string>
+    <string name="supplies_edit">編集</string>
+    <string name="supplies_archive">アーカイブ</string>
+    <string name="supplies_unarchive">アーカイブ解除</string>
+    <string name="supplies_name_field">名前</string>
+    <string name="supplies_specification_label_field">ラベル</string>
+    <string name="supplies_specification_value_field">値</string>
+    <string name="supplies_specification_unit_field">単位</string>
+
+    <string name="installed_components_section">取り付け部品</string>
+    <string name="installed_no_installed_components">取り付け部品はありません</string>
+    <string name="installed_install_component">部品を取り付け</string>
+    <string name="installed_install_inside">内部に取り付け</string>
+    <string name="installed_inside_of">%1$sの内部</string>
+    <string name="installed_serial_or_lot">シリアルまたはロット</string>
+    <string name="installed_installed_on">取り付け日</string>
+    <string name="installed_removed_on">取り外し日</string>
+    <string name="installed_replace">交換</string>
+    <string name="installed_replace_title">%1$sを交換</string>
+    <string name="installed_remove_title">%1$sを取り外す</string>
+    <string name="installed_subtree_removed_too">内部に取り付けられているものもすべて、同じ日付で取り外されます。</string>
+    <string name="installed_edit_component">部品を編集</string>
+    <string name="installed_history">履歴</string>
+    <string name="installed_installed_on_day">%1$sに取り付け</string>
+    <string name="installed_install_date_not_recorded">取り付け日は未記録</string>
+    <string name="installed_removed_on_day">%1$sに取り外し</string>
+    <string name="installed_removed_count">取り外し済み（%1$d）</string>
+    <string name="installed_component_changed">この部品は取り外されたか、変更されました。何も保存されていません。</string>
+    <string name="installed_removal_before_install">取り外し日を取り付け日より前にすることはできません。</string>
+    <string name="installed_composition_line">%1$s × %2$s</string>
+    <string name="installed_more_entries">他%1$d件</string>
+    <string name="installed_composition_section">構成</string>
+    <string name="installed_remove_from_composition">構成から削除</string>
+    <string name="installed_composition_quantity_required">各消耗品には0より大きい数量が必要です。</string>
+    <string name="installed_documents_and_references">ドキュメントと参照</string>
+    <string name="installed_this_installed_component">この取り付け部品</string>
+    <string name="installed_from_supply">%1$sから</string>
+    <string name="installed_open_the_supply_to_change">これらを追加・変更するには、消耗品を開いてください。</string>
+
+    <string name="installed_back">戻る</string>
+    <string name="installed_remove">取り外す</string>
+    <string name="installed_edit">編集</string>
+    <string name="installed_save">保存</string>
+    <string name="installed_cancel">キャンセル</string>
+    <string name="installed_quantity_field">数量</string>
+    <string name="installed_unit_field">単位</string>
+
+    <string name="reminders_permission_rationale_maintenance">メンテナンスの期限をお知らせするには、ServiceTagに通知の権限が必要です。</string>
+    <string name="reminders_permission_rationale_warranty">保証の期限が切れる前にお知らせするには、ServiceTagに通知の権限が必要です。</string>
+    <string name="reminders_permission_rationale_loan">貸出の返却予定日をお知らせするには、ServiceTagに通知の権限が必要です。</string>
+
+    <string name="reminders_health_notifications_blocked">通知がオフになっているため、メンテナンスのリマインダーは届きません。</string>
+    <string name="reminders_health_reminders_globally_off">ServiceTagでリマインダーがオフになっています。</string>
+    <string name="reminders_health_digest_alarm_missing">毎日のリマインダーチェックがスケジュールされていないため、今日のメンテナンスが通知されない可能性があります。</string>
+    <string name="reminders_health_backstop_work_missing">バックグラウンドの安全チェックが実行されていないため、届かなかったリマインダーが検出されません。</string>
+    <string name="reminders_health_app_restricted">このスマートフォンがバックグラウンドでのServiceTagの動作を制限しているため、リマインダーが遅れて届くか、まったく届かない可能性があります。</string>
+    <plurals name="reminders_health_schedule_no_provider">
+        <item quantity="other">%1$d件のスケジュールでリマインダーがオンになっていますが、リマインダーの配信が設定されていません。</item>
+    </plurals>
+    <plurals name="reminders_health_schedule_provider_disabled">
+        <item quantity="other">%1$d件のスケジュールでリマインダーがオンになっていますが、配信する手段がありません。</item>
+    </plurals>
+    <plurals name="reminders_health_no_baseline">
+        <item quantity="other">%1$d件のスケジュールは、期限を迎えるためにメーターの測定値が必要です。</item>
+    </plurals>
+
+    <string name="notification_channel_due_name">メンテナンスの期限</string>
+    <string name="notification_channel_due_description">期限が来たメンテナンスのリマインダー。</string>
+    <string name="notification_channel_overdue_name">メンテナンスの期限切れ</string>
+    <string name="notification_channel_overdue_description">期限を過ぎたメンテナンスのリマインダー。</string>
+    <string name="notification_channel_warranty_name">保証のリマインダー</string>
+    <string name="notification_channel_warranty_description">保証の期限が切れる前のリマインダー。</string>
+    <string name="notification_channel_loans_name">貸出のリマインダー</string>
+    <string name="notification_channel_loans_description">貸し出したものの返却予定日のリマインダー。</string>
+
+    <plurals name="notification_summary_title">
+        <item quantity="other">%1$d件のメンテナンスに対応が必要です</item>
+    </plurals>
+    <plurals name="notification_summary_overdue">
+        <item quantity="other">期限切れ%1$d件</item>
+    </plurals>
+    <plurals name="notification_summary_due">
+        <item quantity="other">期限%1$d件</item>
+    </plurals>
+    <plurals name="notification_summary_due_soon">
+        <item quantity="other">まもなく期限%1$d件</item>
+    </plurals>
+    <string name="notification_summary_body">%1$s。</string>
+
+    <string name="notification_item_title">%1$s — %2$s</string>
+    <string name="notification_item_due_on">期限は%1$sです。</string>
+    <string name="notification_item_overdue_since">%1$sから期限切れです。</string>
+    <string name="notification_item_meter_due">期限は%1$s %2$s、現在は%3$sです。</string>
+    <string name="notification_item_meter_due_no_unit">期限は%1$s、現在は%2$sです。</string>
+
+    <string name="notification_status_due">期限</string>
+    <string name="notification_status_overdue">期限切れ</string>
+    <string name="notification_status_expires_soon">まもなく保証終了</string>
+    <string name="notification_status_due_back">返却予定</string>
+    <string name="notification_status_not_returned">未返却</string>
+
+    <string name="notification_action_done">完了</string>
+    <string name="notification_action_snooze_one_day">1日スヌーズ</string>
+    <string name="notification_action_open">開く</string>
+
+    <string name="notification_warranty_title">%1$s — 保証</string>
+    <string name="notification_warranty_body">保証は%1$sに終了します。</string>
+    <string name="notification_loan_title">%1$s — 返却予定日</string>
+    <string name="notification_loan_body_through">%1$sに貸出中。返却予定日は%2$sです。</string>
+    <string name="notification_loan_body_after">%1$sに貸出中。%2$sに返却予定でした。</string>
+</resources>

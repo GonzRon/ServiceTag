@@ -47,7 +47,7 @@
     <string name="maintenance_log_meter_reading">Zählerstand eintragen</string>
     <string name="maintenance_meter_line">Fällig bei %1$s %2$s, jetzt %3$s.</string>
     <string name="maintenance_meter_line_no_unit">Fällig bei %1$s, jetzt %2$s.</string>
-    <string name="maintenance_snoozed_until">Zurückgestellt bis %1$s</string>
+    <string name="maintenance_snoozed_until">Erinnerung erst wieder am %1$s</string>
     <string name="maintenance_progress">%1$d von %2$d erledigt</string>
     <string name="maintenance_part_of">Teil von %1$s</string>
     <string name="maintenance_promoted_subtitle">%1$s · %2$s</string>
@@ -80,7 +80,7 @@
     <string name="maintenance_why_now_due">Fällig am %1$s.</string>
     <string name="maintenance_reading_with_unit">%1$s %2$s</string>
 
-    <string name="maintenance_snooze">Zurückstellen</string>
+    <string name="maintenance_snooze">Später erinnern</string>
     <string name="maintenance_postpone">Verschieben</string>
     <string name="maintenance_remove">Entfernen</string>
     <string name="maintenance_service_record">Serviceprotokoll</string>

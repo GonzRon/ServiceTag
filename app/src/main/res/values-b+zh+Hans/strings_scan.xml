@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_scan.xml. -->
+<resources>
+    <string name="nav_dashboard">概览</string>
+    <string name="nav_assets">设备</string>
+    <string name="nav_maintenance">保养</string>
+    <string name="nav_link_points_nowhere">该链接未指向此处的任何内容。</string>
+
+    <string name="scan_title">读取/检查标签</string>
+    <string name="scan_back">返回</string>
+    <string name="scan_ready">可以扫描</string>
+    <string name="scan_reading">正在读取标签</string>
+    <string name="scan_hold_hint">将手机顶部靠近设备上的标签。</string>
+    <string name="scan_needs_window">扫描需要在应用自己的窗口中进行。</string>
+    <string name="scan_read_failed">无法读取该标签。请保持标签不动，然后重试。</string>
+    <string name="scan_reason_no_ndef">此标签不支持 NDEF</string>
+
+    <string name="nfc_no_hardware">此手机没有 NFC 硬件。</string>
+    <string name="nfc_turned_off">NFC 已关闭。请在系统设置中开启，然后返回。</string>
+    <string name="nfc_nothing_to_resolve">没有可识别的内容。</string>
+    <string name="nfc_could_not_resolve">无法识别此标签：%1$s</string>
+
+    <string name="tag_eyebrow_reading">正在读取标签</string>
+    <string name="tag_looking_up">正在查找此标签…</string>
+    <string name="tag_eyebrow_servicetag">ServiceTag 标签</string>
+    <string name="tag_open_asset">打开设备</string>
+    <string name="tag_cancel">取消</string>
+    <string name="tag_eyebrow_detected">检测到标签</string>
+    <string name="tag_opening_asset">正在打开设备…</string>
+    <string name="tag_pre_split_link">此标签指向产品拆分之前的笔记链接。ServiceTag 已不再打开链接，NoteTag 可以打开。</string>
+    <string name="tag_eyebrow_unregistered">未登记的标签</string>
+    <string name="tag_not_assigned">此标签尚未分配给任何对象。</string>
+    <string name="tag_bind_to_asset">绑定到设备</string>
+    <string name="tag_eyebrow_marked_lost">标签已标记为丢失</string>
+    <string name="tag_eyebrow_retired">标签已退役</string>
+    <string name="tag_revoked_sentence">此标签已停用。重新绑定即可让它恢复使用。</string>
+    <string name="tag_not_in_records">此 ServiceTag 标签不在此手机的记录中。</string>
+    <string name="tag_write_over_it">覆盖写入新标签</string>
+    <string name="tag_eyebrow_not_ours">不是 ServiceTag 标签</string>
+    <string name="tag_holds_something_else">此标签存有其他内容。</string>
+    <string name="tag_placement">标签位置</string>
+    <string name="tag_picker_title">将此标签绑定到</string>
+    <string name="tag_picker_new_asset">新建设备…</string>
+    <string name="tag_picker_new_asset_detail">先创建设备，然后再次扫描此标签</string>
+    <string name="tag_picker_empty">尚无可绑定的对象</string>
+    <string name="tag_picker_asset">设备</string>
+    <string name="tag_bind_failed">无法绑定此标签：%1$s</string>
+
+    <string name="tag_reason_empty">空标签</string>
+    <string name="tag_reason_foreign">不是 ServiceTag 标签：%1$s</string>
+    <string name="tag_reason_unreadable">无法读取的 ServiceTag 记录：%1$s</string>
+    <string name="tag_reason_not_ours">不是 ServiceTag 标签</string>
+    <string name="tag_reason_newer_app">由更新版本的 ServiceTag 写入（数据格式%1$d）</string>
+    <string name="tag_reason_unresolved">无法识别此标签</string>
+
+    <string name="tag_write_title">写入标签</string>
+    <string name="tag_write_close">关闭</string>
+    <string name="tag_write_target">目标</string>
+    <string name="tag_target_spare">暂无 — 备用标签，首次扫描时绑定</string>
+    <string name="tag_target_unnamed">此目标</string>
+    <string name="tag_write_eyebrow_idle">写入 NFC 标签</string>
+    <string name="tag_write_eyebrow_confirm">覆盖此标签？</string>
+    <string name="tag_write_answer_here">请先在此处作答，然后再次将同一个标签靠近手机。</string>
+    <string name="tag_write_eyebrow_written">标签已写入</string>
+    <string name="tag_written_locked">%1$s · 已锁定</string>
+    <string name="tag_written_rewritable">%1$s · 可重写</string>
+    <string name="tag_write_done">完成</string>
+    <string name="tag_write_eyebrow_error">未写入</string>
+    <string name="tag_write_verified">回读内容逐字节一致</string>
+    <string name="tag_write_needs_window">写入需要在应用自己的窗口中进行。</string>
+    <string name="tag_lock_switch">永久锁定</string>
+    <string name="tag_lock_switch_hint">锁定的标签永远无法重写。</string>
+    <string name="tag_lock_warning_title">永久锁定？</string>
+    <string name="tag_lock_warning_text">锁定的标签永远无法重写或重复使用。请只锁定永久安装的标签。</string>
+    <string name="tag_lock_warning_confirm">写入后锁定</string>
+    <string name="tag_lock_warning_dismiss">不锁定</string>
+
+    <string name="tag_write_hold_blank">将空白或可重复使用的标签靠近手机背面。</string>
+    <string name="tag_write_read_failed">无法读取标签。请保持标签不动，然后重试。</string>
+    <string name="tag_write_no_ndef_hint">此标签不支持 NDEF。请使用 NTAG213/215/216 或类似标签。</string>
+    <string name="tag_write_no_ndef">此标签不支持 NDEF。</string>
+    <string name="tag_write_read_only">此标签为只读（已锁定）。未写入任何内容。</string>
+    <string name="tag_write_too_small">标签容量太小：它可容纳%1$d字节，而消息需要%2$d字节。</string>
+    <string name="tag_write_formatted">已格式化。请将标签移开，再重新靠近以写入。</string>
+    <string name="tag_write_format_failed">无法格式化标签。请保持标签不动，然后重试。</string>
+    <string name="tag_write_format_unexpected">格式化时出现意外结果。请保持标签不动，然后重试。</string>
+    <string name="tag_write_unexpected">写入时出现意外结果。请保持标签不动，然后重试。</string>
+    <string name="tag_write_verify_mismatch">回读内容与写入内容不一致。未记录任何内容 — 请重试。</string>
+    <string name="tag_write_not_written">未写入任何内容（%1$s）。请保持标签不动，然后重试。</string>
+    <string name="tag_write_may_not_have_finished">写入可能未完成（%1$s）。请将标签移开，再重新靠近手机。</string>
+    <string name="tag_write_overwrite_confirmed">已确认覆盖。请再次将同一个标签靠近手机以写入。</string>
+    <string name="tag_write_kept">未写入。标签保持原样。</string>
+
+    <string name="tag_overwrite_title">覆盖此标签？</string>
+    <string name="tag_overwrite_explanation">覆盖后，此标签将标识%1$s。原有内容会丢失。确认后，请再次将同一个标签靠近手机以写入。</string>
+    <string name="tag_overwrite_confirm">覆盖</string>
+    <string name="tag_overwrite_keep">保留</string>
+    <string name="tag_overwrite_identifies">此标签当前标识%1$s。</string>
+    <string name="tag_overwrite_not_assigned">此标签在此手机的记录中，但尚未分配给任何对象。</string>
+    <string name="tag_overwrite_marked_lost">此标签已标记为丢失，并已停用。</string>
+    <string name="tag_overwrite_retired">此标签已退役，并已停用。</string>
+    <string name="tag_overwrite_could_not_check">这是 ServiceTag 标签，但暂时无法核对其记录。</string>
+    <string name="tag_overwrite_holds_newer">此标签已存有由更新版本应用写入的 ServiceTag 标签数据（格式%1$s）。</string>
+    <string name="tag_overwrite_holds_foreign">此标签已存有其他来源的 NDEF 内容（%1$s）。</string>
+    <string name="tag_overwrite_holds_unreadable">此标签已存有无法读取的 NDEF 内容（%1$s）。</string>
+</resources>

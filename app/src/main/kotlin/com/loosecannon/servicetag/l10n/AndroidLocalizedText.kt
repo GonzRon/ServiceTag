@@ -27,6 +27,8 @@ class AndroidLocalizedText(context: Context) : LocalizedText {
     override fun plural(id: Int, count: Int, args: Array<out Any?>): String =
         pluralResources().getQuantityString(id, count, *args)
 
+    override fun flag(id: Int): Boolean = app.resources.getBoolean(id)
+
     /**
      * Android picks a plural form by the rules of the configuration's first language, even when that language has
      * no pack and the words on screen are English: a Ukrainian phone would read "21 day", because Ukrainian's `one`

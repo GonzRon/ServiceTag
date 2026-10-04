@@ -47,10 +47,10 @@ are capitals in languages that have them and plain in those that do not (zh-Hans
 | due / DUE | the work is due now | pendiente / PENDIENTE | pendente / PENDENTE | 到期 | à faire / À FAIRE | 期限 | срок / СРОК | fällig / FÄLLIG | da fare / DA FARE | देय |
 | due soon / DUE SOON | | próximo / PRÓXIMO | em breve / EM BREVE | 即将到期 | bientôt / BIENTÔT | まもなく期限 | скоро / СКОРО | bald fällig / BALD FÄLLIG | a breve / A BREVE | जल्द देय |
 | overdue / OVERDUE | | vencido / VENCIDO | atrasado / ATRASADO | 已逾期 | en retard / EN RETARD | 期限切れ | просрочено / ПРОСРОЧЕНО | überfällig / ÜBERFÄLLIG | in ritardo / IN RITARDO | अतिदेय |
-| deferred / DEFERRED | held back by the maintenance policy | aplazado / APLAZADO | adiado / ADIADO | 已推迟 | différé / DIFFÉRÉ | 延期 | отложено / ОТЛОЖЕНО | zurückgestellt / ZURÜCKGESTELLT | rinviato / RINVIATO | स्थगित |
+| deferred / DEFERRED | held back by the maintenance policy; never the snooze word | aplazado / APLAZADO | postergado / POSTERGADO | 已推迟 | différé / DIFFÉRÉ | 延期 | отложено / ОТЛОЖЕНО | zurückgestellt / ZURÜCKGESTELLT | rinviato / RINVIATO | स्थगित |
 | paused / PAUSED | | en pausa / EN PAUSA | pausado / PAUSADO | 已暂停 | en pause / EN PAUSE | 一時停止 | приостановлено / ПРИОСТАНОВЛЕНО | pausiert / PAUSIERT | in pausa / IN PAUSA | रुका हुआ |
 | complete / done | record that the work was done | completar / hecho | concluir / feito | 完成 | terminer / fait | 完了 | выполнить / выполнено | erledigen / erledigt | completare / fatto | पूरा करें / पूरा |
-| snooze | remind again later | posponer | adiar | 稍后提醒 | reporter | スヌーズ | отложить | zurückstellen | posticipa | स्नूज़ |
+| snooze | remind again later; never the DEFERRED word | posponer | adiar | 稍后提醒 | reporter | スヌーズ | напомнить позже | später erinnern | posticipa | स्नूज़ |
 | reminder | a notification about due work | recordatorio | lembrete | 提醒 | rappel | リマインダー | напоминание | Erinnerung | promemoria | रिमाइंडर |
 | meter | a running count such as engine hours | contador | medidor | 计数器 | compteur | メーター | счётчик | Zähler | contatore | मीटर |
 | reading | one value read from a meter or gauge | lectura | leitura | 读数 | relevé | 測定値 | показание | Messwert | lettura | रीडिंग |

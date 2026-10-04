@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_scan.xml. -->
+<resources>
+    <string name="nav_dashboard">डैशबोर्ड</string>
+    <string name="nav_assets">उपकरण</string>
+    <string name="nav_maintenance">रखरखाव</string>
+    <string name="nav_link_points_nowhere">वह लिंक यहाँ किसी चीज़ तक नहीं ले जाता।</string>
+
+    <string name="scan_title">टैग पढ़ें / जाँचें</string>
+    <string name="scan_back">वापस जाएँ</string>
+    <string name="scan_ready">स्कैन के लिए तैयार</string>
+    <string name="scan_reading">टैग पढ़ा जा रहा है</string>
+    <string name="scan_hold_hint">अपने फ़ोन का ऊपरी हिस्सा उपकरण पर लगे टैग के पास रखें।</string>
+    <string name="scan_needs_window">स्कैन करने के लिए ऐप की अपनी विंडो ज़रूरी है।</string>
+    <string name="scan_read_failed">वह टैग पढ़ा नहीं जा सका। उसे स्थिर रखें और फिर से कोशिश करें।</string>
+    <string name="scan_reason_no_ndef">यह टैग NDEF सपोर्ट नहीं करता</string>
+
+    <string name="nfc_no_hardware">इस फ़ोन में NFC हार्डवेयर नहीं है।</string>
+    <string name="nfc_turned_off">NFC बंद है। इसे सिस्टम सेटिंग में चालू करें, फिर वापस आएँ।</string>
+    <string name="nfc_nothing_to_resolve">पहचानने लायक कुछ नहीं मिला।</string>
+    <string name="nfc_could_not_resolve">इस टैग की पहचान नहीं हो सकी: %1$s</string>
+
+    <string name="tag_eyebrow_reading">टैग पढ़ा जा रहा है</string>
+    <string name="tag_looking_up">यह टैग खोजा जा रहा है…</string>
+    <string name="tag_eyebrow_servicetag">ServiceTag टैग</string>
+    <string name="tag_open_asset">उपकरण खोलें</string>
+    <string name="tag_cancel">रद्द करें</string>
+    <string name="tag_eyebrow_detected">टैग मिला</string>
+    <string name="tag_opening_asset">उपकरण खोला जा रहा है…</string>
+    <string name="tag_pre_split_link">यह टैग प्रोडक्ट के बँटवारे से पहले के एक नोट लिंक की ओर इशारा करता है। ServiceTag अब लिंक नहीं खोलता; NoteTag खोलता है।</string>
+    <string name="tag_eyebrow_unregistered">रजिस्टर नहीं हुआ टैग</string>
+    <string name="tag_not_assigned">यह टैग अभी तक किसी चीज़ से जुड़ा नहीं है।</string>
+    <string name="tag_bind_to_asset">उपकरण से जोड़ें</string>
+    <string name="tag_eyebrow_marked_lost">टैग खोया हुआ मार्क किया गया</string>
+    <string name="tag_eyebrow_retired">टैग सेवा से हटाया गया</string>
+    <string name="tag_revoked_sentence">यह टैग सेवा से हटा दिया गया था। इसे फिर से जोड़ने पर यह फिर से काम करने लगेगा।</string>
+    <string name="tag_not_in_records">यह ServiceTag टैग इस फ़ोन के रिकॉर्ड में नहीं है।</string>
+    <string name="tag_write_over_it">इस पर नया टैग लिखें</string>
+    <string name="tag_eyebrow_not_ours">ServiceTag टैग नहीं है</string>
+    <string name="tag_holds_something_else">इस टैग में कुछ और है।</string>
+    <string name="tag_placement">टैग की जगह</string>
+    <string name="tag_picker_title">यह टैग इससे जोड़ें</string>
+    <string name="tag_picker_new_asset">नया उपकरण…</string>
+    <string name="tag_picker_new_asset_detail">इसे बनाएँ, फिर यह टैग दोबारा स्कैन करें</string>
+    <string name="tag_picker_empty">जोड़ने के लिए अभी कुछ नहीं है</string>
+    <string name="tag_picker_asset">उपकरण</string>
+    <string name="tag_bind_failed">यह टैग जोड़ा नहीं जा सका: %1$s</string>
+
+    <string name="tag_reason_empty">खाली टैग</string>
+    <string name="tag_reason_foreign">ServiceTag टैग नहीं: %1$s</string>
+    <string name="tag_reason_unreadable">ServiceTag रिकॉर्ड पढ़ा नहीं जा सका: %1$s</string>
+    <string name="tag_reason_not_ours">ServiceTag टैग नहीं</string>
+    <string name="tag_reason_newer_app">ServiceTag के नए वर्शन से लिखा गया (पेलोड फ़ॉर्मैट %1$d)</string>
+    <string name="tag_reason_unresolved">इस टैग की पहचान नहीं हो सकी</string>
+
+    <string name="tag_write_title">टैग लिखें</string>
+    <string name="tag_write_close">बंद करें</string>
+    <string name="tag_write_target">लक्ष्य</string>
+    <string name="tag_target_spare">अभी कुछ नहीं — एक अतिरिक्त टैग, जो पहली बार स्कैन होने पर जोड़ा जाएगा</string>
+    <string name="tag_target_unnamed">यह लक्ष्य</string>
+    <string name="tag_write_eyebrow_idle">NFC टैग लिखें</string>
+    <string name="tag_write_eyebrow_confirm">इस टैग को ओवरराइट करें?</string>
+    <string name="tag_write_answer_here">यहाँ जवाब दें, फिर वही टैग दोबारा फ़ोन के पास रखें।</string>
+    <string name="tag_write_eyebrow_written">टैग लिखा गया</string>
+    <string name="tag_written_locked">%1$s · लॉक किया गया</string>
+    <string name="tag_written_rewritable">%1$s · दोबारा लिखा जा सकता है</string>
+    <string name="tag_write_done">हो गया</string>
+    <string name="tag_write_eyebrow_error">नहीं लिखा गया</string>
+    <string name="tag_write_verified">वापस पढ़ने पर बाइट-दर-बाइट एक जैसा</string>
+    <string name="tag_write_needs_window">लिखने के लिए ऐप की अपनी विंडो ज़रूरी है।</string>
+    <string name="tag_lock_switch">हमेशा के लिए लॉक करें</string>
+    <string name="tag_lock_switch_hint">लॉक किया गया टैग कभी दोबारा नहीं लिखा जा सकता।</string>
+    <string name="tag_lock_warning_title">हमेशा के लिए लॉक करें?</string>
+    <string name="tag_lock_warning_text">लॉक किया गया टैग न कभी दोबारा लिखा जा सकता है, न दोबारा इस्तेमाल किया जा सकता है। सिर्फ़ उन्हीं टैग को लॉक करें जो हमेशा के लिए लगाए गए हैं।</string>
+    <string name="tag_lock_warning_confirm">लिखने के बाद लॉक करें</string>
+    <string name="tag_lock_warning_dismiss">लॉक न करें</string>
+
+    <string name="tag_write_hold_blank">कोई खाली या दोबारा इस्तेमाल होने लायक टैग फ़ोन के पिछले हिस्से के पास रखें।</string>
+    <string name="tag_write_read_failed">टैग पढ़ा नहीं जा सका। उसे स्थिर रखें और फिर से कोशिश करें।</string>
+    <string name="tag_write_no_ndef_hint">यह टैग NDEF सपोर्ट नहीं करता। NTAG213/215/216 या ऐसा ही कोई टैग इस्तेमाल करें।</string>
+    <string name="tag_write_no_ndef">यह टैग NDEF सपोर्ट नहीं करता।</string>
+    <string name="tag_write_read_only">यह टैग सिर्फ़ पढ़ा जा सकता है (लॉक है)। कुछ भी नहीं लिखा गया।</string>
+    <string name="tag_write_too_small">टैग बहुत छोटा है: इसमें %1$d बाइट आते हैं, मैसेज को %2$d बाइट चाहिए।</string>
+    <string name="tag_write_formatted">फ़ॉर्मैट हो गया। लिखने के लिए टैग को हटाएँ और फिर से पास रखें।</string>
+    <string name="tag_write_format_failed">टैग फ़ॉर्मैट नहीं किया जा सका। उसे स्थिर रखें और फिर से कोशिश करें।</string>
+    <string name="tag_write_format_unexpected">फ़ॉर्मैट करते समय अनपेक्षित नतीजा मिला। टैग को स्थिर रखें और फिर से कोशिश करें।</string>
+    <string name="tag_write_unexpected">लिखते समय अनपेक्षित नतीजा मिला। टैग को स्थिर रखें और फिर से कोशिश करें।</string>
+    <string name="tag_write_verify_mismatch">वापस पढ़ा गया डेटा लिखे गए डेटा से अलग है। कुछ भी दर्ज नहीं किया गया — फिर से कोशिश करें।</string>
+    <string name="tag_write_not_written">कुछ भी नहीं लिखा गया (%1$s)। टैग को स्थिर रखें और फिर से कोशिश करें।</string>
+    <string name="tag_write_may_not_have_finished">हो सकता है कि लिखना पूरा न हुआ हो (%1$s)। टैग को हटाएँ और फिर से फ़ोन के पास रखें।</string>
+    <string name="tag_write_overwrite_confirmed">ओवरराइट की पुष्टि हो गई। लिखने के लिए वही टैग फिर से फ़ोन के पास रखें।</string>
+    <string name="tag_write_kept">नहीं लिखा गया। टैग जैसा था, वैसा ही छोड़ दिया गया।</string>
+
+    <string name="tag_overwrite_title">इस टैग को ओवरराइट करें?</string>
+    <string name="tag_overwrite_explanation">बदलने के बाद यह टैग इसकी पहचान करेगा: %1$s। पुराना डेटा मिट जाएगा। पुष्टि करने के बाद, लिखने के लिए वही टैग फिर से फ़ोन के पास रखें।</string>
+    <string name="tag_overwrite_confirm">ओवरराइट करें</string>
+    <string name="tag_overwrite_keep">रहने दें</string>
+    <string name="tag_overwrite_identifies">यह टैग अभी %1$s की पहचान करता है।</string>
+    <string name="tag_overwrite_not_assigned">यह टैग इस फ़ोन के रिकॉर्ड में है, लेकिन अभी तक किसी चीज़ से जुड़ा नहीं है।</string>
+    <string name="tag_overwrite_marked_lost">इस टैग को खोया हुआ मार्क करके सेवा से हटा दिया गया था।</string>
+    <string name="tag_overwrite_retired">इस टैग को सेवा से हटा दिया गया था और अब यह इस्तेमाल में नहीं है।</string>
+    <string name="tag_overwrite_could_not_check">यह एक ServiceTag टैग है, लेकिन अभी इसका रिकॉर्ड जाँचा नहीं जा सका।</string>
+    <string name="tag_overwrite_holds_newer">इस टैग में पहले से एक ServiceTag टैग है, जो नए ऐप से लिखा गया था (फ़ॉर्मैट %1$s)।</string>
+    <string name="tag_overwrite_holds_foreign">इस टैग में पहले से किसी और का NDEF डेटा है (%1$s)।</string>
+    <string name="tag_overwrite_holds_unreadable">इस टैग में पहले से ऐसा NDEF डेटा है, जिसे पढ़ा नहीं जा सकता (%1$s)।</string>
+</resources>

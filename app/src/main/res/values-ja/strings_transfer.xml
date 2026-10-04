@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_transfer.xml. -->
+<resources>
+    <string name="replace_asset">機器を置き換える</string>
+    <string name="replace_back">戻る</string>
+    <string name="replace_old_asset">以前の機器</string>
+    <string name="replace_will_be_retired">%1$sは使用終了になります。履歴、ドキュメント、サービス記録はそのまま保持されます。</string>
+    <string name="replace_was_retired_on">%1$sは%2$sに使用終了になりました。履歴、ドキュメント、サービス記録はそのまま保持されます。</string>
+    <string name="replace_new_asset">新しい機器</string>
+    <string name="replace_separate_asset">独自の識別情報を持つ別の機器です。以前の機器の履歴はコピーされません。</string>
+    <string name="replace_carry_forward">引き継ぎ</string>
+    <string name="replace_only_what_you_tick">チェックした項目だけが、履歴のない新しいレコードとしてコピーされます。</string>
+    <string name="replace_season_and_break">稼働シーズンとメンテナンス休止期間</string>
+    <string name="replace_description_and_notes">説明とメモ</string>
+    <string name="replace_add_to">%1$sに追加</string>
+    <string name="replace_schedules_start_on">コピーしたスケジュールの開始日</string>
+    <string name="replace_needs_setup">「測定値とアクション」が必要です。</string>
+    <string name="replace_needs_season">「稼働シーズンとメンテナンス休止期間」が必要です。</string>
+    <string name="replace_move_to_new">新しい機器に移動</string>
+    <string name="replace_leave_with_old">以前の機器に残す</string>
+    <string name="replace_moved_tag_not_rewritten">移動したタグは書き換えられません。スキャンすると新しい機器が開きます。</string>
+    <plurals name="replace_children_stay">
+        <item quantity="other">%1$sは引き続き%2$sの一部です。</item>
+    </plurals>
+    <string name="replace_lent_out">%1$sは貸出中です。貸出はその機器に残ります。</string>
+    <string name="replace_retire_on">%2$sに%1$sを使用終了にする</string>
+    <string name="replace_stays_retired_from">%1$sは%2$sから使用終了のまま</string>
+    <string name="replace_create">%1$sを作成</string>
+    <string name="replace_nothing_carried">引き継ぐ項目なし</string>
+    <string name="replace_could_not_replace">%1$sを置き換えられませんでした。何も変更されていません。</string>
+    <string name="replace_changed_while_reviewing">確認中に機器または関連する記録が変更されました。何も変更されていません。</string>
+    <string name="replace_replaced_by">%2$sに%1$sへ置き換え</string>
+    <string name="replace_replaces">%1$sの後継</string>
+    <string name="replace_was_in_season_on">新しい機器は%1$sの時点でシーズン中でしたか？</string>
+
+    <string name="transfer_assets">機器を移行</string>
+    <string name="transfer_back">戻る</string>
+    <string name="transfer_select_what_leaves">このServiceTagから移す機器を選択</string>
+    <string name="transfer_components_go_with">子機器は所属する機器と一緒に移行されます。</string>
+    <string name="transfer_review">確認</string>
+    <string name="transfer_pack">移行パック</string>
+    <string name="transfer_may_contain">これらの記録には、シリアル番号、設置場所、購入情報、領収書、サービス履歴が含まれている可能性があります。</string>
+    <string name="transfer_note_label">新しい所有者へのメモ（任意）</string>
+    <string name="transfer_create">移行パックを作成</string>
+    <string name="transfer_mixed_group">%1$sは、ここに残る%2$sも対象にしています。グループは、これまでに対象としたすべての機器と一緒にのみ移行できます。</string>
+    <string name="transfer_parent_not_selected">%1$sは%2$sの子機器です。%2$sも選択してください。</string>
+    <string name="transfer_lent_out">%1$sは貸出中です。先に返却済みにしてください。</string>
+    <string name="transfer_outside_reference">%1$sには、この移行の範囲外を参照する記録があります。</string>
+    <string name="transfer_creating">移行パックを作成中…</string>
+    <string name="transfer_not_created">移行パックは作成されませんでした：%1$s。何も変更されていません。</string>
+    <string name="transfer_not_created_entangled">移行パックは作成されませんでした：このスマートフォンの記録が、まだ移管済みの機器を参照しています。何も変更されていません。</string>
+    <string name="transfer_not_created_generic">移行パックは作成されませんでした：ファイルを書き込めませんでした。何も変更されていません。</string>
+    <string name="transfer_ready">移行パックの準備ができました</string>
+    <string name="transfer_share">共有</string>
+    <string name="transfer_save_a_copy">コピーを保存</string>
+    <string name="transfer_size">サイズ：%1$s</string>
+    <string name="transfer_share_title">移行パックを共有</string>
+    <string name="transfer_saved">保存しました</string>
+    <string name="transfer_mark_question">このスマートフォンで、これらの機器を移管済みにしますか？</string>
+    <string name="transfer_mark">移管済みにする</string>
+    <string name="transfer_mark_consequence">リマインダーは停止し、一覧に表示されなくなります。「アーカイブ済み」から引き続き開けます。</string>
+    <string name="transfer_transferred">移管済み</string>
+    <string name="transfer_transferred_out">移管済み</string>
+    <string name="transfer_transferred_on">移管日：%1$s</string>
+    <string name="transfer_pack_line">移行パック%1$s</string>
+    <string name="transfer_scan_title">移管済みの機器</string>
+    <string name="transfer_handed_over">%1$sは%2$sに引き渡されました。このスマートフォンでは管理されなくなりました。</string>
+    <string name="transfer_changed_since">この移行パックの作成後に%1$sが変更されました。もう一度作成してください。</string>
+    <string name="transfer_could_not_mark">これらの機器を移管済みにできませんでした。何も変更されていません。</string>
+    <string name="transfer_could_not_save">コピーを保存できませんでした。</string>
+    <string name="transfer_nothing_to_offer">移行できる機器がありません。</string>
+    <string name="transfer_already_transferred">これらの機器はすでに移管済みになっています。</string>
+    <string name="transfer_too_large">これらの機器は記録が多すぎて、1つの移行パックに収まりません。一度に移行する機器を減らしてください。</string>
+    <string name="transfer_pack_gone">この移行パックはこのスマートフォンにもうありません。もう一度作成してください。</string>
+    <string name="transfer_included_with">%1$sに含まれます</string>
+    <string name="transfer_withdraw_record">移行記録を取り消す</string>
+    <string name="transfer_withdraw_title">移行パック%1$sの記録を取り消しますか？</string>
+    <string name="transfer_withdraw_body">この移行パックが渡されなかった場合、または別のスマートフォンの記録を優先すべき場合にのみ使用してください。その機器はアーカイブされたままです。</string>
+    <string name="transfer_withdraw">取り消す</string>
+    <string name="transfer_could_not_withdraw">この記録を取り消せませんでした。何も変更されていません。</string>
+    <string name="transfer_withdraw_entangled">この記録を取り消せませんでした：取り消すと、このスマートフォンの記録が移管済みの機器を参照したままになります。何も変更されていません。</string>
+    <string name="transfer_bearer">このファイルを持っている人は誰でも、これらの機器をインポートできます。受け取るべき相手またはデバイスにのみ共有してください。</string>
+    <string name="transfer_mark_entangled">これらの機器を移管済みにできませんでした：このスマートフォンの記録が、まだ移管済みの機器を参照しています。何も変更されていません。</string>
+
+    <string name="transfer_import_asset_transferred_out">この機器は移管済みです。</string>
+    <string name="transfer_import_title">移行パックをインポート</string>
+    <string name="transfer_import_note">メモ：%1$s</string>
+    <string name="transfer_import_created">作成日：%1$s</string>
+    <string name="transfer_import_contains">内容</string>
+    <string name="transfer_import_import">インポート</string>
+    <string name="transfer_import_already_here">この移行パックはすでにこのスマートフォンにあります。</string>
+    <string name="transfer_import_conflicts">この移行パックはこのスマートフォンの記録と競合するため、何もインポートされませんでした。</string>
+    <string name="transfer_import_tag_used_here">このパックのNFCタグは、このスマートフォンですでに%1$sに使用されています。</string>
+    <string name="transfer_import_duplicate">%1$sは、すでに%2$sとしてここにある可能性があります。</string>
+    <string name="transfer_import_not_a_pack">このファイルは移行パックではありません。</string>
+    <string name="transfer_import_newer">この移行パックには新しいバージョンのServiceTagが必要です。</string>
+    <string name="transfer_import_damaged">この移行パックは破損しているため、インポートできません。</string>
+    <string name="transfer_import_imported">移行パックをインポートしました：%1$s</string>
+    <string name="transfer_import_could_not_import">この移行パックをインポートできませんでした。何も変更されていません。</string>
+    <string name="transfer_import_coming_back">戻ってくる機器：%1$s</string>
+    <string name="transfer_import_not_brought_back">%1$sはこのスマートフォンから移管済みで、この移行パックでは戻りません。</string>
+
+    <plurals name="transfer_count_assets">
+        <item quantity="other">機器%1$d台</item>
+    </plurals>
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="other">NFCタグ%1$d枚</item>
+    </plurals>
+    <plurals name="transfer_count_records">
+        <item quantity="other">記録%1$d件</item>
+    </plurals>
+    <plurals name="transfer_count_schedules">
+        <item quantity="other">スケジュール%1$d件</item>
+    </plurals>
+    <plurals name="transfer_count_documents">
+        <item quantity="other">ドキュメント・写真%1$d件</item>
+    </plurals>
+    <plurals name="transfer_count_service_cases">
+        <item quantity="other">サービス案件%1$d件</item>
+    </plurals>
+
+    <string name="backup_title">バックアップ</string>
+    <string name="backup_back">戻る</string>
+    <string name="backup_last_backup">前回のバックアップ</string>
+    <string name="backup_never">未実施</string>
+    <string name="backup_set_explained">バックアップセットは、選択したフォルダに保存される2つのファイル（データと、その横に置かれる添付ファイル）です。このスマートフォンの外にある唯一のコピーになります。</string>
+    <string name="backup_export_set">バックアップセットをエクスポート</string>
+    <string name="backup_folder_not_writable">そのフォルダには書き込めません</string>
+    <string name="backup_restore_section">復元</string>
+    <string name="backup_restore_data_explained">データを復元すると、まずこのスマートフォン上のすべてが削除され、その後ファイルが読み込まれます。</string>
+    <string name="backup_restore_data">データを復元</string>
+    <string name="backup_restore_files_explained">続いて、同じセットのファイルアーカイブを復元して添付ファイルを戻してください。ファイルが追加されるだけで、何も削除されません。</string>
+    <string name="backup_restore_files">ファイルを復元</string>
+    <string name="backup_replace_title">すべて置き換えますか？</string>
+    <string name="backup_replace_body">このスマートフォン上のすべての機器、タグ、リンクが削除され、ファイルの内容に置き換えられます。この操作は元に戻せません。</string>
+    <string name="backup_replace_type_word">確認のため%1$sと入力してください</string>
+    <string name="backup_replace_confirm">置き換え</string>
+    <string name="backup_cancel">キャンセル</string>
+    <string name="backup_restore_empty_title">このバックアップを復元しますか？</string>
+    <string name="backup_restore_empty_body">このスマートフォンにはまだ記録がないため、置き換えられるものはありません。</string>
+    <string name="backup_restore_confirm">復元</string>
+
+    <string name="backup_no_attachment_folder">先に「設定」で添付ファイルフォルダを選択してください</string>
+    <string name="backup_exported_as">%1$sとしてエクスポートしました</string>
+
+    <string name="backup_export_failed_entangled">エクスポートに失敗しました：このスマートフォンの記録が、まだ移管済みの機器を参照しています</string>
+    <string name="backup_export_failed_files_archive">エクスポートに失敗しました：ファイルアーカイブを書き込めませんでした</string>
+    <string name="backup_export_failed">エクスポートに失敗しました：%1$s</string>
+    <string name="backup_nothing_saved">%1$s。何も保存されていません。</string>
+    <string name="backup_not_saved">バックアップは保存されていません：%1$s</string>
+    <plurals name="backup_left_behind">
+        <item quantity="other">%1$s。%2$sを削除できませんでした — 手動で削除してください。</item>
+    </plurals>
+    <plurals name="backup_incomplete_missing">
+        <item quantity="other">添付ファイル%1$d件が見つかりません</item>
+    </plurals>
+    <plurals name="backup_incomplete_changed">
+        <item quantity="other">添付ファイル%1$d件が追加後に変更されています</item>
+    </plurals>
+    <string name="backup_incomplete_both">%1$s。%2$s</string>
+    <string name="backup_incomplete_not_covered">ファイルアーカイブにすべての添付ファイルが含まれていませんでした</string>
+
+    <string name="backup_restored_data">インポートしました：%1$s、%2$s、%3$s</string>
+    <string name="backup_restored_data_attachments">インポートしました：%1$s、%2$s、%3$s · %4$s</string>
+    <plurals name="backup_restored_assets">
+        <item quantity="other">機器%1$d台</item>
+    </plurals>
+    <plurals name="backup_restored_tags">
+        <item quantity="other">タグ%1$d枚</item>
+    </plurals>
+    <plurals name="backup_restored_links">
+        <item quantity="other">リンク%1$d件</item>
+    </plurals>
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="other">添付ファイル%1$d件が記載されています。内容を取得するには、ファイルアーカイブを復元してください</item>
+    </plurals>
+
+    <plurals name="backup_restored_files">
+        <item quantity="other">ファイル%1$d件を復元し、%2$d件をスキップしました</item>
+    </plurals>
+    <string name="backup_report_separator">"。"</string>
+    <plurals name="backup_files_already_present">
+        <item quantity="other">%1$d件はすでに存在します</item>
+    </plurals>
+    <plurals name="backup_files_missing_entries">
+        <item quantity="other">記載されたファイルのうち%1$d件がアーカイブにありませんでした</item>
+    </plurals>
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="other">アーカイブ内のファイルのうち%1$d件が記載されていませんでした</item>
+    </plurals>
+    <string name="backup_set_mismatch">それらのファイルは%2$sではなく、バックアップセット%1$sのものです</string>
+    <string name="backup_restore_failed">復元に失敗しました：%1$s</string>
+    <string name="backup_restore_transferred_out_one">復元に失敗しました：このバックアップには、このスマートフォンから移管済みの%1$sがまだ含まれています。何も置き換えられていません。</string>
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="other">復元に失敗しました：このバックアップには、このスマートフォンから移管済みの機器が%1$d台まだ含まれています。何も置き換えられていません。</item>
+    </plurals>
+
+    <string name="backup_cannot_create">選択したフォルダに%1$sを作成できません</string>
+    <string name="backup_cannot_open_for_writing">%1$sを書き込み用に開けません</string>
+    <string name="backup_cannot_open_for_reading">%1$sを読み取り用に開けません</string>
+</resources>

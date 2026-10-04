@@ -39,6 +39,7 @@ id (`P16-12`) where the copy was ratified. They are a translator's only context:
 | a count | `localizedPlural(R.plurals.x, count, args…)` |
 | a date the owner reads | `localizedDate(date)` / `localizedMonthDay(date)` — never `ofPattern("d MMM uuuu")` |
 | names joined into one run | `localizedList(names)` |
+| a rule that differs by language but is not words | a `<bool>` in `values/bools.xml`, read with `localizedFlag`; a pack overrides it in its own `bools.xml` only where its grammar differs (German keeps an action name's capital in "Wassertest eintragen") |
 
 `ServiceTagApp` installs the Android resources before anything can render. Text is read when it is drawn and never
 cached in a top-level or companion `val`, which would keep the first language it was read in: a catalog entry is a
@@ -65,7 +66,8 @@ its English spelling (#74). Localizing them needs language-neutral keys for the 
 
 1. Create `values-<language>/` (or `values-b+<script tag>/`, as Simplified Chinese does) with every
    `strings*.xml` and `plurals.xml` translated, every plural form the language needs, and its own
-   `format_date_display`, `format_date_month_day` and `format_list_separator`.
+   `format_date_display`, `format_date_month_day`, `format_list_separator` and `format_language` (its ISO 639
+   code, which picks plural rules). Check `values/bools.xml` and override any rule its grammar needs.
 2. Add its tag to `xml/locales_config.xml`.
 3. Add its plural rule to `PluralRules` in the unit tests and a column to the glossary.
 4. Run the unit tests: `LocalizationCoverageTest` fails until all of the above agree.

@@ -37,11 +37,11 @@
     <string name="maintenance_status_out_of_season">FORA DE TEMPORADA</string>
     <string name="maintenance_status_paused">PAUSADO</string>
     <string name="maintenance_status_no_baseline">SEM LEITURA INICIAL</string>
-    <string name="maintenance_status_deferred">ADIADO</string>
+    <string name="maintenance_status_deferred">POSTERGADO</string>
     <string name="maintenance_dashboard_section_attention">ATENÇÃO</string>
     <string name="maintenance_dashboard_section_upcoming">PRÓXIMOS</string>
     <string name="maintenance_dashboard_section_current">EM DIA</string>
-    <string name="maintenance_dashboard_section_deferred">Adiados</string>
+    <string name="maintenance_dashboard_section_deferred">Postergados</string>
     <string name="maintenance_dashboard_section_out_of_season">FORA DE TEMPORADA</string>
 
     <string name="maintenance_log_meter_reading">Registrar leitura do medidor</string>

@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedFlag
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.theme.ServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.StatusColor
@@ -107,7 +108,10 @@ fun stateIcon(state: RangeState): ImageVector = when (state) {
  */
 fun quickActionLabel(profile: EventProfile): String {
     val name = profile.name
-    val label = if (name.length > 1 && name[1].isLowerCase()) name.replaceFirstChar { it.lowercase() } else name
+    // English lower-cases the name's first letter inside the sentence ("Log water test"), never an acronym's; a
+    // language whose nouns keep their capital (German) turns this off in its own bools.xml (#102).
+    val lower = localizedFlag(R.bool.journal_lowercase_profile_name) && name.length > 1 && name[1].isLowerCase()
+    val label = if (lower) name.replaceFirstChar { it.lowercase() } else name
     return localized(R.string.journal_log_profile, label)
 }
 

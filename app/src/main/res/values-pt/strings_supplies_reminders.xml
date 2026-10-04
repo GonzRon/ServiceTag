@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese (Brazilian usage) translation of values/strings_supplies_reminders.xml. -->
+<resources>
+    <string name="supplies_section">Insumos</string>
+    <string name="supplies_supply_item">Insumo</string>
+    <string name="supplies_no_supplies_yet">Nenhum insumo ainda.</string>
+    <string name="supplies_part_number_field">Código da peça</string>
+    <string name="supplies_preferred_unit_field">Unidade preferida</string>
+    <string name="supplies_specifications_section">Especificações</string>
+    <string name="supplies_add_specification">Adicionar especificação</string>
+    <string name="supplies_remove_specification">Remover especificação</string>
+    <string name="supplies_no_specifications">Sem especificações</string>
+    <string name="supplies_used_by_section">Usado por</string>
+    <string name="supplies_not_used_by_any_asset">Não usado por nenhum equipamento</string>
+    <string name="supplies_specification_needs_label_and_value">Cada especificação precisa de um rótulo e de um valor.</string>
+    <string name="supplies_add_supply">Adicionar insumo</string>
+    <string name="supplies_no_supplies">Sem insumos</string>
+    <string name="supplies_choose_a_supply">Escolha um insumo</string>
+    <string name="supplies_no_supply_items_yet">Nenhum insumo ainda. Adicione um em Manutenção › Insumos.</string>
+    <string name="supplies_edit_role">Editar função</string>
+    <string name="supplies_role_taken">Este equipamento já tem esse insumo nessa função.</string>
+    <string name="supplies_item_gone">Esse insumo não está mais disponível.</string>
+    <string name="supplies_link_supply">Vincular insumo</string>
+    <string name="supplies_linked_to">Vinculado a %1$s</string>
+    <string name="supplies_remove_link">Remover vínculo</string>
+
+    <string name="supplies_item_archived_badge">Arquivado</string>
+    <string name="supplies_more">Mais</string>
+    <string name="supplies_remove_row">Remover</string>
+    <string name="supplies_back">Voltar</string>
+    <string name="supplies_cancel">Cancelar</string>
+    <string name="supplies_save">Salvar</string>
+    <string name="supplies_edit">Editar</string>
+    <string name="supplies_archive">Arquivar</string>
+    <string name="supplies_unarchive">Desarquivar</string>
+    <string name="supplies_name_field">Nome</string>
+    <string name="supplies_specification_label_field">Rótulo</string>
+    <string name="supplies_specification_value_field">Valor</string>
+    <string name="supplies_specification_unit_field">Unidade</string>
+
+    <string name="installed_components_section">Componentes instalados</string>
+    <string name="installed_no_installed_components">Nenhum componente instalado</string>
+    <string name="installed_install_component">Instalar componente</string>
+    <string name="installed_install_inside">Instalar dentro</string>
+    <string name="installed_inside_of">Dentro de %1$s</string>
+    <string name="installed_serial_or_lot">Série ou lote</string>
+    <string name="installed_installed_on">Instalado em</string>
+    <string name="installed_removed_on">Removido em</string>
+    <string name="installed_replace">Substituir</string>
+    <string name="installed_replace_title">Substituir %1$s</string>
+    <string name="installed_remove_title">Remover %1$s</string>
+    <string name="installed_subtree_removed_too">Tudo o que está instalado dentro dele é removido na mesma data.</string>
+    <string name="installed_edit_component">Editar componente</string>
+    <string name="installed_history">Histórico</string>
+    <string name="installed_installed_on_day">Instalado em %1$s</string>
+    <string name="installed_install_date_not_recorded">Data de instalação não registrada</string>
+    <string name="installed_removed_on_day">Removido em %1$s</string>
+    <string name="installed_removed_count">Removidos (%1$d)</string>
+    <string name="installed_component_changed">Este componente foi removido ou alterado. Nada foi salvo.</string>
+    <string name="installed_removal_before_install">A data de remoção não pode ser anterior à data de instalação.</string>
+    <string name="installed_composition_line">%1$s × %2$s</string>
+    <string name="installed_more_entries">+%1$d a mais</string>
+    <string name="installed_composition_section">Composição</string>
+    <string name="installed_remove_from_composition">Remover da composição</string>
+    <string name="installed_composition_quantity_required">Cada insumo precisa de uma quantidade maior que zero.</string>
+    <string name="installed_documents_and_references">Documentos e referências</string>
+    <string name="installed_this_installed_component">Este componente instalado</string>
+    <string name="installed_from_supply">De %1$s</string>
+    <string name="installed_open_the_supply_to_change">Abra o insumo para adicionar ou alterar estes itens.</string>
+
+    <string name="installed_back">Voltar</string>
+    <string name="installed_remove">Remover</string>
+    <string name="installed_edit">Editar</string>
+    <string name="installed_save">Salvar</string>
+    <string name="installed_cancel">Cancelar</string>
+    <string name="installed_quantity_field">Qtd.</string>
+    <string name="installed_unit_field">Unidade</string>
+
+    <string name="reminders_permission_rationale_maintenance">O ServiceTag precisa da permissão de notificações para lembrar você quando uma manutenção estiver pendente.</string>
+    <string name="reminders_permission_rationale_warranty">O ServiceTag precisa da permissão de notificações para lembrar você antes que uma garantia vença.</string>
+    <string name="reminders_permission_rationale_loan">O ServiceTag precisa da permissão de notificações para lembrar você quando chegar a data de devolução de um empréstimo.</string>
+
+    <string name="reminders_health_notifications_blocked">As notificações estão desativadas, então os lembretes de manutenção não vão chegar.</string>
+    <string name="reminders_health_reminders_globally_off">Os lembretes estão desativados no ServiceTag.</string>
+    <string name="reminders_health_digest_alarm_missing">A verificação diária de lembretes não está agendada, então a manutenção de hoje pode ficar sem aviso.</string>
+    <string name="reminders_health_backstop_work_missing">A verificação de segurança em segundo plano não está em execução, então um lembrete perdido não seria detectado.</string>
+    <string name="reminders_health_app_restricted">Este telefone está restringindo o ServiceTag em segundo plano, então os lembretes podem chegar atrasados ou nem chegar.</string>
+    <plurals name="reminders_health_schedule_no_provider">
+        <item quantity="one">%1$d plano tem lembretes ativados, mas a entrega de lembretes não está configurada.</item>
+        <item quantity="other">%1$d planos têm lembretes ativados, mas a entrega de lembretes não está configurada.</item>
+    </plurals>
+    <plurals name="reminders_health_schedule_provider_disabled">
+        <item quantity="one">%1$d plano tem lembretes ativados, mas nenhuma forma de entregá-los.</item>
+        <item quantity="other">%1$d planos têm lembretes ativados, mas nenhuma forma de entregá-los.</item>
+    </plurals>
+    <plurals name="reminders_health_no_baseline">
+        <item quantity="one">%1$d plano precisa de uma leitura do medidor antes de poder vencer.</item>
+        <item quantity="other">%1$d planos precisam de uma leitura do medidor antes de poder vencer.</item>
+    </plurals>
+
+    <string name="notification_channel_due_name">Manutenção pendente</string>
+    <string name="notification_channel_due_description">Lembretes de manutenção pendente.</string>
+    <string name="notification_channel_overdue_name">Manutenção atrasada</string>
+    <string name="notification_channel_overdue_description">Lembretes de manutenção que já passou do prazo.</string>
+    <string name="notification_channel_warranty_name">Lembretes de garantia</string>
+    <string name="notification_channel_warranty_description">Lembretes antes de uma garantia vencer.</string>
+    <string name="notification_channel_loans_name">Lembretes de empréstimo</string>
+    <string name="notification_channel_loans_description">Lembretes quando um item emprestado deve ser devolvido.</string>
+
+    <plurals name="notification_summary_title">
+        <item quantity="one">%1$d item de manutenção precisa de atenção</item>
+        <item quantity="other">%1$d itens de manutenção precisam de atenção</item>
+    </plurals>
+    <plurals name="notification_summary_overdue">
+        <item quantity="one">%1$d atrasado</item>
+        <item quantity="other">%1$d atrasados</item>
+    </plurals>
+    <plurals name="notification_summary_due">
+        <item quantity="one">%1$d pendente</item>
+        <item quantity="other">%1$d pendentes</item>
+    </plurals>
+    <plurals name="notification_summary_due_soon">
+        <item quantity="one">%1$d em breve</item>
+        <item quantity="other">%1$d em breve</item>
+    </plurals>
+    <string name="notification_summary_body">%1$s.</string>
+
+    <string name="notification_item_title">%1$s — %2$s</string>
+    <string name="notification_item_due_on">Vence em %1$s.</string>
+    <string name="notification_item_overdue_since">Atrasado desde %1$s.</string>
+    <string name="notification_item_meter_due">Vence em %1$s %2$s; agora %3$s.</string>
+    <string name="notification_item_meter_due_no_unit">Vence em %1$s; agora %2$s.</string>
+
+    <string name="notification_status_due">PENDENTE</string>
+    <string name="notification_status_overdue">ATRASADO</string>
+    <string name="notification_status_expires_soon">VENCE EM BREVE</string>
+    <string name="notification_status_due_back">A DEVOLVER</string>
+    <string name="notification_status_not_returned">NÃO DEVOLVIDO</string>
+
+    <string name="notification_action_done">Feito</string>
+    <string name="notification_action_snooze_one_day">Adiar 1 dia</string>
+    <string name="notification_action_open">Abrir</string>
+
+    <string name="notification_warranty_title">%1$s — Garantia</string>
+    <string name="notification_warranty_body">A garantia vence em %1$s.</string>
+    <string name="notification_loan_title">%1$s — Devolução</string>
+    <string name="notification_loan_body_through">Emprestado para %1$s. Devolver até %2$s.</string>
+    <string name="notification_loan_body_after">Emprestado para %1$s. Devia ser devolvido até %2$s.</string>
+</resources>

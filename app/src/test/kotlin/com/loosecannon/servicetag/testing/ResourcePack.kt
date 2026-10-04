@@ -24,6 +24,9 @@ class ResourcePack(
     val strings: Map<String, String>
     val plurals: Map<String, Map<String, String>>
 
+    /** `<bool>` rules (`bools.xml`); optional in a pack, which then takes English's. */
+    val flags: Map<String, Boolean>
+
     /** Names declared `translatable="false"`: the same in every language, never a fallback. */
     val untranslatable: Set<String>
 
@@ -34,6 +37,7 @@ class ResourcePack(
         val parsed = parse(directory)
         strings = parsed.strings
         plurals = parsed.plurals
+        flags = parsed.flags
         untranslatable = parsed.untranslatable
     }
 
@@ -49,6 +53,11 @@ class ResourcePack(
         return if (args.isEmpty()) form else String.format(locale, form, *args)
     }
 
+    override fun flag(id: Int): Boolean {
+        val name = name(id, boolNames)
+        return flags[name] ?: fallback?.flags?.get(name) ?: error("no bool $name in ${directory.name}")
+    }
+
     fun stringNamed(name: String): String = strings[name]
         ?: fallback?.strings?.get(name)?.also { if (name !in fallback.untranslatable) fallbacks += name }
         ?: error("no string $name in ${directory.name}")
@@ -58,6 +67,7 @@ class ResourcePack(
     class Parsed(
         val strings: Map<String, String>,
         val plurals: Map<String, Map<String, String>>,
+        val flags: Map<String, Boolean>,
         val untranslatable: Set<String>,
     )
 
@@ -65,6 +75,7 @@ class ResourcePack(
         /** The app's `R.string` / `R.plurals` ids by name. By reflection: `R.plurals` exists only once one is declared. */
         val stringNames: Map<Int, String> by lazy { idsToNames("string") }
         val pluralNames: Map<Int, String> by lazy { idsToNames("plurals") }
+        val boolNames: Map<Int, String> by lazy { idsToNames("bool") }
 
         private fun idsToNames(type: String): Map<Int, String> =
             runCatching { Class.forName("${R::class.java.name}\$$type") }.getOrNull()?.fields.orEmpty()
@@ -107,6 +118,7 @@ class ResourcePack(
         fun parse(dir: File): Parsed {
             val strings = linkedMapOf<String, String>()
             val plurals = linkedMapOf<String, Map<String, String>>()
+            val flags = linkedMapOf<String, Boolean>()
             val untranslatable = linkedSetOf<String>()
             val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".xml") }.orEmpty().sortedBy { it.name }
             for (file in files) {
@@ -123,10 +135,13 @@ class ResourcePack(
                                 .associate { it.getAttribute("quantity") to androidText(it) }
                             check(plurals.put(name, forms) == null) { "${dir.name}: $name is declared twice" }
                         }
+                        "bool" -> check(flags.put(name, element.textContent.trim().toBooleanStrict()) == null) {
+                            "${dir.name}: $name is declared twice"
+                        }
                     }
                 }
             }
-            return Parsed(strings, plurals, untranslatable)
+            return Parsed(strings, plurals, flags, untranslatable)
         }
 
         private fun Element.childElements(): List<Element> =
