@@ -535,9 +535,14 @@ class VersionAgreementTest {
     }
 
     /**
-     * Three primary destinations, in the visual-design document and in the README. A released
-     * document describing the wrong navigation is a support cost, and both of these are read by
-     * people who cannot check them against the code.
+     * Three primary destinations, in the visual-design document, and the maintenance capability on the capabilities
+     * page. A released document describing the wrong navigation is a support cost, and both are read by people who
+     * cannot check them against the code.
+     *
+     * The README's 2026-10-04 rewrite for progressive disclosure (f93896d) moved every capability description to
+     * `docs/capabilities.md` and links it, so the capability cases below are anchored there — each to its own section,
+     * so a mention anywhere else in the page can never satisfy it — with the spec and release links each section
+     * carries. The README is still held to linking that page and to the stale promises staying gone.
      */
     @Test fun theDocumentsDescribeThreePrimaryDestinations() {
         assertTrue(
@@ -545,124 +550,107 @@ class VersionAgreementTest {
             repoFile("docs/design/12-visual-design-apollo-service-binder.md").readText()
                 .contains("**Dashboard · Assets · Maintenance**"),
         )
-        // The README stopped describing the navigation bar in its 2026-09-25 rewrite; it now names
-        // the capability in its own words and links the spec, and that is what is held here.
-        val readme = repoFile("README.md").readText()
+        assertTrue("the README must link the capabilities page", readme().contains("](docs/capabilities.md)"))
+        val maintenance = capabilitySection("## Maintenance schedules, seasons, condition, and health")
         assertTrue(
-            "the README must carry the maintenance capability bullet",
-            Regex(
-                """^- \*\*Maintenance scheduling and local reminders\*\* —""",
-                RegexOption.MULTILINE,
-            ).containsMatchIn(readme),
+            "the maintenance section must name local reminders",
+            Regex("""^- local reminders and notification actions;""", RegexOption.MULTILINE).containsMatchIn(maintenance),
         )
+        assertLinks(maintenance, "superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md")
+    }
+
+    /** The share intake's capability line and its spec, on the capabilities page's documents section. */
+    @Test fun theCapabilitiesPageNamesTheShareIntakeAndLinksItsSpec() {
+        val documents = capabilitySection("## Documents, references, and share intake")
         assertTrue(
-            "the README must link the 1.2 spec",
-            readme.contains(
-                "](docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md)",
-            ),
+            "the documents section must say what the share intake does",
+            Regex("""^Android Share intake can attach a document, image, or URL""", RegexOption.MULTILINE)
+                .containsMatchIn(documents),
         )
+        assertLinks(documents, "superpowers/specs/2026-09-23-servicetag-share-intake.md")
     }
 
     /**
-     * The README's own capability line for this release. A released document that describes the
-     * wrong capability is a support cost, and the README is read by people who cannot check it
-     * against the code. Anchored at the bullet, so a mention of the share intake anywhere else in
-     * the file — the NoteTag section, for instance — can never satisfy it.
+     * 1.4's capabilities — seasons, policy, condition and health — and the 1.4 spec, linked by path rather than a
+     * section anchor so a later revision of the spec cannot break it.
      */
-    @Test fun theReadmeNamesTheShareIntakeAndLinksItsSpec() {
-        val readme = repoFile("README.md").readText()
-        assertTrue(
-            "the README must carry a capability bullet for the share intake",
-            Regex(
-                """^- \*\*Documents and references\*\* — .*share a document, image, URL, or note into an Asset""",
-                RegexOption.MULTILINE,
-            ).containsMatchIn(readme),
-        )
-        assertTrue(
-            "that bullet must link the committed spec",
-            readme.contains(
-                "](docs/superpowers/specs/2026-09-23-servicetag-share-intake.md)",
-            ),
-        )
-    }
-
-    /**
-     * The README's capability line for 1.4. Anchored at the bullet, so a mention of seasons or
-     * health anywhere else in the file can never satisfy it; the link is to the spec's path, not to
-     * a section anchor, so a later revision of the spec cannot break it.
-     */
-    @Test fun theReadmeNamesSeasonsConditionAndHealthAndLinksTheSpec() {
-        val readme = repoFile("README.md").readText()
-        assertTrue(
-            "the README must carry the 1.4 capability bullets: seasons, policy, condition and health",
-            listOf("Operating seasons", "Maintenance policy", "Condition", "Health").all { word ->
-                Regex("""^- \*\*$word\*\* """, RegexOption.MULTILINE).containsMatchIn(readme)
-            },
-        )
-        assertTrue(
-            "that bullet must link the committed 1.4 spec",
-            readme.contains(
-                "](docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md)",
-            ),
-        )
-    }
-
-    /**
-     * The README's capability lines for 1.5.0: lending (custody), Transfer Packs, Replace asset and
-     * Save as document. Each is anchored at its own bullet, so a mention anywhere else in the file —
-     * the permissions section names Save as document, for instance — can never satisfy it. The two
-     * sentences that promised lending and Transfer Packs as future work must be gone, and the README
-     * links the release notes, which must exist.
-     */
-    @Test fun theReadmeNamesCustodyTransfersReplaceAndSaveAsDocument() {
-        val readme = repoFile("README.md").readText()
-        for ((lead, words) in listOf(
-            "Lending" to "due-back reminder",
-            "Transfer Packs" to "transferred out",
-            "Replace asset" to "successor",
-            "Save as document" to "https",
+    @Test fun theCapabilitiesPageNamesSeasonsConditionAndHealthAndLinksTheSpec() {
+        val maintenance = capabilitySection("## Maintenance schedules, seasons, condition, and health")
+        for (claim in listOf(
+            "Operating season is distinct from maintenance policy.",
+            "Condition records whether an Asset is **operational, degraded, or down**.",
+            "Health is a separate derived view",
         )) {
-            assertTrue(
-                "the README must carry the 1.5.0 capability bullet \"$lead\", naming \"$words\"",
-                Regex("""^- \*\*$lead\*\* — .*$words""", RegexOption.MULTILINE).containsMatchIn(readme),
-            )
+            assertTrue("the maintenance section must say \"$claim\"", maintenance.contains(claim))
         }
-        assertFalse(
-            "the README must no longer promise Transfer Packs as future work",
-            readme.contains("Transfer Packs are intended for"),
-        )
-        assertFalse(
-            "the README must no longer promise lending and a Transfer Pack workflow as post-1.4 work",
-            readme.contains("finally a **Transfer Pack** workflow"),
-        )
-        assertTrue("the README must link the 1.5.0 release notes", readme.contains("](docs/releases/1.5.0.md)"))
-        assertTrue("the 1.5.0 release notes must exist", repoFile("docs/releases/1.5.0.md").isFile)
+        assertLinks(maintenance, "superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md")
     }
 
     /**
-     * The README's capability lines for 1.7.0: supply items and installed components, each anchored at
-     * its own bullet, as the 1.5.0 case does. The two sentences that promised supplies and
-     * installed-component tracking as future work must be gone, and the README links the release
-     * notes, which must exist.
+     * 1.5.0's capabilities: lending (custody), Transfer Packs, Replace asset and Save as document, each in its own
+     * subsection naming what it does. The two sentences that promised lending and Transfer Packs as future work stay
+     * gone from the README and the page, and the page links the 1.5.0 release notes, which must exist.
      */
-    @Test fun theReadmeNamesSupplyItemsAndInstalledComponents() {
-        val readme = repoFile("README.md").readText()
-        for (lead in listOf("Supply items", "Installed components")) {
-            assertTrue(
-                "the README must carry the 1.7.0 capability bullet \"$lead\"",
-                Regex("""^- \*\*$lead\*\* — """, RegexOption.MULTILINE).containsMatchIn(readme),
+    @Test fun theCapabilitiesPageNamesCustodyTransfersReplaceAndSaveAsDocument() {
+        for ((heading, words) in listOf(
+            "### Lending" to "due-back reminder",
+            "### Transfer Packs" to "transferred out",
+            "### Replace Asset" to "successor",
+            "### Save as document" to "HTTPS",
+        )) {
+            assertTrue("\"$heading\" must name \"$words\"", capabilitySection(heading).contains(words))
+        }
+        for (doc in listOf(readme(), capabilities())) {
+            assertFalse("Transfer Packs must no longer be promised as future work", doc.contains("Transfer Packs are intended for"))
+            assertFalse(
+                "lending and a Transfer Pack workflow must no longer be promised as post-1.4 work",
+                doc.contains("finally a **Transfer Pack** workflow"),
             )
         }
-        assertFalse(
-            "the README must no longer promise supplies as the next product phase",
-            readme.contains("The next product phase is **supplies"),
+        assertLinks(capabilitySection("## Lending, replacement, and ownership handoff"), "releases/1.5.0.md")
+    }
+
+    /**
+     * 1.7.0's capabilities: supply items and installed components, each its own section. The two sentences that
+     * promised supplies and installed-component tracking as future work stay gone, and both the README and the page's
+     * section link the 1.7.0 release notes, which must exist.
+     */
+    @Test fun theCapabilitiesPageNamesSupplyItemsAndInstalledComponents() {
+        assertTrue(
+            "the supply items section must describe the catalog",
+            capabilitySection("## Supply items").contains("canonical **SupplyItem** catalog"),
         )
-        assertFalse(
-            "the README must no longer list installed-component tracking as later work",
-            readme.contains("installed-component tracking"),
-        )
-        assertTrue("the README must link the 1.7.0 release notes", readme.contains("](docs/releases/1.7.0.md)"))
-        assertTrue("the 1.7.0 release notes must exist", repoFile("docs/releases/1.7.0.md").isFile)
+        val installed = capabilitySection("## Installed components")
+        assertTrue("the installed components section must describe them", installed.contains("**Installed Components**"))
+        for (doc in listOf(readme(), capabilities())) {
+            assertFalse("supplies must no longer be promised as the next phase", doc.contains("The next product phase is **supplies"))
+            assertFalse("installed-component tracking must no longer be listed as later work", doc.contains("installed-component tracking"))
+        }
+        assertTrue("the README must link the 1.7.0 release notes", readme().contains("](docs/releases/1.7.0.md)"))
+        assertLinks(installed, "releases/1.7.0.md")
+    }
+
+    private fun readme(): String = repoFile("README.md").readText()
+
+    private fun capabilities(): String = repoFile("docs/capabilities.md").readText()
+
+    /** The text under [heading] on the capabilities page, up to the next heading of the same or a higher level. */
+    private fun capabilitySection(heading: String): String {
+        val level = heading.takeWhile { it == '#' }.length
+        val lines = capabilities().lines()
+        val start = lines.indexOfFirst { it.trim() == heading }
+        assertTrue("docs/capabilities.md must have the heading \"$heading\"", start >= 0)
+        val end = (start + 1 until lines.size).firstOrNull { i ->
+            val hashes = lines[i].takeWhile { it == '#' }.length
+            hashes in 1..level && lines[i].getOrNull(hashes) == ' '
+        } ?: lines.size
+        return lines.subList(start + 1, end).joinToString("\n")
+    }
+
+    /** [section] links [target] (relative to `docs/`), and the target exists. */
+    private fun assertLinks(section: String, target: String) {
+        assertTrue("the section must link $target", section.contains("]($target)"))
+        assertTrue("$target must exist", repoFile("docs/$target").isFile)
     }
 
     /**
