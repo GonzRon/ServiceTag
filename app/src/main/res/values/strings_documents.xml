@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: documents, references, attachments, share intake, contacts and links — English source. Comments carry the
+  ratification ids and what each string is for.
+
+  Vocabulary: a "document" (or "file", an "attachment") is bytes stored in the owner's attachment folder on this
+  phone; a "reference" (a "link") is a pointer to something elsewhere — a web page, a note in another app. A
+  "supply" is a consumable product record shared across assets; an "installed component" is a part fitted inside an
+  asset. File names, link names, descriptions, host names and asset/supply/component names are the owner's own text
+  (or a website's) and arrive as placeholders, unchanged.
+-->
+<resources>
+    <!-- ============================================================ DOCUMENTS section (ui/attachments/DocumentsSection) -->
+
+    <!-- The section header when it lists no files. -->
+    <string name="documents_header">Documents</string>
+    <!-- The section header with its file count. %1$d: how many files the section lists. -->
+    <string name="documents_header_count">Documents · %1$d</string>
+    <!-- Quiet line when the attachment folder is there but holds no file for this owner. -->
+    <string name="documents_empty">No documents yet</string>
+    <!-- Button: pick one or more files from the phone to attach. -->
+    <string name="documents_add_file">Add file</string>
+    <!-- Button: take a photo with the camera and attach it. -->
+    <string name="documents_take_photo">Take photo</string>
+    <!-- The no-folder card's small headline (Settings section name). -->
+    <string name="documents_storage_headline">Attachment storage</string>
+    <!-- The no-folder card's title: no attachment folder has been chosen. -->
+    <string name="documents_storage_not_set_up">Attachment storage not set up</string>
+    <!-- The no-folder card's detail line: what to do about it. -->
+    <string name="documents_storage_detail">Choose a folder in Settings</string>
+    <!-- Button under the no-folder card: go to the app's Settings screen. -->
+    <string name="documents_open_settings">Open settings</string>
+    <!-- Snackbar: nothing on the phone can hand a file over (no document picker app). -->
+    <string name="documents_no_app_can_pick_files">No app can pick files</string>
+    <!-- Snackbar: nothing on the phone can open the tapped file. -->
+    <string name="documents_no_app_can_open_file">No app can open this file</string>
+    <!-- Snackbar: nothing on the phone can take a picture. -->
+    <string name="documents_no_camera_app">No camera app on this device</string>
+    <!-- A row's quiet line, and the snackbar on tapping it, when the file's bytes are not on this phone. -->
+    <string name="documents_not_on_device">Not on this device</string>
+    <!--
+      #84 (C13, R84-1): accessibility label of a row's overflow (three dots) button in DOCUMENTS.
+      %1$s: the file's name.
+    -->
+    <string name="documents_more_for">More for %1$s</string>
+    <!--
+      #84 (C13, R84-1): the same, for a row in KEY DOCUMENTS, which also names the group's role so TalkBack can tell
+      the two copies of one row apart ("More for Pump manual.pdf, User manual"). %1$s: the file's name.
+      %2$s: the document role's label (e.g. "User manual").
+    -->
+    <string name="documents_more_for_role">More for %1$s, %2$s</string>
+
+    <!-- The file kinds (sentence case), on a row's quiet line and as the edit sheet's Kind chips. -->
+    <string name="documents_kind_photo">Photo</string>
+    <!-- A photo of an asset's rating/serial-number label. -->
+    <string name="documents_kind_label_photo">Label photo</string>
+    <string name="documents_kind_receipt">Receipt</string>
+    <string name="documents_kind_manual">Manual</string>
+    <string name="documents_kind_warranty">Warranty</string>
+    <string name="documents_kind_document">Document</string>
+    <string name="documents_kind_other">Other</string>
+
+    <!--
+      File sizes (a row's quiet line, the Save-as-document progress and type lines, the Transfer Pack size). The
+      number arrives already formatted. Unit symbols: B = bytes, KB = kibibytes, MB = mebibytes.
+      Under a kibibyte: %1$s: the number of bytes ("512").
+    -->
+    <string name="documents_size_bytes">%1$s B</string>
+    <!-- %1$s: the size in kibibytes, already formatted with one decimal ("1.5"). -->
+    <string name="documents_size_kb">%1$s KB</string>
+    <!-- %1$s: the size in mebibytes, already formatted with one decimal ("2.0"). -->
+    <string name="documents_size_mb">%1$s MB</string>
+
+    <!-- ============================================================ A file's edit sheet (ui/attachments/AttachmentEditSheet) -->
+
+    <!-- #85 §6 (reused by the Save-as-document review): the file name field's label. -->
+    <string name="attachments_name_label">Name</string>
+    <!-- #85 §6 (reused): the header over the file kind chips. -->
+    <string name="attachments_kind_header">Kind</string>
+    <!-- #85 §6 (reused; also the supply and installed-component forms): the notes field's label. -->
+    <string name="attachments_notes_label">Notes</string>
+    <!-- #85 §6 (reused): button that closes the sheet without saving. -->
+    <string name="attachments_cancel">Cancel</string>
+    <!-- #85 §6 (reused across the app's sheets): button that saves the sheet. -->
+    <string name="attachments_save">Save</string>
+    <!-- Label of the date field: the day the photo was taken or the document dated. -->
+    <string name="attachments_captured_on_label">Captured on</string>
+    <!-- Destructive button on the edit sheet, and the confirm button of its dialog. -->
+    <string name="attachments_delete">Delete</string>
+    <!-- Title of the delete confirmation. -->
+    <string name="attachments_delete_title">Delete file?</string>
+    <!-- Body of the delete confirmation. %1$s: the file's name. -->
+    <string name="attachments_delete_body">Delete %1$s? The file is removed from your attachment folder.</string>
+
+    <!-- ============================================================ Attachments: roles, progress, refusals (AttachmentsSectionViewModel) -->
+
+    <!-- #67 (P67-5, ratified verbatim): the header over the document role chips (edit sheet, share intake, review). -->
+    <string name="attachments_role_header">Role</string>
+    <!-- #67 (P67-2, ratified verbatim): role chip and Key documents group label. -->
+    <string name="attachments_role_purchase_invoice_or_receipt">Purchase invoice or receipt</string>
+    <!-- #67 (P67-3, ratified verbatim): role chip and group label. -->
+    <string name="attachments_role_user_manual">User manual</string>
+    <!-- #67 (P67-4, ratified verbatim): role chip and group label. -->
+    <string name="attachments_role_service_manual">Service manual</string>
+    <!-- #67 (P67-6, ratified verbatim): the chip that clears the role. -->
+    <string name="attachments_role_none">No role</string>
+    <!--
+      Spec §8.1: the line shown while a multi-file pick is being added. %1$d: which file is being added now.
+      %2$d: how many files were picked.
+    -->
+    <string name="attachments_adding_progress">Adding %1$d of %2$d…</string>
+    <!-- #85 §6 (reused): snackbar when a save did not land. %1$s: the file name the person typed. -->
+    <string name="attachments_could_not_save">Could not save %1$s</string>
+    <!-- Snackbar when a delete did not happen. -->
+    <string name="attachments_could_not_delete">Could not delete that file</string>
+    <!-- Snackbar when copying a picked file failed. %1$s: the picked file's name. -->
+    <string name="attachments_could_not_add">Could not add %1$s</string>
+    <!-- Refusal: the file's name was left blank. -->
+    <string name="attachments_blank_name">Give the file a name</string>
+    <!-- Refusal: no attachment folder has been chosen in Settings. -->
+    <string name="attachments_no_store">Choose an attachment folder in Settings first</string>
+    <!-- Refusal: the chosen attachment folder cannot be reached or written. -->
+    <string name="attachments_store_unavailable">The attachment folder is not available</string>
+    <!-- Refusal: the file is over the 256 MB limit. -->
+    <string name="attachments_too_large">That file is larger than 256 MB</string>
+    <!-- Refusal: the file's record (or its owner) was removed meanwhile. -->
+    <string name="attachments_owner_missing">That file is no longer here</string>
+    <!-- Snackbar: the background check of which files are present failed (the rows stay listed). -->
+    <string name="attachments_scan_failed">Could not check the attachment folder</string>
+    <!-- Settings' folder line when the chosen folder reports no name of its own. -->
+    <string name="attachments_folder_fallback">Folder</string>
+
+    <!-- ============================================================ REFERENCES section (ui/references) -->
+
+    <!-- The section header when it lists no references. -->
+    <string name="references_header">References</string>
+    <!-- The section header with its count. %1$d: how many references the section lists. -->
+    <string name="references_header_count">References · %1$d</string>
+    <!-- Quiet line when the owner has no references. -->
+    <string name="references_empty">No references yet</string>
+    <!-- D-21 C: the section's button, and the title of its sheet, to add a link by typing it. -->
+    <string name="references_add_link">Add link</string>
+    <!-- Accessibility: a reference row's overflow (three dots) button. -->
+    <string name="references_more">More</string>
+    <!-- Overflow menu item: open the link in the app that handles it. -->
+    <string name="references_open">Open</string>
+    <!-- Overflow menu item: edit the reference's name and description. -->
+    <string name="references_edit">Edit</string>
+    <!-- Overflow menu item, and the confirm button of the remove dialog. -->
+    <string name="references_remove">Remove</string>
+    <!-- §10: the three kind words on a reference row. A link to a web page. -->
+    <string name="references_kind_web_link">Web link</string>
+    <!-- §10: a link to a note in a notes app. -->
+    <string name="references_kind_note">Note</string>
+    <!-- §10: any other kind of link. -->
+    <string name="references_kind_other">Other</string>
+    <!-- §10 (ratified 2026-09-23): snackbar when a stored link is one ServiceTag refuses to open. -->
+    <string name="references_blocked_at_open">ServiceTag will not open that kind of link.</string>
+    <!-- §10: snackbar and toast when nothing on the phone can open a link (names no URI). -->
+    <string name="links_no_handler">No app can open this link</string>
+
+    <!-- Title of the sheet that edits a reference. -->
+    <string name="references_edit_title">Edit reference</string>
+    <!-- Add link sheet: the field the link (URL) is typed into. -->
+    <string name="references_link_label">Link</string>
+    <!-- The reference sheets' name field. -->
+    <string name="references_name_label">Name</string>
+    <!-- The reference sheets' description field. -->
+    <string name="references_description_label">Description</string>
+    <!-- The reference sheets' and dialogs' dismiss button. -->
+    <string name="references_cancel">Cancel</string>
+    <!-- The reference sheets' save button, and the unknown-scheme dialog's confirm button. -->
+    <string name="references_save">Save</string>
+    <!-- Title of the remove confirmation. -->
+    <string name="references_remove_title">Remove this reference?</string>
+    <!-- Body of the remove confirmation, for an asset's link. -->
+    <string name="references_removed_from_asset">The link is removed from this asset. Nothing in the other app is changed.</string>
+    <!-- #69 P69-13: body of the remove confirmation, for a supply's link. -->
+    <string name="references_removed_from_supply">The link is removed from this supply. Nothing in the other app is changed.</string>
+    <!-- #69 P69-14: body of the remove confirmation, for an installed component's link. -->
+    <string name="references_removed_from_installed_component">The link is removed from this installed component. Nothing in the other app is changed.</string>
+    <!-- Spec §4.2: title of the one question an unfamiliar link scheme takes before it is saved. -->
+    <string name="references_unknown_scheme_title">Save this link?</string>
+    <!-- Spec §4.2: its body. %1$s: the link's scheme as typed (e.g. "obsidian"), shown in straight quotes. -->
+    <string name="references_unknown_scheme_body">ServiceTag does not recognise \"%1$s\" links. It will be saved as written and opened with whatever app claims it.</string>
+
+    <!-- §10 refusals (snackbars) when adding or editing a reference. The name was left blank. -->
+    <string name="references_blank_name">Give the reference a name</string>
+    <!-- §10: the text is not a link. -->
+    <string name="references_not_a_link">That is not a link.</string>
+    <!-- §10: the link is over the length limit. -->
+    <string name="references_uri_too_long">That link is too long to save.</string>
+    <!-- §10: the link's scheme is one ServiceTag refuses to store. -->
+    <string name="references_scheme_blocked">ServiceTag will not save that kind of link.</string>
+    <!-- §10: the same link is already saved on this asset (in-app). -->
+    <string name="references_duplicate_on_asset">That link is already on this asset</string>
+    <!-- #69 P69-11: the same, on a supply (in-app and in Share). -->
+    <string name="references_duplicate_on_supply">That link is already on this supply</string>
+    <!-- #69 P69-12: the same, on an installed component (in-app and in Share). -->
+    <string name="references_duplicate_on_installed_component">That link is already on this installed component</string>
+
+    <!-- ============================================================ Save as document (#85 §6, ui/references/MaterializeStrings) -->
+
+    <!-- P85-1: a web reference's menu item, and the review sheet's title — download the linked file into Documents. -->
+    <string name="references_save_as_document">Save as document</string>
+    <!-- P85-2: the sheet's title while downloading. %1$s: the link's host name (e.g. "manuals.example.com"). -->
+    <string name="references_downloading_from">Downloading from %1$s…</string>
+    <!--
+      P85-3: download progress. %1$s: the size received so far, %2$s: the total size — both already formatted
+      with their unit (e.g. "1.5 KB of 2.0 MB"). When the total is unknown the received size is shown alone.
+    -->
+    <string name="references_download_progress">%1$s of %2$s</string>
+    <!-- P85-4: the review sheet's source line. %1$s: the link's host name. -->
+    <string name="references_from_host">From %1$s</string>
+    <!--
+      P85-5: the review sheet's type line. %1$s: the file type's short name (PDF, DOCX, Markdown…).
+      %2$s: the file's size with its unit.
+    -->
+    <string name="references_type_line">%1$s · %2$s</string>
+    <!-- P85-6: quiet line on a reference whose linked file is already saved as a document. -->
+    <string name="references_saved_as_document">Saved as document</string>
+    <!-- P85-7: snackbar after Save as document finished. -->
+    <string name="references_saved_to_documents">Saved to Documents</string>
+    <!--
+      P85-8: a saved file's provenance line on its edit sheet. %1$s: the link's host name. %2$s: the day it was
+      downloaded, as a display date ("29 Sep 2026").
+    -->
+    <string name="references_downloaded_from">Downloaded from %1$s on %2$s</string>
+    <!-- P85-9: button on a saved file's edit sheet that opens the reference it was downloaded from. -->
+    <string name="references_open_source_link">Open source link</string>
+    <!-- P85-10: refusal when Android denies the app network access (followed by a button to the app's settings). -->
+    <string name="references_network_denied">ServiceTag is not allowed to use the network, so it cannot download this file. Allow network access in the app settings, then close ServiceTag and open it again.</string>
+    <!-- P85-11: refusal when the host cannot be reached. %1$s: the link's host name. -->
+    <string name="references_unreachable">Could not reach %1$s. Check the connection and try again.</string>
+    <!-- P85-12: refusal when the download timed out. -->
+    <string name="references_timed_out">The download took too long and was stopped.</string>
+    <!-- P85-13: refusal when the link did not lead to a supported file type; the reference is kept. -->
+    <string name="references_not_a_document">That link did not lead to a supported document type. It stays a link.</string>
+    <!-- P85-14: refusal when the file is behind a sign-in. -->
+    <string name="references_needs_sign_in">That file needs a sign-in, so ServiceTag cannot download it. It stays a link.</string>
+    <!-- P85-15: refusal when the server answered with an error. %1$d: the HTTP status code (e.g. 503). -->
+    <string name="references_server_error">The server did not send the file (error %1$d).</string>
+    <!-- P85-16: refusal when the link redirects somewhere the app will not follow. -->
+    <string name="references_redirect_refused">That link redirects somewhere ServiceTag will not follow. It stays a link.</string>
+    <!-- P85-17: refusal when the asset already has the same file. %1$s: the existing file's name. -->
+    <string name="references_already_have_on_asset">This asset already has this file: %1$s.</string>
+    <!-- #69 P69-15: the same, for a supply. %1$s: the existing file's name. -->
+    <string name="references_already_have_on_supply">This supply already has this file: %1$s.</string>
+    <!-- #69 P69-16: the same, for an installed component. %1$s: the existing file's name. -->
+    <string name="references_already_have_on_installed_component">This installed component already has this file: %1$s.</string>
+    <!-- P85-18: refusal when the download broke off. -->
+    <string name="references_interrupted">The download could not be completed. Try again.</string>
+    <!-- P85-19: refusal when the link points into the local network. -->
+    <string name="references_local_address">That link resolves to a local-network address, so ServiceTag will not download it. It stays a link.</string>
+
+    <!-- ============================================================ Contacts (#72) -->
+
+    <!-- #72 P72-20 (ratified verbatim): "Open contact" when nothing on the phone takes the contact link. -->
+    <string name="contacts_no_app_can_open">No app can open this contact</string>
+
+    <!-- ============================================================ Share intake (share/, spec §10 and #69, #93) -->
+
+    <!-- The intake screen's title, when another app shares something to ServiceTag. -->
+    <string name="share_title">Save to ServiceTag</string>
+    <!-- Section header over what arrived (the link, the file name or the text). -->
+    <string name="share_received">Received</string>
+    <!-- Section header over the destination picker and the chosen destination; also the type control's accessible name. -->
+    <string name="share_attach_to">Attach to</string>
+    <!-- The picker's prompt over the Assets list. -->
+    <string name="share_choose_asset">Choose asset</string>
+    <!-- The save form's name field. -->
+    <string name="share_name">Name</string>
+    <!-- The save form's description field. -->
+    <string name="share_description">Description (optional)</string>
+    <!-- Section header over the file kind chips. -->
+    <string name="share_type">Type</string>
+    <!-- Button: save what was shared. -->
+    <string name="share_save">Save</string>
+    <!-- Button: leave without saving anything. -->
+    <string name="share_cancel">Cancel</string>
+    <!-- Button: leave a screen that can only be closed (a refusal, or no attachment folder). -->
+    <string name="share_close">Close</string>
+    <!-- Button when shared prose is saved as a journal note on the asset. -->
+    <string name="share_save_as_note">Save as a note</string>
+    <!-- Line beside the form when shared text is not a link (it can still be saved as a note). -->
+    <string name="share_not_a_link">That is not a link.</string>
+    <!-- Dead end: there is no asset (or supply) to save to. -->
+    <string name="share_no_assets">Add an asset in ServiceTag first, then share this again.</string>
+    <!-- A file was shared but no attachment folder is chosen. -->
+    <string name="share_no_folder">Choose an attachment folder in ServiceTag Settings, then share this again.</string>
+    <!-- Dead end: the sharing app's file cannot be accepted (an unsafe source). -->
+    <string name="share_stream_refused">That file cannot be accepted from the app that shared it.</string>
+    <!-- Dead end / refusal: what was shared could not be read. -->
+    <string name="share_unreadable">Could not read what was shared</string>
+    <!-- Refusal: the shared link is over the length limit. -->
+    <string name="share_uri_too_long">That link is too long to save.</string>
+    <!-- Refusal: the shared link's scheme is one ServiceTag refuses to store. -->
+    <string name="share_scheme_blocked">ServiceTag will not save that kind of link.</string>
+    <!-- Refusal: the shared link is already saved on the chosen asset. -->
+    <string name="share_duplicate_uri">That link is already on this asset</string>
+    <!-- Refusal: the shared file has no bytes. -->
+    <string name="share_empty_file">That file is empty</string>
+    <!-- Refusal: the shared file is over the 256 MB limit. -->
+    <string name="share_too_large">That file is larger than 256 MB</string>
+    <!-- Refusal: the file's name was left blank. -->
+    <string name="share_blank_file_name">Give the file a name</string>
+    <!-- Refusal: the link's name was left blank. -->
+    <string name="share_blank_reference_name">Give the reference a name</string>
+    <!-- Title of the one question an unfamiliar link scheme takes before it is saved. -->
+    <string name="share_confirm_title">Save this link?</string>
+    <!-- Its body. %1$s: the link's scheme (e.g. "obsidian"), shown in straight quotes. -->
+    <string name="share_confirm_body">ServiceTag does not recognise \"%1$s\" links. It will be saved as written and opened with whatever app claims it.</string>
+    <!-- #93 (R93-5): the form's button back to the destination picker. -->
+    <string name="share_change">Change</string>
+    <!-- #69 (P69-26): the Assets list's line when no asset is maintained here. -->
+    <string name="share_no_active_assets">No active assets</string>
+    <!-- #69 (P69-24): the search box's hint and accessible name over the installed-component list. -->
+    <string name="share_search_installed_components">Search installed components</string>
+    <!-- #69 (P69-25): the same, over the supply list. -->
+    <string name="share_search_supplies">Search supplies</string>
+    <!--
+      #69 (P69-20): one step of a destination's path (asset › component › sub-component), applied a pair at a time.
+      %1$s: the outer part of the path so far. %2$s: the name inside it.
+    -->
+    <string name="share_path_step">%1$s › %2$s</string>
+    <!-- #69 (P69-17): an asset level's first row — the asset itself as the destination. -->
+    <string name="share_this_asset">This asset</string>
+    <!-- #69 (P69-18): the quiet line under each supply row on a browsing level. -->
+    <string name="share_supply_shared">Supply — shared across uses</string>
+    <!-- #69 (P69-19): accessibility click label of a component row, which opens that component's level. %1$s: the component's name. -->
+    <string name="share_show_inside">Show what is inside %1$s</string>
+    <!-- #69 (P69-21): under a supply destination on the save form. %1$s: the supply's name. -->
+    <string name="share_on_supply">This will be saved on the supply %1$s and available wherever that supply is used.</string>
+    <!-- #69 (P69-22): the line after a save to a supply. %1$s: the supply's name. -->
+    <string name="share_saved_to_supply">Saved to supply %1$s.</string>
+    <!-- The line after a save. %1$s: the asset's name, or an installed component's path. -->
+    <string name="share_saved_to">Saved to %1$s</string>
+    <!-- Accessibility: the back arrow on a browsing level (goes up one level). -->
+    <string name="share_back">Back</string>
+</resources>

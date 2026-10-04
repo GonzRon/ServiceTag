@@ -1,9 +1,11 @@
 package com.loosecannon.servicetag.attachments
 
 import android.net.Uri
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.prefs.AppPrefs
 
 /**
@@ -40,5 +42,5 @@ class SafAttachmentStorage(
 
     /** A folder whose root we cannot even resolve still has a name worth showing. */
     private fun nameOf(uri: String): String =
-        uri.substringAfterLast("%2F").substringAfterLast('/').ifEmpty { "Folder" }
+        uri.substringAfterLast("%2F").substringAfterLast('/').ifEmpty { localized(R.string.attachments_folder_fallback) }
 }

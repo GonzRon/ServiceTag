@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: asset detail, the Assets list, the asset search box and the warranty words — English source. Comments carry the ratification ids and what each string is for. -->
+<resources>
+    <!-- ================================================================ generic words, used app-wide -->
+
+    <!-- MN-4: a dialog's dismiss button; writes nothing. Drawn by many screens (CANCEL_BUTTON). -->
+    <string name="common_cancel">Cancel</string>
+    <!-- The app bar's back arrow, as an accessibility description. -->
+    <string name="common_back">Back</string>
+    <!-- The app bar's overflow (three-dot) menu button, as an accessibility description. -->
+    <string name="common_more">More</string>
+    <!-- A dialog's acknowledge button, when there is nothing to choose. -->
+    <string name="common_ok">OK</string>
+    <!-- A dialog's save button. -->
+    <string name="common_save">Save</string>
+    <!-- Shown while a screen's content is still being read. -->
+    <string name="common_loading">Loading…</string>
+
+    <!-- ================================================================ asset detail -->
+
+    <!-- The word "Asset": the detail's app-bar title before the asset has loaded, and the identity plate's eyebrow when the asset has no category. -->
+    <string name="asset_detail_asset_word">Asset</string>
+
+    <!-- #86: the retire dialog's date field (also drawn by Replace asset). -->
+    <string name="asset_detail_retired_on">Retired on</string>
+    <!-- #86: the action grid's set-up button: what the asset measures and what can be logged against it (also drawn by Replace asset). -->
+    <string name="asset_detail_readings_and_actions">Readings &amp; actions</string>
+    <!-- #86: the Tags section's header (also drawn by Replace asset). -->
+    <string name="asset_detail_tags_section">Tags</string>
+
+    <!-- Action grid: back up the app's data. -->
+    <string name="asset_detail_backup">Backup</string>
+    <!-- Action grid: write this asset to an NFC tag. Also named inside asset_detail_no_tag_yet. -->
+    <string name="asset_detail_write_tag">Write tag</string>
+    <!-- Action grid and overflow menu: edit the asset; also a tag row's edit glyph, as an accessibility description. -->
+    <string name="asset_detail_edit">Edit</string>
+    <!-- Action grid, and the title of the dialog it opens: give a bare asset a starter template's readings and actions. -->
+    <string name="asset_detail_set_up_from_template">Set up from template</string>
+
+    <!-- The header over the asset's current readings. -->
+    <string name="asset_detail_current_readings">Current readings</string>
+    <!-- Spec §5: the small eyebrow over a reading the app computes rather than one someone entered. -->
+    <string name="asset_detail_derived">Derived</string>
+
+    <!-- D12 §8: the header over the asset's ledger of logged events. -->
+    <string name="asset_detail_service_record">Service record</string>
+    <!-- The service record's empty line. -->
+    <string name="asset_detail_no_service_recorded">No service recorded yet</string>
+
+    <!-- Overflow menu: take the asset off the owner's list (reversible). -->
+    <string name="asset_detail_archive">Archive</string>
+    <!-- Overflow menu: put an archived asset back on the list. -->
+    <string name="asset_detail_unarchive">Unarchive</string>
+    <!-- Overflow menu, and the retire dialog's confirm: mark the asset out of service (reversible). -->
+    <string name="asset_detail_retire">Retire</string>
+    <!-- Overflow menu: put a retired asset back in service. -->
+    <string name="asset_detail_unretire">Unretire</string>
+    <!-- Overflow menu, and the typed delete confirmation's button: delete the asset for good. -->
+    <string name="asset_detail_delete">Delete</string>
+
+    <!-- The typed delete confirmation's title. %1$s: the asset's name, as the owner entered it. -->
+    <string name="asset_detail_delete_title">Delete %1$s?</string>
+    <!-- The typed delete confirmation's body: the owner types the asset's name to enable Delete. -->
+    <string name="asset_detail_delete_body">Type the asset\'s name to delete it. Its tags, readings and history go with it. There is no automatic snapshot yet.</string>
+    <!-- Spec §5: the refusal's title when an asset that still has child assets is deleted. -->
+    <string name="asset_detail_child_assets_first">Child assets first</string>
+    <!-- The refusal's body. %1$s: the asset's name; %2$s: its child assets' names, as a list ("Pump, Filter"). -->
+    <string name="asset_detail_child_assets_first_body">%1$s still has %2$s. Move or delete them first, so nothing disappears by cascade.</string>
+
+    <!-- Spec §7: the retire dialog's title. -->
+    <string name="asset_detail_retire_title">Retire this asset?</string>
+    <!-- Spec §7: the retire dialog's body. -->
+    <string name="asset_detail_retire_body">It keeps its history and its tags still resolve.</string>
+
+    <!-- Spec §7: offered after an asset is retired; the retirement is already written. -->
+    <string name="asset_detail_log_what_happened">Log what happened?</string>
+    <!-- Spec §7: under that title — declining changes nothing. -->
+    <string name="asset_detail_retired_either_way">The asset is retired either way.</string>
+    <!-- Spec §7: opens a Replacement entry for the retired asset. -->
+    <string name="asset_detail_log_replacement">Log replacement</string>
+    <!-- Spec §7: opens a Note entry for the retired asset. -->
+    <string name="asset_detail_log_note">Log note</string>
+    <!-- Spec §7: declines the offer (not a cancel: the retirement stands). -->
+    <string name="asset_detail_not_now">Not now</string>
+
+    <!-- Spec §9: the identity plate's six cells (the plate draws them upper-cased). Make and model. -->
+    <string name="asset_detail_plate_model">Model</string>
+    <!-- Spec §9: plate cell, the serial number. -->
+    <string name="asset_detail_plate_serial">Serial</string>
+    <!-- Spec §9: plate cell, where the asset is. -->
+    <string name="asset_detail_plate_location">Location</string>
+    <!-- Spec §9: plate cell, the purchase date. -->
+    <string name="asset_detail_plate_purchased">Purchased</string>
+    <!-- Spec §9: plate cell, the date the asset went into service. -->
+    <string name="asset_detail_plate_in_service">In service</string>
+    <!-- Spec §9: plate cell, the asset's first NFC tag. -->
+    <string name="asset_detail_plate_nfc_tag">NFC tag</string>
+
+    <!-- #67: the DETAILS section's header (purchase facts). -->
+    <string name="asset_detail_details">Details</string>
+    <!-- #67: DETAILS row label. -->
+    <string name="asset_detail_purchase_date">Purchase date</string>
+    <!-- #67 (R67-5): DETAILS row label; its value is the newest purchase invoice or receipt, by name. -->
+    <string name="asset_detail_purchase_document">Purchase document</string>
+    <!-- #67: DETAILS row label. -->
+    <string name="asset_detail_price">Price</string>
+    <!-- #67: DETAILS row label, who the asset was bought from. -->
+    <string name="asset_detail_vendor">Vendor</string>
+
+    <!-- Spec §9: the header over the asset's child assets (its components). -->
+    <string name="asset_detail_child_assets">Child assets</string>
+    <!-- Spec §9: the child assets section's empty line. -->
+    <string name="asset_detail_no_child_assets">No child assets</string>
+    <!-- Spec §9: the button that adds a child asset. -->
+    <string name="asset_detail_add_child_asset">+ Add child asset</string>
+    <!-- A child asset's row, when none of its own readings is out of range. -->
+    <string name="asset_detail_no_readings_out_of_range">No readings out of range</string>
+    <!-- A child asset's row: how many of its own readings are out of range. %1$d: the count. -->
+    <plurals name="asset_detail_readings_out_of_range">
+        <item quantity="one">%1$d reading out of range</item>
+        <item quantity="other">%1$d readings out of range</item>
+    </plurals>
+    <!-- A child asset's row: "Pump · 1 reading out of range". %1$s: the child's category, as entered; %2$s: the readings line above. -->
+    <string name="asset_detail_category_and_readings">%1$s · %2$s</string>
+
+    <!-- #49: the Tags section's empty line; "Write tag" names the action grid's button (asset_detail_write_tag). -->
+    <string name="asset_detail_no_tag_yet">No tag yet · Write tag to add one</string>
+    <!-- #49: a tag row's title, when the tag was written by the app. -->
+    <string name="asset_detail_tag_written">Tag written</string>
+    <!-- #49: a tag row's title, when an existing tag was bound without writing it. -->
+    <string name="asset_detail_tag_bound">Tag bound</string>
+    <!-- A tag's status badge (drawn upper-cased): the tag is in use. -->
+    <string name="asset_detail_tag_status_active">Active</string>
+    <!-- A tag's status badge (drawn upper-cased): the tag is a spare, bound to nothing. -->
+    <string name="asset_detail_tag_status_unbound">Unbound</string>
+    <!-- A tag's status badge (drawn upper-cased): the tag was reported lost. -->
+    <string name="asset_detail_tag_status_lost">Lost</string>
+    <!-- A tag's status badge (drawn upper-cased): the tag was taken out of service. -->
+    <string name="asset_detail_tag_status_retired">Retired</string>
+    <!-- #49 (ratified): the caption over where a tag is stuck on the machine, and the title of the dialog that edits it. -->
+    <string name="asset_detail_tag_placement">Tag placement</string>
+
+    <!-- The header over the asset's free-form notes. -->
+    <string name="asset_detail_notes">Notes</string>
+    <!-- The notes section's empty line. -->
+    <string name="asset_detail_no_notes">No notes</string>
+
+    <!-- 1.2: the asset's schedules section, when the asset has no schedule of its own. -->
+    <string name="asset_detail_no_schedule_yet">No schedule yet</string>
+
+    <!-- ================================================================ warranty (#79, RATIFIED verbatim, R79-21) -->
+
+    <!-- #79: the Warranty section's header. -->
+    <string name="warranty_section">Warranty</string>
+    <!-- #79: the Warranty section's notes label. -->
+    <string name="warranty_notes">Warranty notes</string>
+    <!-- P79-1: the Warranty section's badge while the expiry date has not passed (the expiry day included). Upper case by design. -->
+    <string name="warranty_in_warranty">IN WARRANTY</string>
+    <!-- P79-2: the same badge once the date has passed. Upper case by design. -->
+    <string name="warranty_out_of_warranty">OUT OF WARRANTY</string>
+    <!-- P79-3: the Warranty section with no expiry date recorded. -->
+    <string name="warranty_not_recorded">Warranty not recorded</string>
+    <!-- P79-4: under the badge while in warranty. %1$s: the expiry date, formatted ("1 Mar 2026"). -->
+    <string name="warranty_expires">Expires %1$s</string>
+    <!-- P79-5: under the badge once out of warranty. %1$s: the expiry date, formatted. -->
+    <string name="warranty_expired">Expired %1$s</string>
+    <!-- P79-6 / P79-7: how long before the expiry the owner is reminded. %1$d: the number of days. -->
+    <plurals name="warranty_reminder_days_before">
+        <item quantity="one">Reminder: %1$d day before</item>
+        <item quantity="other">Reminder: %1$d days before</item>
+    </plurals>
+    <!-- P79-8: the asset editor's reminder-lead field's supporting text. -->
+    <string name="warranty_leave_blank_for_no_reminder">Leave blank for no reminder.</string>
+    <!-- P79-9: the reminder-lead field's refusal when there is no warranty date to count back from. -->
+    <string name="warranty_add_date_first">Add the date the warranty expires first.</string>
+
+    <!-- ================================================================ Assets list -->
+
+    <!-- The Assets screen's title. -->
+    <string name="assets_title">Assets</string>
+    <!-- The app-bar add button's accessibility description, and the empty list's button. -->
+    <string name="assets_add_asset">Add asset</string>
+    <!-- The empty list, when there are no assets at all. -->
+    <string name="assets_no_assets_yet">No assets yet</string>
+    <!-- The empty list, when every asset is archived and Archived is off. %1$d: how many are archived. -->
+    <plurals name="assets_no_active_assets">
+        <item quantity="one">No active assets · %1$d archived</item>
+        <item quantity="other">No active assets · %1$d archived</item>
+    </plurals>
+    <!-- The empty list, when the search matches nothing. -->
+    <string name="assets_nothing_matches">Nothing matches that.</string>
+    <!-- The empty list's button that turns the Archived control on. -->
+    <string name="assets_show_archived">Show archived</string>
+    <!-- Spec §9: under an asset's name (in the list and under the detail's plate) when it is a child of another. %1$s: the parent asset's name. -->
+    <string name="assets_part_of">Part of %1$s</string>
+    <!-- P71-4: the accessibility description of the NFC disc on a row whose tag has been written. -->
+    <string name="assets_nfc_tag_written">NFC tag written</string>
+    <!-- Spec §7: the badge (drawn upper-cased) on a retired asset, in the list and on the plate. -->
+    <string name="assets_badge_retired">Retired</string>
+    <!-- Spec §6: the badge on an asset out of its operating season, in the list and on the plate; also the season phase word. -->
+    <string name="assets_badge_out_of_season">Out of season</string>
+
+    <!-- P73-1: the Type filter chip's label while it is All, and its accessible name always. -->
+    <string name="assets_filter_type">Type</string>
+    <!-- P73-2: the Type menu's first row (every type), and the chip's state while it is chosen. -->
+    <string name="assets_filter_all">All</string>
+    <!-- P73-3: the filter chip that shows child assets (components). -->
+    <string name="assets_filter_child_assets">Child assets</string>
+    <!-- P73-4: the filter chip that shows archived assets, and the badge word (drawn upper-cased) on an archived asset. -->
+    <string name="assets_filter_archived">Archived</string>
+    <!-- P73-5: every match is hidden by the Archived chip alone; names that chip (assets_filter_archived). -->
+    <string name="assets_archived_hidden">Matching assets are archived. Turn on Archived to see them.</string>
+    <!-- P73-6: every match is hidden by the Child assets chip alone; names that chip (assets_filter_child_assets). -->
+    <string name="assets_child_assets_hidden">Matching assets are child assets. Turn on Child assets to see them.</string>
+    <!-- P73-7: the matches are hidden by both chips; names both. -->
+    <string name="assets_both_hidden">Matching assets are hidden. Turn on Child assets and Archived to see them.</string>
+    <!-- P73-9: no search, Type All, and every asset shown would be a child asset; names the Child assets chip. -->
+    <string name="assets_only_child_assets">Only child assets here. Turn on Child assets to see them.</string>
+    <!-- P73-10: the search has matches, all of another type; names the Type chip and its All row. -->
+    <string name="assets_type_hidden">Matching assets have another type. Set Type to All.</string>
+
+    <!-- P73-11: the search box's placeholder and its accessible name. -->
+    <string name="assets_search_hint">Search assets</string>
+    <!-- The search box's clear button, as an accessibility description. -->
+    <string name="assets_clear_search">Clear search</string>
+</resources>

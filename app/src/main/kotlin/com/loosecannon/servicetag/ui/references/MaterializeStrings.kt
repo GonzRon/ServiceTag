@@ -1,8 +1,10 @@
 package com.loosecannon.servicetag.ui.references
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.attachments.asFileSize
-import com.loosecannon.servicetag.ui.condition.displayDate
 import java.time.LocalDate
 
 /**
@@ -12,31 +14,34 @@ import java.time.LocalDate
  * screen's to invent.
  */
 internal object MaterializeStrings {
-    const val SAVE_AS_DOCUMENT = "Save as document" // P85-1
-    fun downloadingFrom(host: String): String = "Downloading from $host…" // P85-2
+    val SAVE_AS_DOCUMENT: String get() = localized(R.string.references_save_as_document) // P85-1
+    fun downloadingFrom(host: String): String = localized(R.string.references_downloading_from, host) // P85-2
 
     /** P85-3: `{done} of {total}`, or `{done}` alone when the size is unknown. */
     fun progress(done: Long, total: Long?): String =
-        if (total == null) done.asFileSize() else "${done.asFileSize()} of ${total.asFileSize()}"
-    fun fromHost(host: String): String = "From $host" // P85-4
+        if (total == null) done.asFileSize()
+        else localized(R.string.references_download_progress, done.asFileSize(), total.asFileSize())
+    fun fromHost(host: String): String = localized(R.string.references_from_host, host) // P85-4
 
     /** P85-5: the proven type's ratified label (§19's table) and the size. */
-    fun typeLine(mimeType: String, sizeBytes: Long): String = "${typeLabel(mimeType)} · ${sizeBytes.asFileSize()}"
-    const val SAVED_AS_DOCUMENT = "Saved as document" // P85-6
-    const val SAVED_TO_DOCUMENTS = "Saved to Documents" // P85-7
-    fun downloadedFrom(host: String, date: LocalDate): String = "Downloaded from $host on ${displayDate(date)}" // P85-8
-    const val OPEN_SOURCE_LINK = "Open source link" // P85-9
-    const val NETWORK_DENIED = "ServiceTag is not allowed to use the network, so it cannot download this file. Allow network access in the app settings, then close ServiceTag and open it again." // P85-10
-    fun unreachable(host: String): String = "Could not reach $host. Check the connection and try again." // P85-11
-    const val TIMED_OUT = "The download took too long and was stopped." // P85-12
-    const val NOT_A_DOCUMENT = "That link did not lead to a supported document type. It stays a link." // P85-13
-    const val NEEDS_SIGN_IN = "That file needs a sign-in, so ServiceTag cannot download it. It stays a link." // P85-14
-    fun serverError(code: Int): String = "The server did not send the file (error $code)." // P85-15
-    const val REDIRECT_REFUSED = "That link redirects somewhere ServiceTag will not follow. It stays a link." // P85-16
-    fun alreadyHave(name: String): String = "This asset already has this file: $name." // P85-17
-    fun alreadyHaveOnSupply(name: String): String = "This supply already has this file: $name." // P69-15
+    fun typeLine(mimeType: String, sizeBytes: Long): String =
+        localized(R.string.references_type_line, typeLabel(mimeType), sizeBytes.asFileSize())
+    val SAVED_AS_DOCUMENT: String get() = localized(R.string.references_saved_as_document) // P85-6
+    val SAVED_TO_DOCUMENTS: String get() = localized(R.string.references_saved_to_documents) // P85-7
+    fun downloadedFrom(host: String, date: LocalDate): String =
+        localized(R.string.references_downloaded_from, host, localizedDate(date)) // P85-8
+    val OPEN_SOURCE_LINK: String get() = localized(R.string.references_open_source_link) // P85-9
+    val NETWORK_DENIED: String get() = localized(R.string.references_network_denied) // P85-10
+    fun unreachable(host: String): String = localized(R.string.references_unreachable, host) // P85-11
+    val TIMED_OUT: String get() = localized(R.string.references_timed_out) // P85-12
+    val NOT_A_DOCUMENT: String get() = localized(R.string.references_not_a_document) // P85-13
+    val NEEDS_SIGN_IN: String get() = localized(R.string.references_needs_sign_in) // P85-14
+    fun serverError(code: Int): String = localized(R.string.references_server_error, code) // P85-15
+    val REDIRECT_REFUSED: String get() = localized(R.string.references_redirect_refused) // P85-16
+    fun alreadyHave(name: String): String = localized(R.string.references_already_have_on_asset, name) // P85-17
+    fun alreadyHaveOnSupply(name: String): String = localized(R.string.references_already_have_on_supply, name) // P69-15
     fun alreadyHaveOnInstalledComponent(name: String): String =
-        "This installed component already has this file: $name." // P69-16
+        localized(R.string.references_already_have_on_installed_component, name) // P69-16
 
     /** #69 (C28, R69-13): P85-17 by the owner's kind; an asset keeps its shipped wording. */
     fun alreadyHave(owner: ReferenceOwner, name: String): String = when (owner) {
@@ -44,12 +49,13 @@ internal object MaterializeStrings {
         is ReferenceOwner.OfSupplyItem -> alreadyHaveOnSupply(name)
         is ReferenceOwner.OfInstalledComponent -> alreadyHaveOnInstalledComponent(name)
     }
-    const val INTERRUPTED = "The download could not be completed. Try again." // P85-18
-    const val LOCAL_ADDRESS = "That link resolves to a local-network address, so ServiceTag will not download it. It stays a link." // P85-19
+    val INTERRUPTED: String get() = localized(R.string.references_interrupted) // P85-18
+    val LOCAL_ADDRESS: String get() = localized(R.string.references_local_address) // P85-19
 
     /**
      * P85-5's `{TYPE}`, keyed by the MIME type the sniff stores (§19's table): the nineteen ratified labels, and
      * nothing else. The sniff proves exactly these, so a type missing here is a programming error, not a line.
+     * #102: file-format names, the same in every language, so they stay here rather than in the string resources.
      */
     private fun typeLabel(mimeType: String): String = checkNotNull(TYPE_LABELS[mimeType]) { "no ratified label" }
 
@@ -70,7 +76,7 @@ internal object MaterializeStrings {
         "application/vnd.oasis.opendocument.spreadsheet" to "ODS",
         "application/vnd.oasis.opendocument.presentation" to "ODP",
         "text/plain" to "TXT",
-        "text/markdown" to "Markdown",
+        "text/markdown" to "Markdown", // l10n-ok: file-format name
         "text/csv" to "CSV",
         "text/tab-separated-values" to "TSV",
     )

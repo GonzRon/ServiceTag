@@ -37,10 +37,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -48,6 +50,7 @@ import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.FieldLabel
 import com.loosecannon.servicetag.ui.asset.KEY_DOCUMENTS
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -90,14 +93,18 @@ fun DocumentsSection(
     // them still listed below, unchanged.
     KeyDocumentsBlock(state.keyDocuments, onOpen, edit)
     SectionHeader(
-        title = if (state.rows.isEmpty()) "Documents" else "Documents · ${state.rows.size}",
+        title = if (state.rows.isEmpty()) {
+            stringResource(R.string.documents_header)
+        } else {
+            stringResource(R.string.documents_header_count, state.rows.size)
+        },
     )
     if (state.rows.isNotEmpty()) {
         Column { state.rows.forEach { row -> DocumentRow(row, onOpen, edit, keyRole = null) } }
     } else if (state.store is StoreState.Ready) {
         // Only a folder that is actually there can be empty; without one the status block below
         // is the whole story, and "No documents yet" over it would read as the wrong problem.
-        QuietLine("No documents yet")
+        QuietLine(stringResource(R.string.documents_empty))
     }
     Spacer(Modifier.height(4.dp))
     if (readOnly) return
@@ -105,8 +112,8 @@ fun DocumentsSection(
     // for the bytes to go, and a greyed button invites a tap that can only fail (spec §8.1).
     if (state.store is StoreState.Ready) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            ActionButton("Add file", ServiceTagIcons.AttachFile, onAddFiles)
-            ActionButton("Take photo", ServiceTagIcons.Photo, onTakePhoto)
+            ActionButton(stringResource(R.string.documents_add_file), ServiceTagIcons.AttachFile, onAddFiles)
+            ActionButton(stringResource(R.string.documents_take_photo), ServiceTagIcons.Photo, onTakePhoto)
         }
     } else {
         NoAttachmentFolderCard(onOpenSettings)
@@ -123,18 +130,18 @@ fun DocumentsSection(
 internal fun NoAttachmentFolderCard(onOpenSettings: () -> Unit) {
     StatusBlock(
         kind = ServiceTagTheme.semanticColors.seasonInactive,
-        headline = "Attachment storage",
-        title = "Attachment storage not set up",
-        detail = "Choose a folder in Settings",
+        headline = stringResource(R.string.documents_storage_headline),
+        title = stringResource(R.string.documents_storage_not_set_up),
+        detail = stringResource(R.string.documents_storage_detail),
         icon = ServiceTagIcons.CloudOff,
         leftRule = false,
         modifier = Modifier.fillMaxWidth(),
     )
-    TextButton(onClick = onOpenSettings) { Text("Open settings") }
+    TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.documents_open_settings)) }
 }
 
 /** Said when nothing on the device can hand a file over; DOCUMENTS and the asset editor both say it. */
-internal const val NO_APP_CAN_PICK_FILES = "No app can pick files"
+internal val NO_APP_CAN_PICK_FILES: String get() = localized(R.string.documents_no_app_can_pick_files)
 
 /**
  * The wrapper both detail screens call: it owns the ViewModel, the pickers and the sheet. The
@@ -177,8 +184,8 @@ fun AttachmentsSection(
         graph = graph,
         viewUri = model::viewUri,
         onPicked = model::add,
-        onNoViewer = { scope.launch { snackbars.showSnackbar("No app can open this file") } },
-        onNoCamera = { scope.launch { snackbars.showSnackbar("No camera app on this device") } },
+        onNoViewer = { scope.launch { snackbars.showSnackbar(localized(R.string.documents_no_app_can_open_file)) } },
+        onNoCamera = { scope.launch { snackbars.showSnackbar(localized(R.string.documents_no_camera_app)) } },
         onNoFilePicker = { scope.launch { snackbars.showSnackbar(NO_APP_CAN_PICK_FILES) } },
     )
 
@@ -187,7 +194,7 @@ fun AttachmentsSection(
         // A row whose bytes are gone says so again rather than launching an intent at nothing.
         onOpen = { row ->
             if (row.present) pickers.open(row)
-            else scope.launch { snackbars.showSnackbar("Not on this device") }
+            else scope.launch { snackbars.showSnackbar(localized(R.string.documents_not_on_device)) }
         },
         onEdit = { row -> editing = row.id },
         onAddFiles = pickers.addFiles,
@@ -269,7 +276,7 @@ private fun DocumentRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            QuietLine(if (row.present) row.quietLine() else "Not on this device")
+            QuietLine(if (row.present) row.quietLine() else stringResource(R.string.documents_not_on_device))
             // D-19: the description the byte path has stored since Phase 4A and never drawn. It
             // is genuinely a second line, and it is drawn only when the bytes are here — a row
             // whose whole message is that they are gone must not also carry prose.
@@ -294,8 +301,11 @@ private fun DocumentRow(
  * home, so TalkBack can tell the two copies of one row apart: `More for Pump manual.pdf, User manual`.
  */
 internal fun overflowLabel(displayName: String, keyRole: DocumentRole?): String {
-    val label = "More for $displayName"
-    return if (keyRole == null) label else "$label, ${keyRole.label()}"
+    return if (keyRole == null) {
+        localized(R.string.documents_more_for, displayName)
+    } else {
+        localized(R.string.documents_more_for_role, displayName, keyRole.label())
+    }
 }
 
 /** The thumbnail when there is one, otherwise the kind glyph — dimmed when the bytes are gone. */
@@ -346,13 +356,13 @@ private fun AttachmentRowState.quietLine(): String =
 
 /** Sentence case, as the chips in the edit sheet show them too (spec §8.1). */
 internal fun AttachmentKind.label(): String = when (this) {
-    AttachmentKind.PHOTO -> "Photo"
-    AttachmentKind.LABEL_PHOTO -> "Label photo"
-    AttachmentKind.RECEIPT -> "Receipt"
-    AttachmentKind.MANUAL -> "Manual"
-    AttachmentKind.WARRANTY -> "Warranty"
-    AttachmentKind.DOCUMENT -> "Document"
-    AttachmentKind.OTHER -> "Other"
+    AttachmentKind.PHOTO -> localized(R.string.documents_kind_photo)
+    AttachmentKind.LABEL_PHOTO -> localized(R.string.documents_kind_label_photo)
+    AttachmentKind.RECEIPT -> localized(R.string.documents_kind_receipt)
+    AttachmentKind.MANUAL -> localized(R.string.documents_kind_manual)
+    AttachmentKind.WARRANTY -> localized(R.string.documents_kind_warranty)
+    AttachmentKind.DOCUMENT -> localized(R.string.documents_kind_document)
+    AttachmentKind.OTHER -> localized(R.string.documents_kind_other)
 }
 
 /** Broad glyphs only, as the category icons are (D12 §12): a picture, a page, or a paperclip. */
@@ -368,9 +378,10 @@ private fun AttachmentKind.glyph(): ImageVector = when (this) {
 /**
  * Under a kibibyte is plain bytes, then one decimal of KB, then one decimal of MB (spec §8.1).
  * It lives in this file because nothing else needs it; `internal` only so a test can name it.
+ * #102: the number keeps its shipped formatting; only the unit word comes from the resources.
  */
 internal fun Long.asFileSize(): String = when {
-    this < 1024L -> "$this B"
-    this < 1024L * 1024L -> String.format(Locale.US, "%.1f KB", this / 1024.0)
-    else -> String.format(Locale.US, "%.1f MB", this / (1024.0 * 1024.0))
+    this < 1024L -> localized(R.string.documents_size_bytes, this.toString())
+    this < 1024L * 1024L -> localized(R.string.documents_size_kb, String.format(Locale.US, "%.1f", this / 1024.0))
+    else -> localized(R.string.documents_size_mb, String.format(Locale.US, "%.1f", this / (1024.0 * 1024.0)))
 }

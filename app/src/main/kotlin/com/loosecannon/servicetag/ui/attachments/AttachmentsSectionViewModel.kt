@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.attachments.Thumbnails
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
@@ -25,6 +26,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.references.ReferenceUris
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.references.MaterializeStrings
 import java.io.File
 import java.io.InputStream
@@ -54,10 +56,11 @@ import kotlinx.coroutines.withContext
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
 /** #85 §6 (reused, hoisted byte-identical): a save that did not land, naming the file the person typed. */
-internal fun couldNotSave(name: String): String = "Could not save $name"
+internal fun couldNotSave(name: String): String = localized(R.string.attachments_could_not_save, name)
 
 /** "Adding 3 of 8…" — the line the section shows while a multi-select lands (spec §8.1). */
-internal fun addingProgressLine(index: Int, total: Int): String = "Adding $index of $total…"
+internal fun addingProgressLine(index: Int, total: Int): String =
+    localized(R.string.attachments_adding_progress, index, total)
 
 /**
  * #67 (P67-2/3/4, P67-6, ratified verbatim): the one home of the role labels, beside
@@ -65,14 +68,14 @@ internal fun addingProgressLine(index: Int, total: Int): String = "Adding $index
  * the choices the pickers offer, and its words live here too.
  */
 internal fun DocumentRole?.label(): String = when (this) {
-    DocumentRole.PURCHASE_INVOICE_OR_RECEIPT -> "Purchase invoice or receipt"
-    DocumentRole.USER_MANUAL -> "User manual"
-    DocumentRole.SERVICE_MANUAL -> "Service manual"
-    null -> "No role"
+    DocumentRole.PURCHASE_INVOICE_OR_RECEIPT -> localized(R.string.attachments_role_purchase_invoice_or_receipt)
+    DocumentRole.USER_MANUAL -> localized(R.string.attachments_role_user_manual)
+    DocumentRole.SERVICE_MANUAL -> localized(R.string.attachments_role_service_manual)
+    null -> localized(R.string.attachments_role_none)
 }
 
 /** #67 (P67-5, ratified verbatim): the header over the role chips, in the edit sheet and the share intake. */
-internal const val ROLE_HEADER = "Role"
+internal val ROLE_HEADER: String get() = localized(R.string.attachments_role_header)
 
 /** #67: the role chips, in the order the edit sheet and the share intake draw them — no role first. */
 internal val ROLE_CHOICES: List<DocumentRole?> = listOf<DocumentRole?>(null) + DocumentRole.entries
@@ -336,7 +339,7 @@ class AttachmentsSectionViewModel(
             } catch (e: Throwable) {
                 // The row write failed, or the store would not give the bytes up. Either way the
                 // person asked for one thing and it did not happen, so they hear about it.
-                _messages.tryEmit(e.transferredOutOr("Could not delete that file"))
+                _messages.tryEmit(e.transferredOutOr(localized(R.string.attachments_could_not_delete)))
             }
             refresh.value++
         }
@@ -460,18 +463,18 @@ internal sealed interface AttachmentFailure {
 /** The one line a failure is said with; null is silence (`Unchanged`: the sheet simply closes, spec §8.1). */
 internal fun AttachmentFailure.sentence(): String? = when (this) {
     // Name the file the person picked: of several, "something failed" would not tell them which.
-    is AttachmentFailure.CopyFailed -> "Could not add $displayName"
+    is AttachmentFailure.CopyFailed -> localized(R.string.attachments_could_not_add, displayName)
     is AttachmentFailure.Refused -> when (problem) {
-        AttachmentProblem.BlankName -> "Give the file a name"
-        AttachmentProblem.NoStore -> "Choose an attachment folder in Settings first"
-        AttachmentProblem.StoreUnavailable -> "The attachment folder is not available"
-        is AttachmentProblem.TooLarge -> "That file is larger than 256 MB"
+        AttachmentProblem.BlankName -> localized(R.string.attachments_blank_name)
+        AttachmentProblem.NoStore -> localized(R.string.attachments_no_store)
+        AttachmentProblem.StoreUnavailable -> localized(R.string.attachments_store_unavailable)
+        is AttachmentProblem.TooLarge -> localized(R.string.attachments_too_large)
         // `UpdateAttachment` reports a vanished *attachment* row as `OwnerMissing` too, so the
         // wording is about the file: the person never named an owner.
-        AttachmentProblem.OwnerMissing -> "That file is no longer here"
+        AttachmentProblem.OwnerMissing -> localized(R.string.attachments_owner_missing)
         AttachmentProblem.Unchanged -> null
     }
 }
 
 /** Said once per failed presence/thumbnail pass; the rows stay, only their checks are unknown. */
-internal const val SCAN_FAILED = "Could not check the attachment folder"
+internal val SCAN_FAILED: String get() = localized(R.string.attachments_scan_failed)

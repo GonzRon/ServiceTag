@@ -31,8 +31,12 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** #16 (C26, R16-Q-D): the four cadences with their words, in the order drawn; [SyncCadence.DAILY] is preselected. */
-internal val HA_CADENCE_CHOICES: List<Pair<SyncCadence, String>> = SyncCadence.entries.map { it to cadenceLabel(it) }
+/**
+ * #16 (C26, R16-Q-D): the four cadences with their words, in the order drawn; [SyncCadence.DAILY] is preselected.
+ * A getter (#102): the words are read in the current language each time, never kept from the first read.
+ */
+internal val HA_CADENCE_CHOICES: List<Pair<SyncCadence, String>>
+    get() = SyncCadence.entries.map { it to cadenceLabel(it) }
 
 /** #16 (C26, C32): what the screen asks Android for, on the owner's choice only; it reports back when answered. */
 internal enum class PermissionRequest {

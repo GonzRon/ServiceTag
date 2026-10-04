@@ -143,7 +143,7 @@ class PlatformNetworkReader(
         const val CALLBACK_WAIT_MILLIS = 2_000L
 
         /** The platform's marker for a name it will not reveal (`WifiManager.UNKNOWN_SSID`). */
-        const val UNKNOWN_NAME = "<unknown ssid>"
+        const val UNKNOWN_NAME = "<unknown ssid>" // l10n-ok: platform marker, compared and never shown
 
         private const val CALLBACK_API = 31
         private const val BACKGROUND_RULE_API = 29

@@ -3,10 +3,12 @@ package com.loosecannon.servicetag.ui.maintenance
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.RepairAction
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.reminders.ReminderHealthCheck
 import com.loosecannon.servicetag.reminders.ReminderHealthRun
@@ -30,14 +32,14 @@ import kotlinx.coroutines.launch
  * shown with no button rather than a button saying nothing.
  */
 fun repairLabel(code: String): String? = when (repairActionOf(code)) {
-    ReminderRepair.OPEN_NOTIFICATION_SETTINGS -> "Open notification settings"
-    ReminderRepair.ARM_DIGEST_ALARM -> "Reschedule the check"
-    ReminderRepair.ENQUEUE_BACKSTOP -> "Restart the check"
-    ReminderRepair.OPEN_BATTERY_SETTINGS -> "Open battery settings"
-    ReminderRepair.TURN_REMINDERS_ON -> "Turn reminders on"
-    ReminderRepair.OPEN_SCHEDULE -> "Open the schedule"
-    ReminderRepair.LOG_METER_READING -> "Log meter reading"
-    ReminderRepair.RESTORE_REMINDER_DELIVERY -> "Fix reminder delivery"
+    ReminderRepair.OPEN_NOTIFICATION_SETTINGS -> localized(R.string.maintenance_repair_open_notification_settings)
+    ReminderRepair.ARM_DIGEST_ALARM -> localized(R.string.maintenance_repair_reschedule_check)
+    ReminderRepair.ENQUEUE_BACKSTOP -> localized(R.string.maintenance_repair_restart_check)
+    ReminderRepair.OPEN_BATTERY_SETTINGS -> localized(R.string.maintenance_repair_open_battery_settings)
+    ReminderRepair.TURN_REMINDERS_ON -> localized(R.string.maintenance_repair_turn_reminders_on)
+    ReminderRepair.OPEN_SCHEDULE -> localized(R.string.maintenance_repair_open_schedule)
+    ReminderRepair.LOG_METER_READING -> localized(R.string.maintenance_log_meter_reading)
+    ReminderRepair.RESTORE_REMINDER_DELIVERY -> localized(R.string.maintenance_repair_fix_delivery)
     else -> null
 }
 

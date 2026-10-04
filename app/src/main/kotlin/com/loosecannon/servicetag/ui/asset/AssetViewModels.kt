@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.asset
 
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
+import com.loosecannon.servicetag.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.condition.ConditionHistory
@@ -123,6 +124,9 @@ import com.loosecannon.servicetag.core.usecase.WarrantyReminderProblem
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
 import com.loosecannon.servicetag.core.usecase.liveContinuousCount
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedList
+import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.ui.attachments.AttachmentFailure
 import com.loosecannon.servicetag.ui.attachments.PickedFile
@@ -1335,7 +1339,7 @@ class AssetDetailViewModel(
                 }
                 is AssetValidation -> refuse(ENTER_A_DATE_AS_YYYY_MM_DD)
                 is AssetTransferredOut -> refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
-                else -> refuse("Could not retire this asset.")
+                else -> refuse(localized(R.string.asset_model_could_not_retire))
             }
         }
     }
@@ -1370,8 +1374,8 @@ class AssetDetailViewModel(
                 // group round, so the delete does not proceed. It says the shipped line and no
                 // more: the string table ratifies no sentence for this refusal, and a brief may not
                 // draft one.
-                is AssetMembershipReferenced -> refuse("Could not delete this asset.")
-                else -> refuse("Could not delete this asset.")
+                is AssetMembershipReferenced -> refuse(localized(R.string.asset_model_could_not_delete))
+                else -> refuse(localized(R.string.asset_model_could_not_delete))
             }
         }
     }
@@ -1396,16 +1400,16 @@ class AssetDetailViewModel(
         viewModelScope.launch {
             val template = SeedTemplates.byKey(key)
             if (template == null) {
-                _messages.tryEmit("That template is not available.")
+                _messages.tryEmit(localized(R.string.asset_model_template_not_available))
                 return@launch
             }
             val outcome = runCatching { applyTemplate.run(id, template) }
             when {
                 outcome.exceptionOrNull() is AssetTransferredOut ->
                     _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
-                outcome.isFailure -> _messages.tryEmit("Could not set up this asset.")
+                outcome.isFailure -> _messages.tryEmit(localized(R.string.asset_model_could_not_set_up))
                 outcome.getOrNull() is ApplyResult.AlreadySetUp ->
-                    _messages.tryEmit("This asset is already set up.")
+                    _messages.tryEmit(localized(R.string.asset_model_already_set_up))
             }
         }
     }
@@ -1452,68 +1456,66 @@ class AssetDetailViewModel(
 //
 // The words below are RATIFIED (spec §10.7), each by its S-number and verbatim; `<…>` is the one
 // substitution. B14 owns S21, S24, S39, S42–S50, S54, S56, S57, S94, S107 and S138 (master §19) and
-// only uses B12's and B10's.
+// only uses B12's and B10's. #102: they live in res/values/strings_asset_edit.xml (`season_*`, `asset_model_*`)
+// beside their S-numbers, and are read when drawn.
 // ------------------------------------------------------------------------------------------------
 
 /** S21, section. */
-const val CONDITION_HISTORY = "Condition history"
+val CONDITION_HISTORY: String get() = localized(R.string.asset_model_condition_history)
 
 /** S24, a condition row's link to an event that has since been deleted (spec §5.3). */
-const val LINKED_RECORD_REMOVED = "The linked record was removed."
+val LINKED_RECORD_REMOVED: String get() = localized(R.string.asset_model_linked_record_removed)
 
 /** S39, the phase word for IN_SEASON. The out-of-season word is the shipped [OUT_OF_SEASON]. */
-const val IN_SEASON_WORD = "IN SEASON"
+val IN_SEASON_WORD: String get() = localized(R.string.season_in_season_word)
 
 /** S42, dialog title. */
-const val START_THE_SEASON = "Start the season?"
+val START_THE_SEASON: String get() = localized(R.string.season_start_title)
 
 /** S43, "Maintenance set to follow the season becomes active again from <date>.", the dialog's date substituted. */
-fun startSeasonBody(date: String): String =
-    "Maintenance set to follow the season becomes active again from $date."
+fun startSeasonBody(date: String): String = localized(R.string.season_start_body, date)
 
 /** S44, dialog title. */
-const val END_THE_SEASON = "End the season?"
+val END_THE_SEASON: String get() = localized(R.string.season_end_title)
 
 /** S45, dialog body. */
-const val END_SEASON_BODY =
-    "Maintenance set to follow the season waits until you start it again. Nothing is marked done."
+val END_SEASON_BODY: String get() = localized(R.string.season_end_body)
 
 /** S46, history row. */
-const val SEASON_STARTED = "Season started"
+val SEASON_STARTED: String get() = localized(R.string.season_history_started)
 
 /** S47, history row. */
-const val SEASON_ENDED = "Season ended"
+val SEASON_ENDED: String get() = localized(R.string.season_history_ended)
 
 /** S48, section. */
-const val SEASON_HISTORY = "Season history"
+val SEASON_HISTORY: String get() = localized(R.string.season_history_section)
 
 /** S49, "Next season starts <date>": a CALENDAR asset out of season. */
-fun nextSeasonStartsLine(date: String): String = "Next season starts $date"
+fun nextSeasonStartsLine(date: String): String = localized(R.string.season_next_starts, date)
 
 /** S50, "Season ends <date>": a CALENDAR asset in season. */
-fun seasonEndsLine(date: String): String = "Season ends $date"
+fun seasonEndsLine(date: String): String = localized(R.string.season_ends_on, date)
 
 /** S54, "Choose a date from <date> to today.", `<date>` the latest activation's day. */
-fun chooseADateFrom(date: String): String = "Choose a date from $date to today."
+fun chooseADateFrom(date: String): String = localized(R.string.season_choose_date_from, date)
 
 /** S56, refusal: a START raced by another START. */
-const val THE_SEASON_IS_ALREADY_RUNNING = "The season is already running."
+val THE_SEASON_IS_ALREADY_RUNNING: String get() = localized(R.string.season_already_running)
 
 /** S57, refusal: an END raced by another END. */
-const val THE_SEASON_HAS_ALREADY_ENDED = "The season has already ended."
+val THE_SEASON_HAS_ALREADY_ENDED: String get() = localized(R.string.season_already_ended)
 
 /** S94, section. */
-const val HEALTH_SECTION = "Health"
+val HEALTH_SECTION: String get() = localized(R.string.asset_model_health_section)
 
 /** S107, the Health section's footer (spec §6.6). */
-const val HEALTH_FOOTER =
-    "Health is an estimate from dates and records, not a diagnosis. It never changes the condition."
+val HEALTH_FOOTER: String get() = localized(R.string.asset_model_health_footer)
 
 /** S138, fallback: TRACK_ONE's subject is gone and WORST is shown instead (spec §6.5). */
-const val FALLBACK_TO_WORST = "The subject to follow is missing, so the worst subject is shown."
+val FALLBACK_TO_WORST: String get() = localized(R.string.asset_model_health_fallback_to_worst)
 
 /** The shipped line this screen already says when a lifecycle write fails for no stated reason. */
-internal const val COULD_NOT_UPDATE_THIS_ASSET = "Could not update this asset."
+internal val COULD_NOT_UPDATE_THIS_ASSET: String get() = localized(R.string.asset_model_could_not_update)
 
 /**
  * One row of S21 "Condition history" (spec §5.1): a recorded fact, drawn and never edited — no row
@@ -1757,7 +1759,7 @@ data class MonthDayInput(
 }
 
 /** The shipped line under a month-day that is not one. */
-internal const val NOT_A_REAL_MONTH_AND_DAY = "Not a real month and day"
+internal val NOT_A_REAL_MONTH_AND_DAY: String get() = localized(R.string.asset_model_not_a_real_month_day)
 
 /**
  * The non-verbal required mark (the controller's ruling on I10 and the plan-review follow-up's F4): an asterisk
@@ -1945,7 +1947,7 @@ data class AssetEditState(
 }
 
 /** The label of the empty choice in the "Part of" picker, and of the asset with no parent. */
-const val NO_PARENT = "None"
+val NO_PARENT: String get() = localized(R.string.asset_model_no_parent)
 
 /**
  * The "Part of" picker of spec §5, over [all]: [NO_PARENT] first, then everything but [self] and everything under
@@ -1962,7 +1964,11 @@ internal fun parentChoicesIn(all: Collection<Asset>, held: Set<AssetId>, self: A
         .map { row ->
             ParentChoice(
                 id = row.id.value,
-                label = if (row.status == AssetStatus.ARCHIVED) "${row.name} (archived)" else row.name,
+                label = if (row.status == AssetStatus.ARCHIVED) {
+                    localized(R.string.asset_model_parent_archived, row.name)
+                } else {
+                    row.name
+                },
             )
         }
 }
@@ -2490,7 +2496,7 @@ class AssetEditViewModel(
                 }
                 is AssetCycle -> {
                     _state.update { it.copy(saving = false) }
-                    _messages.tryEmit("${nameOf(failure.parentId)} is already part of this asset.")
+                    _messages.tryEmit(localized(R.string.asset_model_parent_cycle, nameOf(failure.parentId)))
                     return
                 }
                 is SeasonSyncOwnsSeason -> {
@@ -2505,7 +2511,7 @@ class AssetEditViewModel(
                 }
                 else -> {
                     _state.update { it.copy(saving = false) }
-                    _messages.tryEmit(failure.transferredOutOr("Could not save this asset."))
+                    _messages.tryEmit(failure.transferredOutOr(localized(R.string.asset_model_could_not_save)))
                     return
                 }
             }
@@ -2845,17 +2851,19 @@ internal fun priceTextOf(minor: Long?, code: String?): String {
     return runCatching { Money.format(minor, code).removeSuffix(" $code") }.getOrDefault("")
 }
 
-/** "123.45" for a two-digit currency, "123" for a zero-digit one: the shape, not an amount. */
+/**
+ * "123.45" for a two-digit currency, "123" for a zero-digit one: the shape, not an amount. The example is the form
+ * `Money.parse` reads, so it is built here and only the words around it are the language's.
+ */
 internal fun priceExample(digits: Int): String =
-    "Enter a price like " + if (digits <= 0) "123" else "123." + "456789".take(digits)
+    localized(R.string.asset_model_price_example, if (digits <= 0) "123" else "123." + "456789".take(digits))
 
 /** What the price field says before anything is wrong: how many decimals this currency has. */
 internal fun priceHint(currency: String): String {
-    val digits = Money.fractionDigits(currency.trim()) ?: return "Amount"
+    val digits = Money.fractionDigits(currency.trim()) ?: return localized(R.string.asset_model_price_hint_amount)
     return when (digits) {
-        0 -> "Whole numbers only"
-        1 -> "Up to 1 decimal place"
-        else -> "Up to $digits decimal places"
+        0 -> localized(R.string.asset_model_price_hint_whole)
+        else -> localizedPlural(R.plurals.asset_model_price_hint_decimals, digits, digits)
     }
 }
 
@@ -2879,8 +2887,8 @@ private fun markFor(problem: AssetProblem): Pair<String, String>? = when (proble
     AssetProblem.NameRequired -> AssetField.NAME to GIVE_THE_ASSET_A_NAME
     AssetProblem.BadCurrency -> AssetField.CURRENCY to BAD_CURRENCY
     AssetProblem.CurrencyRequired -> AssetField.CURRENCY to CURRENCY_REQUIRED
-    AssetProblem.NegativePrice -> AssetField.PRICE to "Price cannot be negative"
-    AssetProblem.UnknownParent -> AssetField.PARENT to "That asset is no longer there"
+    AssetProblem.NegativePrice -> AssetField.PRICE to localized(R.string.asset_model_price_negative)
+    AssetProblem.UnknownParent -> AssetField.PARENT to localized(R.string.asset_model_parent_gone)
     is AssetProblem.BadDate -> problem.field to ENTER_A_DATE_AS_YYYY_MM_DD
     is AssetProblem.Season -> when (val season = problem.p) {
         SeasonWindow.Problem.BothOrNeither -> null
@@ -2924,20 +2932,26 @@ private fun policyOf(row: Asset, subjects: List<HealthSubject>): Pair<HealthAggr
     return HealthAggregation.TRACK_ONE to primary.value
 }
 
-/** S55 with its one substitution: the stranded schedules' titles. */
+/**
+ * S55, refusal: "Some maintenance on this asset is set to be ready before its season. Change it first: <titles>.", with
+ * its one substitution: the stranded schedules' titles, as the language lists them.
+ */
 internal fun seasonStrands(titles: List<String>): String =
-    SEASON_STRANDS_PRE_SERVICE.replace("<titles>", titles.joinToString(", "))
+    localized(R.string.asset_edit_season_strands, localizedList(titles))
 
-/** S64 with its one substitution: the stranded schedules' titles. */
+/**
+ * S64, refusal: "Some maintenance on this asset is set to be ready before the break. Change it first: <titles>.", with
+ * its one substitution: the stranded schedules' titles, as the language lists them.
+ */
 internal fun breakStrands(titles: List<String>): String =
-    BREAK_STRANDS_PRE_SERVICE.replace("<titles>", titles.joinToString(", "))
+    localized(R.string.asset_edit_break_strands, localizedList(titles))
 
 /** #86 (plan §6, reused 16): the name refusal, hoisted byte-identical so Replace asset draws it from here. */
-const val GIVE_THE_ASSET_A_NAME = "Give the asset a name"
+val GIVE_THE_ASSET_A_NAME: String get() = localized(R.string.asset_model_name_required)
 
 /** #86 (plan §6, reused 17): every bad or blank required date, hoisted byte-identical. */
-const val ENTER_A_DATE_AS_YYYY_MM_DD = "Enter a date as YYYY-MM-DD"
+val ENTER_A_DATE_AS_YYYY_MM_DD: String get() = localized(R.string.asset_model_bad_date)
 
 /** Also the case editor's currency refusal (#79, C21): reused through this home. */
-internal const val BAD_CURRENCY = "Currency is a three-letter code like USD"
-private const val CURRENCY_REQUIRED = "A price needs a currency"
+internal val BAD_CURRENCY: String get() = localized(R.string.asset_model_bad_currency)
+private val CURRENCY_REQUIRED: String get() = localized(R.string.asset_model_currency_required)

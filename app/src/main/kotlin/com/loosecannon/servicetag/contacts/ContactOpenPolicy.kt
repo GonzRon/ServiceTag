@@ -1,12 +1,14 @@
 package com.loosecannon.servicetag.contacts
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.CONTACT_LOOKUP_URI
+import com.loosecannon.servicetag.l10n.localized
 
 /**
  * #72, P72-20 (RATIFIED verbatim, R72-23): what "Open contact" says when nothing on the phone takes the
  * link, or the handler refuses it. It names no URI (the shipped `NO_HANDLER_MESSAGE` rule).
  */
-const val NO_APP_CAN_OPEN_THIS_CONTACT = "No app can open this contact"
+val NO_APP_CAN_OPEN_THIS_CONTACT: String get() = localized(R.string.contacts_no_app_can_open)
 
 /**
  * #72 (C15; R72-4): which stored links may be launched — only one the shared `CONTACT_LOOKUP_URI`

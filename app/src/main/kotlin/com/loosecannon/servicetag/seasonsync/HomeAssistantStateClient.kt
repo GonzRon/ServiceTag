@@ -193,8 +193,8 @@ class HomeAssistantStateClient(
         connection.useCaches = false
         connection.connectTimeout = CONNECT_MILLIS
         connection.readTimeout = IDLE_MILLIS
-        connection.setRequestProperty("Authorization", "Bearer " + token.value)
-        connection.setRequestProperty("Accept", "application/json")
+        connection.setRequestProperty("Authorization", "Bearer " + token.value) // l10n-ok: HTTP header
+        connection.setRequestProperty("Accept", "application/json") // l10n-ok: HTTP header
         connection.setRequestProperty("Accept-Encoding", "identity")
         connection.setRequestProperty("User-Agent", DocumentTransport.USER_AGENT)
         return connection

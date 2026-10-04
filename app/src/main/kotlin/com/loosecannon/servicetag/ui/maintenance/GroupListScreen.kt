@@ -18,13 +18,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /** The RATIFIED noun (master plan §17): the one word these screens are allowed to call a group. */
-const val MAINTENANCE_GROUP = "Maintenance group"
+val MAINTENANCE_GROUP: String get() = localized(R.string.maintenance_group_noun)
 
 /**
  * The group list, inside the Maintenance destination's "Maintenance groups" section (#55's
@@ -93,7 +96,10 @@ private fun GroupRow(group: MaintenanceGroupRow, onClick: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         if (group.archived) {
-            StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+            StatusBadge(
+                label = stringResource(R.string.maintenance_archived),
+                colors = ServiceTagTheme.semanticColors.seasonInactive,
+            )
         }
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,

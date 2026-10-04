@@ -17,14 +17,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
 /** The RATIFIED action label (master plan §17). */
-const val CLOSE_THIS_ROUND = "Close this round"
+val CLOSE_THIS_ROUND: String get() = localized(R.string.maintenance_close_this_round)
 
 /**
  * The RATIFIED confirmation body (owner, 2026-09-22; master plan §17.1b), verbatim.
@@ -33,8 +36,8 @@ const val CLOSE_THIS_ROUND = "Close this round"
  * members are **not** being recorded as serviced, and that is the whole difference between a closure
  * and the false history D-8 exists to avoid.
  */
-const val CLOSE_THIS_ROUND_CONFIRMATION =
-    "Close this round? The members not marked done will not be recorded as serviced."
+val CLOSE_THIS_ROUND_CONFIRMATION: String
+    get() = localized(R.string.maintenance_close_this_round_confirmation)
 
 /**
  * The dates a closure may carry: the round's **open date, clamped to today**, through today.
@@ -82,10 +85,10 @@ fun CloseRoundDialog(
         onDismissRequest = onDismiss,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(CLOSE_THIS_ROUND_CONFIRMATION)
+                Text(stringResource(R.string.maintenance_close_this_round_confirmation))
                 // The shipped date field's own label and its `"Pick <label>"` content-description
                 // idiom (`AssetEditScreen.kt`), instantiated rather than re-worded.
-                val dateLabel = "Date"
+                val dateLabel = stringResource(R.string.maintenance_date)
                 MaintenanceField(
                     value = closedOn.toString(),
                     onValueChange = {},
@@ -96,7 +99,10 @@ fun CloseRoundDialog(
                     mono = true,
                     trailingIcon = {
                         IconButton(onClick = { picking = true }) {
-                            Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick $dateLabel")
+                            Icon(
+                                ServiceTagIcons.CalendarMonth,
+                                contentDescription = stringResource(R.string.maintenance_pick_field, dateLabel),
+                            )
                         }
                     },
                 )
@@ -106,9 +112,9 @@ fun CloseRoundDialog(
             TextButton(
                 enabled = closedOn in range,
                 onClick = { onConfirm(closedOn.toString()) },
-            ) { Text(CLOSE_THIS_ROUND) }
+            ) { Text(stringResource(R.string.maintenance_close_this_round)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.maintenance_cancel)) } },
     )
 
     if (picking) {
@@ -130,9 +136,11 @@ fun CloseRoundDialog(
                         picker.selectedDateMillis?.let { closedOn = utcDate(it) }
                         picking = false
                     },
-                ) { Text("OK") }
+                ) { Text(stringResource(R.string.maintenance_ok)) }
             },
-            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = { picking = false }) { Text(stringResource(R.string.maintenance_cancel)) }
+            },
         ) {
             DatePicker(state = picker)
         }

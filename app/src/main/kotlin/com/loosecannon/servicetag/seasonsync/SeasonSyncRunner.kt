@@ -278,7 +278,7 @@ suspend fun startSeasonSync(
 }
 
 /** G3: the start-up sweep's line. */
-const val KEY_SWEEP_FAILED = "the Home Assistant key sweep failed; the next start repeats it"
+const val KEY_SWEEP_FAILED = "the Home Assistant key sweep failed; the next start repeats it" // l10n-ok: log line
 
 /**
  * G5 (R16-Q-J): the one line of a check that failed where nothing else would say so — a command's fresh read, the
@@ -286,7 +286,7 @@ const val KEY_SWEEP_FAILED = "the Home Assistant key sweep failed; the next star
  * Wi-Fi name, token or exception.
  */
 const val CHECK_NOT_RUN =
-    "a Home Assistant check could not run; it will retry on the next resume, scheduled run, or app start"
+    "a Home Assistant check could not run; it will retry on the next resume, scheduled run, or app start" // l10n-ok: log line
 
 private suspend fun <T> database(block: suspend () -> T): T = try {
     block()

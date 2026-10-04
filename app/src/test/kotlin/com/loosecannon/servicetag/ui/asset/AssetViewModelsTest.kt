@@ -2666,7 +2666,7 @@ class AssetViewModelsTest {
             notTiedToSeason(3),
         )
         assertEquals(notTiedToSeason(1), NOT_TIED_TO_SEASON_ONE)
-        assertEquals(NOT_TIED_TO_SEASON.replace("<n>", "2"), notTiedToSeason(2))
+        assertEquals(notTiedToSeason(3).replace("has 3 ", "has 2 "), notTiedToSeason(2))
         assertEquals("Review maintenance schedules", REVIEW_MAINTENANCE_SCHEDULES)
         assertEquals("Keep schedules as-is", KEEP_SCHEDULES_AS_IS)
     }

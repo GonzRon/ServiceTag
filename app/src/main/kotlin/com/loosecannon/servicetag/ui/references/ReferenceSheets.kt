@@ -26,13 +26,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
 import com.loosecannon.servicetag.core.references.takesRole
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.attachments.ROLE_CHOICES
 import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
 import com.loosecannon.servicetag.ui.attachments.label
@@ -65,7 +68,7 @@ internal fun ReferenceEditSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         SheetColumn {
-            Text("Edit reference", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.references_edit_title), style = MaterialTheme.typography.titleMedium)
             NameField(name) { name = it }
             DescriptionField(description) { description = it }
             if (row.kind.takesRole) RoleChips(role) { role = it }
@@ -107,11 +110,11 @@ internal fun AddLinkSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         SheetColumn {
-            Text("Add link", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.references_add_link), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = form.link,
                 onValueChange = { form = form.withLink(it, roleOffered) },
-                label = { Text("Link") },
+                label = { Text(stringResource(R.string.references_link_label)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -127,15 +130,15 @@ internal fun AddLinkSheet(
 }
 
 /** #69 P69-13 (C28): the remove confirmation's body, for a SupplyItem's link. */
-internal const val REMOVED_FROM_SUPPLY = "The link is removed from this supply. Nothing in the other app is changed."
+internal val REMOVED_FROM_SUPPLY: String get() = localized(R.string.references_removed_from_supply)
 
 /** #69 P69-14 (C28): the remove confirmation's body, for an installed component's link. */
-internal const val REMOVED_FROM_INSTALLED_COMPONENT =
-    "The link is removed from this installed component. Nothing in the other app is changed."
+internal val REMOVED_FROM_INSTALLED_COMPONENT: String
+    get() = localized(R.string.references_removed_from_installed_component)
 
 /** #69 (C28, R69-13): the remove confirmation's body by the owner's kind; an asset keeps its shipped wording. */
 internal fun removedFrom(owner: ReferenceOwner): String = when (owner) {
-    is ReferenceOwner.OfAsset -> "The link is removed from this asset. Nothing in the other app is changed."
+    is ReferenceOwner.OfAsset -> localized(R.string.references_removed_from_asset)
     is ReferenceOwner.OfSupplyItem -> REMOVED_FROM_SUPPLY
     is ReferenceOwner.OfInstalledComponent -> REMOVED_FROM_INSTALLED_COMPONENT
 }
@@ -148,7 +151,7 @@ internal fun removedFrom(owner: ReferenceOwner): String = when (owner) {
 internal fun RemoveReferenceDialog(owner: ReferenceOwner, onRemove: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Remove this reference?") },
+        title = { Text(stringResource(R.string.references_remove_title)) },
         text = {
             Text(
                 text = removedFrom(owner),
@@ -158,12 +161,12 @@ internal fun RemoveReferenceDialog(owner: ReferenceOwner, onRemove: () -> Unit, 
         confirmButton = {
             TextButton(onClick = onRemove) {
                 Text(
-                    text = "Remove",
+                    text = stringResource(R.string.references_remove),
                     color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
                 )
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.references_cancel)) } },
     )
 }
 
@@ -175,16 +178,15 @@ internal fun RemoveReferenceDialog(owner: ReferenceOwner, onRemove: () -> Unit, 
 internal fun UnknownSchemeDialog(scheme: String, onSave: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Save this link?") },
+        title = { Text(stringResource(R.string.references_unknown_scheme_title)) },
         text = {
             Text(
-                text = "ServiceTag does not recognise \"$scheme\" links. " +
-                    "It will be saved as written and opened with whatever app claims it.",
+                text = stringResource(R.string.references_unknown_scheme_body, scheme),
                 style = MaterialTheme.typography.bodyMedium,
             )
         },
-        confirmButton = { TextButton(onClick = onSave) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = onSave) { Text(stringResource(R.string.references_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.references_cancel)) } },
     )
 }
 
@@ -234,7 +236,7 @@ private fun NameField(value: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { onValueChange(it.take(MAX_REFERENCE_NAME_CHARS)) },
-        label = { Text("Name") },
+        label = { Text(stringResource(R.string.references_name_label)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -245,7 +247,7 @@ private fun DescriptionField(value: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { onValueChange(it.take(MAX_REFERENCE_DESCRIPTION_CHARS)) },
-        label = { Text("Description") },
+        label = { Text(stringResource(R.string.references_description_label)) },
         minLines = 3,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -255,7 +257,7 @@ private fun DescriptionField(value: String, onValueChange: (String) -> Unit) {
 private fun SheetButtons(onCancel: () -> Unit, onSave: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = onCancel) { Text("Cancel") }
-        TextButton(onClick = onSave) { Text("Save") }
+        TextButton(onClick = onCancel) { Text(stringResource(R.string.references_cancel)) }
+        TextButton(onClick = onSave) { Text(stringResource(R.string.references_save)) }
     }
 }

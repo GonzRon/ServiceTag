@@ -10,8 +10,8 @@ import org.junit.Test
  * could never be — this case is what keeps the two from drifting, because the section shows
  * [NO_HANDLER_MESSAGE] itself.
  *
- * `NO_HANDLER_MESSAGE` is a `const`, so the compiler inlines it here and nothing loads
- * `LinkLauncher` itself — which is just as well, the object being all `Activity` and `Toast`.
+ * `NO_HANDLER_MESSAGE` is a top-level property (#102: read from the English resources here), so
+ * nothing loads `LinkLauncher` itself — which is just as well, the object being all `Activity` and `Toast`.
  */
 class LinkLauncherTest {
 

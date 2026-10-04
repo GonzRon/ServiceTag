@@ -318,7 +318,7 @@ internal class SeasonSyncBlockViewModel(
         on?.let { runCatching { displayDate(LocalDate.parse(it)) }.getOrDefault(it) }.orEmpty()
 
     private companion object {
-        val DATE_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
+        val DATE_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm") // l10n-ok: numeric pattern
 
         /** API 30: background location is granted on the app's settings page, no longer in a dialog (C32). */
         const val SETTINGS_PAGE_API = 30

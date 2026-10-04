@@ -24,7 +24,9 @@ import com.loosecannon.servicetag.core.usecase.ProfileFieldInput
 import com.loosecannon.servicetag.core.usecase.ProfileProblem
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.SaveProfile
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.supplies.listRowsOf
@@ -361,7 +363,7 @@ class ProfileEditViewModel(
             when (failure) {
                 null -> _saved.tryEmit(outcome.getOrThrow().id)
                 is ProfileValidation -> Unit                     // named under their own controls
-                else -> _messages.tryEmit(failure.transferredOutOr("Could not save this action."))
+                else -> _messages.tryEmit(failure.transferredOutOr(localized(R.string.setup_failed_save_action)))
             }
             _state.update { it.copy(saving = false, problems = failure.asProblems()) }
         }
@@ -374,7 +376,9 @@ class ProfileEditViewModel(
             if (archiving.isSuccess) {
                 _state.update { it.copy(archived = archived) }
             } else {
-                _messages.tryEmit(archiving.exceptionOrNull()!!.transferredOutOr("Could not change that action."))
+                _messages.tryEmit(
+                    archiving.exceptionOrNull()!!.transferredOutOr(localized(R.string.setup_failed_change_action)),
+                )
             }
         }
     }
@@ -387,7 +391,9 @@ class ProfileEditViewModel(
             if (deleting.isSuccess) {
                 _deleted.tryEmit(Unit)
             } else {
-                _messages.tryEmit(deleting.exceptionOrNull()!!.transferredOutOr("Could not delete this action."))
+                _messages.tryEmit(
+                    deleting.exceptionOrNull()!!.transferredOutOr(localized(R.string.setup_failed_delete_this_action)),
+                )
             }
         }
     }
@@ -395,7 +401,8 @@ class ProfileEditViewModel(
 
 private const val CONSUMABLE_PREFIX = "consumable-"
 
-private const val QUANTITY_COPY = "Quantity must be a number, or empty"
+/** Under a material row whose quantity does not parse; read when it is said (#102). */
+private val QUANTITY_COPY: String get() = localized(R.string.setup_problem_quantity_not_number)
 
 private fun ProfileEditState.command(assetId: AssetId, quantities: List<Double?>) = ProfileCommand(
     assetId = assetId,
@@ -420,14 +427,13 @@ private fun Throwable?.asProblems(): Map<String, String> {
     val validation = this as? ProfileValidation ?: return emptyMap()
     return validation.problems.associate { problem ->
         when (problem) {
-            ProfileProblem.NameRequired -> ProfileForm.NAME to "Give the action a name"
-            ProfileProblem.NameTaken -> ProfileForm.NAME to "Another action already uses this name"
+            ProfileProblem.NameRequired -> ProfileForm.NAME to localized(R.string.setup_problem_action_name_required)
+            ProfileProblem.NameTaken -> ProfileForm.NAME to localized(R.string.setup_problem_action_name_taken)
             // The use case's reason already says what is wrong with the field it names; the list is
             // one control, so it is said once under the header rather than per row.
             is ProfileProblem.BadField -> ProfileForm.FIELDS to problem.reason
             is ProfileProblem.BadConsumable ->
-                ProfileForm.consumable(problem.index) to
-                    "Needs a name, and a quantity of 0 or more"
+                ProfileForm.consumable(problem.index) to localized(R.string.setup_problem_bad_material)
             // #15 (C20, C-2): the line's SupplyItem is gone — P15-20, reused verbatim.
             is ProfileProblem.UnknownSupplyItem -> ProfileForm.consumable(problem.index) to SUPPLY_ITEM_GONE
         }

@@ -28,9 +28,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.asset.FieldLabel
@@ -73,7 +75,7 @@ fun ServiceCaseEditScreen(
                 title = { Text(state.screenTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Close")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.service_close))
                     }
                 },
             )
@@ -135,13 +137,18 @@ fun ServiceCaseEditScreen(
                 FormField(
                     value = state.currency,
                     onValueChange = model::onCurrency,
-                    label = "Currency",
+                    label = stringResource(R.string.service_field_currency),
                     problem = state.problems[CaseField.CURRENCY],
                     mono = true,
                     modifier = Modifier.width(126.dp),
                 )
             }
-            FormField(value = state.notes, onValueChange = model::onNotes, label = "Notes", minLines = 3)
+            FormField(
+                value = state.notes,
+                onValueChange = model::onNotes,
+                label = stringResource(R.string.service_field_notes),
+                minLines = 3,
+            )
             Button(
                 onClick = model::save,
                 enabled = state.canSave,

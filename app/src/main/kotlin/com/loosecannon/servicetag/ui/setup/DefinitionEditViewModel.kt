@@ -25,7 +25,11 @@ import com.loosecannon.servicetag.core.usecase.DefinitionWouldBreakProfiles
 import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.slugify
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedList
+import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -286,18 +290,18 @@ class DefinitionEditViewModel(
                 null -> _saved.tryEmit(outcome.getOrThrow().id)
                 is DefinitionValidation -> Unit                  // named under their own fields
                 is DefinitionInUse -> _messages.tryEmit(
-                    "${failure.measurements} entries already use this reading, " +
-                        "so its key, kind and type are fixed.",
+                    localizedPlural(R.plurals.setup_definition_in_use, failure.measurements, failure.measurements),
                 )
                 is DefinitionWouldBreakDerived -> _messages.tryEmit(
-                    "Used as a source by ${failure.dependentDerivedIds.named(form.definitionLabels)} — " +
-                        "change that derived reading first.",
+                    localized(
+                        R.string.setup_definition_breaks_derived,
+                        failure.dependentDerivedIds.named(form.definitionLabels),
+                    ),
                 )
                 is DefinitionWouldBreakProfiles -> _messages.tryEmit(
-                    "Offered as a field by ${failure.profileIds.named(form.profileNames)} — " +
-                        "take it off that action first.",
+                    localized(R.string.setup_definition_breaks_profiles, failure.profileIds.named(form.profileNames)),
                 )
-                else -> _messages.tryEmit(failure.transferredOutOr("Could not save this reading."))
+                else -> _messages.tryEmit(failure.transferredOutOr(localized(R.string.setup_failed_save_reading)))
             }
             _state.update { it.copy(saving = false, problems = failure.asProblems()) }
         }
@@ -310,7 +314,9 @@ class DefinitionEditViewModel(
             if (archiving.isSuccess) {
                 _state.update { it.copy(archived = archived) }
             } else {
-                _messages.tryEmit(archiving.exceptionOrNull()!!.transferredOutOr("Could not change that reading."))
+                _messages.tryEmit(
+                    archiving.exceptionOrNull()!!.transferredOutOr(localized(R.string.setup_failed_change_reading)),
+                )
             }
         }
     }
@@ -323,7 +329,7 @@ class DefinitionEditViewModel(
             when (val failure = outcome.exceptionOrNull()) {
                 null -> _deleted.tryEmit(Unit)
                 is DefinitionReferenced -> _refusal.value = failure
-                else -> _messages.tryEmit(failure.transferredOutOr("Could not delete this reading."))
+                else -> _messages.tryEmit(failure.transferredOutOr(localized(R.string.setup_failed_delete_this_reading)))
             }
         }
     }
@@ -334,7 +340,7 @@ private fun String.bound(field: String, into: MutableMap<String, String>): Doubl
     val text = trim()
     if (text.isEmpty()) return null
     val value = text.toDoubleOrNull()
-    if (value == null) into[field] = "Not a number"
+    if (value == null) into[field] = localized(R.string.setup_problem_not_a_number)
     return value
 }
 
@@ -373,7 +379,7 @@ private fun Throwable?.asProblems(): Map<String, String> {
     return validation.problems.associate { it.fieldName() to it.message() }
 }
 
-private const val DECIMALS_COPY = "Decimals must be 0–4"
+private val DECIMALS_COPY: String get() = localized(R.string.setup_problem_decimals_range)
 
 private fun DefinitionProblem.fieldName(): String = when (this) {
     DefinitionProblem.LabelRequired -> DefinitionField.LABEL
@@ -390,33 +396,37 @@ private fun DefinitionProblem.fieldName(): String = when (this) {
 }
 
 private fun DefinitionProblem.message(): String = when (this) {
-    DefinitionProblem.LabelRequired -> "Give the reading a label"
-    DefinitionProblem.BadKey -> "Key: lowercase letters, digits and _ only"
-    DefinitionProblem.KeyTaken -> "Another reading already uses this key"
+    DefinitionProblem.LabelRequired -> localized(R.string.setup_problem_label_required)
+    DefinitionProblem.BadKey -> localized(R.string.setup_problem_bad_key)
+    DefinitionProblem.KeyTaken -> localized(R.string.setup_problem_key_taken)
     DefinitionProblem.BadDecimals -> DECIMALS_COPY
-    DefinitionProblem.RangeOrder -> "Low must not exceed high"
-    DefinitionProblem.RangeOnNonNumber -> "Only a number reading has a target"
-    DefinitionProblem.MeterOnNonNumber -> "Only a number reading can be a meter"
+    DefinitionProblem.RangeOrder -> localized(R.string.setup_problem_range_order)
+    DefinitionProblem.RangeOnNonNumber -> localized(R.string.setup_problem_range_on_non_number)
+    DefinitionProblem.MeterOnNonNumber -> localized(R.string.setup_problem_meter_on_non_number)
     is DefinitionProblem.Derived -> when (p) {
-        DerivedProblem.SameSource -> "Choose two different number readings"
-        DerivedProblem.MissingSpec -> "Choose two different number readings"
-        is DerivedProblem.UnknownSource -> "That reading is no longer there"
-        is DerivedProblem.SourceOtherAsset -> "A source must belong to this asset"
-        is DerivedProblem.SourceNotEntered -> "A source must be a reading someone enters"
-        is DerivedProblem.SourceNotNumber -> "A source must be a number reading"
-        is DerivedProblem.SourceIsMeter -> "A meter cannot be a source"
-        DerivedProblem.NotNumber -> "A derived reading is a number"
-        DerivedProblem.IsMeter -> "A derived reading is not a meter"
-        DerivedProblem.SpecOnEntered -> "An entered reading has no formula"
+        DerivedProblem.SameSource -> localized(R.string.setup_problem_two_sources)
+        DerivedProblem.MissingSpec -> localized(R.string.setup_problem_two_sources)
+        is DerivedProblem.UnknownSource -> localized(R.string.setup_problem_unknown_source)
+        is DerivedProblem.SourceOtherAsset -> localized(R.string.setup_problem_source_other_asset)
+        is DerivedProblem.SourceNotEntered -> localized(R.string.setup_problem_source_not_entered)
+        is DerivedProblem.SourceNotNumber -> localized(R.string.setup_problem_source_not_number)
+        is DerivedProblem.SourceIsMeter -> localized(R.string.setup_problem_source_is_meter)
+        DerivedProblem.NotNumber -> localized(R.string.setup_problem_derived_not_number)
+        DerivedProblem.IsMeter -> localized(R.string.setup_problem_derived_is_meter)
+        DerivedProblem.SpecOnEntered -> localized(R.string.setup_problem_spec_on_entered)
     }
 }
 
-/** "Rejection", or "Rejection and Recovery" — what the refusal is actually about, by name. */
+/**
+ * "Rejection", or "Rejection and Recovery" — what the refusal is actually about, by name. The names before the
+ * last are joined as the language's list, and the last one is joined on with its "and" (#102).
+ */
 private fun <T> List<T>.named(names: Map<T, String>): String {
-    val words = map { names[it] ?: "another reading" }
+    val another = localized(R.string.setup_another_reading)
+    val words = map { names[it] ?: another }
     return when (words.size) {
-        0 -> "another reading"
+        0 -> another
         1 -> words.single()
-        else -> words.dropLast(1).joinToString(", ") + " and " + words.last()
+        else -> localized(R.string.setup_names_last_and, localizedList(words.dropLast(1)), words.last())
     }
 }

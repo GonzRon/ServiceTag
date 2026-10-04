@@ -46,12 +46,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.loosecannon.servicetag.BuildConfig
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.prefs.AppearanceMode
 import com.loosecannon.servicetag.ui.components.LabelValue
@@ -133,7 +136,7 @@ fun SettingsScreen(
         when {
             picked == null -> Unit
             repairing && stored != null && !sameTree(stored, picked) -> scope.launch {
-                snackbars.showSnackbar("That is a different folder. Choose the same one to restore access.")
+                snackbars.showSnackbar(localized(R.string.settings_different_folder))
             }
             else -> {
                 val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -146,7 +149,7 @@ fun SettingsScreen(
                 // still shows what is actually true.
                 if (runCatching { resolver.takePersistableUriPermission(picked, flags) }.isFailure) {
                     store = graph.attachmentStorage.state()
-                    scope.launch { snackbars.showSnackbar("Could not keep access to that folder") }
+                    scope.launch { snackbars.showSnackbar(localized(R.string.settings_could_not_keep_access)) }
                 } else {
                     // Grants accumulate otherwise (spike S5), and releasing one the system no
                     // longer holds throws — which must not undo the take that just succeeded.
@@ -163,10 +166,13 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(R.string.settings_back),
+                        )
                     }
                 },
             )
@@ -179,7 +185,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            SectionHeader(title = "Appearance")
+            SectionHeader(title = stringResource(R.string.settings_appearance))
             Column(modifier = Modifier.selectableGroup()) {
                 AppearanceMode.entries.forEach { option ->
                     ModeRow(
@@ -197,69 +203,72 @@ fun SettingsScreen(
                 }
             }
 
-            SectionHeader(title = "Theme")
+            SectionHeader(title = stringResource(R.string.settings_theme))
             Column(
                 modifier = Modifier.padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                LabelValue(label = "Palette", value = "Apollo Service Binder")
-                QuietLine("Dynamic colour arrives in a later release")
+                LabelValue(
+                    label = stringResource(R.string.settings_palette),
+                    value = stringResource(R.string.settings_palette_name),
+                )
+                QuietLine(stringResource(R.string.settings_dynamic_colour_later))
             }
 
-            SectionHeader(title = "Attachment storage")
+            SectionHeader(title = stringResource(R.string.settings_attachment_storage))
             Column(
                 modifier = Modifier.padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
+                val folder = stringResource(R.string.settings_folder)
+                val provider = stringResource(R.string.settings_provider)
                 when (val current = store) {
-                    StoreState.NotConfigured -> LabelValue(label = "Folder", value = "Not set")
+                    StoreState.NotConfigured ->
+                        LabelValue(label = folder, value = stringResource(R.string.settings_folder_not_set))
                     is StoreState.Ready -> {
-                        LabelValue(label = "Folder", value = current.displayName)
-                        LabelValue(label = "Provider", value = current.authority)
+                        LabelValue(label = folder, value = current.displayName)
+                        LabelValue(label = provider, value = current.authority)
                     }
                     is StoreState.AccessLost -> {
-                        LabelValue(label = "Folder", value = current.displayName)
-                        LabelValue(label = "Provider", value = authorityOf(prefs.attachmentTreeUri))
-                        QuietLine("access lost — choose the folder again")
+                        LabelValue(label = folder, value = current.displayName)
+                        LabelValue(label = provider, value = authorityOf(prefs.attachmentTreeUri))
+                        QuietLine(stringResource(R.string.settings_folder_access_lost))
                     }
                 }
-                QuietLine(
-                    "Files are written as ordinary documents in this folder; a sync tool such as " +
-                        "Syncthing owns any off-device copy.",
-                )
+                QuietLine(stringResource(R.string.settings_folder_help))
                 Button(
                     onClick = { chooseFolder.launch(null) },
                     enabled = !folderFixed,
                     shape = ControlShape,
                     modifier = Modifier.padding(top = 4.dp),
                 ) {
-                    Text("Choose folder")
+                    Text(stringResource(R.string.settings_choose_folder))
                 }
                 // D12 §14: the reason a control is unavailable is shown, not hidden with it.
                 if (folderFixed) {
-                    QuietLine("Moving attachments to another folder arrives in a later release")
+                    QuietLine(stringResource(R.string.settings_moving_attachments_later))
                 }
             }
 
-            SectionHeader(title = "Utilities")
+            SectionHeader(title = stringResource(R.string.settings_utilities))
             UtilityRow(
                 icon = ServiceTagIcons.Backup,
-                label = "Backup and restore",
+                label = stringResource(R.string.settings_backup_and_restore),
                 onClick = onBackup,
             )
             UtilityRow(
                 icon = ServiceTagIcons.Contactless,
-                label = "Read / inspect tag",
+                label = stringResource(R.string.settings_read_inspect_tag),
                 onClick = onReadTag,
             )
             UtilityRow(
                 icon = ServiceTagIcons.Speed,
-                label = "Developer API",
+                label = stringResource(R.string.settings_developer_api),
                 onClick = onDeveloperApi,
             )
             UtilityRow(
                 icon = ServiceTagIcons.Label,
-                label = "Categories",
+                label = stringResource(R.string.settings_categories),
                 onClick = onCategories,
             )
             UtilityRow(
@@ -268,9 +277,9 @@ fun SettingsScreen(
                 onClick = onHomeAssistant,
             )
 
-            SectionHeader(title = "About")
+            SectionHeader(title = stringResource(R.string.settings_about))
             LabelValue(
-                label = "Version",
+                label = stringResource(R.string.settings_version),
                 value = BuildConfig.VERSION_NAME,
                 modifier = Modifier.padding(vertical = 4.dp),
             )
@@ -280,12 +289,12 @@ fun SettingsScreen(
                 onClick = {
                     val opened = activity?.let { LinkLauncher.open(it, PROJECT_URL) } ?: false
                     if (!opened) {
-                        scope.launch { snackbars.showSnackbar("No browser available for this link") }
+                        scope.launch { snackbars.showSnackbar(localized(R.string.settings_no_browser)) }
                     }
                 },
                 contentPadding = PaddingValues(0.dp),
             ) {
-                Text("Source and issues on GitHub")
+                Text(stringResource(R.string.settings_source_on_github))
             }
             QuietLine(PROJECT_URL, Modifier.padding(bottom = 16.dp))
         }
@@ -306,7 +315,8 @@ private fun sameTree(stored: String, picked: Uri): Boolean {
 }
 
 /** The provider behind the stored tree, for the Provider line when the store cannot answer. */
-private fun authorityOf(treeUri: String?): String = treeUri?.toUri()?.authority ?: "unknown"
+private fun authorityOf(treeUri: String?): String =
+    treeUri?.toUri()?.authority ?: localized(R.string.settings_provider_unknown)
 
 /** One radio row. The whole row is the target, so the label is not a decoration next to a dot. */
 @Composable
@@ -360,7 +370,7 @@ private fun UtilityRow(icon: ImageVector, label: String, onClick: () -> Unit) {
 }
 
 private fun modeLabel(mode: AppearanceMode): String = when (mode) {
-    AppearanceMode.SYSTEM -> "System"
-    AppearanceMode.LIGHT -> "Light"
-    AppearanceMode.DARK -> "Dark"
+    AppearanceMode.SYSTEM -> localized(R.string.settings_appearance_system)
+    AppearanceMode.LIGHT -> localized(R.string.settings_appearance_light)
+    AppearanceMode.DARK -> localized(R.string.settings_appearance_dark)
 }

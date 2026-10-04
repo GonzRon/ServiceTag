@@ -60,11 +60,13 @@ import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.journal.Reading
@@ -95,6 +97,11 @@ import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.warranty.WarrantyStatus
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
+import com.loosecannon.servicetag.l10n.localizedList
+import com.loosecannon.servicetag.l10n.localizedMonthDay
+import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
 import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
@@ -169,16 +176,16 @@ const val SECTION_SCHEDULES = "schedules"
 // #86 (plan §6, reused 12–15): four labels this screen draws, hoisted byte-identical so Replace asset draws them from here.
 
 /** The retire dialog's date field. */
-const val RETIRED_ON_FIELD = "Retired on"
+val RETIRED_ON_FIELD: String get() = localized(R.string.asset_detail_retired_on)
 
 /** The action grid's set-up button. */
-const val READINGS_AND_ACTIONS = "Readings & actions"
+val READINGS_AND_ACTIONS: String get() = localized(R.string.asset_detail_readings_and_actions)
 
 /** The Tags section's header. */
-const val TAGS_SECTION = "Tags"
+val TAGS_SECTION: String get() = localized(R.string.asset_detail_tags_section)
 
 /** The retire dialog's dismiss (MN-4); the file's other inline `Cancel` sites stay as they are. */
-const val CANCEL_BUTTON = "Cancel"
+val CANCEL_BUTTON: String get() = localized(R.string.common_cancel)
 
 /**
  * One asset, as the Apollo Service Binder draws it (D12 §8, G1 §1.1): identity plate, the current
@@ -307,14 +314,17 @@ fun AssetDetailScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = asset?.name ?: "Asset",
+                        text = asset?.name ?: stringResource(R.string.asset_detail_asset_word),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 actions = {
@@ -338,7 +348,7 @@ fun AssetDetailScreen(
     ) { padding ->
         val current = state
         if (current == null) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.common_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
         if (pickingTemplate) {
@@ -573,10 +583,14 @@ private fun detailActions(
     val ledger = ServiceTagIcons.History
     val nfc = ServiceTagIcons.NfcTag
     val backup = ServiceTagIcons.Backup
+    val backupLabel = stringResource(R.string.asset_detail_backup)
+    val writeTagLabel = stringResource(R.string.asset_detail_write_tag)
+    val editLabel = stringResource(R.string.asset_detail_edit)
+    val setUpLabel = stringResource(R.string.asset_detail_set_up_from_template)
     return buildList {
         // #77 (R77-4): a held asset keeps Backup, which writes nothing to it, and nothing else.
         if (!offersWrites) {
-            add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
+            add(ActionSpec(backupLabel, backup, outlined = false, onClick = onBackup))
             return@buildList
         }
         profiles.forEach { profile ->
@@ -586,12 +600,12 @@ private fun detailActions(
                 },
             )
         }
-        add(ActionSpec("Write tag", nfc, outlined = true) { onWriteTag(assetId) })
-        add(ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) })
+        add(ActionSpec(writeTagLabel, nfc, outlined = true) { onWriteTag(assetId) })
+        add(ActionSpec(editLabel, Icons.Outlined.Edit, outlined = true) { onEdit(assetId) })
         // What this asset measures and what can be logged against it, both editable (spec §9).
         add(ActionSpec(READINGS_AND_ACTIONS, ServiceTagIcons.Speed, outlined = true) { onSetup(assetId) })
-        add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
-        if (bare) add(ActionSpec("Set up from template", Icons.Outlined.Add, outlined = true, onClick = onSetUp))
+        add(ActionSpec(backupLabel, backup, outlined = false, onClick = onBackup))
+        if (bare) add(ActionSpec(setUpLabel, Icons.Outlined.Add, outlined = true, onClick = onSetUp))
     }
 }
 
@@ -600,7 +614,7 @@ private fun detailActions(
 private fun TemplatePicker(onDismiss: () -> Unit, onPick: (String) -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set up from template") },
+        title = { Text(stringResource(R.string.asset_detail_set_up_from_template)) },
         text = {
             Column {
                 SeedTemplates.all.forEach { template ->
@@ -616,7 +630,7 @@ private fun TemplatePicker(onDismiss: () -> Unit, onPick: (String) -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
@@ -628,12 +642,13 @@ private fun TemplatePicker(onDismiss: () -> Unit, onPick: (String) -> Unit) {
 @Composable
 private fun ReadingsSection(readings: List<Reading>) {
     if (readings.isEmpty()) return
-    SectionHeader(title = "Current readings")
+    SectionHeader(title = stringResource(R.string.asset_detail_current_readings))
+    val derivedWord = stringResource(R.string.asset_detail_derived)
     InstrumentList(count = readings.size) { index ->
         val reading = readings[index]
         val derived = reading.definition.kind == DefinitionKind.DERIVED
         InstrumentRow(
-            eyebrow = if (derived) "Derived" else null,
+            eyebrow = if (derived) derivedWord else null,
             label = reading.definition.label,
             target = formatTarget(reading.definition),
             value = formatValue(reading),
@@ -652,9 +667,9 @@ private fun ServiceRecordSection(
     definitions: List<MeasurementDefinition>,
     onOpenEvent: (String) -> Unit,
 ) {
-    SectionHeader(title = "Service record")
+    SectionHeader(title = stringResource(R.string.asset_detail_service_record))
     if (events.isEmpty()) {
-        QuietLine("No service recorded yet")
+        QuietLine(stringResource(R.string.asset_detail_no_service_recorded))
         return
     }
     val byId: Map<DefinitionId, MeasurementDefinition> = definitions.associateBy { it.id }
@@ -709,7 +724,7 @@ private fun outOfRange(
 private fun DetailOverflow(items: List<DetailMenuItem>, onPick: (DetailMenuItem) -> Unit) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.common_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         // #77 (R77-4): the items are the state's decision — Delete alone for a transferred-out asset.
@@ -717,15 +732,18 @@ private fun DetailOverflow(items: List<DetailMenuItem>, onPick: (DetailMenuItem)
             DropdownMenuItem(
                 text = {
                     when (item) {
-                        DetailMenuItem.EDIT -> Text("Edit")
-                        DetailMenuItem.ARCHIVE -> Text("Archive")
-                        DetailMenuItem.UNARCHIVE -> Text("Unarchive")
-                        DetailMenuItem.RETIRE -> Text("Retire")
-                        DetailMenuItem.UNRETIRE -> Text("Unretire")
+                        DetailMenuItem.EDIT -> Text(stringResource(R.string.asset_detail_edit))
+                        DetailMenuItem.ARCHIVE -> Text(stringResource(R.string.asset_detail_archive))
+                        DetailMenuItem.UNARCHIVE -> Text(stringResource(R.string.asset_detail_unarchive))
+                        DetailMenuItem.RETIRE -> Text(stringResource(R.string.asset_detail_retire))
+                        DetailMenuItem.UNRETIRE -> Text(stringResource(R.string.asset_detail_unretire))
                         DetailMenuItem.REPLACE -> Text(ReplaceStrings.REPLACE_ASSET)
                         DetailMenuItem.TRANSFER -> Text(TransferStrings.TRANSFER_ASSETS)
                         DetailMenuItem.DELETE ->
-                            Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
+                            Text(
+                                stringResource(R.string.asset_detail_delete),
+                                color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
+                            )
                     }
                 },
                 onClick = { open = false; onPick(item) },
@@ -778,24 +796,26 @@ private fun DetailPrompts(
             onNote = { onLogOutcome(EventKind.NOTE.name) },
         )
         DetailPrompt.ConfirmDelete -> TypedConfirmDialog(
-            title = "Delete $assetName?",
-            body = "Type the asset's name to delete it. Its tags, readings and history go with it. " +
-                "There is no automatic snapshot yet.",
+            title = stringResource(R.string.asset_detail_delete_title, assetName),
+            body = stringResource(R.string.asset_detail_delete_body),
             expected = assetName,
-            confirmLabel = "Delete",
+            confirmLabel = stringResource(R.string.asset_detail_delete),
             onConfirm = onDelete,
             onDismiss = onDismiss,
         )
         is DetailPrompt.DeleteRefused -> AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Child assets first") },
+            title = { Text(stringResource(R.string.asset_detail_child_assets_first)) },
             text = {
                 Text(
-                    "$assetName still has ${prompt.children.joinToString(", ")}. Move or delete " +
-                        "them first, so nothing disappears by cascade.",
+                    stringResource(
+                        R.string.asset_detail_child_assets_first_body,
+                        assetName,
+                        localizedList(prompt.children),
+                    ),
                 )
             },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+            confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) } },
         )
         // #77 (C23, R77-5): P77-63 / P77-64, P77-65 or the reused Cancel. Nothing is written before the confirm.
         is DetailPrompt.Withdraw -> AlertDialog(
@@ -803,7 +823,11 @@ private fun DetailPrompts(
             title = { Text(prompt.title) },
             text = { Text(TransferStrings.WITHDRAW_BODY) },
             confirmButton = { TextButton(onClick = onWithdraw, enabled = !prompt.saving) { Text(TransferStrings.WITHDRAW) } },
-            dismissButton = { TextButton(onClick = onDismiss, enabled = !prompt.saving) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = onDismiss, enabled = !prompt.saving) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 }
@@ -818,15 +842,17 @@ private fun RetireDialog(initial: String, onDismiss: () -> Unit, onConfirm: (Str
     var date by remember(initial) { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Retire this asset?") },
+        title = { Text(stringResource(R.string.asset_detail_retire_title)) },
         text = {
             Column {
-                Text("It keeps its history and its tags still resolve.")
+                Text(stringResource(R.string.asset_detail_retire_body))
                 Spacer(Modifier.height(12.dp))
                 DateField(value = date, onValueChange = { date = it }, label = RETIRED_ON_FIELD)
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(date) }) { Text("Retire") } },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(date) }) { Text(stringResource(R.string.asset_detail_retire)) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(CANCEL_BUTTON) } },
     )
 }
@@ -843,16 +869,19 @@ private fun LogWhatHappenedDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Log what happened?") },
+        title = { Text(stringResource(R.string.asset_detail_log_what_happened)) },
         text = {
             Column {
                 Text(
-                    text = "The asset is retired either way.",
+                    text = stringResource(R.string.asset_detail_retired_either_way),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                listOf("Log replacement" to onReplacement, "Log note" to onNote).forEach { (label, pick) ->
+                listOf(
+                    stringResource(R.string.asset_detail_log_replacement) to onReplacement,
+                    stringResource(R.string.asset_detail_log_note) to onNote,
+                ).forEach { (label, pick) ->
                     Text(
                         text = label,
                         style = MaterialTheme.typography.bodyLarge,
@@ -865,7 +894,7 @@ private fun LogWhatHappenedDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.asset_detail_not_now)) } },
     )
 }
 
@@ -877,17 +906,20 @@ private fun LogWhatHappenedDialog(
 @Composable
 private fun AssetPlate(state: AssetDetailState) {
     val asset = state.asset
+    val assetWord = stringResource(R.string.asset_detail_asset_word)
     IdentityPlate(
-        category = asset.category.ifBlank { "Asset" },
+        category = asset.category.ifBlank { assetWord },
         model = asset.name,
         name = asset.description.takeIf { it.isNotBlank() },
         cells = listOf(
-            "Model" to PlateValue(modelLine(asset)),
-            "Serial" to PlateValue(asset.serialNumber, mono = true),
-            "Location" to PlateValue(asset.location),
-            "Purchased" to PlateValue(asset.purchaseOn.orEmpty().asDayDate()),
-            "In service" to PlateValue(asset.inServiceOn.orEmpty().asDayDate()),
-            "NFC tag" to PlateValue(state.tags.firstOrNull()?.identityLine().orEmpty(), mono = true),
+            stringResource(R.string.asset_detail_plate_model) to PlateValue(modelLine(asset)),
+            stringResource(R.string.asset_detail_plate_serial) to PlateValue(asset.serialNumber, mono = true),
+            stringResource(R.string.asset_detail_plate_location) to PlateValue(asset.location),
+            stringResource(R.string.asset_detail_plate_purchased) to PlateValue(asset.purchaseOn.orEmpty().asDayDate()),
+            stringResource(R.string.asset_detail_plate_in_service) to
+                PlateValue(asset.inServiceOn.orEmpty().asDayDate()),
+            stringResource(R.string.asset_detail_plate_nfc_tag) to
+                PlateValue(state.tags.firstOrNull()?.identityLine().orEmpty(), mono = true),
         ),
         icon = categoryIcon(asset.category),
         badges = plateBadges(state.plate),
@@ -936,7 +968,7 @@ private fun plateBadges(facts: List<PlateFact>): (@Composable FlowRowScope.() ->
 @Composable
 private fun PartOfLine(parentName: String, onClick: () -> Unit) {
     QuietLine(
-        text = "Part of $parentName",
+        text = stringResource(R.string.assets_part_of, parentName),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -968,7 +1000,7 @@ private fun SuccessionLink(line: SuccessionLine, onOpenAsset: (String) -> Unit) 
 private fun DetailsSection(state: AssetDetailState) {
     val rows = detailsFacts(state)
     if (rows.isEmpty()) return
-    SectionHeader(title = "Details")
+    SectionHeader(title = stringResource(R.string.asset_detail_details))
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         rows.forEach { (label, value) ->
             LabelValue(label = label, value = value, modifier = Modifier.fillMaxWidth())
@@ -980,11 +1012,11 @@ private fun DetailsSection(state: AssetDetailState) {
 internal fun detailsFacts(state: AssetDetailState): List<Pair<String, String>> {
     val asset = state.asset
     return buildList {
-        asset.purchaseOn?.let { add("Purchase date" to it.asDayDate()) }
+        asset.purchaseOn?.let { add(localized(R.string.asset_detail_purchase_date) to it.asDayDate()) }
         // #67 (R67-5): the newest purchase invoice or receipt, by name — text, not a link.
-        state.purchaseDocument?.let { add("Purchase document" to it) }
-        priceLine(asset)?.let { add("Price" to it) }
-        asset.vendor.takeIf { it.isNotBlank() }?.let { add("Vendor" to it) }
+        state.purchaseDocument?.let { add(localized(R.string.asset_detail_purchase_document) to it) }
+        priceLine(asset)?.let { add(localized(R.string.asset_detail_price) to it) }
+        asset.vendor.takeIf { it.isNotBlank() }?.let { add(localized(R.string.asset_detail_vendor) to it) }
     }
 }
 
@@ -996,7 +1028,7 @@ internal fun detailsFacts(state: AssetDetailState): List<Pair<String, String>> {
  */
 @Composable
 private fun WarrantySection(warranty: WarrantyFacts) {
-    SectionHeader(title = "Warranty")
+    SectionHeader(title = stringResource(R.string.warranty_section))
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val badge = warranty.badge
         if (badge == null) {
@@ -1009,7 +1041,7 @@ private fun WarrantySection(warranty: WarrantyFacts) {
         }
         warranty.reminderLine?.let { QuietLine(it) }
         warranty.notes.takeIf { it.isNotBlank() }?.let {
-            LabelValue(label = "Warranty notes", value = it, modifier = Modifier.fillMaxWidth())
+            LabelValue(label = stringResource(R.string.warranty_notes), value = it, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -1058,9 +1090,9 @@ private fun ComponentsSection(
     onOpenAsset: (String) -> Unit,
     onAddComponent: (() -> Unit)?,
 ) {
-    SectionHeader(title = "Child assets")
+    SectionHeader(title = stringResource(R.string.asset_detail_child_assets))
     Column {
-        if (components.isEmpty()) QuietLine("No child assets")
+        if (components.isEmpty()) QuietLine(stringResource(R.string.asset_detail_no_child_assets))
         components.forEach { child ->
             Column(
                 modifier = Modifier
@@ -1079,7 +1111,9 @@ private fun ComponentsSection(
                 ConditionBadge(child.condition, Modifier.padding(top = 4.dp))
             }
         }
-        onAddComponent?.let { add -> TextButton(onClick = add) { Text("+ Add child asset") } }
+        onAddComponent?.let { add ->
+            TextButton(onClick = add) { Text(stringResource(R.string.asset_detail_add_child_asset)) }
+        }
     }
 }
 
@@ -1386,25 +1420,28 @@ private fun SeasonDialog(
         confirmButton = {
             TextButton(onClick = onConfirm, enabled = prompt.canConfirm) { Text(if (start) START_SEASON else END_SEASON) }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !prompt.saving) { Text("Cancel") } },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !prompt.saving) { Text(stringResource(R.string.common_cancel)) }
+        },
     )
 }
 
 /** A window's `MM-DD` as a day and month ("1 May"); the stored text itself if it is not one. */
 private fun monthDayText(mmdd: String?): String {
     if (mmdd == null) return ""
-    return runCatching { MonthDay.parse("--$mmdd").format(monthDay) }.getOrDefault(mmdd)
+    return runCatching { localizedMonthDay(MonthDay.parse("--$mmdd").atYear(ANY_LEAP_YEAR)) }.getOrDefault(mmdd)
 }
 
-/** "Pump · Water · 1 reading out of range", with an unset category simply left out. */
-private fun componentLine(child: ComponentRow): String = listOfNotNull(
-    child.category.takeIf { it.isNotBlank() },
-    when (child.outOfRange) {
-        0 -> "No readings out of range"
-        1 -> "1 reading out of range"
-        else -> "${child.outOfRange} readings out of range"
-    },
-).joinToString(" · ")
+/** "Pump · 1 reading out of range", with an unset category simply left out. */
+private fun componentLine(child: ComponentRow): String {
+    val readings = if (child.outOfRange == 0) {
+        localized(R.string.asset_detail_no_readings_out_of_range)
+    } else {
+        localizedPlural(R.plurals.asset_detail_readings_out_of_range, child.outOfRange, child.outOfRange)
+    }
+    val category = child.category.takeIf { it.isNotBlank() } ?: return readings
+    return localized(R.string.asset_detail_category_and_readings, category, readings)
+}
 
 /**
  * Every bound tag (#49 AC 6) — a lost, retired or freshly written one all get their own row, so
@@ -1416,9 +1453,12 @@ private fun componentLine(child: ComponentRow): String = listOfNotNull(
 internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -> Unit, editable: Boolean = true) {
     SectionHeader(title = TAGS_SECTION)
     if (tags.isEmpty()) {
-        QuietLine("No tag yet · Write tag to add one")
+        QuietLine(stringResource(R.string.asset_detail_no_tag_yet))
         return
     }
+    val writtenTitle = stringResource(R.string.asset_detail_tag_written)
+    val boundTitle = stringResource(R.string.asset_detail_tag_bound)
+    val editWord = stringResource(R.string.asset_detail_edit)
     var editing by remember { mutableStateOf<TagBinding?>(null) }
     LedgerList(count = tags.size) { index ->
         val tag = tags[index]
@@ -1436,12 +1476,12 @@ internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -
                     day = day,
                     month = month,
                     year = year,
-                    title = if (tag.writtenAt != null) "Tag written" else "Tag bound",
+                    title = if (tag.writtenAt != null) writtenTitle else boundTitle,
                     detail = tag.identityLine(),
                     badge = if (tag.status != TagStatus.ACTIVE) {
                         {
                             StatusBadge(
-                                label = tag.status.name.lowercase().replaceFirstChar { it.uppercase() },
+                                label = tagStatusWord(tag.status),
                                 colors = ServiceTagTheme.semanticColors.seasonInactive,
                             )
                         }
@@ -1456,7 +1496,7 @@ internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -
             if (editable) {
                 Icon(
                     imageVector = Icons.Outlined.Edit,
-                    contentDescription = "Edit",
+                    contentDescription = editWord,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
@@ -1472,12 +1512,20 @@ internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -
     }
 }
 
+/** A tag's status as its row's badge word ("Lost", drawn upper-cased by the badge); never the stored enum name. */
+private fun tagStatusWord(status: TagStatus): String = when (status) {
+    TagStatus.ACTIVE -> localized(R.string.asset_detail_tag_status_active)
+    TagStatus.UNBOUND -> localized(R.string.asset_detail_tag_status_unbound)
+    TagStatus.LOST -> localized(R.string.asset_detail_tag_status_lost)
+    TagStatus.RETIRED -> localized(R.string.asset_detail_tag_status_retired)
+}
+
 /** The ratified "Tag placement" caption over the value, indented under the ledger's date column. */
 @Composable
 private fun TagPlacementCaption(value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Text(
-            text = "Tag placement",
+            text = stringResource(R.string.asset_detail_tag_placement),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1496,7 +1544,7 @@ private fun TagPlacementDialog(tag: TagBinding, onDismiss: () -> Unit, onSave: (
     // field itself carries no second "Tag placement" label.
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Tag placement") },
+        title = { Text(stringResource(R.string.asset_detail_tag_placement)) },
         text = {
             OutlinedTextField(
                 value = text,
@@ -1506,16 +1554,16 @@ private fun TagPlacementDialog(tag: TagBinding, onDismiss: () -> Unit, onSave: (
                 modifier = Modifier.fillMaxWidth(),
             )
         },
-        confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSave(text) }) { Text(stringResource(R.string.common_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
 @Composable
 private fun NotesSection(notes: String) {
-    SectionHeader(title = "Notes")
+    SectionHeader(title = stringResource(R.string.asset_detail_notes))
     if (notes.isBlank()) {
-        QuietLine("No notes")
+        QuietLine(stringResource(R.string.asset_detail_no_notes))
     } else {
         Text(
             text = notes,
@@ -1542,8 +1590,8 @@ private fun categoryIcon(category: String): ImageVector {
     }
 }
 
-private val plateDate = DateTimeFormatter.ofPattern("d MMM uuuu")
-private val monthDay = DateTimeFormatter.ofPattern("d MMM")
+/** Any leap year: a stored `MM-DD` window edge drawn as a day and month, so 29 February keeps its day. */
+private const val ANY_LEAP_YEAR = 2000
 private val ledgerDay = DateTimeFormatter.ofPattern("dd")
 private val ledgerMonth = DateTimeFormatter.ofPattern("MMM")
 private val ledgerYear = DateTimeFormatter.ofPattern("uuuu")
@@ -1552,7 +1600,7 @@ private fun Long.zoned() = Instant.ofEpochMilli(this).atZone(ZoneId.systemDefaul
 
 /** An ISO date as the plate and DETAILS show it. A string the domain would refuse shows verbatim. */
 private fun String.asDayDate(): String =
-    runCatching { LocalDate.parse(this).format(plateDate) }.getOrDefault(this)
+    runCatching { localizedDate(LocalDate.parse(this)) }.getOrDefault(this)
 
 /** The ledger's 64dp date column wants the three parts apart, not one formatted string. */
 private fun Long.asLedgerDate(): Triple<String, String, String> {

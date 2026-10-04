@@ -10,9 +10,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
@@ -65,7 +68,7 @@ internal fun SearchBox(
         trailingIcon = {
             if (query.isNotEmpty()) {
                 IconButton(onClick = onClear) {
-                    Icon(Icons.Outlined.Clear, contentDescription = "Clear search")
+                    Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.assets_clear_search))
                 }
             }
         },
@@ -82,4 +85,4 @@ internal fun SearchBox(
  * P73-11 (#73, ratified 2026-09-26): the box's placeholder and its accessible name. Components are
  * assets, and with the Components control off by default a promise to search them would over-promise.
  */
-private const val SEARCH_ASSETS = "Search assets"
+private val SEARCH_ASSETS: String get() = localized(R.string.assets_search_hint)

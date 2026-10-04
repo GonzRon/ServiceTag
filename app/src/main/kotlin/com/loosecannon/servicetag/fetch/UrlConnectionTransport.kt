@@ -87,7 +87,7 @@ class UrlConnectionTransport(
         connection.useCaches = false
         connection.connectTimeout = connectTimeoutMillis
         connection.readTimeout = readTimeoutMillis
-        connection.setRequestProperty("Accept", ACCEPT)
+        connection.setRequestProperty("Accept", ACCEPT) // l10n-ok: HTTP header
         connection.setRequestProperty("Accept-Encoding", "identity")
         connection.setRequestProperty("User-Agent", DocumentTransport.USER_AGENT)
         return connection
@@ -100,7 +100,7 @@ class UrlConnectionTransport(
         val body = if (status in 200..299) GuardedBody(connection.inputStream) else ByteArrayInputStream(ByteArray(0))
         return TransportResponse(
             status = status,
-            location = connection.getHeaderField("Location"),
+            location = connection.getHeaderField("Location"), // l10n-ok: HTTP header
             contentType = connection.contentType,
             contentLength = connection.contentLengthLong.takeIf { it >= 0 },
             body = body,
@@ -136,7 +136,7 @@ class UrlConnectionTransport(
 
     companion object {
         /** The documents Save as document keeps, and anything else at a low weight: the bytes decide, not this. */
-        const val ACCEPT = "application/pdf, image/png, image/jpeg;q=0.9, */*;q=0.1"
+        const val ACCEPT = "application/pdf, image/png, image/jpeg;q=0.9, */*;q=0.1" // l10n-ok: HTTP header value
 
         /** Equal but for ASCII case: no locale, no Unicode case mapping. */
         private fun sameAsciiHost(a: String, b: String): Boolean {

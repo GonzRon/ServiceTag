@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.ui.references
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.DocumentRole
@@ -24,6 +25,7 @@ import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -281,10 +283,10 @@ class ReferencesSectionViewModel(
      */
     private fun say(problem: ReferenceProblem) {
         val line = when (problem) {
-            ReferenceProblem.BlankName -> "Give the reference a name"
-            ReferenceProblem.NotALink -> "That is not a link."
-            ReferenceProblem.UriTooLong -> "That link is too long to save."
-            ReferenceProblem.SchemeBlocked -> "ServiceTag will not save that kind of link."
+            ReferenceProblem.BlankName -> localized(R.string.references_blank_name)
+            ReferenceProblem.NotALink -> localized(R.string.references_not_a_link)
+            ReferenceProblem.UriTooLong -> localized(R.string.references_uri_too_long)
+            ReferenceProblem.SchemeBlocked -> localized(R.string.references_scheme_blocked)
             ReferenceProblem.DuplicateUri -> duplicateUriOn(owner)
             is ReferenceProblem.UnknownSchemeNeedsConfirmation -> return
             ReferenceProblem.Unchanged -> return
@@ -297,14 +299,15 @@ class ReferencesSectionViewModel(
 }
 
 /** #69 P69-11 (C28): the in-app and the Share duplicate, for a SupplyItem's link. */
-internal const val DUPLICATE_URI_ON_SUPPLY = "That link is already on this supply"
+internal val DUPLICATE_URI_ON_SUPPLY: String get() = localized(R.string.references_duplicate_on_supply)
 
 /** #69 P69-12 (C28): the in-app and the Share duplicate, for an installed component's link. */
-internal const val DUPLICATE_URI_ON_INSTALLED_COMPONENT = "That link is already on this installed component"
+internal val DUPLICATE_URI_ON_INSTALLED_COMPONENT: String
+    get() = localized(R.string.references_duplicate_on_installed_component)
 
 /** #69 (C28, R69-13): the duplicate sentence by the owner's kind; an asset keeps its shipped wording. */
 internal fun duplicateUriOn(owner: ReferenceOwner): String = when (owner) {
-    is ReferenceOwner.OfAsset -> "That link is already on this asset"
+    is ReferenceOwner.OfAsset -> localized(R.string.references_duplicate_on_asset)
     is ReferenceOwner.OfSupplyItem -> DUPLICATE_URI_ON_SUPPLY
     is ReferenceOwner.OfInstalledComponent -> DUPLICATE_URI_ON_INSTALLED_COMPONENT
 }

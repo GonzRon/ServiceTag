@@ -37,10 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.DerivedFormula
@@ -52,6 +54,9 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.DefinitionReferenced
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedList
+import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.ui.components.LedgerList
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -109,21 +114,24 @@ fun AssetSetupScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = current?.assetName ?: "Readings & actions",
+                        text = current?.assetName ?: stringResource(R.string.setup_title_fallback),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(R.string.setup_back),
+                        )
                     }
                 },
             )
         },
     ) { padding ->
         if (current == null) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.setup_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
 
@@ -137,10 +145,10 @@ fun AssetSetupScreen(
         }
         deletingDefinition?.let { row ->
             ConfirmDialog(
-                title = "Delete this reading?",
+                title = stringResource(R.string.setup_delete_reading_title),
                 // Whether it can go at all is the use case's call; the refusal dialog says so when
                 // it cannot, so the confirm no longer promises "it has no data" before anyone looked.
-                body = "This cannot be undone.",
+                body = stringResource(R.string.setup_delete_reading_body),
                 onDismiss = { deletingDefinition = null },
                 onConfirm = {
                     deletingDefinition = null
@@ -150,8 +158,8 @@ fun AssetSetupScreen(
         }
         deletingProfile?.let { row ->
             ConfirmDialog(
-                title = "Delete this action?",
-                body = "Past entries keep their readings.",
+                title = stringResource(R.string.setup_delete_action_title),
+                body = stringResource(R.string.setup_delete_action_body),
                 onDismiss = { deletingProfile = null },
                 onConfirm = {
                     deletingProfile = null
@@ -167,15 +175,15 @@ fun AssetSetupScreen(
                 .padding(horizontal = 16.dp),
         ) {
             Text(
-                text = "READINGS & ACTIONS",
+                text = stringResource(R.string.setup_eyebrow),
                 style = Eyebrow,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
 
-            SectionHeader(title = "Readings")
+            SectionHeader(title = stringResource(R.string.setup_readings_header))
             if (current.definitions.isEmpty()) {
-                QuietLine("No readings yet · add one to start measuring this asset")
+                QuietLine(stringResource(R.string.setup_readings_empty))
             } else {
                 LedgerList(count = current.definitions.size) { index ->
                     val row = current.definitions[index]
@@ -191,11 +199,11 @@ fun AssetSetupScreen(
                     )
                 }
             }
-            AddButton(text = "Add reading") { onEditDefinition(assetId, null) }
+            AddButton(text = stringResource(R.string.setup_add_reading)) { onEditDefinition(assetId, null) }
 
-            SectionHeader(title = "Actions")
+            SectionHeader(title = stringResource(R.string.setup_actions_header))
             if (current.profiles.isEmpty()) {
-                QuietLine("No actions yet · add one to log this asset in a tap")
+                QuietLine(stringResource(R.string.setup_actions_empty))
             } else {
                 LedgerList(count = current.profiles.size) { index ->
                     val row = current.profiles[index]
@@ -210,7 +218,7 @@ fun AssetSetupScreen(
                     )
                 }
             }
-            AddButton(text = "Add action") { onEditProfile(assetId, null) }
+            AddButton(text = stringResource(R.string.setup_add_action)) { onEditProfile(assetId, null) }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -243,7 +251,7 @@ private fun DefinitionRow(
                 if (definition.kind == DefinitionKind.DERIVED) {
                     Icon(
                         imageVector = ServiceTagIcons.Equal,
-                        contentDescription = "Derived",
+                        contentDescription = stringResource(R.string.setup_definition_kind_derived),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),
                     )
@@ -255,7 +263,10 @@ private fun DefinitionRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (definition.archivedAt != null) {
-                    StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+                    StatusBadge(
+                        label = stringResource(R.string.setup_archived_badge),
+                        colors = ServiceTagTheme.semanticColors.seasonInactive,
+                    )
                 }
             }
             definition.derived?.let { spec ->
@@ -310,11 +321,14 @@ private fun ProfileRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (profile.archivedAt != null) {
-                    StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+                    StatusBadge(
+                        label = stringResource(R.string.setup_archived_badge),
+                        colors = ServiceTagTheme.semanticColors.seasonInactive,
+                    )
                 }
             }
             Text(
-                text = "${kindLabel(profile.eventKind)} · ${fieldCount(profile.fields.size)}",
+                text = profileMetaLine(profile.eventKind, profile.fields.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -348,25 +362,25 @@ private fun RowOverflow(
 ) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.setup_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        DropdownMenuItem(text = { Text("Edit") }, onClick = { open = false; onEdit() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.setup_edit)) }, onClick = { open = false; onEdit() })
         DropdownMenuItem(
-            text = { Text("Move up") },
+            text = { Text(stringResource(R.string.setup_move_up)) },
             enabled = canMoveUp,
             onClick = { open = false; onMove(true) },
         )
         DropdownMenuItem(
-            text = { Text("Move down") },
+            text = { Text(stringResource(R.string.setup_move_down)) },
             enabled = canMoveDown,
             onClick = { open = false; onMove(false) },
         )
         DropdownMenuItem(
-            text = { Text(if (archived) "Unarchive" else "Archive") },
+            text = { Text(stringResource(if (archived) R.string.setup_unarchive else R.string.setup_archive)) },
             onClick = { open = false; onArchive(!archived) },
         )
-        DropdownMenuItem(text = { Text("Delete") }, onClick = { open = false; onDelete() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.setup_delete)) }, onClick = { open = false; onDelete() })
     }
 }
 
@@ -400,22 +414,22 @@ internal fun ReferencedDialog(
         refusal.derivedBy
             .mapNotNull { definitionLabels[it] }
             .takeIf { it.isNotEmpty() }
-            ?.let { add("Used by ${it.joinToString(", ")}") }
+            ?.let { add(localized(R.string.setup_refusal_used_by, localizedList(it))) }
         refusal.profiles
             .mapNotNull { profileNames[it] }
             .takeIf { it.isNotEmpty() }
-            ?.let { add("Offered by ${it.joinToString(", ")}") }
+            ?.let { add(localized(R.string.setup_refusal_offered_by, localizedList(it))) }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Cannot delete this reading") },
+        title = { Text(stringResource(R.string.setup_refusal_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 lines.forEach { Text(it) }
-                Text("Archive it instead to take it off the forms and keep its history.")
+                Text(stringResource(R.string.setup_refusal_archive_hint))
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.setup_ok)) } },
     )
 }
 
@@ -428,10 +442,13 @@ internal fun ConfirmDialog(title: String, body: String, onDismiss: () -> Unit, o
         text = { Text(body) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
+                Text(
+                    stringResource(R.string.setup_delete),
+                    color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
+                )
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.setup_cancel)) } },
     )
 }
 
@@ -447,7 +464,7 @@ internal fun formulaLine(
     val a = sources[spec.sourceA]?.label ?: "?"
     val b = sources[spec.sourceB]?.label ?: "?"
     return when (spec.formula) {
-        DerivedFormula.PERCENT_DROP -> "= ($a − $b) / $a × 100"
+        DerivedFormula.PERCENT_DROP -> localized(R.string.setup_formula_percent_drop_line, a, b)
     }
 }
 
@@ -455,30 +472,34 @@ internal fun formulaLine(
 private fun MeasurementDefinition.metaLine(): String {
     val shape = when (valueType) {
         ValueType.NUMBER -> formatTarget(this)
-        ValueType.TEXT -> "Text"
-        ValueType.BOOLEAN -> "Yes / no"
+        ValueType.TEXT -> localized(R.string.setup_value_type_text)
+        ValueType.BOOLEAN -> localized(R.string.setup_value_type_boolean)
     }
     return listOfNotNull(
         unit.takeIf { it.isNotBlank() },
         shape,
-        "Meter".takeIf { isMeter },
+        localized(R.string.setup_meter_tag).takeIf { isMeter },
     ).joinToString(" · ")
 }
 
 /** The event kind in words, for the row and for the profile editor's picker (Task 7's dropdown). */
-internal fun kindLabel(kind: EventKind): String = when (kind) {
-    EventKind.MAINTENANCE -> "Maintenance"
-    EventKind.INSPECTION -> "Inspection"
-    EventKind.MEASUREMENT -> "Measurement"
-    EventKind.TREATMENT -> "Treatment"
-    EventKind.INCIDENT -> "Incident"
-    EventKind.REPLACEMENT -> "Replacement"
-    EventKind.SEASON_START -> "Season start"
-    EventKind.SEASON_END -> "Season end"
-    EventKind.NOTE -> "Note"
-    EventKind.CUSTOM -> "Custom"
-}
+internal fun kindLabel(kind: EventKind): String = localized(
+    when (kind) {
+        EventKind.MAINTENANCE -> R.string.setup_event_kind_maintenance
+        EventKind.INSPECTION -> R.string.setup_event_kind_inspection
+        EventKind.MEASUREMENT -> R.string.setup_event_kind_measurement
+        EventKind.TREATMENT -> R.string.setup_event_kind_treatment
+        EventKind.INCIDENT -> R.string.setup_event_kind_incident
+        EventKind.REPLACEMENT -> R.string.setup_event_kind_replacement
+        EventKind.SEASON_START -> R.string.setup_event_kind_season_start
+        EventKind.SEASON_END -> R.string.setup_event_kind_season_end
+        EventKind.NOTE -> R.string.setup_event_kind_note
+        EventKind.CUSTOM -> R.string.setup_event_kind_custom
+    },
+)
 
-private fun fieldCount(n: Int): String = if (n == 1) "1 field" else "$n fields"
+/** "Maintenance · 3 fields": the kind of entry an action logs and how many fields its form asks for. */
+private fun profileMetaLine(kind: EventKind, fields: Int): String =
+    localizedPlural(R.plurals.setup_profile_row_meta, fields, kindLabel(kind), fields)
 
-private fun readingCount(n: Int): String = if (n == 1) "1 reading logged" else "$n readings logged"
+private fun readingCount(n: Int): String = localizedPlural(R.plurals.setup_refusal_readings_logged, n, n)

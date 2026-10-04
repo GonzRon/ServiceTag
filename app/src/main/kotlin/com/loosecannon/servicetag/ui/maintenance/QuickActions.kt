@@ -9,12 +9,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /** F4's three RATIFIED labels, quoted verbatim (master plan §1.2). */
-const val SCAN_TAG = "Scan tag"
-const val ADD_ASSET = "Add asset"
-const val LOG_MAINTENANCE = "Log maintenance"
+val SCAN_TAG: String get() = localized(R.string.maintenance_scan_tag)
+val ADD_ASSET: String get() = localized(R.string.maintenance_add_asset)
+val LOG_MAINTENANCE: String get() = localized(R.string.maintenance_log_maintenance)
 
 /**
  * The Maintenance destination's three persistent quick actions (F4).

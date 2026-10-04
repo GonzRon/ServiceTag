@@ -35,11 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.SentenceSectionHeader
 import com.loosecannon.servicetag.ui.components.LedgerList
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -49,45 +52,49 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 // #74's Categories words (plan §6, RATIFIED 2026-09-26), each by its P74-number and verbatim. The
 // sentences that carry a name or a count are the model's, in CategoriesViewModel.kt. P74-1 is the
 // Settings row's own word, and P74-14 ("Delete") is the existing one.
+//
+// #102: the English text is in res/values/strings_home_assistant_settings.xml under each P74 id; these
+// names read it in the current language when drawn. The built-in categories' names come from core and
+// stay as they are (starter content keyed on its English spelling, #74).
 
 /** P74-2, the screen's title. */
-const val CATEGORIES_TITLE = "Categories"
+val CATEGORIES_TITLE: String get() = localized(R.string.settings_categories_title)
 
 /** P74-3, the owner's section. */
-const val YOUR_CATEGORIES = "Your categories"
+val YOUR_CATEGORIES: String get() = localized(R.string.settings_categories_yours)
 
 /** P74-4, the built-ins' section. */
-const val BUILT_IN = "Built-in"
+val BUILT_IN: String get() = localized(R.string.settings_categories_built_in)
 
 /**
  * P74-5, under P74-3 when the owner has no categories: a save is the owner's way in. A restore or a
  * merge also adds rows, for the assets it brings.
  */
-const val NO_CATEGORIES_YET = "No categories of your own yet. Save an asset with a new category to add one."
+val NO_CATEGORIES_YET: String get() = localized(R.string.settings_categories_none_yet)
 
 /** P74-7, under P74-4. */
-const val BUILT_INS_ARE_FIXED = "Built-in categories are always offered and cannot be renamed or deleted."
+val BUILT_INS_ARE_FIXED: String get() = localized(R.string.settings_categories_built_ins_fixed)
 
 /** P74-8, the rename dialog's title. */
-const val RENAME_CATEGORY = "Rename category"
+val RENAME_CATEGORY: String get() = localized(R.string.settings_categories_rename_title)
 
 /** P74-10 and P74-13: the dialog's confirm and the row's menu item, one word in two places. */
-const val RENAME = "Rename"
+val RENAME: String get() = localized(R.string.settings_categories_rename)
 
 /** P74-15, the delete dialog's title. */
-const val DELETE_THIS_CATEGORY = "Delete this category?"
+val DELETE_THIS_CATEGORY: String get() = localized(R.string.settings_categories_delete_title)
 
 /**
  * P74-18 (the follow-ups, RATIFIED 2026-09-26), under the rename field, the dialog staying: a rename
  * failed for a reason none of the refusals names.
  */
-const val COULD_NOT_RENAME = "Could not rename that category."
+val COULD_NOT_RENAME: String get() = localized(R.string.settings_categories_could_not_rename)
 
 /**
  * P74-19 (the follow-ups, RATIFIED 2026-09-26), on the screen's snackbar: a confirmed delete failed for
  * a reason none of the refusals names; the row stays.
  */
-const val COULD_NOT_DELETE = "Could not delete that category."
+val COULD_NOT_DELETE: String get() = localized(R.string.settings_categories_could_not_delete)
 
 /**
  * Settings → Categories (#74, C17): the owner's own categories with how many assets use each, then the
@@ -134,7 +141,10 @@ fun CategoriesScreen(graph: AppGraph, onBack: () -> Unit) {
                 title = { Text(CATEGORIES_TITLE) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(R.string.settings_back),
+                        )
                     }
                 },
             )
@@ -210,11 +220,14 @@ private fun OwnCategoryRow(row: OwnCategory, onRename: () -> Unit, onDelete: () 
 private fun CategoryOverflow(onRename: () -> Unit, onDelete: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.settings_categories_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         DropdownMenuItem(text = { Text(RENAME) }, onClick = { open = false; onRename() })
-        DropdownMenuItem(text = { Text("Delete") }, onClick = { open = false; onDelete() })
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.settings_categories_delete)) },
+            onClick = { open = false; onDelete() },
+        )
     }
 }
 
@@ -253,7 +266,7 @@ private fun RenameDialog(
             OutlinedTextField(
                 value = draft.text,
                 onValueChange = onText,
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.settings_categories_name)) },
                 readOnly = draft.renaming,
                 singleLine = true,
                 isError = refusal != null,
@@ -265,6 +278,8 @@ private fun RenameDialog(
         confirmButton = {
             TextButton(onClick = onConfirm, enabled = draft.canRename) { Text(RENAME) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.settings_categories_cancel)) }
+        },
     )
 }

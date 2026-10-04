@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: maintenance — the Maintenance destination (ui/maintenance/MaintenanceScreen), its due-work and schedules
+  rows (DueItemRow, WhyLines), the schedule detail and editor, the completion flow, maintenance groups, the scan
+  completion sheet and the reminder-health screen. English source. Comments carry the ratification ids (master
+  plan §17; spec §10.7 S-numbers; P-numbers) and what each placeholder is.
+
+  Vocabulary: a "schedule" is one maintenance obligation on an asset or on a maintenance group; a "round" is one
+  occurrence of a group schedule, which each required member completes; the "season" and the "maintenance break"
+  are an asset's own periods. Schedule titles, asset, group and subject names, meter units and readings are the
+  owner's own text and arrive as placeholders, unchanged. Dates arrive already formatted.
+-->
+<resources>
+    <!-- ============================================================ Shared words -->
+
+    <!-- Placeholder line while a screen's data loads. -->
+    <string name="maintenance_loading">Loading…</string>
+    <!-- Accessibility: a screen's back arrow. -->
+    <string name="maintenance_back">Back</string>
+    <!-- A dialog's dismiss button, and the editors' close icon (accessibility). -->
+    <string name="maintenance_cancel">Cancel</string>
+    <!-- A dialog's or an editor's Save button. -->
+    <string name="maintenance_save">Save</string>
+    <!-- The date picker's confirm button, and the notification-permission rationale's confirm button. -->
+    <string name="maintenance_ok">OK</string>
+    <!-- The schedule detail's Edit button, and the group detail's edit icon (accessibility). -->
+    <string name="maintenance_edit">Edit</string>
+    <!-- Accessibility: the schedule detail's overflow (three dots) menu. -->
+    <string name="maintenance_more">More</string>
+    <!-- Action: archive a schedule or a maintenance group (it keeps its history and can be brought back). -->
+    <string name="maintenance_archive">Archive</string>
+    <!-- Action: bring an archived schedule or maintenance group back. -->
+    <string name="maintenance_unarchive">Unarchive</string>
+    <!-- Badge on an archived maintenance group. -->
+    <string name="maintenance_archived">Archived</string>
+    <!-- A date field's label (the completion date, a closure date, a postponed date, the schedule's anchor date). -->
+    <string name="maintenance_date">Date</string>
+    <!-- Accessibility: the calendar icon beside a date field. %1$s: the field's label (maintenance_date). -->
+    <string name="maintenance_pick_field">Pick %1$s</string>
+    <!-- Field label: a schedule's or a maintenance group's name. -->
+    <string name="maintenance_name">Name</string>
+    <!-- Field label: a schedule's or a maintenance group's description. -->
+    <string name="maintenance_description">Description</string>
+    <!-- Accessibility: dismisses the "notifications are blocked" line. -->
+    <string name="maintenance_dismiss">Dismiss</string>
+    <!-- RATIFIED (§17): leave having written nothing — the scan sheet's way out, and the notification rationale's dismiss. -->
+    <string name="maintenance_not_now">Not now</string>
+
+    <!-- ============================================================ The Maintenance destination -->
+
+    <!-- RATIFIED (§17): the Maintenance destination's title, the scan completion sheet's title and its maintenance
+         block's heading, and the "Log maintenance" picker's title — one subject, one word. -->
+    <string name="maintenance_title">Maintenance</string>
+    <!-- RATIFIED (§17.1f): the destination's section of schedules that need attention. -->
+    <string name="maintenance_section_due_work">Due work</string>
+    <!-- RATIFIED (§17.1f): the section listing every schedule (also on the asset screen). -->
+    <string name="maintenance_section_schedules">Schedules</string>
+    <!-- RATIFIED (§17.1f): the section listing maintenance groups (also on the asset screen). -->
+    <string name="maintenance_section_groups">Maintenance groups</string>
+    <!-- RATIFIED (§17.1f): the row opening reminder health, and that screen's title. -->
+    <string name="maintenance_section_reminders">Reminders</string>
+    <!-- RATIFIED (§17.1f): the empty state when there are no schedules at all. -->
+    <string name="maintenance_no_schedules_yet">No maintenance schedules yet. Add one from an asset or a maintenance group.</string>
+    <!-- RATIFIED (D-22): the dismissible line shown while notification permission is denied. -->
+    <string name="maintenance_reminders_blocked">Reminders are off because notifications are blocked.</string>
+    <!-- D12 §5: the health badge's word, shown when a reminder-health finding is at least a warning. -->
+    <string name="maintenance_reminder_failed">REMINDER FAILED</string>
+    <!-- RATIFIED (F4, §1.2): quick action opening the tag scanner. -->
+    <string name="maintenance_scan_tag">Scan tag</string>
+    <!-- RATIFIED (F4, §1.2): quick action opening the new-asset form. -->
+    <string name="maintenance_add_asset">Add asset</string>
+    <!-- RATIFIED (F4, §1.2): quick action and button opening the completion flow ("record that this was done"). -->
+    <string name="maintenance_log_maintenance">Log maintenance</string>
+
+    <!-- ============================================================ Status words and dashboard sections -->
+
+    <!-- RATIFIED (spec §9.1, D12 §5): status badge — the schedule is not due yet. -->
+    <string name="maintenance_status_ok">OK</string>
+    <!-- RATIFIED: status badge — due within the reminder lead. -->
+    <string name="maintenance_status_due_soon">DUE SOON</string>
+    <!-- RATIFIED: status badge — due today. -->
+    <string name="maintenance_status_due">DUE</string>
+    <!-- RATIFIED: status badge — past its due date. -->
+    <string name="maintenance_status_overdue">OVERDUE</string>
+    <!-- RATIFIED: status badge — the asset's season is not running. -->
+    <string name="maintenance_status_out_of_season">OUT OF SEASON</string>
+    <!-- RATIFIED: status badge — the owner paused the schedule; also the schedule detail's pause menu item. -->
+    <string name="maintenance_status_paused">PAUSED</string>
+    <!-- RATIFIED: status badge — a meter rule with no reading to measure from yet. -->
+    <string name="maintenance_status_no_baseline">NO BASELINE</string>
+    <!-- RATIFIED (1.4): status badge — held by the maintenance break. -->
+    <string name="maintenance_status_deferred">DEFERRED</string>
+    <!-- RATIFIED (D12 §10): dashboard section heading — work that needs attention now. -->
+    <string name="maintenance_dashboard_section_attention">ATTENTION</string>
+    <!-- RATIFIED (D12 §10): dashboard section heading — work due soon. -->
+    <string name="maintenance_dashboard_section_upcoming">UPCOMING</string>
+    <!-- RATIFIED (D12 §10): dashboard section heading — schedules that are up to date. -->
+    <string name="maintenance_dashboard_section_current">CURRENT</string>
+    <!-- RATIFIED (S93): dashboard section heading — work held by the maintenance break (deliberately not upper case). -->
+    <string name="maintenance_dashboard_section_deferred">Deferred</string>
+    <!-- RATIFIED (D12 §10): dashboard section heading — schedules whose asset is out of season. -->
+    <string name="maintenance_dashboard_section_out_of_season">OUT OF SEASON</string>
+
+    <!-- ============================================================ A schedule row's lines -->
+
+    <!-- RATIFIED (D-24): the repair offered by a schedule with no meter baseline, and the completion's reading field label. -->
+    <string name="maintenance_log_meter_reading">Log meter reading</string>
+    <!-- F3: a meter rule's line. %1$s: the reading it is due at; %2$s: the meter's unit; %3$s: the current reading. -->
+    <string name="maintenance_meter_line">Due at %1$s %2$s, now %3$s.</string>
+    <!-- F3, for a unitless meter (pH). %1$s: the reading it is due at; %2$s: the current reading. -->
+    <string name="maintenance_meter_line_no_unit">Due at %1$s, now %2$s.</string>
+    <!-- RATIFIED (§17): a snoozed schedule's line. %1$s: the date the snooze ends. -->
+    <string name="maintenance_snoozed_until">Snoozed until %1$s</string>
+    <!-- RATIFIED (§17): a group round's progress. %1$d: members done; %2$d: members the round requires. -->
+    <string name="maintenance_progress">%1$d of %2$d complete</string>
+    <!-- Spec 1.2 inv. 75: names a component's parent. %1$s: the parent asset's name. -->
+    <string name="maintenance_part_of">Part of %1$s</string>
+    <!-- A component's subtitle. %1$s: the component's name; %2$s: maintenance_part_of with its parent's name. -->
+    <string name="maintenance_promoted_subtitle">%1$s · %2$s</string>
+
+    <!-- Why-lines (spec §10.5, §10.7 S85–S91): one line under a schedule row saying why its date is what it is. -->
+    <!-- S85: the break holds the work. %1$s: the first allowed day after the break. -->
+    <string name="maintenance_why_held_until">Held until %1$s because of the maintenance break</string>
+    <!-- S86: the work was pulled ahead of the season's start. -->
+    <string name="maintenance_why_before_season">Made due before the season starts</string>
+    <!-- S87: the work was pulled ahead of the maintenance break. -->
+    <string name="maintenance_why_before_break">Made due before the maintenance break</string>
+    <!-- S88: the work moved to the season's start. %1$s: the date it was due before it moved. -->
+    <string name="maintenance_why_moved_from">Moved from %1$s because the season was not running</string>
+    <!-- S89: the season is off. %1$s: the next season start. -->
+    <string name="maintenance_why_out_of_season_until">Out of season until %1$s</string>
+    <!-- S90: the season is off and is started by hand, so no date is predicted. -->
+    <string name="maintenance_why_until_you_start">Out of season until you start it</string>
+    <!-- S91: the break withholds reminders; the work keeps its place. -->
+    <string name="maintenance_why_reminders_wait">Reminders wait for the maintenance break to end</string>
+
+    <!-- ============================================================ Completion -->
+
+    <!-- RATIFIED (§17): the completion dialog's title. -->
+    <string name="maintenance_when_was_this_done">When was this done?</string>
+    <!-- The completion dialog's optional time field. -->
+    <string name="maintenance_time">Time</string>
+    <!-- The time field's placeholder: the 24-hour hours:minutes shape the field expects. -->
+    <string name="maintenance_time_placeholder">HH:MM</string>
+    <!-- RATIFIED (§17): completes every outstanding member of a group round. -->
+    <string name="maintenance_complete_all">Complete all</string>
+    <!-- RATIFIED (§17): completes the ticked members of a group round, or the ticked items of the scan sheet. -->
+    <string name="maintenance_complete_selected">Complete selected</string>
+    <!-- RATIFIED (§17): closes a group round without recording the outstanding members as serviced. -->
+    <string name="maintenance_close_this_round">Close this round</string>
+    <!-- RATIFIED (§17.1b), verbatim: the close-round confirmation. -->
+    <string name="maintenance_close_this_round_confirmation">Close this round? The members not marked done will not be recorded as serviced.</string>
+
+    <!-- ============================================================ Maintenance groups -->
+
+    <!-- RATIFIED (§17): the noun for a group — the group screens' title and eyebrow, and the new-group button. -->
+    <string name="maintenance_group_noun">Maintenance group</string>
+    <!-- RATIFIED (§17): a group member's action, opening the member asset. -->
+    <string name="maintenance_open_asset">Open asset</string>
+    <!-- Heading over a group's members: the app's word for the things a group is a set of. -->
+    <string name="maintenance_members_section">Assets</string>
+
+    <!-- ============================================================ Scan completion sheet -->
+
+    <!-- RATIFIED (§17): the sheet's way out to the ordinary asset screen. -->
+    <string name="maintenance_sheet_open_asset">Open asset</string>
+    <!-- RATIFIED (§17): opens the schedule's detail (a look, never a completion). -->
+    <string name="maintenance_review_maintenance">Review maintenance</string>
+    <!-- RATIFIED (§17, #49 AC 3): caption over the scanned tag's placement label. -->
+    <string name="maintenance_tag_placement">Tag placement</string>
+    <!-- S139: the maintenance block when the sheet opened for the asset's condition and nothing is due. -->
+    <string name="maintenance_nothing_due">Nothing due</string>
+    <!-- RATIFIED (§17.1e): an overdue item's line. %1$s: the date it became due (yyyy-mm-dd). -->
+    <string name="maintenance_why_now_overdue_since">Overdue since %1$s.</string>
+    <!-- RATIFIED (§17.1e): a due item's line. %1$s: the date it is due (yyyy-mm-dd). -->
+    <string name="maintenance_why_now_due">Due %1$s.</string>
+    <!-- One reading of the last completion. %1$s: the value; %2$s: its unit. -->
+    <string name="maintenance_reading_with_unit">%1$s %2$s</string>
+
+    <!-- ============================================================ Schedule detail -->
+
+    <!-- RATIFIED (§17): suppresses this schedule's reminder for a day; the due date does not move. -->
+    <string name="maintenance_snooze">Snooze</string>
+    <!-- RATIFIED (§17): moves this occurrence's date; also the postponed date's label and the dialog title. -->
+    <string name="maintenance_postpone">Postpone</string>
+    <!-- Removes a postponement. -->
+    <string name="maintenance_remove">Remove</string>
+    <!-- Heading over the schedule's completion history. -->
+    <string name="maintenance_service_record">Service record</string>
+    <!-- The completion history's empty state. -->
+    <string name="maintenance_no_service_recorded">No service recorded yet</string>
+
+    <!-- ============================================================ Schedule editor (§17, §17.1c) -->
+
+    <!-- RATIFIED: the target field's label. -->
+    <string name="maintenance_this_applies_to">This applies to</string>
+    <!-- RATIFIED: target — an asset. -->
+    <string name="maintenance_one_asset">One asset</string>
+    <!-- RATIFIED: target — a maintenance group. -->
+    <string name="maintenance_a_maintenance_group">A maintenance group</string>
+    <!-- RATIFIED (D-24): the interval field's label; N is the number the field takes. -->
+    <string name="maintenance_every_n">Every N</string>
+    <!-- RATIFIED: the time rule's section heading; followed by one of the two options below. -->
+    <string name="maintenance_repeats_from">Repeats from</string>
+    <!-- RATIFIED: option under "Repeats from" — the series keeps to its calendar dates. -->
+    <string name="maintenance_the_scheduled_date">the scheduled date</string>
+    <!-- RATIFIED: option under "Repeats from" — the next date counts from each completion. -->
+    <string name="maintenance_when_i_complete_it">when I complete it</string>
+    <!-- RATIFIED (D-24): the reminder lead field's label; N is the number the field takes. -->
+    <string name="maintenance_remind_me_n_days_early">Remind me N days early</string>
+    <!-- RATIFIED: the meter picker's label. -->
+    <string name="maintenance_also_due_by_use">Also due by use</string>
+    <!-- RATIFIED (D-24): the meter interval field's label, with its markers verbatim: <n> is the number the field takes, <unit> the meter's unit. -->
+    <string name="maintenance_every_n_unit_of_use">Every &lt;n&gt; &lt;unit&gt; of use</string>
+    <!-- RATIFIED: the reading at the last completion. -->
+    <string name="maintenance_last_done_at">Last done at</string>
+    <!-- RATIFIED (D-24): the meter reminder lead field's label, with its markers verbatim. -->
+    <string name="maintenance_remind_me_n_unit_early">Remind me &lt;n&gt; &lt;unit&gt; early</string>
+    <!-- RATIFIED: the completion mode's section heading. -->
+    <string name="maintenance_completing_this_takes">Completing this takes</string>
+    <!-- RATIFIED: completion mode — one tap records it; also shown on the scan sheet's items. -->
+    <string name="maintenance_one_tap">One tap</string>
+    <!-- RATIFIED: completion mode — the quick action's full form; also shown on the scan sheet's items. -->
+    <string name="maintenance_the_full_form">The full form</string>
+    <!-- RATIFIED: the quick-action picker's label under "The full form". -->
+    <string name="maintenance_use_this_form">Use this form</string>
+    <!-- P141-3: the quick-action picker's label under "One tap". -->
+    <string name="maintenance_quick_action">Quick action</string>
+    <!-- P141-4: the picker's first row, clearing a chosen quick action (also the loan editor's "no reminder"). -->
+    <string name="maintenance_none">None</string>
+    <!-- RATIFIED: the reminder switch's heading and its accessibility name. -->
+    <string name="maintenance_remind_me_through">Remind me through</string>
+    <!-- RATIFIED (D-11): a non-blocking warning under the name. -->
+    <string name="maintenance_similar_through_a_group">This asset already has a similar schedule through another group.</string>
+    <!-- The meter picker's row that clears the meter rule (the shipped "No target" wording). -->
+    <string name="maintenance_no_target">No target</string>
+    <!-- The interval unit picker's choices. -->
+    <string name="maintenance_unit_day">DAY</string>
+    <string name="maintenance_unit_week">WEEK</string>
+    <string name="maintenance_unit_month">MONTH</string>
+    <string name="maintenance_unit_year">YEAR</string>
+
+    <!-- Service policy (spec §10.7, S65–S84). -->
+    <!-- S65: the question. -->
+    <string name="maintenance_when_should_this_be_done">When should this maintenance be done?</string>
+    <!-- S66: option. -->
+    <string name="maintenance_before_the_season_starts">Before the season starts</string>
+    <!-- S67: option. -->
+    <string name="maintenance_when_the_season_starts">When the season starts</string>
+    <!-- S68: option. -->
+    <string name="maintenance_whenever_it_is_due">Whenever it is due</string>
+    <!-- S69: option. -->
+    <string name="maintenance_before_the_maintenance_break">Before the maintenance break</string>
+    <!-- S70: option. -->
+    <string name="maintenance_after_the_maintenance_break">After the maintenance break</string>
+    <!-- S71: field — how many days before the season or break starts. -->
+    <string name="maintenance_days_before_it_starts">Days before it starts</string>
+    <!-- S72: field — how many days after the season starts. -->
+    <string name="maintenance_days_after_it_starts">Days after it starts</string>
+    <!-- S73: heading over S74 and S75. -->
+    <string name="maintenance_start_counting_from">Start counting from</string>
+    <!-- S74: option. -->
+    <string name="maintenance_the_seasons_start">The season\'s start</string>
+    <!-- S75: option. -->
+    <string name="maintenance_its_own_date_not_before_the_season">Its own date, but not before the season starts</string>
+    <!-- S76: warning. -->
+    <string name="maintenance_first_due_outside_the_season">The first due date is outside this asset\'s season, so it will wait for the season to start.</string>
+    <!-- S77: warning. -->
+    <string name="maintenance_nothing_to_be_ready_before">This asset has no season or maintenance break to be ready before, so this is due whenever its date comes.</string>
+    <!-- S78: helper under S66. -->
+    <string name="maintenance_helper_before_the_season">A date in the season or the maintenance break becomes due on an allowed day before the season starts.</string>
+    <!-- S79: helper under S69. -->
+    <string name="maintenance_helper_before_the_break">A date in the maintenance break becomes due before the break starts.</string>
+    <!-- S80: helper under S67. -->
+    <string name="maintenance_helper_when_the_season_starts">This maintenance waits while the season is off and becomes active again when it starts.</string>
+    <!-- S81: helper under S70. -->
+    <string name="maintenance_helper_after_the_break">A date in the maintenance break moves to the first day after it.</string>
+    <!-- S82: helper under S68. -->
+    <string name="maintenance_helper_whenever_it_is_due">The season and the maintenance break never change when this is due.</string>
+    <!-- S83: under an empty day field (also the asset editor's warranty reminder lead). -->
+    <string name="maintenance_enter_the_number_of_days">Enter the number of days.</string>
+    <!-- S84: warning under S72. -->
+    <string name="maintenance_after_the_season_ends">That is after the season ends, so this would never become due.</string>
+
+    <!-- Health link guard (spec §6.1, D-30). -->
+    <!-- S137: refusal — archiving the subject its asset's health follows. -->
+    <string name="maintenance_the_subject_health_follows">This is the subject asset health follows. Choose another way to combine health first.</string>
+    <!-- S140: the link-guard question. %1$s: the health subject's name. -->
+    <string name="maintenance_schedule_drives_subject">This schedule drives the health subject %1$s. Archive that subject as well?</string>
+    <!-- S141: the link-guard confirm. -->
+    <string name="maintenance_archive_both">Archive both</string>
+
+    <!-- ============================================================ Reminder health repairs (§17.1a, P141-2) -->
+
+    <!-- Opens the app's notification settings. -->
+    <string name="maintenance_repair_open_notification_settings">Open notification settings</string>
+    <!-- Re-arms the daily reminder check's alarm. -->
+    <string name="maintenance_repair_reschedule_check">Reschedule the check</string>
+    <!-- Restarts the background reminder check. -->
+    <string name="maintenance_repair_restart_check">Restart the check</string>
+    <!-- Opens the app's details page, where the battery restriction lives. -->
+    <string name="maintenance_repair_open_battery_settings">Open battery settings</string>
+    <!-- Turns the app's reminders back on. -->
+    <string name="maintenance_repair_turn_reminders_on">Turn reminders on</string>
+    <!-- Opens the schedule the finding is about. -->
+    <string name="maintenance_repair_open_schedule">Open the schedule</string>
+    <!-- P141-2: runs the reminder delivery repair. -->
+    <string name="maintenance_repair_fix_delivery">Fix reminder delivery</string>
+</resources>

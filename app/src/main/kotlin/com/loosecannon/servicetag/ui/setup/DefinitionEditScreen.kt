@@ -42,17 +42,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.DerivedFormula
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
@@ -107,19 +111,20 @@ fun DefinitionEditScreen(
     }
 
     var confirming by remember { mutableStateOf(false) }
+    val titleRes = if (state.editing) R.string.setup_definition_title_edit else R.string.setup_definition_title_new
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
-                title = { Text(if (state.editing) "Edit reading" else "New reading") },
+                title = { Text(stringResource(titleRes)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Cancel")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.setup_cancel))
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = !state.saving) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = !state.saving) { Text(stringResource(R.string.setup_save)) }
                     if (state.editing) {
                         EditorOverflow(
                             archived = state.archived,
@@ -132,7 +137,7 @@ fun DefinitionEditScreen(
         },
     ) { padding ->
         if (!state.loaded) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.setup_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
 
@@ -146,8 +151,8 @@ fun DefinitionEditScreen(
         }
         if (confirming) {
             ConfirmDialog(
-                title = "Delete this reading?",
-                body = "This cannot be undone.",
+                title = stringResource(R.string.setup_delete_reading_title),
+                body = stringResource(R.string.setup_delete_reading_body),
                 onDismiss = { confirming = false },
                 onConfirm = {
                     confirming = false
@@ -166,7 +171,7 @@ fun DefinitionEditScreen(
             OutlinedTextField(
                 value = state.label,
                 onValueChange = model::onLabel,
-                label = { Text("Label") },
+                label = { Text(stringResource(R.string.setup_definition_label)) },
                 isError = state.problems.containsKey(DefinitionField.LABEL),
                 supportingText = state.problems[DefinitionField.LABEL]?.let { { Text(it) } },
                 singleLine = true,
@@ -176,7 +181,7 @@ fun DefinitionEditScreen(
             OutlinedTextField(
                 value = state.key,
                 onValueChange = model::onKey,
-                label = { Text("Key") },
+                label = { Text(stringResource(R.string.setup_definition_key)) },
                 // The key is how a stored measurement and a backup name this reading, so it is
                 // shown in the technical face and frozen the moment there is data behind it.
                 enabled = state.inUse == 0,
@@ -190,7 +195,7 @@ fun DefinitionEditScreen(
             )
 
             FieldGroup(
-                label = "Kind",
+                label = stringResource(R.string.setup_definition_kind),
                 note = state.problems[DefinitionField.KIND] ?: state.frozenReason(),
                 isProblem = state.problems.containsKey(DefinitionField.KIND),
             ) {
@@ -198,14 +203,14 @@ fun DefinitionEditScreen(
                     options = DefinitionKind.entries,
                     selected = state.kind,
                     enabled = state.inUse == 0,
-                    label = { if (it == DefinitionKind.DERIVED) "Derived" else "Entered" },
+                    label = { definitionKindLabel(it) },
                     onSelect = model::onKind,
                 )
             }
 
             if (state.kind == DefinitionKind.ENTERED) {
                 FieldGroup(
-                    label = "Type",
+                    label = stringResource(R.string.setup_definition_type),
                     note = state.problems[DefinitionField.TYPE] ?: state.frozenReason(),
                     isProblem = state.problems.containsKey(DefinitionField.TYPE),
                 ) {
@@ -218,7 +223,7 @@ fun DefinitionEditScreen(
                     )
                 }
             } else {
-                FieldGroup(label = "Formula", note = null, isProblem = false) {
+                FieldGroup(label = stringResource(R.string.setup_definition_formula), note = null, isProblem = false) {
                     // One formula exists today (spec §11), so it is stated rather than chosen.
                     Text(
                         text = formulaName(state.formula),
@@ -227,13 +232,13 @@ fun DefinitionEditScreen(
                     )
                 }
                 SourcePicker(
-                    label = "Source A",
+                    label = stringResource(R.string.setup_definition_source_a),
                     selected = state.sourceA,
                     sources = state.sources,
                     onSelect = model::onSourceA,
                 )
                 SourcePicker(
-                    label = "Source B",
+                    label = stringResource(R.string.setup_definition_source_b),
                     selected = state.sourceB,
                     sources = state.sources,
                     onSelect = model::onSourceB,
@@ -241,8 +246,7 @@ fun DefinitionEditScreen(
                 state.problems[DefinitionField.SOURCES]?.let { Problem(it) }
                 if (state.sources.size < 2) {
                     Text(
-                        text = "A derived reading needs two number readings to work from. " +
-                            "Add them first.",
+                        text = stringResource(R.string.setup_definition_sources_needed),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -252,7 +256,7 @@ fun DefinitionEditScreen(
             OutlinedTextField(
                 value = state.unit,
                 onValueChange = model::onUnit,
-                label = { Text("Unit") },
+                label = { Text(stringResource(R.string.setup_definition_unit)) },
                 singleLine = true,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
@@ -264,7 +268,7 @@ fun DefinitionEditScreen(
                 OutlinedTextField(
                     value = state.decimals,
                     onValueChange = model::onDecimals,
-                    label = { Text("Decimals") },
+                    label = { Text(stringResource(R.string.setup_definition_decimals)) },
                     isError = state.problems.containsKey(DefinitionField.DECIMALS),
                     supportingText = state.problems[DefinitionField.DECIMALS]?.let { { Text(it) } },
                     singleLine = true,
@@ -276,7 +280,7 @@ fun DefinitionEditScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 FieldGroup(
-                    label = "Target",
+                    label = stringResource(R.string.setup_definition_target),
                     note = state.problems[DefinitionField.RANGE_LOW]
                         ?: state.problems[DefinitionField.RANGE_HIGH],
                     isProblem = true,
@@ -285,7 +289,7 @@ fun DefinitionEditScreen(
                         OutlinedTextField(
                             value = state.rangeLow,
                             onValueChange = model::onRangeLow,
-                            label = { Text("Low") },
+                            label = { Text(stringResource(R.string.setup_definition_target_low)) },
                             isError = state.problems.containsKey(DefinitionField.RANGE_LOW),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
@@ -298,7 +302,7 @@ fun DefinitionEditScreen(
                         OutlinedTextField(
                             value = state.rangeHigh,
                             onValueChange = model::onRangeHigh,
-                            label = { Text("High") },
+                            label = { Text(stringResource(R.string.setup_definition_target_high)) },
                             isError = state.problems.containsKey(DefinitionField.RANGE_HIGH),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
@@ -313,7 +317,7 @@ fun DefinitionEditScreen(
                 if (state.kind == DefinitionKind.ENTERED) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Meter (counts up)",
+                            text = stringResource(R.string.setup_definition_meter),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
@@ -330,7 +334,7 @@ fun DefinitionEditScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Save reading")
+                Text(stringResource(R.string.setup_definition_save))
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -344,8 +348,7 @@ private val DefinitionEditState.numeric: Boolean
 /** What the locked controls say for themselves: how much data is holding them still. */
 private fun DefinitionEditState.frozenReason(): String? = when (inUse) {
     0 -> null
-    1 -> "Used by 1 reading"
-    else -> "Used by $inUse readings"
+    else -> localizedPlural(R.plurals.setup_definition_frozen, inUse, inUse)
 }
 
 /** A small all-caps label over a control that is not a text field, with its note underneath. */
@@ -428,7 +431,7 @@ private fun SourcePicker(
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
-            placeholder = { Text("Choose a reading") },
+            placeholder = { Text(stringResource(R.string.setup_definition_choose_source)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             shape = ControlShape,
             modifier = Modifier
@@ -453,24 +456,36 @@ private fun SourcePicker(
 private fun EditorOverflow(archived: Boolean, onArchive: () -> Unit, onDelete: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.setup_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         DropdownMenuItem(
-            text = { Text(if (archived) "Unarchive" else "Archive") },
+            text = { Text(stringResource(if (archived) R.string.setup_unarchive else R.string.setup_archive)) },
             onClick = { open = false; onArchive() },
         )
-        DropdownMenuItem(text = { Text("Delete") }, onClick = { open = false; onDelete() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.setup_delete)) }, onClick = { open = false; onDelete() })
     }
 }
 
-private fun typeLabel(type: ValueType): String = when (type) {
-    ValueType.NUMBER -> "Number"
-    ValueType.TEXT -> "Text"
-    ValueType.BOOLEAN -> "Yes / no"
-}
+private fun typeLabel(type: ValueType): String = localized(
+    when (type) {
+        ValueType.NUMBER -> R.string.setup_value_type_number
+        ValueType.TEXT -> R.string.setup_value_type_text
+        ValueType.BOOLEAN -> R.string.setup_value_type_boolean
+    },
+)
+
+/** Entered or Derived, on the Kind control's two segments. */
+private fun definitionKindLabel(kind: DefinitionKind): String = localized(
+    when (kind) {
+        DefinitionKind.ENTERED -> R.string.setup_definition_kind_entered
+        DefinitionKind.DERIVED -> R.string.setup_definition_kind_derived
+    },
+)
 
 /** The formula, named and written out, because "Percent drop" alone does not say from what. */
-private fun formulaName(formula: DerivedFormula): String = when (formula) {
-    DerivedFormula.PERCENT_DROP -> "Percent drop: (A − B) / A × 100"
-}
+private fun formulaName(formula: DerivedFormula): String = localized(
+    when (formula) {
+        DerivedFormula.PERCENT_DROP -> R.string.setup_formula_percent_drop
+    },
+)

@@ -38,12 +38,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -54,8 +57,8 @@ import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 
 /** RATIFIED (master plan §17): the two operation labels that are not a completion. */
-const val SNOOZE = "Snooze"
-const val POSTPONE = "Postpone"
+val SNOOZE: String get() = localized(R.string.maintenance_snooze)
+val POSTPONE: String get() = localized(R.string.maintenance_postpone)
 
 /**
  * One schedule, in full, and the five operations.
@@ -129,7 +132,7 @@ fun ScheduleDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.maintenance_back))
                     }
                 },
                 actions = {
@@ -140,7 +143,9 @@ fun ScheduleDetailScreen(
                     // floor, would be movable from the one screen that withholds everything else.
                     // #77 (C19): a transferred-out owner's schedule offers no write at all.
                     if (!state.archived && state.editable) {
-                        TextButton(onClick = { onEditRecurrence(scheduleId) }) { Text("Edit") }
+                        TextButton(onClick = { onEditRecurrence(scheduleId) }) {
+                            Text(stringResource(R.string.maintenance_edit))
+                        }
                     }
                     if (state.editable) {
                         DetailOverflow(
@@ -155,7 +160,7 @@ fun ScheduleDetailScreen(
         },
     ) { padding ->
         if (!state.loaded) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.maintenance_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
         if (state.missing) {
@@ -214,7 +219,7 @@ fun ScheduleDetailScreen(
                 StatusBadge(label = word, colors = colors, icon = statusIcon(state.status!!))
                 Spacer(Modifier.height(8.dp))
             }
-            state.effectiveDueOn?.let { LabelValue(label = "Date", value = it) }
+            state.effectiveDueOn?.let { LabelValue(label = stringResource(R.string.maintenance_date), value = it) }
             state.postponedDueOn?.let { LabelValue(label = POSTPONE, value = it) }
             state.description.takeIf { it.isNotBlank() }?.let { QuietLine(it) }
             state.progress?.let { QuietLine(it) }
@@ -273,7 +278,7 @@ fun ScheduleDetailScreen(
                         onClick = model::clearPostponement,
                         enabled = !state.busy,
                         shape = ControlShape,
-                    ) { Text("Remove") }
+                    ) { Text(stringResource(R.string.maintenance_remove)) }
                 }
                 if (state.canClose) {
                     OutlinedButton(
@@ -305,9 +310,9 @@ fun ScheduleDetailScreen(
                 }
             }
 
-            SectionHeader(title = "Service record")
+            SectionHeader(title = stringResource(R.string.maintenance_service_record))
             if (state.history.isEmpty()) {
-                QuietLine("No service recorded yet")
+                QuietLine(stringResource(R.string.maintenance_no_service_recorded))
             } else {
                 state.history.forEach { row ->
                     HorizontalDivider(
@@ -380,9 +385,13 @@ internal fun PostponeDialog(initial: String, onDismiss: () -> Unit, onConfirm: (
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(POSTPONE) },
-        text = { DateField(value = dueOn, onValueChange = { dueOn = it }, label = "Date") },
-        confirmButton = { TextButton(onClick = { onConfirm(dueOn) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        text = {
+            DateField(value = dueOn, onValueChange = { dueOn = it }, label = stringResource(R.string.maintenance_date))
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(dueOn) }) { Text(stringResource(R.string.maintenance_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.maintenance_cancel)) } },
     )
 }
 
@@ -404,7 +413,7 @@ private fun DetailOverflow(
 ) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.maintenance_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         DropdownMenuItem(
@@ -413,7 +422,9 @@ private fun DetailOverflow(
             onClick = { open = false; onPause() },
         )
         DropdownMenuItem(
-            text = { Text(if (archived) "Unarchive" else "Archive") },
+            text = {
+                Text(stringResource(if (archived) R.string.maintenance_unarchive else R.string.maintenance_archive))
+            },
             onClick = { open = false; onArchive() },
         )
     }

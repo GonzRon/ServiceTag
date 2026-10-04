@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.service
 
 import android.util.Log
+import com.loosecannon.servicetag.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetEvent
@@ -22,6 +23,7 @@ import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.ServiceCaseValidation
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
@@ -323,9 +325,9 @@ private fun ServiceCase.asCommand(resolution: EventId?) = ServiceCaseCommand(
 
 /** An update's refusal on its field, or null for one the sheet has no field for. */
 private fun entryMarkFor(problem: ServiceCaseProblem): Pair<String, String>? = when (problem) {
-    is ServiceCaseProblem.BadDate -> UpdateField.DATE to "Enter a date as YYYY-MM-DD"
+    is ServiceCaseProblem.BadDate -> UpdateField.DATE to localized(R.string.service_enter_a_date)
     ServiceCaseProblem.EntryAfterToday -> UpdateField.DATE to DATE_NOT_LATER_THAN_TODAY
-    is ServiceCaseProblem.BadTime -> UpdateField.TIME to "Enter a time as HH:MM"
+    is ServiceCaseProblem.BadTime -> UpdateField.TIME to localized(R.string.service_enter_a_time)
     else -> null
 }
 
@@ -370,7 +372,7 @@ private fun factsOf(case: ServiceCase): List<CaseFact> = buildList {
     legOf(case.outboundTracking, case.outboundCarrier)?.let { add(CaseFact(OUTBOUND_TRACKING, it)) }
     legOf(case.returnTracking, case.returnCarrier)?.let { add(CaseFact(RETURN_TRACKING, it)) }
     costOf(case)?.let { add(CaseFact(COST, it)) }
-    case.notes.takeIf { it.isNotBlank() }?.let { add(CaseFact("Notes", it)) }
+    case.notes.takeIf { it.isNotBlank() }?.let { add(CaseFact(localized(R.string.service_field_notes), it)) }
 }
 
 /** One leg's tracking number and carrier, as one value; null when neither is recorded. */

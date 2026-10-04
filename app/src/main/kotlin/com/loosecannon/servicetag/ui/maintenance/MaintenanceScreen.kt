@@ -25,10 +25,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.StatusBadge
@@ -36,15 +39,15 @@ import com.loosecannon.servicetag.ui.supplies.SUPPLIES_SECTION
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 
 /** The Maintenance destination's four RATIFIED section labels, and its empty state (§17.1f). */
-const val DUE_WORK_SECTION = "Due work"
-const val SCHEDULES_SECTION = "Schedules"
-const val GROUPS_SECTION = "Maintenance groups"
-const val REMINDERS_SECTION = "Reminders"
-const val NO_SCHEDULES_YET =
-    "No maintenance schedules yet. Add one from an asset or a maintenance group."
+val DUE_WORK_SECTION: String get() = localized(R.string.maintenance_section_due_work)
+val SCHEDULES_SECTION: String get() = localized(R.string.maintenance_section_schedules)
+val GROUPS_SECTION: String get() = localized(R.string.maintenance_section_groups)
+val REMINDERS_SECTION: String get() = localized(R.string.maintenance_section_reminders)
+val NO_SCHEDULES_YET: String
+    get() = localized(R.string.maintenance_no_schedules_yet)
 
 /** D-22's one dismissible line, RATIFIED. A denied permission disables nothing; it explains. */
-const val REMINDERS_BLOCKED = "Reminders are off because notifications are blocked."
+val REMINDERS_BLOCKED: String get() = localized(R.string.maintenance_reminders_blocked)
 
 /**
  * The Maintenance destination (spec §2.6, master plan §11): the third tab, and the shell the rest
@@ -84,7 +87,7 @@ fun MaintenanceScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Maintenance") },
+                title = { Text(stringResource(R.string.maintenance_title)) },
                 actions = {
                     if (state.worstSeverity.showsBadge()) {
                         StatusBadge(
@@ -189,7 +192,7 @@ private fun ReminderNotice(onDismiss: () -> Unit) {
     ) {
         QuietLine(REMINDERS_BLOCKED, modifier = Modifier.weight(1f))
         IconButton(onClick = onDismiss) {
-            Icon(Icons.Outlined.Clear, contentDescription = "Dismiss")
+            Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.maintenance_dismiss))
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.journal.Reading
 import com.loosecannon.servicetag.core.model.AssetEvent
@@ -14,6 +15,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ValueType
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.theme.ServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.StatusColor
@@ -36,7 +38,7 @@ fun formatTarget(definition: MeasurementDefinition): String {
         low != null && high != null -> "${bound(low, definition)}–${bound(high, definition)}"
         low != null -> "≥ ${bound(low, definition)}"
         high != null -> "≤ ${bound(high, definition)}"
-        else -> "No target"
+        else -> localized(R.string.journal_no_target)
     }
 }
 
@@ -45,7 +47,7 @@ fun formatValue(measurement: Measurement?, definition: MeasurementDefinition): S
     val m = measurement ?: return null
     return when (definition.valueType) {
         // The label names the question ("Passed"), so the value only ever answers it (spec §7).
-        ValueType.BOOLEAN -> if (m.valueNum == 1.0) "Yes" else "No"
+        ValueType.BOOLEAN -> localized(if (m.valueNum == 1.0) R.string.journal_yes else R.string.journal_no)
         ValueType.TEXT -> m.valueText
         ValueType.NUMBER -> m.valueNum?.let { bound(it, definition) }
     }
@@ -73,10 +75,10 @@ fun formatNumber(value: Double): String {
 }
 
 fun stateLabel(state: RangeState): String = when (state) {
-    RangeState.LOW -> "LOW"
-    RangeState.IN_RANGE -> "IN RANGE"
-    RangeState.HIGH -> "HIGH"
-    RangeState.NO_TARGET -> "NO TARGET SET"
+    RangeState.LOW -> localized(R.string.journal_state_low)
+    RangeState.IN_RANGE -> localized(R.string.journal_state_in_range)
+    RangeState.HIGH -> localized(R.string.journal_state_high)
+    RangeState.NO_TARGET -> localized(R.string.journal_state_no_target)
 }
 
 fun stateColors(state: RangeState, colors: ServiceTagSemanticColors): StatusColor = when (state) {
@@ -106,7 +108,7 @@ fun stateIcon(state: RangeState): ImageVector = when (state) {
 fun quickActionLabel(profile: EventProfile): String {
     val name = profile.name
     val label = if (name.length > 1 && name[1].isLowerCase()) name.replaceFirstChar { it.lowercase() } else name
-    return "Log $label"
+    return localized(R.string.journal_log_profile, label)
 }
 
 /**
