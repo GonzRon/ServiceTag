@@ -128,6 +128,9 @@ class RouteTest {
         assertFalse(Route.GroupDetail("g1").readsTags())
         assertFalse(Route.GroupEdit(null).readsTags())
         assertFalse(Route.ReminderHealth.readsTags())
+        // #103 (1.7.1): the two pushed lists under the Maintenance tab's grouped section.
+        assertFalse(Route.MaintenanceGroups.readsTags())
+        assertFalse(Route.InstalledComponents.readsTags())
         assertFalse(Route.MaintenanceSheet("a1", "t1").readsTags())
     }
 

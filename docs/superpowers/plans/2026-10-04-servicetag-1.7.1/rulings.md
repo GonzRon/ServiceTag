@@ -25,7 +25,16 @@ The issue offers `encodeDefaults = true` **or** an explicit list of names, and a
 
 Not in scope: any change to the checks, the repairs, the schedules, groups, supplies or installed-components screens themselves; no new capability; every new user-visible string is ratified before it ships.
 
-## Decisions pending (the gate before P3)
+## Owner adjudication (2026-10-04, later) — the gate is passed; P3 authorized
+
+- **Q1 APPROVED:** a grouped section of three peer rows in the Maintenance tab — Maintenance groups · Supplies · Installed components; the inline maintenance-group list moves to its own pushed screen.
+- **Q2 APPROVED:** a read-only, cross-asset Installed components pushed list; each row identifies enough parent-asset context to be unambiguous; tapping a row opens that Asset's detail; no second component-management surface.
+- **Q3 RATIFIED:** all thirteen strings of plan.md §4, exactly as written.
+- **Q4 APPROVED:** Last checked is the Reminder Health run's own execution/completion instant, cached alongside that run's findings; never screen-open time, and it does not advance because the screen was viewed.
+- The navigation ruling stands: Reminders leaves the Maintenance tab and moves to Settings › Utilities › Reminder health; a healthy Reminder health screen shows the last-check time and the checks that passed.
+- No version bump yet: the bump, the `versioning.md` row and the 1.7.1 release notes are P4, after #103 has merged.
+
+## Decisions as they were put to the owner (resolved above)
 
 ### Q1 — the sub-menu's shape
 

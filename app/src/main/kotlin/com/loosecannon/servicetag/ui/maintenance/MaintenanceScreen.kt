@@ -32,14 +32,21 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.installed.INSTALLED_COMPONENTS_SECTION
 import com.loosecannon.servicetag.ui.supplies.SUPPLIES_SECTION
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 
-/** The Maintenance destination's four RATIFIED section labels, and its empty state (§17.1f). */
+/** The Maintenance destination's RATIFIED section labels, and its empty state (§17.1f). */
 const val DUE_WORK_SECTION = "Due work"
 const val SCHEDULES_SECTION = "Schedules"
 const val GROUPS_SECTION = "Maintenance groups"
-const val REMINDERS_SECTION = "Reminders"
+
+/**
+ * #103 (1.7.1; P171-1, RATIFIED 2026-10-04): the heading over the three peer rows — Maintenance groups,
+ * Supplies, Installed components — that the owner's layout ruling puts after Schedules. Named for all
+ * three so the section cannot be read as more maintenance work.
+ */
+const val GROUPS_SUPPLIES_COMPONENTS_SECTION = "Groups, supplies and components"
 const val NO_SCHEDULES_YET =
     "No maintenance schedules yet. Add one from an asset or a maintenance group."
 
@@ -50,12 +57,16 @@ const val REMINDERS_BLOCKED = "Reminders are off because notifications are block
  * The Maintenance destination (spec §2.6, master plan §11): the third tab, and the shell the rest
  * of 1.2's maintenance surfaces land inside.
  *
- * Five sections, each of which routes onward — **"Due work"** and **"Schedules"** to a schedule,
- * **"Maintenance groups"** to a group, #15's **"Supplies"** to the SupplyItem catalog (P15-1, C29),
- * **"Reminders"** to reminder health — plus F4's three persistent quick actions above them. Due work is what needs attention, in the shared projection's
- * attention order; Schedules is every listed schedule, **the paused ones included**, because a
- * paused schedule is what an owner comes here to find and the dashboard is the surface that
- * deliberately omits it.
+ * Since 1.7.1 (#103, the owner's layout ruling): **"Due work"** and **"Schedules"**, each routing to
+ * a schedule, then one grouped section (P171-1) of three peer rows — **"Maintenance groups"** to the
+ * pushed group list (`MaintenanceGroupsScreen`, which keeps the create row), #15's **"Supplies"** to
+ * the SupplyItem catalog (C29), and **"Installed components"** to the cross-asset list of what is
+ * fitted (`InstalledComponentsListScreen`) — plus F4's three persistent quick actions above them.
+ * **Reminder health is no longer a row here**: it lives under Settings › Utilities, and this screen
+ * reaches it only through the top bar's badge, as the Dashboard does. Due work is what needs
+ * attention, in the shared projection's attention order; Schedules is every listed schedule, **the
+ * paused ones included**, because a paused schedule is what an owner comes here to find and the
+ * dashboard is the surface that deliberately omits it.
  *
  * This screen decides nothing about what is due, what order it comes in, or what a status means:
  * all of that is `DueReadModel`'s, so this destination and the dashboard cannot drift apart.
@@ -65,10 +76,13 @@ const val REMINDERS_BLOCKED = "Reminders are off because notifications are block
 fun MaintenanceScreen(
     graph: AppGraph,
     onOpenSchedule: (String) -> Unit,
-    onOpenGroup: (String) -> Unit,
-    onNewGroup: () -> Unit,
-    /** #15 (C29): the fifth section's one row, opening the Supplies list. */
+    /** #103: the grouped section's first row, opening the pushed group list. */
+    onOpenGroups: () -> Unit,
+    /** #15 (C29): the grouped section's second row, opening the Supplies list. */
     onOpenSupplies: () -> Unit,
+    /** #103: the grouped section's third row, opening the cross-asset Installed components list. */
+    onOpenInstalledComponents: () -> Unit,
+    /** The top bar's badge only (#103): the page itself is reached from Settings › Utilities. */
     onReminderHealth: () -> Unit,
     onScanTag: () -> Unit,
     onAddAsset: () -> Unit,
@@ -141,35 +155,18 @@ fun MaintenanceScreen(
                 )
             }
 
-            // B15's group list, in this section, drawn **unconditionally** (controller ruling on
-            // C5, 2026-09-22). B08's rule was to omit a section with no rows, and this one loses
-            // to reachability: the list's create affordance is the section's last row, so omitting
-            // the section on a phone with no groups would leave no in-app way to make the first
-            // one — while the ratified empty state above it sends the owner to "an asset or **a
-            // maintenance group**". No numbered plan decision protected the omission.
-            //
-            // The section is therefore never rowless — the affordance is always a row — so B08's
-            // "no bare headings" concern does not arise, and no empty-state line is drawn here:
-            // §17.1f's line is about *schedules*, it is already on screen above when there are
-            // none, and a second copy under the groups heading would read as a claim about the
-            // group list. Inventing one is not this brief's to do.
-            MaintenanceSectionTitle(GROUPS_SECTION)
-            GroupList(
-                groups = state.groups,
-                onOpenGroup = onOpenGroup,
-                onNewGroup = onNewGroup,
-            )
-
-            // #15's fifth section (C29), after the groups and before Reminders: one row, with no
-            // heading of its own for the reason Reminders has none — the row's name *is* the ratified
-            // section label (P15-1), and a heading above it would say the same word twice.
+            // #103 (1.7.1): the owner's layout — one ratified heading over three peer rows, each a
+            // navigating row with no second line (the rule `NavigatingRow` states). The inline group
+            // list B15 drew here moved to its own pushed screen with its create row, so C5's
+            // reachability ruling of 2026-09-22 still holds one tap away; Supplies is no longer below
+            // the fold behind however many groups the owner has; and Installed components, which had
+            // no entry in the tab at all, is the third row. The Reminders row left the tab.
+            MaintenanceSectionTitle(GROUPS_SUPPLIES_COMPONENTS_SECTION)
+            NavigatingRow(title = GROUPS_SECTION, onClick = onOpenGroups)
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             NavigatingRow(title = SUPPLIES_SECTION, onClick = onOpenSupplies)
-
-            // The last section is one row and needs no heading of its own: the row's name *is*
-            // the ratified section label, and a heading above it would say the same word twice.
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-            NavigatingRow(title = REMINDERS_SECTION, onClick = onReminderHealth)
+            NavigatingRow(title = INSTALLED_COMPONENTS_SECTION, onClick = onOpenInstalledComponents)
         }
     }
 }

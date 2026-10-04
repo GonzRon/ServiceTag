@@ -37,6 +37,9 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.FakeTransferRecords
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.scheduleOf
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -85,6 +88,9 @@ class ReminderHealthViewModelTest {
     private val transfers = FakeTransferRecords()
     private val states = mutableMapOf<String, ScheduleState>()
     private val clock = Clock { 0L }
+
+    /** The cache's own clock (#103, Q4): what `checkedAt` reads, moved by the cases that care. */
+    private var now = 0L
 
     /** How many times the one-tap enable drove B06's reconcile. */
     private var deliveryResumed = 0
@@ -145,7 +151,7 @@ class ReminderHealthViewModelTest {
             io = Dispatchers.Unconfined,
             transfers = transfers,
         ),
-    )
+    ) { now }
 
     /**
      * Refreshed on the way out, because the screen refreshes on every `ON_START` and the view model
@@ -512,5 +518,126 @@ class ReminderHealthViewModelTest {
             "This phone is holding ServiceTag back in the background, so reminders may arrive late or not at all.",
             row.message,
         )
+    }
+
+    // --- #103 (1.7.1): the healthy state, and the run's own instant --------------------------------
+
+    /**
+     * A run that found nothing is the ratified healthy state: `loaded`, no row, `healthy`, every one of
+     * the seven checks passed in display order, and `checkedAt` the instant the run completed — the
+     * clock the cache was given, read once per publish (owner ruling Q4).
+     */
+    @Test
+    fun aRunThatFoundNothingIsTheHealthyStateWithEveryCheckPassedAndItsOwnInstant() = runTest {
+        now = 1_000L
+        val state = viewModel().state.first { it.loaded }
+
+        assertTrue(state.healthy)
+        assertEquals(emptyList<HealthRow>(), state.rows)
+        assertEquals(1_000L, state.checkedAt)
+        assertEquals(HealthCheck.entries.toList(), state.passed)
+    }
+
+    /**
+     * Q4's other half: the instant belongs to the run, not to the screen. Reading the cache after the
+     * clock moved answers the old instant; only a new run moves it.
+     */
+    @Test
+    fun theCheckedInstantDoesNotAdvanceUntilANewRun() = runTest {
+        val health = health()
+        assertNull("no run yet", health.checkedAt)
+        now = 1_000L
+        health.refresh()
+        assertEquals(1_000L, health.checkedAt)
+
+        now = 5_000L
+        assertEquals("a read moved nothing", 1_000L, health.checkedAt)
+        assertNull(health.worstSeverity())
+        assertEquals(1_000L, health.checkedAt)
+
+        health.refresh()
+        assertEquals(5_000L, health.checkedAt)
+    }
+
+    /**
+     * Each finding takes exactly its own check out of `passed`, the rest stay, and with any row the
+     * state is not `healthy` — the screen draws the rows and none of the healthy lines. Delivery is
+     * one check with two codes: the batch shape and the residual shape each remove it alone.
+     */
+    @Test
+    fun eachFindingRemovesItsOwnCheckFromPassedAndTheStateIsNotHealthy() = runTest {
+        platform.enabled = false
+        var state = viewModel().state.first { it.loaded }
+        assertFalse(state.healthy)
+        assertEquals(HealthCheck.entries - HealthCheck.NOTIFICATIONS, state.passed)
+        platform.enabled = true
+
+        prefs.remindersEnabled = false
+        state = viewModel().state.first { it.loaded }
+        assertEquals(HealthCheck.entries - HealthCheck.REMINDERS_ON, state.passed)
+        prefs.remindersEnabled = true
+
+        backstop.drop()
+        platform.restriction = AppRestriction.BATTERY_RESTRICTED
+        state = viewModel().state.first { it.loaded }
+        assertEquals(HealthCheck.entries - HealthCheck.BACKSTOP - HealthCheck.APP_RESTRICTION, state.passed)
+
+        assets.upsert(assetOf("a1"))
+        schedules.upsert(scheduleOf(id = "sched-1", assetId = "a1").copy(providers = emptyList()))
+        state = viewModel().state.first { it.loaded }
+        assertEquals(listOf("SCHEDULE_NO_PROVIDER"), state.rows.map { it.code }.filter { it.startsWith("SCHEDULE") })
+        assertFalse(HealthCheck.DELIVERY in state.passed)
+
+        schedules.upsert(
+            scheduleOf(id = "sched-1", assetId = "a1").copy(providers = listOf(ScheduleProviderRow("LOCAL", enabled = false))),
+        )
+        state = viewModel().state.first { it.loaded }
+        assertEquals(listOf("SCHEDULE_PROVIDER_DISABLED"), state.rows.map { it.code }.filter { it.startsWith("SCHEDULE") })
+        assertFalse(HealthCheck.DELIVERY in state.passed)
+        assertTrue(HealthCheck.METER_BASELINES in state.passed)
+    }
+
+    /** A repair that clears the last finding makes the next state healthy, at the refresh's own instant. */
+    @Test
+    fun clearingTheLastFindingMakesTheNextStateHealthy() = runTest {
+        now = 1_000L
+        prefs.remindersEnabled = false
+        val model = viewModel()
+        val row = model.state.first { it.loaded }.rows.single { it.code == "REMINDERS_GLOBALLY_OFF" }
+        assertFalse(model.state.value.healthy)
+
+        now = 2_000L
+        model.repair(row)
+
+        assertTrue(model.state.value.healthy)
+        assertEquals(2_000L, model.state.value.checkedAt)
+        assertEquals(HealthCheck.entries.toList(), model.state.value.passed)
+    }
+
+    /** P171-5, verbatim: the app's display date, the phone's short time, in the zone and locale given. */
+    @Test
+    fun theLastCheckedLineIsTheRatifiedShape() {
+        val at = LocalDateTime.of(2026, 10, 4, 9, 5).toInstant(ZoneOffset.UTC).toEpochMilli()
+        assertEquals("Last checked 4 Oct 2026 at 09:05", lastCheckedLine(at, ZoneOffset.UTC, Locale.UK))
+    }
+
+    /** P171-7a…g, verbatim, in display order. */
+    @Test
+    fun theSevenPassedLinesAreTheRatifiedWords() {
+        assertEquals(
+            listOf(
+                "Notifications are allowed",
+                "Reminders are turned on",
+                "The daily reminder check is scheduled",
+                "The background safety check is running",
+                "This phone is not holding ServiceTag back in the background",
+                "Every schedule with reminders can deliver them",
+                "Every meter schedule has a baseline reading",
+            ),
+            HealthCheck.entries.map { it.passedLine },
+        )
+        assertEquals("Reminder health", REMINDER_HEALTH_TITLE)
+        assertEquals("No problems found.", NO_PROBLEMS_FOUND)
+        assertEquals("Checks that passed", CHECKS_THAT_PASSED)
     }
 }
