@@ -4,6 +4,8 @@
 
 ServiceTag turns physical equipment into a durable digital maintenance record.
 
+If you’ve ever tried to manage equipment maintenance with ordinary phone reminders or a general-purpose to-do app, you already know how quickly it becomes awkward. Those tools can remind you that something is due, but they don’t really understand the equipment, its service history, what was done last time, what parts or supplies it uses, or when the next service should actually be calculated from. ServiceTag is built specifically for that problem. Instead of maintaining a separate collection of reminders and checklists, each piece of equipment keeps its own maintenance schedule, history, documents, measurements, and service information together, and ServiceTag works out what is due and when. You spend less time managing reminders and more time simply doing the maintenance when it needs to be done.
+
 Put a small NFC tag on a generator, furnace, hot tub, mower, snowblower, water system, UPS, pump, appliance, vehicle, tool, or other serviceable asset. Tap the tag with your Android phone and ServiceTag opens the record for that exact piece of equipment: what it is, where it is, its make, model and serial number, what has been done to it, the measurements that were taken, the documents and photos that belong with it, its current condition and health, and what maintenance is coming next.
 
 The tag itself carries only a stable ServiceTag identity. The useful information stays in ServiceTag's local database, so the equipment record can grow over years without trying to squeeze mutable data onto the NFC tag. Backups preserve those identities, which means the same physical tags can keep working after a phone replacement, reinstall, or restore.
