@@ -1500,3 +1500,107 @@ silent site's result or attach an exception, URL, host, entity, Wi-Fi name or to
 batched only across disjoint classes, B2's rule); 1 h / 2 h. **Size:** about 60 production lines plus `21.json`, 220
 test lines, 15 pin and site edits. **Estimate:** 50 min. **Split clause:** past 40 min with row 80 unstarted, row 80
 goes to a B2c (the runner, the worker and their test).
+
+## 28. Errata and the gate record (2026-10-04; the whole-branch review's E-1…E-55 plus the controller's gate record)
+
+Collected after the whole-branch review (`branch-review.md` in the ledger directory) in the §30-of-#69 style: what the plan said → what happened → why it stands. Nothing above this section was edited; rev 1.5 is the ratified text.
+
+
+One line each: what the plan said → what happened → why it is right / recorded.
+
+- **E-1. B1a dispatch, NEEDS_TOKEN.** The dispatch called it "derived from the secret store" → B1a shipped `SyncErrorKind.NEEDS_TOKEN` and `SecretStore.has`; the derived state is C17's (B3c) → the plan was right, the dispatch wrong.
+- **E-2. B1a ports.** Port shapes as sketched → `SecretStore` suspend, `SeasonSyncBinding` without defaults, the mapper's `detail` only for HTTP_ERROR/UNSUPPORTED_STATE → consistent with the I/O ports; accepted.
+- **E-3. B1a NOTE-3.** C4's control-character bound → replaces ISO controls only (bidi, zero-width, U+2028 pass) → recorded; no widening without a ruling.
+- **E-4. B1a gate.** Both modules gated → B1a ran core only → B1a2's gate ran the app half.
+- **E-5. B1b.** C8 named four things → `classify`/`EndpointCheck`, `HaEndpoint` (redacting `toString`, internal constructor), `HaScheme`, `HaHostKind`, eight `EndpointProblem` codes under one P16-12 → C19 and row 53 need the redaction.
+- **E-6. B1b.** `C/fetch` untouched → one keyword, `HopPolicy.kt:66` `private` → `internal` (+1 test) → the allowlist is reused, not copied.
+- **E-7. B1b row 10.** RED observed before the helper fix → production bytes identical across the rebuild; the review confirmed it genuine.
+- **E-8. B1b NOTE-6.** No trim in C17 → B8a's view model trims and shows the saved canonical → input hygiene; C8 stays the one rule.
+- **E-9. B1a2 (rev 1.3 C4a).** An SSID-or-"wired" identity (`home_network_kind`) → `homeNetwork` → `homeNetworkSsid: String?`, 8 fields / 8 columns, `Wired` a reader kind only → rev 1.4 C-2 (no "any Ethernet").
+- **E-10. B1a2 row 73.** RED ran before the final shape → one filtered re-run on ba46d1d8 → real.
+- **E-11. §11 :1274.** "C9's four connection columns" → eight columns → stale since rev 1.3/1.4.
+- **E-12. B2 dispatch.** `ha_season_binding` → the table is `season_sync_binding` (the plan's name) → a dispatch error only.
+- **E-13. B2.** `RoomHaConnectionRepository.get()` throws on a second row; the save updates in place, never INSERT OR REPLACE → carried to B3c, met.
+- **E-14. B2 NOTE-6.** `Format7RestoreContractTest.kt:41` "(20 since #69)" → stale at 21 → fixed in the final round.
+- **E-15. B3a (C13).** The sketch → error time from the write's clock; one error field; `applyIfChanged` reads the clock; `Recorded` carries no row flag → the plan's intent (review).
+- **E-16. B3b.** FakeGraph gave the guard its own repository at five sites → tidied by B6a; the offer is guarded twice (prompt + accept) → accepted (N-11).
+- **E-17. B3b.** `SeasonSyncOwnsSeason` answered 500 until B7a's arm → the stated gap, closed at 6dced40e.
+- **E-18. B3c (C17 :428).** Cadence and background checks required → both nullable (null = DAILY/OFF new, else kept) → the only reading under which row 74 means anything.
+- **E-19. B3c.** Ten counted REDs → all real; row 43 needed temporary constructor parameters on `StopSeasonSync`; row 74 fails through the double's invariant; the fix round's mutation by hand, uncounted.
+- **E-20. B3c NOTE-8/9/10.** An entity edit with an unchanged id is not a no-op; `SeasonSyncNotLinked` public but unlisted; the scheduler port sits in `SeasonSyncCommands.kt` → recorded.
+- **E-21. C24 :543.** Two repositories and the store → `TransferRecordRepository` also needed for NOT_MAINTAINED_HERE → carried into B7a.
+- **E-22. B4.** `JdkAead` in main as the JVM seam (0 production constructions; `AndroidKeystoreAead()` the one); a Keystore that cannot load stays loud from `has`; FakeGraph's temp dir not cleaned → review-confirmed.
+- **E-23. B5.** C19 → the client also opens with `Proxy.NO_PROXY` → beyond the text, required so the bearer never reaches a proxy (pinned by B9).
+- **E-24. B5 greps.** `registerNetworkCallback` also matches `unregister…` (one real site); `isPrivateLanAddress` 2 at base and tip → grep artefacts.
+- **E-25. B6a dispatch.** Periodic policy KEEP → `ExistingPeriodicWorkPolicy.UPDATE` → the amended C22 (:519) governs.
+- **E-26. B6a.** Silent catches → G4/G5 at four sites → ratified at owner gate 2, landed by B2b.
+- **E-27. B6b (§18).** ~150 test lines → 534 (537 at tip), 7 cases → the AC list was ~3× row 60; one AC6 step added; the MINOR-2 addendum lists the steps no single mutation can break.
+- **E-28. B6b.** FakeGraph ids restart at one per graph → a reopened database skips 1,000 ids, documented at its one use → B8c and B9 need none.
+- **E-29. B7a.** C3 "every field present" → `@EncodeDefault(NEVER)` (the first `@OptIn(ExperimentalSerializationApi)`) keeps the five settings keys absent → the one exception, stated in v1.md and the ApiJson KDoc.
+- **E-30. B7a.** v1.md beyond its list (the activation sentence, "since #16", audit correction 4, the trigger list) → accepted.
+- **E-31. B7b (§20).** 21 pins → also the tuple, both tail pins, a new tail pin and six twins the `\b89\b` grep missed → all true.
+- **E-32. B7b.** The unanchored decorator grep reads 91 at base / 92 at tip → the real count is `len(TOOL_NAMES)` = 90 (#69 E-14's twin).
+- **E-33. B7b.** `test_installed_component_tools.py:128` "…listed_last" → no longer true → left, #47's precedent.
+- **E-34. B7b.** The counted mutation failed on the constant assertion → the assertion moved last (efc5e2b9).
+- **E-35. B9 (§25).** ~330 lines / ~10 cases → 726 lines / 12 cases (764 at tip) → every case platform-only and named.
+- **E-36. B9 NOTE-9.** §25 "precise and background granted" → C29's while-in-use (case 3) plus the background read (case 12) → C29 governs.
+- **E-37. B9.** Cases 3/4 need a fresh install (`run.sh`/`fill.sh` uninstall); the throwaway P-256 key stays by ruling; case 11 nulls and restores `SeasonSyncDispatch.runner`.
+- **E-38. Rev 1.5 / B2b dispatch.** "V21_TABLES move" → they did not; `Migration20To21Test`'s columns and DaoTest/ModelTest 18 → 19 moved; two MCP canned bodies moved as twins under a controller exception.
+- **E-39. B2b.** `21.json`'s identity hash changed in place → no release carries 21; the gate and the real-HA proof start from a fresh install.
+- **E-40. B2b.** The `RecordSeasonActivation(` grep 154 → 155 (test-only `blindToRows`); the docstring at `server.py:4324`, not `:4318`; row 67's second case went to B8b1.
+- **E-41. B8a (C26 :576).** P16-73 shows Android's label → API 29 has none, so it goes straight to the system dialog → recorded.
+- **E-42. B8a.** A new connection starts at Any network; Cancel = On but paused; P16-65 with the system request; P16-74 from the unsaved form; the screen builds its own `AndroidNetworkPlatform` → accepted.
+- **E-43. B8b1 (C27).** C27 silent on hiding → mode control and Sync now hidden when held or not maintained here, Stop/Resume only when held (`offersControls` = here) → becomes plan text.
+- **E-44. B8b1.** The copied stale rule → `internal seasonSyncStale` in `SeasonSyncRunner.kt` (the one fenced edit); `LocationAsks.kt` shared by the screen and the card.
+- **E-45. B8b2 (§23).** `C/**` fenced → one core change, `liveContinuousCount` once in `SeasonCommands.kt` (the #78 lift) → #78's table unchanged.
+- **E-46. B8b2.** `AssetEditViewModelTest.kt` named as existing → it did not → created beside `AssetViewModelsTest.kt`.
+- **E-47. B8b2.** "Review maintenance schedules" was to navigate → it scrolls (navigation needs `ServiceTagRoot.kt`) → pinned by B8c.
+- **E-48. B8b2.** S38's helper hidden while synced; P16-47 also the sheet's (unreachable) refusal; the entity id trimmed → accepted.
+- **E-49. B8c (§24).** ~300 lines → 684 (≈120 imports), 11 of 14 cases → within budget.
+- **E-50. B10 NOTE-1.** Beyond §4's row: the 08 S7 note, README past :80, the manifest comment → each named by C30, R16-5 or a ruling.
+- **E-51. B10 NOTE-5.** Quote §5 verbatim → the page quotes first sentences or a fragment (P16-12/81/50) → verbatim as far as each goes.
+- **E-52. §6 :1088/:1091/:1093.** R16-20, Q-B, Q-D still say "Only on this home Wi-Fi/local network" → P16-60 ratified "Only on this home Wi-Fi" → 0 hits outside the plan.
+- **E-53. Sizes.** B1a 296/705 vs ~220/380; B2 372/594 vs ~190/300; B3a 745 test lines vs ~520; B3c 478/830 vs ~230/380; B6a ~530/720 vs ~270/300; B8a 930 vs ~270; B8b1 610 vs ~210; B8b2 375/464 vs ~190/160 → KDoc and real code, within caps.
+- **E-54. Process.** 16 briefs → 20 dispatches (up-front splits, B1a2, B2b) → the owner's feedback: larger ownership units next time.
+- **E-55. §1 limits (B2 NOTE-3).** The limits list does not name the #77 return merge → it re-creates the asset, so the CASCADE takes the binding and the owner links again → recorded here and on the page by the final round (MINOR-1).
+
+**55 errata.** (The B3c row-mutation counts are E-19; the C32 API 29–30 row was fixed in rev 1.4 and needs no entry.)
+
+
+### The gate record
+
+The integrated gate ran ONCE, clean, on the merged master `b845e06d` (2026-10-04, start 19:47:55, GATE DONE 20:07:36):
+JVM `--rerun-tasks --no-build-cache`: core 2160 / app 2184, 0 failures, 0 errors, 0 skips; MCP 653/0; loader 154/0; the
+device loop 61 of 61 classes (the 59 #69 gated + `SeasonSyncScreensTest` + `SeasonSyncPlatformProofTest`), 368 tests,
+0 failures, 0 skips, every class in run 1 (no fill needed — the first #16-era gate without an emulator death);
+F-1 times: device loop 1,099 s (18.3 min), total 1,181 s (19.7 min). The owner's 15-minute line is REPORTING ONLY
+(2026-09-29 ruling): software rendering runs at about 2× hardware, so the line is not a trigger here; #90 stays parked.
+Environment (F-1): `Android emulator version 37.2.12.0`, AVD Pixel_10_Pro_XL, `-no-window -gpu swangle_indirect -feature -Vulkan -no-snapshot
+-no-snapshot-save -no-boot-anim` (gles_mode_selected:swangle; launched as the owner's account — every host-GL mode segfaults in
+libnvidia-glcore on this host), build `google/sdk_gphone16k_x86_64/emu64xa16k:17/CP31.260623.012/16064790:user/dev-keys` (API 37); the emulator's default network is its virtual Wi-Fi
+(SSID: "AndroidWifi"); the
+host is on the owner's LAN and the emulator reaches it through NAT (the release-proof paragraph's `192.168.0.10` is
+unreachable here by construction); a fresh install before every class (`run.sh:32`, and `fill.sh` since B9's review).
+The platform proof's first-run risks (the test platform must not install with `-g`; the default network must be Wi-Fi
+named `AndroidWifi`) both held. The real-HA proof is recorded below it.
+
+### The real-HA proof (§7, AC10 as ruled by R16-Q-A)
+
+Run once by the controller on 2026-10-03 (20:09:26 → 20:10:19 local) after the gate, from the side branch
+`issue-16-proof` (`d640e000` = master `b845e06d` + one instrumented class and one host script; never merged — archived
+in the ledger directory). `SeasonSyncRealHaProofTest`, 8 steps through the REAL screens, graph, Keystore store and LAN
+client over Compose, the token typed into the masked field from an instrumentation argument; the HOST flipped the
+fixture's helpers through Home Assistant's service API between steps (the app never writes to Home Assistant). All 8
+PASS: (1) configure + link, Sync now reads OFF, no season row; (2) the helper turned on → ONE START row dated today
+from Home Assistant, P16-34; (3) §7's override: Force out → END with `FORCED_OUT`, P16-84; Sync now adds no row; Follow
+→ a fresh read → START from Home Assistant; (4) the helper turned off → END from Home Assistant, P16-35; (5) Force in →
+START with `FORCED_IN`, P16-83; Follow → END from Home Assistant; (6) status-only answers with no decision: the odd
+state → `UNSUPPORTED_STATE`; the flaky sensor with its source off → `UNSUPPORTED_STATE` with detail `unavailable`; a
+missing entity → `ENTITY_NOT_FOUND`; (7) the https name behind the owner's private CA → `TLS_FAILED` through the
+system store (P16-52; Q-B holds); (8) Disconnect → connection, bindings and token gone, the asset MANUAL at its phase.
+Environment: API 37 (`google/sdk_gphone16k_x86_64/emu64xa16k:17/CP31.260623.012/16064790:user/dev-keys`), active
+transport WIFI, the real reader `Wifi(AndroidWifi)`, location on, precise granted, background not granted (foreground
+only), the captured name matched; host preflight `GET /api/` 200; the fixture left as found (in_season off,
+source_available on); both packages uninstalled. Not covered here (recorded limits): offline recovery mid-run and the
+background-grant path (R16-20's worker on a match; `pm revoke`) — proven on the JVM and in the platform proof only.
+Every kept log is redacted (`<ha-base-url>`, `<ha-https-host>`, `<token>`); reports say `<ha-base-url>`.
