@@ -67,7 +67,7 @@ class TransferImportViewModelTest {
     private fun model(
         copy: File?,
         on: FakeGraph = graph,
-        sentence: String = NoAttachmentFolder().message!!,
+        sentence: String = NoAttachmentFolder().message,
         reconcile: ReminderReconcile = sweep,
     ) = TransferImportViewModel(
         on.importTransferPack, on.transferPackInbox, copy, sentence, reconcile, zone = ZoneOffset.UTC,

@@ -106,6 +106,11 @@ truncate, and nothing positions by left or right: layouts use start/end and dire
 `Icons.AutoMirrored`, so a right-to-left pack needs only its strings and `android:supportsRtl="true"`
 (`LayoutDirectionGuardTest`).
 
+Debug builds carry Android's pseudolocales. To check a screen for expansion, enable developer options on the
+emulator, add **English (XA)** under Languages and open the screen: every string is accented and about a third
+longer, so anything that clips or overlaps shows at once. The shipped packs are checked the same way by choosing the
+language, ideally German or Russian for length and Japanese or Chinese for line breaking.
+
 ## Tests
 
 | Test | Proves |
