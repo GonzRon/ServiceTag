@@ -149,4 +149,8 @@
     <string name="setup_problem_quantity_not_number">Die Menge muss eine Zahl sein oder leer bleiben</string>
     <string name="setup_failed_save_action">Diese Aktion konnte nicht gespeichert werden.</string>
     <string name="setup_failed_delete_this_action">Diese Aktion konnte nicht gelöscht werden.</string>
+    <string name="setup_problem_field_not_this_asset">kein Messwert dieses Geräts</string>
+    <string name="setup_problem_field_derived">berechnete Werte werden ermittelt, nicht eingegeben</string>
+    <string name="setup_problem_field_archived">archiviert</string>
+    <string name="setup_problem_field_listed_twice">doppelt aufgeführt</string>
 </resources>

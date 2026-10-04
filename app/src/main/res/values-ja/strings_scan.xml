@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_scan.xml. -->
+<resources>
+    <string name="nav_dashboard">ダッシュボード</string>
+    <string name="nav_assets">機器</string>
+    <string name="nav_maintenance">メンテナンス</string>
+    <string name="nav_link_points_nowhere">そのリンクが指すものはこのアプリにありません。</string>
+
+    <string name="scan_title">タグの読み取り / 確認</string>
+    <string name="scan_back">戻る</string>
+    <string name="scan_ready">スキャン準備完了</string>
+    <string name="scan_reading">タグを読み取り中</string>
+    <string name="scan_hold_hint">スマートフォンの上部を機器のタグに近づけてください。</string>
+    <string name="scan_needs_window">スキャンにはアプリ自身のウィンドウが必要です。</string>
+    <string name="scan_read_failed">タグを読み取れませんでした。タグを動かさずに、もう一度お試しください。</string>
+    <string name="scan_reason_no_ndef">このタグはNDEFに対応していません</string>
+
+    <string name="nfc_no_hardware">このスマートフォンにはNFCハードウェアがありません。</string>
+    <string name="nfc_turned_off">NFCがオフになっています。システム設定でオンにしてから、戻ってきてください。</string>
+    <string name="nfc_nothing_to_resolve">照合できる内容がありません。</string>
+    <string name="nfc_could_not_resolve">このタグを照合できませんでした：%1$s</string>
+
+    <string name="tag_eyebrow_reading">タグを読み取り中</string>
+    <string name="tag_looking_up">このタグを照会しています…</string>
+    <string name="tag_eyebrow_servicetag">ServiceTagタグ</string>
+    <string name="tag_open_asset">機器を開く</string>
+    <string name="tag_cancel">キャンセル</string>
+    <string name="tag_eyebrow_detected">タグを検出</string>
+    <string name="tag_opening_asset">機器を開いています…</string>
+    <string name="tag_pre_split_link">このタグは、製品分割前のメモリンクを指しています。ServiceTagではリンクを開かなくなりました。リンクはNoteTagで開きます。</string>
+    <string name="tag_eyebrow_unregistered">未登録のタグ</string>
+    <string name="tag_not_assigned">このタグはまだ何にも割り当てられていません。</string>
+    <string name="tag_bind_to_asset">機器に割り当て</string>
+    <string name="tag_eyebrow_marked_lost">紛失扱いのタグ</string>
+    <string name="tag_eyebrow_retired">使用終了のタグ</string>
+    <string name="tag_revoked_sentence">このタグは使用を終了しています。もう一度割り当てると、再び使用できるようになります。</string>
+    <string name="tag_not_in_records">このServiceTagタグは、このスマートフォンの記録にありません。</string>
+    <string name="tag_write_over_it">新しいタグとして上書き</string>
+    <string name="tag_eyebrow_not_ours">ServiceTagタグではありません</string>
+    <string name="tag_holds_something_else">このタグには別の内容が入っています。</string>
+    <string name="tag_placement">タグの貼付位置</string>
+    <string name="tag_picker_title">このタグの割り当て先</string>
+    <string name="tag_picker_new_asset">新しい機器…</string>
+    <string name="tag_picker_new_asset_detail">作成してから、このタグをもう一度スキャンしてください</string>
+    <string name="tag_picker_empty">割り当て先がまだありません</string>
+    <string name="tag_picker_asset">機器</string>
+    <string name="tag_bind_failed">このタグを割り当てられませんでした：%1$s</string>
+
+    <string name="tag_reason_empty">空のタグ</string>
+    <string name="tag_reason_foreign">ServiceTagタグではありません：%1$s</string>
+    <string name="tag_reason_unreadable">読み取れないServiceTagレコード：%1$s</string>
+    <string name="tag_reason_not_ours">ServiceTagタグではありません</string>
+    <string name="tag_reason_newer_app">新しいバージョンのServiceTagで書き込まれています（ペイロード形式%1$d）</string>
+    <string name="tag_reason_unresolved">このタグを照合できませんでした</string>
+
+    <string name="tag_write_title">タグを書き込む</string>
+    <string name="tag_write_close">閉じる</string>
+    <string name="tag_write_target">書き込み対象</string>
+    <string name="tag_target_spare">まだありません — 予備のタグとして、最初のスキャン時に割り当てます</string>
+    <string name="tag_target_unnamed">この対象</string>
+    <string name="tag_write_eyebrow_idle">NFCタグの書き込み</string>
+    <string name="tag_write_eyebrow_confirm">このタグを上書きしますか？</string>
+    <string name="tag_write_answer_here">ここで回答してから、同じタグをもう一度スマートフォンにかざしてください。</string>
+    <string name="tag_write_eyebrow_written">タグ書き込み済み</string>
+    <string name="tag_written_locked">%1$s · ロック済み</string>
+    <string name="tag_written_rewritable">%1$s · 書き換え可能</string>
+    <string name="tag_write_done">完了</string>
+    <string name="tag_write_eyebrow_error">書き込まれていません</string>
+    <string name="tag_write_verified">読み戻した内容がバイト単位で一致</string>
+    <string name="tag_write_needs_window">書き込みにはアプリ自身のウィンドウが必要です。</string>
+    <string name="tag_lock_switch">永久にロック</string>
+    <string name="tag_lock_switch_hint">ロックしたタグは二度と書き換えられません。</string>
+    <string name="tag_lock_warning_title">永久にロックしますか？</string>
+    <string name="tag_lock_warning_text">ロックしたタグは二度と書き換えや再利用ができません。恒久的に取り付けるタグだけをロックしてください。</string>
+    <string name="tag_lock_warning_confirm">書き込み後にロック</string>
+    <string name="tag_lock_warning_dismiss">ロックしない</string>
+
+    <string name="tag_write_hold_blank">空のタグか再利用できるタグを、スマートフォンの背面にかざしてください。</string>
+    <string name="tag_write_read_failed">タグを読み取れませんでした。タグを動かさずに、もう一度お試しください。</string>
+    <string name="tag_write_no_ndef_hint">このタグはNDEFに対応していません。NTAG213/215/216などを使用してください。</string>
+    <string name="tag_write_no_ndef">このタグはNDEFに対応していません。</string>
+    <string name="tag_write_read_only">このタグは読み取り専用（ロック済み）です。何も書き込まれていません。</string>
+    <string name="tag_write_too_small">タグの容量が不足しています：容量は%1$dバイトで、メッセージには%2$dバイト必要です。</string>
+    <string name="tag_write_formatted">フォーマットしました。書き込むには、タグをいったん離してからもう一度かざしてください。</string>
+    <string name="tag_write_format_failed">タグをフォーマットできませんでした。タグを動かさずに、もう一度お試しください。</string>
+    <string name="tag_write_format_unexpected">フォーマット中に予期しない結果が返されました。タグを動かさずに、もう一度お試しください。</string>
+    <string name="tag_write_unexpected">書き込み中に予期しない結果が返されました。タグを動かさずに、もう一度お試しください。</string>
+    <string name="tag_write_verify_mismatch">読み戻した内容が書き込んだ内容と異なります。何も記録されていません — もう一度お試しください。</string>
+    <string name="tag_write_not_written">何も書き込まれませんでした（%1$s）。タグを動かさずに、もう一度お試しください。</string>
+    <string name="tag_write_may_not_have_finished">書き込みが完了していない可能性があります（%1$s）。タグをいったん離してから、もう一度スマートフォンにかざしてください。</string>
+    <string name="tag_write_overwrite_confirmed">上書きを確認しました。書き込むには、同じタグをもう一度スマートフォンにかざしてください。</string>
+    <string name="tag_write_kept">書き込みませんでした。タグはそのままです。</string>
+
+    <string name="tag_overwrite_title">このタグを上書きしますか？</string>
+    <string name="tag_overwrite_explanation">上書きすると、このタグは%1$sを示すようになります。以前の内容は失われます。確認後、書き込むには同じタグをもう一度スマートフォンにかざしてください。</string>
+    <string name="tag_overwrite_confirm">上書き</string>
+    <string name="tag_overwrite_keep">そのままにする</string>
+    <string name="tag_overwrite_identifies">このタグは現在%1$sを示しています。</string>
+    <string name="tag_overwrite_not_assigned">このタグはこのスマートフォンの記録にありますが、まだ何にも割り当てられていません。</string>
+    <string name="tag_overwrite_marked_lost">このタグは紛失扱いになり、使用を終了しています。</string>
+    <string name="tag_overwrite_retired">このタグは使用終了となり、現在は使われていません。</string>
+    <string name="tag_overwrite_could_not_check">これはServiceTagタグですが、現在その記録を確認できませんでした。</string>
+    <string name="tag_overwrite_holds_newer">このタグには、新しいバージョンのアプリで書き込まれたServiceTagタグの内容がすでに入っています（形式%1$s）。</string>
+    <string name="tag_overwrite_holds_foreign">このタグには、他の製品のNDEFコンテンツがすでに入っています（%1$s）。</string>
+    <string name="tag_overwrite_holds_unreadable">このタグには、読み取れないNDEFコンテンツがすでに入っています（%1$s）。</string>
+</resources>

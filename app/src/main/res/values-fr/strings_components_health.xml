@@ -53,7 +53,7 @@
     <string name="condition_start_season_question">Démarrer la saison maintenant ?</string>
     <string name="condition_end_season_question">Terminer la saison maintenant ?</string>
     <string name="condition_you_logged">Vous avez noté %1$s.</string>
-    <string name="condition_did_this_affect_use">Cela a-t-il empêché ou limité l\'utilisation de l\'équipement ?</string>
+    <string name="condition_did_this_affect_use">Cela a-t-il une incidence sur la possibilité d\'utiliser l\'équipement ?</string>
     <string name="condition_mark_down">Marquer en panne</string>
     <string name="condition_mark_degraded">Marquer dégradé</string>
     <string name="condition_no_change">Aucun changement</string>

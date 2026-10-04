@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_components_health.xml. -->
+<resources>
+    <string name="ui_action_cancel">रद्द करें</string>
+    <string name="ui_action_save">सहेजें</string>
+    <string name="ui_typed_confirm_label">पुष्टि करने के लिए %1$s टाइप करें</string>
+
+    <string name="ui_instrument_header_reading">रीडिंग</string>
+    <string name="ui_instrument_header_value">मान</string>
+    <string name="ui_instrument_header_target">लक्ष्य</string>
+    <string name="ui_instrument_required">ज़रूरी</string>
+    <string name="ui_instrument_not_a_number">संख्या नहीं है</string>
+    <string name="ui_instrument_check_value">यह मान जाँचें</string>
+    <string name="ui_instrument_yes">हाँ</string>
+    <string name="ui_instrument_no">नहीं</string>
+
+    <string name="ui_ledger_day_month">%1$s %2$s</string>
+
+    <string name="condition_word_operational">चालू</string>
+    <string name="condition_word_degraded">कमज़ोर</string>
+    <string name="condition_word_down">बंद</string>
+    <string name="condition_not_recorded">स्थिति दर्ज नहीं है</string>
+    <string name="condition_option_operational">चालू</string>
+    <string name="condition_helper_operational">सामान्य इस्तेमाल के लिए उपलब्ध।</string>
+    <string name="condition_option_degraded">कमज़ोर</string>
+    <string name="condition_helper_degraded">काम करता है, लेकिन एक ज्ञात समस्या के साथ।</string>
+    <string name="condition_option_down">बंद</string>
+    <string name="condition_helper_down">अपने तय इस्तेमाल के लिए उपलब्ध नहीं।</string>
+    <string name="condition_no_reason_given">कोई कारण नहीं दिया गया</string>
+    <string name="condition_log_incident">खराबी दर्ज करें</string>
+    <string name="condition_since">%1$s से</string>
+    <string name="condition_component_line">%1$s %2$s — %3$s</string>
+
+    <string name="condition_title">स्थिति</string>
+    <string name="condition_change">स्थिति बदलें</string>
+    <string name="condition_what_is_wrong">क्या गड़बड़ है? (वैकल्पिक)</string>
+    <string name="condition_when_did_this_change">यह कब बदला?</string>
+    <string name="condition_save">स्थिति सहेजें</string>
+    <string name="condition_date_not_later_than_today">तारीख आज के बाद की नहीं हो सकती।</string>
+    <string name="condition_log_incident_details_question">खराबी का ब्यौरा दर्ज करें?</string>
+    <string name="condition_log_incident_details_body">%1$s %2$s है। क्या गड़बड़ हुई, यह सेवा रिकॉर्ड में दर्ज करें?</string>
+    <string name="condition_log_incident_details">खराबी का ब्यौरा दर्ज करें</string>
+    <string name="condition_save_only">सिर्फ़ स्थिति सहेजें</string>
+    <string name="condition_saving_also_records">सहेजने पर %1$s की स्थिति भी %2$s दर्ज होगी।</string>
+
+    <string name="condition_mark_operational">चालू मार्क करें</string>
+    <string name="condition_mark_operational_title">चालू मार्क करें?</string>
+    <string name="condition_mark_operational_body">पहले का %1$s रिकॉर्ड इतिहास में बना रहता है।</string>
+    <string name="condition_operational_offer_body">आपने %1$s दर्ज किया। क्या %2$s फिर से सामान्य रूप से काम कर रहा है?</string>
+    <string name="condition_not_yet">अभी तक नहीं</string>
+    <string name="condition_start_season">मौसम शुरू करें</string>
+    <string name="condition_end_season">मौसम खत्म करें</string>
+    <string name="condition_start_season_question">मौसम अभी शुरू करें?</string>
+    <string name="condition_end_season_question">मौसम अभी खत्म करें?</string>
+    <string name="condition_you_logged">आपने %1$s दर्ज किया।</string>
+    <string name="condition_did_this_affect_use">क्या इसका असर इस पर पड़ा कि उपकरण इस्तेमाल किया जा सकता है या नहीं?</string>
+    <string name="condition_mark_down">बंद मार्क करें</string>
+    <string name="condition_mark_degraded">कमज़ोर मार्क करें</string>
+    <string name="condition_no_change">कोई बदलाव नहीं</string>
+
+    <string name="health_band_nominal">सामान्य</string>
+    <string name="health_band_warning">चेतावनी</string>
+    <string name="health_band_critical">गंभीर</string>
+    <string name="health_not_tracked">ट्रैक नहीं</string>
+    <string name="health_badge_label">%1$s %2$d</string>
+    <string name="health_replaced">%1$s को बदला गया, %2$s पहले</string>
+    <string name="health_no_replacement_recorded">अभी तक कोई रिप्लेसमेंट दर्ज नहीं</string>
+    <string name="health_replacement_action_removed">रिप्लेसमेंट का त्वरित कार्य हटा दिया गया है।</string>
+    <string name="health_up_to_date">%1$s समय पर है</string>
+    <string name="health_postponed">%1$s को %2$s तक आगे बढ़ाया गया</string>
+    <string name="health_not_tracked_out_of_season">मौसम से बाहर रहने पर ट्रैक नहीं होता</string>
+    <string name="health_not_tracked_paused">शेड्यूल रुका होने पर ट्रैक नहीं होता</string>
+    <string name="health_not_tracked_link">ट्रैक नहीं होता: लिंक किए गए शेड्यूल में तारीख का कोई नियम नहीं है, या वह किसी दूसरे उपकरण का है।</string>
+    <string name="health_subject_score">%1$s %2$d</string>
+    <string name="health_aggregate_line">%1$d — %2$s</string>
+    <string name="health_critical_line">गंभीर: %1$s %2$d</string>
+    <string name="health_dashboard_row">%1$s %2$s</string>
+
+    <string name="health_name">नाम</string>
+    <string name="health_what_is_it">यह क्या है?</string>
+    <string name="health_kind_whole_asset">पूरा उपकरण</string>
+    <string name="health_kind_part">एक पुर्ज़ा</string>
+    <string name="health_kind_medium">रखरखाव वाली कोई चीज़, जैसे पानी</string>
+    <string name="health_what_wears_it_down">इसकी हालत किससे बिगड़ती है?</string>
+    <string name="health_driver_age">रिप्लेसमेंट के बाद की उम्र</string>
+    <string name="health_driver_overdue">अतिदेय रखरखाव</string>
+    <string name="health_replacement_quick_action">रिप्लेसमेंट का त्वरित कार्य</string>
+    <string name="health_any_replacement">कोई भी रिप्लेसमेंट</string>
+    <string name="health_maintenance_schedule">रखरखाव शेड्यूल</string>
+    <string name="health_age_threshold_nominal">नए जैसा (इतने दिन तक)</string>
+    <string name="health_age_threshold_warning">चेतावनी (इतने दिन बाद)</string>
+    <string name="health_age_threshold_critical">गंभीर (इतने दिन बाद)</string>
+    <string name="health_overdue_threshold_grace">छूट अवधि (अतिदेय दिन)</string>
+    <string name="health_overdue_threshold_warning">चेतावनी (इतने दिन अतिदेय पर)</string>
+    <string name="health_overdue_threshold_critical">गंभीर (इतने दिन अतिदेय पर)</string>
+    <string name="health_thresholds_must_rise">हर संख्या पिछली संख्या से बड़ी होनी चाहिए।</string>
+    <string name="health_enter_all_three_numbers">तीनों संख्याएँ डालें, या कोई शुरुआती मान इस्तेमाल करें।</string>
+    <string name="health_use_a_starting_point">शुरुआती मान इस्तेमाल करें</string>
+    <string name="health_starting_point_engine_service">इंजन सर्विस: %1$d / %2$d / %3$d दिन अतिदेय</string>
+    <string name="health_starting_point_water_care">पानी की देखभाल: %1$d / %2$d / %3$d दिन अतिदेय</string>
+    <string name="health_starting_points_not_safety_limits">ये शुरुआती मान हैं, सुरक्षा सीमाएँ नहीं। सहेजने से पहले इस उपकरण के लिए इन्हें जाँच लें।</string>
+    <string name="health_use_these_numbers">ये संख्याएँ इस्तेमाल करें</string>
+    <string name="health_weight">भार</string>
+    <string name="health_schedule_already_drives_another">वह शेड्यूल पहले से किसी दूसरे संकेतक को तय करता है।</string>
+    <string name="health_archive_subject">संकेतक संग्रहित करें</string>
+    <string name="health_restore_subject">संकेतक वापस लाएँ</string>
+
+    <string name="dashboard_all_categories">सभी श्रेणियाँ</string>
+    <string name="dashboard_all_statuses">सभी स्टेटस</string>
+    <string name="dashboard_category_label">श्रेणी</string>
+    <string name="dashboard_status_label">रखरखाव स्टेटस</string>
+    <string name="dashboard_chip_not_recorded">दर्ज नहीं</string>
+    <string name="dashboard_settings">सेटिंग</string>
+    <string name="dashboard_child_assets_listed_on_parent">उप-उपकरण उस उपकरण में दिखाए जाते हैं, जिसका वे हिस्सा हैं।</string>
+    <string name="dashboard_nothing_matches">इससे कुछ भी मेल नहीं खाता।</string>
+    <string name="dashboard_backup_eyebrow">बैकअप</string>
+    <string name="dashboard_no_backup_yet">अभी कोई बैकअप नहीं</string>
+    <string name="dashboard_backup_why">फ़ोन बदलने पर टैग तभी काम करते रहेंगे, जब आपके पास बैकअप हो।</string>
+    <string name="dashboard_export_now">अभी एक्सपोर्ट करें</string>
+    <string name="dashboard_nothing_here_yet">अभी यहाँ कुछ नहीं है</string>
+    <string name="dashboard_add_first_asset">अपना पहला उपकरण जोड़ें</string>
+    <string name="dashboard_scan_a_tag">टैग स्कैन करें</string>
+    <string name="dashboard_no_schedule_yet">अभी कोई शेड्यूल नहीं</string>
+</resources>
