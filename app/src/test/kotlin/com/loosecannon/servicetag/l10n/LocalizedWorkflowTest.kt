@@ -161,10 +161,14 @@ class LocalizedWorkflowTest {
                 graph.ndefCodec,
                 UnconfinedTestDispatcher(scheduler),
             )
+            // A foreground collector, cancelled once the answer is in, as ScanViewModelTest collects: `advanceUntilIdle()`
+            // stops when only background work is left, so a backgroundScope collector would never be resumed to
+            // record the event.
             val shown = mutableListOf<ScanEvent>()
-            backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { scan.events.collect { shown += it } }
+            val collecting = launch(start = CoroutineStart.UNDISPATCHED) { scan.events.collect { shown += it } }
             scan.onTag(Handle)
             advanceUntilIdle()
+            collecting.cancel()
             assertNull("$language: the read is not a problem", scan.state.value.problem)
             assertFalse("$language: the scanner is waiting again", scan.state.value.reading)
             val route = (shown.single() as ScanEvent.Show).route
