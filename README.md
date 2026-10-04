@@ -18,6 +18,7 @@ The current **ServiceTag 1.7.0** release includes maintenance scheduling and rem
 
 ServiceTag's documentation uses **progressive disclosure**: start here, then open only the level of detail you need.
 
+- **[New to NFC? Start here](docs/nfc-tags.md)** — what NFC tags are, how your phone already uses NFC, and which tag style to choose for indoor, outdoor, or metal equipment.
 - **[What ServiceTag can do today](docs/capabilities.md)** — the released feature set and product boundaries.
 - **[Local-first design, privacy, and Android permissions](docs/local-first-and-permissions.md)** — where data lives, when ServiceTag uses the network, and why permissions exist.
 - **[Home Assistant season sync](docs/home-assistant-season-sync.md)** — setup, behavior, network choices, and security boundaries.
