@@ -42,16 +42,17 @@ android {
         // `targetSdk` stays 36 on purpose: `targetSdk 37` plus the `DISPATCH_NFC_MESSAGE`
         // permission on the dispatch activity is Phase 7 (spec §5.8), not 1.2.
         targetSdk = 36
-        // 1.6.0 is a MINOR: new user-facing capability (the Developer API and MCP routes for the
-        // phone-only workflows #92, a document role on a web link #91, and share intake that picks
-        // the asset from the Assets tab's own searchable list #93), with a forward-only
-        // backup-format bump — schema 17 / format 17, the new app reading every older archive and
-        // 1.5.x refusing a format-17 archive or Transfer Pack rather than dropping rows
-        // (docs/versioning.md). `versionCode` is +1 on every release and is never reset; it must
-        // agree with the tag `servicetag-v1.6.0` or the release workflow refuses to publish.
-        // VersionAgreementTest asserts these two against the schema and format numbers.
-        versionCode = 19
-        versionName = "1.6.0"
+        // 1.7.0 is a MINOR: new user-facing capability (supply items #15, installed components #47,
+        // files and links on supply items and installed components with Share to all three #69, and
+        // the Home Assistant season sync #16), with a forward-only backup-format bump — schema 21 /
+        // format 20 (#16's two tables are device-local, so the format stays 20), the new app
+        // reading every older archive and 1.6.x and 1.5.x refusing a format-20 archive or Transfer
+        // Pack rather than dropping rows (docs/versioning.md). `versionCode` is +1 on every release
+        // and is never reset; it must agree with the tag `servicetag-v1.7.0` or the release
+        // workflow refuses to publish. VersionAgreementTest asserts these two against the schema
+        // and format numbers.
+        versionCode = 20
+        versionName = "1.7.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ndefTagPath"] = "/$tagExternalDomain:$tagTypeName"

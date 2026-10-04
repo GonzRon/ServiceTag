@@ -1416,3 +1416,7 @@ signer; versionCode 19 / 1.6.0; 8 permissions; not debuggable. The roadmap relab
 ### Development phone (R7)
 
 **PASS** (10:59–11:03): `adb install -r` of the verified published asset over 1.5.0 / 18 → **1.6.0 / 19 in place**; uid 10176 and `firstInstallTime` 2026-09-21 20:26:37 unchanged; 1.6.0 / schema 17 / format 17; all 20 count keys identical (assets 48, references 4, attachments 10, events 35, profiles 67, schedules 48 …); 26 routes — 24 equal raw, `/references` equal once `role: null` is stripped, `/status` equal on its counts, no finding; the four references all `role: null` after, nothing inferred; no export, no clear, no write after; the production phone untouched. (`r7-dev-phone/` in the release ledger.)
+
+## ServiceTag 1.7.0 — supply items, installed components, files and links on both, Home Assistant season sync (issues #15 #47 #69 #16; versionCode 20)
+
+**What shipped.** A MINOR on 1.6.0: versionName 1.7.0, versionCode 20, Room schema 21 / backup format 20, forward-only (the new app reads every older archive; 1.6.x and 1.5.x refuse a format-20 archive — a backup with `BackupNewerFormat`, a Transfer Pack with `NewerPack`; #16's two tables are device-local, so the format stays 20). Release notes: `docs/releases/1.7.0.md`. *(controller: the proofs, the two emulator upgrade paths — 1.6.0/17 and 1.5.0/16 — the release and the development phone are recorded here once each is done.)*
