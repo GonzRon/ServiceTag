@@ -30,3 +30,12 @@ Release details: **[1.7.0 release notes](docs/releases/1.7.0.md)**
 Current roadmap and release sequencing: **[issue #104](https://github.com/GonzRon/ServiceTag/issues/104)**
 
 ServiceTag is distinct from [NoteTag](https://github.com/GonzRon/NoteTag): ServiceTag tags identify physical equipment and open its maintenance record; NoteTag handles the separate tag-to-note/link use case.
+
+
+## License
+
+ServiceTag is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. See [LICENSE](LICENSE).
+
+AGPLv3 permits use, modification, distribution, and commercial use subject to its copyleft requirements, including source-availability obligations for covered modified versions used over a network. Separate proprietary/commercial licensing may be offered by the copyright holder.
+
+Third-party dependencies and the separately maintained `nfc-tag-core` submodule retain their own licensing status and terms.
