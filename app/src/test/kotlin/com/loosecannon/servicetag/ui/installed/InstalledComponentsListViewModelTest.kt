@@ -107,6 +107,23 @@ class InstalledComponentsListViewModelTest {
         assertEquals(emptyList<InstalledComponentListRow>(), vm.rows.first { it != null })
     }
 
+    /**
+     * An archived asset's components are still listed: the asset's detail still opens, and the brief's
+     * matrix names the case so a future read that filtered assets by status could not drop them in silence.
+     */
+    @Test fun anArchivedAssetsComponentsAreStillListed() = runTest {
+        val heater = asset("Example Heater")
+        fit("tray", heater, "Example Battery Tray")
+        graph.archiveAsset.run(heater)
+
+        val vm = InstalledComponentsListViewModel(graph.installedComponents, graph.assets)
+        vm.refresh()
+        val rows = vm.rows.first { it != null }!!
+
+        assertEquals(listOf("Example Battery Tray"), rows.map { it.name })
+        assertEquals(listOf(heater), rows.map { it.assetId })
+    }
+
     /** A second read picks up what changed in between: the screen refreshes on every start for this. */
     @Test fun refreshRereadsTheStore() = runTest {
         val heater = asset("Example Heater")

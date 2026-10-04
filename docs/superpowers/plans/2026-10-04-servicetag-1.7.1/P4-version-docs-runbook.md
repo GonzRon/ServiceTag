@@ -1,4 +1,4 @@
-# P4 — 1.7.1 / versionCode 21: the version, its tests, `versioning.md`, the release notes, the README, the runbook, the evidence file
+# P4 — SUPERSEDED (2026-10-04: 1.7.1 folds into 1.8.0; the version step is 1.8.0's, after #105) — 1.7.1 / versionCode 21: the version, its tests, `versioning.md`, the release notes, the README, the runbook, the evidence file
 
 **Read first:** plan.md §2, §6, §7; `rulings.md` R171-1; the 1.7.0 release commit `a70aa89` (the shape to mirror: seven files).
 **Lane:** alone, last, branched from `<base>` = the master commit that merged P3.

@@ -34,6 +34,10 @@ Not in scope: any change to the checks, the repairs, the schedules, groups, supp
 - The navigation ruling stands: Reminders leaves the Maintenance tab and moves to Settings › Utilities › Reminder health; a healthy Reminder health screen shows the last-check time and the checks that passed.
 - No version bump yet: the bump, the `versioning.md` row and the 1.7.1 release notes are P4, after #103 has merged.
 
+## Owner ruling (2026-10-04, later still) — 1.7.1 and 1.7.2 fold into 1.8.0
+
+The localization work that corresponds to 1.8.0 (#102) is complete. **There is no 1.7.1 release and no 1.7.2 release:** this train's three issues and 1.7.2's #105 ship as content of **ServiceTag 1.8.0**, a MINOR under `docs/versioning.md` (new user-facing capability: the language packs). P4 of this plan is therefore **superseded** — no 1.7.1 / code 21 bump, no 1.7.1 row, no 1.7.1 release notes; the one version step is 1.8.0's, after #105, with this train's changes recorded in 1.8.0's row and notes. The branch merges into master as it stands.
+
 ## Decisions as they were put to the owner (resolved above)
 
 ### Q1 — the sub-menu's shape

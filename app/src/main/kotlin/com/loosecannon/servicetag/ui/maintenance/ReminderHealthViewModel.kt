@@ -150,6 +150,13 @@ data class HealthState(
 }
 
 /**
+ * One run's answer as the cache holds it (#103, owner ruling Q4): its findings and the instant it
+ * completed, **published together** so no reader can pair one run's rows with another run's instant —
+ * the backstop worker and the screen both publish, and two separate fields would tear between them.
+ */
+data class HealthRun(val findings: List<ReminderHealthFinding>, val at: Long)
+
+/**
  * The real [HealthSummary] (B08's decision 28), and the one cache behind it.
  *
  * **It caches, deliberately.** Master plan decision 32 fixes where the check runs — app launch, the
@@ -166,24 +173,26 @@ class ReminderHealth(
 ) : HealthSummary, ReminderHealthRun {
 
     @Volatile
-    private var cached: List<ReminderHealthFinding>? = null
+    private var last: HealthRun? = null
 
     /**
-     * #103 (owner ruling Q4): the instant the cached run completed — null until a run has — set only
-     * by [publish], so it belongs to the findings beside it and never advances because a screen opened
-     * or read it.
+     * #103 (owner ruling Q4): the instant the cached run completed — null until a run has — read off
+     * the one snapshot [publish] stores, so it belongs to the findings beside it and never advances
+     * because a screen opened or read it.
      */
-    @Volatile
-    var checkedAt: Long? = null
-        private set
+    val checkedAt: Long? get() = last?.at
 
     private val _changes = MutableStateFlow(0)
     override val changes: StateFlow<Int> = _changes.asStateFlow()
 
-    override suspend fun worstSeverity(): ReminderHealthSeverity? = cached?.maxByOrNull { it.severity }?.severity
+    override suspend fun worstSeverity(): ReminderHealthSeverity? = last?.findings?.maxByOrNull { it.severity }?.severity
 
-    /** Runs the check and caches what it found. The Health screen's own refresh, and launch's. */
-    suspend fun refresh(): List<ReminderHealthFinding> = check.run().also(::publish)
+    /**
+     * Runs the check and caches what it found, answering the run as one snapshot — findings and
+     * instant together — so the screen draws both from the same run. The Health screen's own
+     * refresh, and launch's.
+     */
+    suspend fun refresh(): HealthRun = publish(check.run())
 
     /**
      * One pass for a background run: report, repair the unambiguous, and cache the result.
@@ -191,7 +200,7 @@ class ReminderHealth(
      * This — not the bare check — is what the backstop worker drives, so a repair it applies reaches
      * the badge instead of leaving it lit until the next launch (fix round 1, S3).
      */
-    override suspend fun runAndRepair(): List<ReminderHealthFinding> = check.runAndRepair().also(::publish)
+    override suspend fun runAndRepair(): List<ReminderHealthFinding> = publish(check.runAndRepair()).findings
 
     /** Applies one automatic repair, and nothing else; the caller refreshes after it. */
     suspend fun repair(finding: ReminderHealthFinding) = check.repair(finding)
@@ -200,10 +209,11 @@ class ReminderHealth(
      * The cache, then the tick — in that order, because a surface woken by the tick reads the cache,
      * and a tick published first is a wake-up to the previous answer.
      */
-    private fun publish(findings: List<ReminderHealthFinding>) {
-        cached = findings
-        checkedAt = now()
+    private fun publish(findings: List<ReminderHealthFinding>): HealthRun {
+        val run = HealthRun(findings, now())
+        last = run
         _changes.update { it + 1 }
+        return run
     }
 }
 
@@ -304,12 +314,13 @@ class ReminderHealthViewModel(
         resumeDelivery()
     }
 
-    private fun emit(findings: List<ReminderHealthFinding>) {
+    /** One run becomes one state: its rows, its instant and its passed checks all from the same snapshot. */
+    private fun emit(run: HealthRun) {
         _state.value = HealthState(
-            rows = findings.map(::rowOf),
+            rows = run.findings.map(::rowOf),
             loaded = true,
-            checkedAt = health.checkedAt,
-            passed = passedChecks(findings),
+            checkedAt = run.at,
+            passed = passedChecks(run.findings),
         )
     }
 

@@ -133,7 +133,8 @@ sealed interface Route : NavKey {
      * 1.2 — the Maintenance destination (spec §2.6, the navigation ruling): due work, schedules
      * including the paused ones the dashboard deliberately omits, and since 1.7.1 (#103) one grouped
      * section whose three rows push [MaintenanceGroups], [Supplies] and [InstalledComponents]. The
-     * third and last tab. Reminder health is no longer reached from it (see [ReminderHealth]).
+     * third and last tab. Reminder health is no longer a row of it; its health badge still pushes
+     * [ReminderHealth], as the Dashboard's does.
      */
     @Serializable data object Maintenance : Route
 

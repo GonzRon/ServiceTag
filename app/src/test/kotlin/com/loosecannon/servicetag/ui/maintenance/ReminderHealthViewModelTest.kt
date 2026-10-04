@@ -640,4 +640,51 @@ class ReminderHealthViewModelTest {
         assertEquals("No problems found.", NO_PROBLEMS_FOUND)
         assertEquals("Checks that passed", CHECKS_THAT_PASSED)
     }
+
+    /**
+     * The code-to-check mapping lives in two files — the finding codes in `ReminderHealthCheck` and
+     * `LocalReminderProvider`, the checks in [HealthCheck] — so this ties them: every code the run can
+     * raise, provoked here over the real check, belongs to exactly one check, and no check owns a code
+     * the run cannot raise. A ninth code, or a renamed one, fails here rather than passing in silence.
+     */
+    @Test
+    fun everyCodeTheRunCanRaiseBelongsToExactlyOneCheck() = runTest {
+        // Three runs, their code sets joined: the provider reports blocked notifications and the
+        // reminders switch each on its own, so neither is left to mask the alarm or the rest.
+        platform.enabled = false
+        val first = viewModel().state.first { it.loaded }.rows.map { it.code }
+        platform.enabled = true
+
+        platform.restriction = AppRestriction.BATTERY_RESTRICTED
+        alarm.cancel()
+        backstop.drop()
+        assets.upsert(assetOf("a1"))
+        schedules.upsert(
+            scheduleOf(id = "sched-1", assetId = "a1").copy(providers = listOf(ScheduleProviderRow("LOCAL", enabled = false))),
+        )
+        schedules.upsert(scheduleOf(id = "sched-3", assetId = "a1").copy(providers = emptyList()))
+        schedules.upsert(
+            scheduleOf(
+                id = "sched-2", assetId = "a1", timeInterval = null, timeUnit = null, anchorOn = null,
+                meterDefinitionId = "d1", meterInterval = 100.0,
+            ),
+        )
+        states["sched-2"] = ScheduleState(
+            scheduleId = ScheduleId("sched-2"), lastCompletedOn = null, lastCompletionEventId = null,
+            lastCompletedMeter = null, currentMeter = null, computedDueMeter = null, lastTerminationEffectiveOn = null,
+            lastTerminationKind = TerminationKind.NONE, computedDueOn = null, effectiveDueOn = null,
+            policyPhase = PolicyPhase.ACTIVE, actionableDueOn = null, policyReason = PolicyReason.NONE, quiet = false,
+            computedForOn = "2026-09-22", computedAt = dayMillis("2026-09-22"),
+        )
+        val second = viewModel().state.first { it.loaded }.rows.map { it.code }
+
+        prefs.remindersEnabled = false
+        val third = viewModel().state.first { it.loaded }.rows.map { it.code }
+
+        val raised = (first + second + third).toSet()
+        val owned = HealthCheck.entries.flatMap { it.codes }
+        assertEquals("every code the run can raise is owned by a check", raised, owned.toSet())
+        assertEquals("and by exactly one", owned.size, owned.toSet().size)
+        assertEquals("the eight codes of 1.4.1", 8, raised.size)
+    }
 }

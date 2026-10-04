@@ -9,6 +9,9 @@ import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.share.IntakeStrings
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,8 +19,8 @@ import kotlinx.coroutines.launch
 
 /**
  * One installed component as the cross-asset list draws it (#103, 1.7.1; owner ruling Q2): its name, the
- * asset it is fitted in, and [path] — the asset's name, then each component it sits inside, joined as the
- * share picker joins them (P69-20, `›`) — which is the "enough parent-asset context to be unambiguous"
+ * asset it is fitted in, and [path] — the asset's name, then each component it sits inside, joined by the
+ * share picker's own `pathOf` (P69-20) — which is the "enough parent-asset context to be unambiguous"
  * the ruling asks for. A tap opens [assetId]'s detail, where the component is edited, replaced and removed.
  */
 data class InstalledComponentListRow(
@@ -48,13 +51,21 @@ class InstalledComponentsListViewModel(
 
     /** Re-read. The screen calls it on every start, so a change made on the asset's detail shows on the way back. */
     fun refresh() {
-        viewModelScope.launch { _rows.value = componentListRowsOf(components.all(), assets.all()) }
+        viewModelScope.launch {
+            // Two independent reads, side by side; the rows are built once both have answered.
+            _rows.value = coroutineScope {
+                val fitted = async { components.all() }
+                val named = async { assets.all() }
+                componentListRowsOf(fitted.await(), named.await())
+            }
+        }
     }
 }
 
 /**
- * [components] as the list's rows: the current ones only (`removedOn == null`), each with its asset's
- * name and its parents' names as [InstalledComponentListRow.path], in `(asset name casefolded, asset id,
+ * [components] as the list's rows: the current ones only (`isCurrent`), each with its asset's name and
+ * its parents' names as [InstalledComponentListRow.path] — joined by the share picker's own `pathOf`
+ * (P69-20), so the two surfaces can never spell a path differently — in `(asset name casefolded, asset id,
  * sortOrder, name casefolded, id)` order so an asset's components sit together under it. A component
  * whose asset the store no longer holds is left out: there is nothing its tap could open.
  */
@@ -65,7 +76,7 @@ internal fun componentListRowsOf(
     val assetsById = assets.associateBy { it.id }
     val componentsById = components.associateBy { it.id }
     return components
-        .filter { it.removedOn == null && it.assetId in assetsById }
+        .filter { it.isCurrent && it.assetId in assetsById }
         .sortedWith(
             compareBy(
                 { assetsById.getValue(it.assetId).name.lowercase() },
@@ -80,8 +91,9 @@ internal fun componentListRowsOf(
                 id = component.id,
                 assetId = component.assetId,
                 name = component.name,
-                path = (listOf(assetsById.getValue(component.assetId).name) + parentNames(component, componentsById))
-                    .joinToString(" › "),
+                path = IntakeStrings.pathOf(
+                    listOf(assetsById.getValue(component.assetId).name) + parentNames(component, componentsById),
+                ),
             )
         }
 }

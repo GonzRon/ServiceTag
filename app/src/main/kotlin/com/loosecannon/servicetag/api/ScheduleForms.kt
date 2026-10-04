@@ -111,16 +111,12 @@ internal object ScheduleForms {
      * the same body, and a missing comma between two pairs, with a `SerializationException`, which
      * `decodeOr400` turns into the shipped 400 carrying the parser's own message (the #91 shape).
      * A body that parses but is not an object — `[]`, `"x"`, `null`, a number — is handed to the map
-     * decoder, which refuses every one of them, so that 400 is the one it always was, byte for byte.
+     * decoder, which refuses every one of them, so that 400 is the one it always was, byte for byte;
+     * the second parse is on that refusal path only, never on a body a caller got right.
      */
-    private fun readObject(request: ApiRequest): JsonObject {
-        val element = request.decode(JsonElement.serializer())
-        if (element is JsonObject) return element
-        request.decode(JsonObject.serializer())
-        // Unreachable: the map decoder refuses every non-object. Kept so a decoder that one day
-        // accepted one would still be a 400 here rather than a cast failure.
-        throw ApiFailure.badRequest("the body must be a JSON object")
-    }
+    private fun readObject(request: ApiRequest): JsonObject =
+        request.decode(JsonElement.serializer()) as? JsonObject
+            ?: request.decode(JsonObject.serializer())
 
     /**
      * 1.4.1 (#80, R4; Q2): a PATCH naming `providers` as `null` stays the shipped 400. The request
