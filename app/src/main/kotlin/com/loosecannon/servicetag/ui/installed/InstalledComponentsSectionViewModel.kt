@@ -27,9 +27,9 @@ import com.loosecannon.servicetag.ui.asset.ENTER_A_DATE_AS_YYYY_MM_DD
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
-import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
+import com.loosecannon.servicetag.ui.supplies.linkedTo
 import com.loosecannon.servicetag.ui.supplies.listRowsOf
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import kotlin.coroutines.CoroutineContext
@@ -733,7 +733,7 @@ private fun rowState(
     }
     val pieces = listOfNotNull(
         lead,
-        link?.let { LINKED_TO.format(it.name) },
+        link?.let { linkedTo(it.name) },
         link?.partNumber?.takeIf { it.isNotBlank() },
     ) + entries.take(ENTRIES_NAMED) + listOfNotNull(
         if (entries.size > ENTRIES_NAMED) moreEntries(entries.size - ENTRIES_NAMED) else null,

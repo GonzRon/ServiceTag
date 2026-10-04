@@ -205,13 +205,21 @@ class BuildReminderSubjects(
     }
 
     /**
-     * What a provider shows beside the title, composed from already-ratified material only: the
-     * status word, and for a group the progress of its current round. No sentence is drafted here
-     * and no connective word is added — the fragments are joined by a separator, and a provider's
-     * own wrapper wording is the provider's.
+     * The subject's status line in its **canonical form**, composed from already-ratified material
+     * only: the status word, and for a group the progress of its current round. No sentence is
+     * drafted here and no connective word is added — the fragments are joined by a separator, and a
+     * provider's own wrapper wording is the provider's.
      *
      * A group is **one** subject with its progress in this line, never one per member, which is what
      * keeps an obligation counted once.
+     *
+     * **#102: a hash input, never display text.** The line is one of [ContentHash]'s fields, so its
+     * bytes are part of every subject's identity: it is composed in the shipped 1.2 English, the
+     * same in every language the owner picks, and must never be translated — a translated line would
+     * move every hash when the owner changed language, and re-post every standing reminder on the
+     * upgrade. The words are therefore codes here. No provider shows this line: the local provider
+     * renders its own words, in the owner's language, from facts it reads itself (the status through
+     * `statusOf`), and a later provider that wants a status or a progress line does the same.
      */
     private suspend fun bodyOf(
         schedule: MaintenanceSchedule,
@@ -230,7 +238,8 @@ class BuildReminderSubjects(
     }
 
     /**
-     * The ratified status word for a derived status.
+     * The ratified status word for a derived status, as the canonical line's code (#102: hashed, never
+     * translated — see [bodyOf]).
      *
      * `NO_DATA` is the one case with a condition on it. The word covers the **repairable missing
      * baseline** and only that; the other way a schedule reports `NO_DATA` is a round with nobody
@@ -255,7 +264,8 @@ class BuildReminderSubjects(
 
     /**
      * "3 of 5 complete" for a group-targeted schedule's current round, and nothing for an
-     * asset-targeted one or a round with nobody in it.
+     * asset-targeted one or a round with nobody in it. Canonical English, part of the hash input and
+     * never shown (#102, [bodyOf]).
      *
      * The round comes from the recompute rather than from a membership list read here, because the
      * occurrence derivation requires windows already bounded by each member Asset's lifecycle: an
@@ -266,7 +276,7 @@ class BuildReminderSubjects(
         val occurrence = occurrences.occurrenceOf(schedule) ?: return null
         if (!occurrence.isActionable) return null
         val (done, total) = occurrence.progress
-        return "$done of $total complete"
+        return "$done of $total complete" // l10n-ok: canonical hash input, never shown (#102)
     }
 
     private companion object {

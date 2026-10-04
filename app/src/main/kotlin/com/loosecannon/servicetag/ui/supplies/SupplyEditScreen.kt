@@ -27,9 +27,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.CATEGORY_FIELD
 import com.loosecannon.servicetag.ui.asset.MANUFACTURER_FIELD
@@ -70,11 +72,11 @@ fun SupplyEditScreen(
                 title = { Text(SUPPLY_ITEM) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Cancel")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.supplies_cancel))
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = state.canSave) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.canSave) { Text(stringResource(R.string.supplies_save)) }
                 },
             )
         },
@@ -89,7 +91,7 @@ fun SupplyEditScreen(
         ) {
             state.goneProblem?.let { Problem(it, Modifier.padding(horizontal = 16.dp)) }
 
-            Field(state.name, model::onName, "Name")
+            Field(state.name, model::onName, stringResource(R.string.supplies_name_field))
             Field(state.category, model::onCategory, CATEGORY_FIELD)
             Field(state.manufacturer, model::onManufacturer, MANUFACTURER_FIELD)
             Field(state.model, model::onModel, MODEL_FIELD)
@@ -155,7 +157,7 @@ private fun SpecificationRowEditor(
             OutlinedTextField(
                 value = row.label,
                 onValueChange = onLabel,
-                label = { Text("Label") },
+                label = { Text(stringResource(R.string.supplies_specification_label_field)) },
                 singleLine = true,
                 isError = row.marked,
                 shape = ControlShape,
@@ -173,7 +175,7 @@ private fun SpecificationRowEditor(
             OutlinedTextField(
                 value = row.value,
                 onValueChange = onValue,
-                label = { Text("Value") },
+                label = { Text(stringResource(R.string.supplies_specification_value_field)) },
                 singleLine = true,
                 isError = row.marked,
                 shape = ControlShape,
@@ -182,7 +184,7 @@ private fun SpecificationRowEditor(
             OutlinedTextField(
                 value = row.unit,
                 onValueChange = onUnit,
-                label = { Text("Unit") },
+                label = { Text(stringResource(R.string.supplies_specification_unit_field)) },
                 singleLine = true,
                 shape = ControlShape,
                 modifier = Modifier.width(96.dp),

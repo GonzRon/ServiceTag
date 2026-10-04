@@ -130,6 +130,14 @@ class LocalizationCoverageTest {
         assertEquals(emptyList<String>(), problems)
     }
 
+    /** Each pack names its own language, which picks the plural rules on a phone whose language has no pack. */
+    @Test fun everyPackNamesTheLanguageItIsWrittenIn() {
+        assertEquals("en", english.strings["format_language"])
+        val wrong = packs.filter { it.strings["format_language"] != it.locale.language }
+            .map { "${it.directory.name} says ${it.strings["format_language"]}, not ${it.locale.language}" }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
     /** Product names and URL schemes are not translated (#102, translation quality): a translation keeps each one. */
     @Test fun technicalTokensSurviveTranslation() {
         val problems = mutableListOf<String>()

@@ -9,8 +9,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -50,7 +52,7 @@ internal fun SupplyLinkLine(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            text = LINKED_TO.format(item.name),
+            text = linkedTo(item.name),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -58,7 +60,7 @@ internal fun SupplyLinkLine(
             modifier = Modifier.weight(1f, fill = false),
         )
         if (item.archived) {
-            StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+            StatusBadge(label = stringResource(R.string.supplies_item_archived_badge), colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
         TextButton(onClick = onUnlink) { Text(REMOVE_LINK) }
     }

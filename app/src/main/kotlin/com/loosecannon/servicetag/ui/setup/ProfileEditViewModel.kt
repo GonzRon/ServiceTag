@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
+import com.loosecannon.servicetag.core.usecase.BadFieldCause
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.ProfileConsumableInput
@@ -429,13 +430,21 @@ private fun Throwable?.asProblems(): Map<String, String> {
         when (problem) {
             ProfileProblem.NameRequired -> ProfileForm.NAME to localized(R.string.setup_problem_action_name_required)
             ProfileProblem.NameTaken -> ProfileForm.NAME to localized(R.string.setup_problem_action_name_taken)
-            // The use case's reason already says what is wrong with the field it names; the list is
-            // one control, so it is said once under the header rather than per row.
-            is ProfileProblem.BadField -> ProfileForm.FIELDS to problem.reason
+            // What is wrong with the field it names; the list is one control, so it is said once under the
+            // header rather than per row. The cause is a code: its words are the owner's language (#102).
+            is ProfileProblem.BadField -> ProfileForm.FIELDS to badFieldWords(problem.cause)
             is ProfileProblem.BadConsumable ->
                 ProfileForm.consumable(problem.index) to localized(R.string.setup_problem_bad_material)
             // #15 (C20, C-2): the line's SupplyItem is gone — P15-20, reused verbatim.
             is ProfileProblem.UnknownSupplyItem -> ProfileForm.consumable(problem.index) to SUPPLY_ITEM_GONE
         }
     }
+}
+
+/** #102: a field the use case refused, in the owner's language. English keeps the use case's original wording. */
+private fun badFieldWords(cause: BadFieldCause): String = when (cause) {
+    BadFieldCause.NOT_THIS_ASSET -> localized(R.string.setup_problem_field_not_this_asset)
+    BadFieldCause.DERIVED -> localized(R.string.setup_problem_field_derived)
+    BadFieldCause.ARCHIVED -> localized(R.string.setup_problem_field_archived)
+    BadFieldCause.LISTED_TWICE -> localized(R.string.setup_problem_field_listed_twice)
 }

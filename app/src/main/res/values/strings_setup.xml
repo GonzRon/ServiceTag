@@ -310,4 +310,11 @@
     <string name="setup_failed_save_action">Could not save this action.</string>
     <!-- Snackbar in the action editor: the delete failed. -->
     <string name="setup_failed_delete_this_action">Could not delete this action.</string>
+
+    <!-- #102: why a field cannot be on an action, shown once under the FIELDS header of the action editor. The English
+         keeps the use case's own wording (lower case, no full stop). -->
+    <string name="setup_problem_field_not_this_asset">not a definition of this asset</string>
+    <string name="setup_problem_field_derived">derived values are computed, not entered</string>
+    <string name="setup_problem_field_archived">archived</string>
+    <string name="setup_problem_field_listed_twice">listed twice</string>
 </resources>

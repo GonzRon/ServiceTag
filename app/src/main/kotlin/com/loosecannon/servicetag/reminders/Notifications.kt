@@ -150,17 +150,19 @@ class AndroidReminderNotifications(
     /**
      * The icon is the second, non-colour carrier of the distinction: a counter for a crossed meter
      * threshold, an active bell for something already past due, a clock for something due today.
-     * Chosen from [ItemPost.meter] and the status word — never by matching the body against a
-     * ratified sentence, which would break silently if §17.1e were reworded.
+     * Chosen from [ItemPost.meter] and the post's channel — never by matching the body against a
+     * ratified sentence, which would break silently if §17.1e were reworded, and never by its status
+     * word, which is drawn in the owner's language (#102). Only an OVERDUE maintenance post rides the
+     * overdue channel, so the channel id is that fact.
      */
     private fun iconFor(post: ItemPost): Int = when {
         post.meter -> R.drawable.ic_speed
-        post.statusWord == DigestPolicy.WORD_OVERDUE -> R.drawable.ic_notifications_active
+        post.overdue -> R.drawable.ic_notifications_active
         else -> R.drawable.ic_schedule
     }
 
     private fun accentFor(post: ItemPost) =
-        if (post.statusWord == DigestPolicy.WORD_OVERDUE) {
+        if (post.overdue) {
             ServiceTagLightSemanticColors.overdue.foreground
         } else {
             ServiceTagLightSemanticColors.due.foreground
@@ -174,3 +176,6 @@ class AndroidReminderNotifications(
         const val SUMMARY_ID = 2200
     }
 }
+
+/** #102: an OVERDUE maintenance post, by its language-neutral channel id rather than its drawn word. */
+private val ItemPost.overdue: Boolean get() = channelId == NotificationChannels.OVERDUE

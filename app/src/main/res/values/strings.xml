@@ -15,6 +15,12 @@
     <string name="format_date_display">d MMM uuuu</string>
     <!-- localizedMonthDay: the same date without the year ("1 Mar"). -->
     <string name="format_date_month_day">d MMM</string>
+    <!--
+      Not words: the ISO 639 code of the language this directory is written in ("en" here, "ru" in values-ru). The
+      app picks plural forms by this language's rules (AndroidLocalizedText), so a phone set to a language without
+      its own pack, which shows these English words, still reads "21 days" and never "21 day".
+    -->
+    <string name="format_language">en</string>
     <!-- localizedList: between names in a run ("A, B, C"). The quotes keep the trailing space. -->
     <string name="format_list_separator">", "</string>
 </resources>

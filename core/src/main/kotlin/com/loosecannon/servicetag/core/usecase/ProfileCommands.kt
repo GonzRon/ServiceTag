@@ -42,8 +42,15 @@ sealed interface ProfileProblem {
     data object NameRequired : ProfileProblem
     data object NameTaken : ProfileProblem
 
-    /** The field's definition can't be offered on this profile; [reason] says why, for the log. */
-    data class BadField(val id: DefinitionId, val reason: String) : ProfileProblem
+    /**
+     * The field's definition can't be offered on this profile, for [cause]. A form says it in the owner's language
+     * (#102); [reason] is the same cause as log text, which the Developer API's `problems` carries verbatim.
+     */
+    data class BadField(val id: DefinitionId, val cause: BadFieldCause) : ProfileProblem {
+        val reason: String get() = cause.logText
+
+        override fun toString(): String = "BadField(id=$id, reason=$reason)"
+    }
     data class BadConsumable(val index: Int) : ProfileProblem
 
     /**
@@ -51,6 +58,14 @@ sealed interface ProfileProblem {
      * (R15-6), and nothing deletes a SupplyItem (R15-5), so only a race or a hand-made request lands here.
      */
     data class UnknownSupplyItem(val index: Int) : ProfileProblem
+}
+
+/** Why a field cannot be offered on a profile; [logText] is the log and API wording, never shown to the owner. */
+enum class BadFieldCause(val logText: String) {
+    NOT_THIS_ASSET("not a definition of this asset"),
+    DERIVED("derived values are computed, not entered"),
+    ARCHIVED("archived"),
+    LISTED_TWICE("listed twice"),
 }
 
 /** Field validation failed; every problem found, collected once rather than fail-fast. */

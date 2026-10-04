@@ -32,11 +32,11 @@ import com.loosecannon.servicetag.ui.asset.NAME_FIELD
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.supplies.ADD_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.CHOOSE_A_SUPPLY
-import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.LINK_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.REMOVE_LINK
 import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
+import com.loosecannon.servicetag.ui.supplies.linkedTo
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -288,7 +288,7 @@ class InstalledComponentsSectionTest {
         rule.onNodeWithText("Remove").assertExists()
         rule.onNodeWithText("Edit").assertExists()
 
-        rule.onNodeWithText(LINKED_TO.format("Example 12 V Battery")).performClick()
+        rule.onNodeWithText(linkedTo("Example 12 V Battery")).performClick()
         assertEquals(cellId, openedSupply)
         rule.onNodeWithText(INSTALL_INSIDE).performScrollTo().performClick()
         assertEquals(1, insideTaps)
@@ -447,7 +447,7 @@ class InstalledComponentsSectionTest {
 
         rule.onNodeWithText(replaceTitle("Position 1")).assertIsDisplayed()
         rule.onNode(hasSetTextAction() and hasText("Position 1")).assertExists()
-        rule.onNodeWithText(LINKED_TO.format("Example Old Battery")).assertExists()
+        rule.onNodeWithText(linkedTo("Example Old Battery")).assertExists()
         rule.onNodeWithText("ARCHIVED").assertExists()
         rule.onNodeWithText(SUPPLY_ITEM_GONE).assertExists()
         rule.onNodeWithText(SUBTREE_REMOVED_TOO).assertExists()

@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.reminders
 
 import android.content.Context
 import androidx.work.WorkManager
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -15,6 +16,8 @@ import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.RepairAction
 import com.loosecannon.servicetag.core.schedule.listedForDue
 import com.loosecannon.servicetag.core.schedule.targetInService
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedPlural
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -186,8 +189,7 @@ class ReminderHealthCheck(
                     ReminderHealthFinding(
                         code = "BACKSTOP_WORK_MISSING",
                         severity = ReminderHealthSeverity.WARN,
-                        message = "The background safety check is not running, " +
-                            "so a missed reminder would not be caught.",
+                        message = localized(R.string.reminders_health_backstop_work_missing),
                         repair = RepairAction.Automatic(ReminderRepair.ENQUEUE_BACKSTOP),
                     ),
                 )
@@ -204,8 +206,7 @@ class ReminderHealthCheck(
                         // (#24). On Android 13+ a restricted app may also not receive
                         // BOOT_COMPLETED until it is opened again — documented, not gated
                         // (master plan §12).
-                        message = "This phone is holding ServiceTag back in the background, " +
-                            "so reminders may arrive late or not at all.",
+                        message = localized(R.string.reminders_health_app_restricted),
                         repair = RepairAction.OpenSystemSettings(ReminderRepair.OPEN_BATTERY_SETTINGS),
                     ),
                 )
@@ -318,12 +319,13 @@ class ReminderHealthCheck(
                     code = "SCHEDULE_NO_PROVIDER",
                     severity = ReminderHealthSeverity.WARN,
                     // RATIFIED verbatim (1.4.1 plan §4, P141-1a / P141-1b): one form for exactly one,
-                    // one for every other count. The count is this finding's rows alone.
-                    message = if (unconfigured.size == 1) {
-                        "1 schedule has reminders turned on, but reminder delivery isn't configured."
-                    } else {
-                        "${unconfigured.size} schedules have reminders turned on, but reminder delivery isn't configured."
-                    },
+                    // one for every other count — now the plural's two English forms (#102), each
+                    // language choosing by its own rules. The count is this finding's rows alone.
+                    message = localizedPlural(
+                        R.plurals.reminders_health_schedule_no_provider,
+                        unconfigured.size,
+                        unconfigured.size,
+                    ),
                     // The whole batch, on the owner's tap: no target, and never `Automatic`.
                     repair = RepairAction.OpenInApp(ReminderRepair.RESTORE_REMINDER_DELIVERY),
                 ),
@@ -338,7 +340,12 @@ class ReminderHealthCheck(
                     // the schedule — the ratified sentence counts them and `ReminderHealthFinding` has no
                     // field for a name — so the repair is what reaches one, and the count is what
                     // says there are more.
-                    message = "${switchedOff.size} schedules have reminders switched on but no way to deliver them.",
+                    // #102: a plural whose English forms both keep the ratified count-shaped wording.
+                    message = localizedPlural(
+                        R.plurals.reminders_health_schedule_provider_disabled,
+                        switchedOff.size,
+                        switchedOff.size,
+                    ),
                     repair = RepairAction.OpenInApp(targeted(ReminderRepair.OPEN_SCHEDULE, switchedOff)),
                 ),
             )
@@ -354,8 +361,8 @@ class ReminderHealthCheck(
                 ReminderHealthFinding(
                     code = "NO_DATA",
                     severity = ReminderHealthSeverity.WARN,
-                    message = "${withoutBaseline.size} schedules need a meter reading " +
-                        "before they can come due.",
+                    // #102: a plural whose English forms both keep the ratified count-shaped wording.
+                    message = localizedPlural(R.plurals.reminders_health_no_baseline, withoutBaseline.size, withoutBaseline.size),
                     repair = RepairAction.OpenInApp(targeted(ReminderRepair.LOG_METER_READING, withoutBaseline)),
                 ),
             )

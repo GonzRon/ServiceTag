@@ -131,6 +131,13 @@ data class RuleFacts(
  * is measured against — and the effective date a withdrawn subject was last shown with. It is null
  * for a use-based rule and for a parked subject: a fabricated date is how a provider comes to announce
  * something that has no date.
+ *
+ * **#102: the hashed text is canonical, never localized.** [body], and a deadline's [title], are composed
+ * here in the shipped 1.2 English as fixed codes, and [contentHash] covers them byte for byte — so a
+ * subject's identity is the same whatever language the owner picks, and changing language re-posts
+ * nothing. They are not display text: a provider draws its words in the owner's language from the facts
+ * (a deadline's [SubjectKey.Deadline.kind], a schedule's derived status). A schedule's [title] is the
+ * owner's own text and is shown as entered.
  */
 data class ReminderSubject(
     val key: SubjectKey,
@@ -149,7 +156,7 @@ data class ReminderSubject(
 ) {
     init {
         require((key is SubjectKey.Deadline) == (repeat != null)) {
-            "a deadline carries its repeat fact and a schedule carries none"
+            "a deadline carries its repeat fact and a schedule carries none" // l10n-ok: exception message
         }
     }
 }

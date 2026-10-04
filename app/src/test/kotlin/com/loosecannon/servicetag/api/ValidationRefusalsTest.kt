@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.journal.DerivedProblem
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.usecase.AssetProblem
 import com.loosecannon.servicetag.core.usecase.AssetValidation
+import com.loosecannon.servicetag.core.usecase.BadFieldCause
 import com.loosecannon.servicetag.core.usecase.DefinitionProblem
 import com.loosecannon.servicetag.core.usecase.DefinitionValidation
 import com.loosecannon.servicetag.core.usecase.EventValidation
@@ -214,7 +215,7 @@ class ValidationRefusalsTest {
             "another quick action of this asset, archived ones included, already has that name", "name",
         ),
         Row(
-            "C36", ProfileProblem.BadField(id, "listed twice"), "BadField(id=DefinitionId(value=def-a), reason=listed twice)",
+            "C36", ProfileProblem.BadField(id, BadFieldCause.LISTED_TWICE), "BadField(id=DefinitionId(value=def-a), reason=listed twice)",
             PROFILE,
             "every entry in fields must name an ENTERED reading of this asset, at most once; an archived reading " +
                 "stays only if the quick action already had it",

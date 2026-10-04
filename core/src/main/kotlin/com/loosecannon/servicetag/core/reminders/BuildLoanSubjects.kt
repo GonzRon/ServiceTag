@@ -84,8 +84,13 @@ class BuildLoanSubjects(
          * #72, P72-23 (RATIFIED verbatim, R72-23), in its core home: the `<title>` of a loan
          * reminder's `<asset> — <title>` line. The lend form's "Due back" label keeps its own UI home
          * (the #79 "Warranty" precedent).
+         *
+         * #102: the subject's **canonical** title — a [ContentHash] input, so it stays this English in
+         * every language and is never translated (a translated title would move every loan's hash on a
+         * language change). The provider draws the kind's title in the owner's language from
+         * [DeadlineKind.LOAN_DUE_BACK], never from this field.
          */
-        const val DUE_BACK_TITLE = "Due back"
+        const val DUE_BACK_TITLE = "Due back" // l10n-ok: canonical hash input, never shown (#102)
     }
 }
 
