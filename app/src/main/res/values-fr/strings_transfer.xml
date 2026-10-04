@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_transfer.xml. -->
+<resources>
+    <string name="replace_asset">Remplacer l\'équipement</string>
+    <string name="replace_back">Retour</string>
+    <string name="replace_old_asset">Ancien équipement</string>
+    <string name="replace_will_be_retired">%1$s sera retiré du service ; son journal, ses documents et son carnet d\'entretien seront conservés tels quels.</string>
+    <string name="replace_was_retired_on">%1$s a été retiré du service le %2$s. Son journal, ses documents et son carnet d\'entretien sont conservés tels quels.</string>
+    <string name="replace_new_asset">Nouvel équipement</string>
+    <string name="replace_separate_asset">Un équipement distinct, avec sa propre identité. Rien du journal de l\'ancien équipement n\'est copié.</string>
+    <string name="replace_carry_forward">À reprendre</string>
+    <string name="replace_only_what_you_tick">Seuls les éléments cochés sont copiés, comme nouveaux enregistrements sans historique.</string>
+    <string name="replace_season_and_break">Saison d\'utilisation et pause d\'entretien</string>
+    <string name="replace_description_and_notes">Description et notes</string>
+    <string name="replace_add_to">Ajouter à %1$s</string>
+    <string name="replace_schedules_start_on">Les plans copiés commencent le</string>
+    <string name="replace_needs_setup">Nécessite « Relevés et actions ».</string>
+    <string name="replace_needs_season">Nécessite « Saison d\'utilisation et pause d\'entretien ».</string>
+    <string name="replace_move_to_new">Déplacer vers le nouvel équipement</string>
+    <string name="replace_leave_with_old">Laisser sur l\'ancien équipement</string>
+    <string name="replace_moved_tag_not_rewritten">Un tag déplacé n\'est pas réécrit. Le scanner ouvre le nouvel équipement.</string>
+    <plurals name="replace_children_stay">
+        <item quantity="one">%1$s continue de faire partie de %2$s.</item>
+        <item quantity="other">%1$s continuent de faire partie de %2$s.</item>
+    </plurals>
+    <string name="replace_lent_out">%1$s est prêté. Le prêt lui reste attaché.</string>
+    <string name="replace_retire_on">Retirer %1$s du service le %2$s</string>
+    <string name="replace_stays_retired_from">%1$s reste retiré du service depuis le %2$s</string>
+    <string name="replace_create">Créer %1$s</string>
+    <string name="replace_nothing_carried">Rien n\'est repris</string>
+    <string name="replace_could_not_replace">Impossible de remplacer %1$s. Rien n\'a été modifié.</string>
+    <string name="replace_changed_while_reviewing">L\'équipement ou des enregistrements liés ont changé pendant votre vérification. Rien n\'a été modifié.</string>
+    <string name="replace_replaced_by">Remplacé par %1$s le %2$s</string>
+    <string name="replace_replaces">Remplace %1$s</string>
+    <string name="replace_was_in_season_on">Le nouvel équipement était-il en saison le %1$s ?</string>
+
+    <string name="transfer_assets">Transférer des équipements</string>
+    <string name="transfer_back">Retour</string>
+    <string name="transfer_select_what_leaves">Sélectionnez ce qui quitte ce ServiceTag</string>
+    <string name="transfer_components_go_with">Les équipements rattachés partent avec l\'équipement dont ils font partie.</string>
+    <string name="transfer_review">Vérifier</string>
+    <string name="transfer_pack">Pack de transfert</string>
+    <string name="transfer_may_contain">Ces enregistrements peuvent contenir des numéros de série, des emplacements, des informations d\'achat, des reçus et l\'historique d\'entretien.</string>
+    <string name="transfer_note_label">Note pour le nouveau propriétaire (facultative)</string>
+    <string name="transfer_create">Créer le pack de transfert</string>
+    <string name="transfer_mixed_group">%1$s couvre aussi des équipements qui restent ici : %2$s. Un groupe n\'est transféré qu\'avec tous les équipements qu\'il a couverts un jour.</string>
+    <string name="transfer_parent_not_selected">%1$s est un équipement rattaché à %2$s. Sélectionnez aussi %2$s.</string>
+    <string name="transfer_lent_out">%1$s est prêté. Marquez-le d\'abord comme rendu.</string>
+    <string name="transfer_outside_reference">%1$s a un enregistrement qui pointe en dehors de ce transfert.</string>
+    <string name="transfer_creating">Création du pack de transfert…</string>
+    <string name="transfer_not_created">Pack de transfert non créé : %1$s. Rien n\'a été modifié.</string>
+    <string name="transfer_not_created_entangled">Pack de transfert non créé : des enregistrements de ce téléphone pointent encore vers un équipement transféré. Rien n\'a été modifié.</string>
+    <string name="transfer_not_created_generic">Pack de transfert non créé : le fichier n\'a pas pu être écrit. Rien n\'a été modifié.</string>
+    <string name="transfer_ready">Pack de transfert prêt</string>
+    <string name="transfer_share">Partager</string>
+    <string name="transfer_save_a_copy">Enregistrer une copie</string>
+    <string name="transfer_size">Taille : %1$s</string>
+    <string name="transfer_share_title">Partager le pack de transfert</string>
+    <string name="transfer_saved">Enregistré</string>
+    <string name="transfer_mark_question">Marquer ces équipements comme transférés sur ce téléphone ?</string>
+    <string name="transfer_mark">Marquer comme transférés</string>
+    <string name="transfer_mark_consequence">Leurs rappels s\'arrêtent et ils quittent vos listes. Vous pouvez toujours les ouvrir avec « Archivé ».</string>
+    <string name="transfer_transferred">Transféré</string>
+    <string name="transfer_transferred_out">Transfert</string>
+    <string name="transfer_transferred_on">Transféré le %1$s</string>
+    <string name="transfer_pack_line">Pack de transfert %1$s</string>
+    <string name="transfer_scan_title">Équipement transféré</string>
+    <string name="transfer_handed_over">%1$s a été remis le %2$s. Ce téléphone ne le gère plus.</string>
+    <string name="transfer_changed_since">%1$s a été modifié après la création de ce pack de transfert. Créez-le à nouveau.</string>
+    <string name="transfer_could_not_mark">Impossible de marquer ces équipements. Rien n\'a été modifié.</string>
+    <string name="transfer_could_not_save">Impossible d\'enregistrer une copie.</string>
+    <string name="transfer_nothing_to_offer">Aucun équipement ne peut être transféré.</string>
+    <string name="transfer_already_transferred">Ces équipements sont déjà marqués comme transférés.</string>
+    <string name="transfer_too_large">Ces équipements ont trop d\'enregistrements pour un seul pack de transfert. Transférez-en moins à la fois.</string>
+    <string name="transfer_pack_gone">Ce pack de transfert n\'est plus sur ce téléphone. Créez-le à nouveau.</string>
+    <string name="transfer_included_with">Inclus avec %1$s</string>
+    <string name="transfer_withdraw_record">Retirer l\'enregistrement de transfert</string>
+    <string name="transfer_withdraw_title">Retirer l\'enregistrement du pack de transfert %1$s ?</string>
+    <string name="transfer_withdraw_body">N\'utilisez cette option que si ce pack de transfert n\'est pas parti, ou si l\'enregistrement d\'un autre téléphone doit prévaloir. Ses équipements restent archivés.</string>
+    <string name="transfer_withdraw">Retirer</string>
+    <string name="transfer_could_not_withdraw">Impossible de retirer cet enregistrement. Rien n\'a été modifié.</string>
+    <string name="transfer_withdraw_entangled">Impossible de retirer cet enregistrement : des enregistrements de ce téléphone pointeraient encore vers un équipement transféré. Rien n\'a été modifié.</string>
+    <string name="transfer_bearer">Toute personne disposant de ce fichier peut importer ces équipements. Ne le partagez qu\'avec la personne ou l\'appareil qui doit les recevoir.</string>
+    <string name="transfer_mark_entangled">Impossible de marquer ces équipements : des enregistrements de ce téléphone pointent encore vers un équipement transféré. Rien n\'a été modifié.</string>
+
+    <string name="transfer_import_asset_transferred_out">Cet équipement a été transféré.</string>
+    <string name="transfer_import_title">Importer un pack de transfert</string>
+    <string name="transfer_import_note">Note : %1$s</string>
+    <string name="transfer_import_created">Créé le %1$s</string>
+    <string name="transfer_import_contains">Contenu</string>
+    <string name="transfer_import_import">Importer</string>
+    <string name="transfer_import_already_here">Ce pack de transfert est déjà sur ce téléphone.</string>
+    <string name="transfer_import_conflicts">Ce pack de transfert est en conflit avec des enregistrements de ce téléphone : rien n\'a donc été importé.</string>
+    <string name="transfer_import_tag_used_here">Un tag NFC de ce pack est déjà utilisé ici pour %1$s.</string>
+    <string name="transfer_import_duplicate">%1$s est peut-être déjà ici sous le nom %2$s.</string>
+    <string name="transfer_import_not_a_pack">Ce fichier n\'est pas un pack de transfert.</string>
+    <string name="transfer_import_newer">Ce pack de transfert nécessite une version plus récente de ServiceTag.</string>
+    <string name="transfer_import_damaged">Ce pack de transfert est endommagé et ne peut pas être importé.</string>
+    <string name="transfer_import_imported">Pack de transfert importé : %1$s</string>
+    <string name="transfer_import_could_not_import">Impossible d\'importer ce pack de transfert. Rien n\'a été modifié.</string>
+    <string name="transfer_import_coming_back">De retour : %1$s</string>
+    <string name="transfer_import_not_brought_back">%1$s a été transféré depuis ce téléphone, et ce pack de transfert ne le ramène pas.</string>
+
+    <plurals name="transfer_count_assets">
+        <item quantity="one">%1$d équipement</item>
+        <item quantity="other">%1$d équipements</item>
+    </plurals>
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="one">%1$d tag NFC</item>
+        <item quantity="other">%1$d tags NFC</item>
+    </plurals>
+    <plurals name="transfer_count_records">
+        <item quantity="one">%1$d entrée</item>
+        <item quantity="other">%1$d entrées</item>
+    </plurals>
+    <plurals name="transfer_count_schedules">
+        <item quantity="one">%1$d plan</item>
+        <item quantity="other">%1$d plans</item>
+    </plurals>
+    <plurals name="transfer_count_documents">
+        <item quantity="one">%1$d document ou photo</item>
+        <item quantity="other">%1$d documents et photos</item>
+    </plurals>
+    <plurals name="transfer_count_service_cases">
+        <item quantity="one">%1$d dossier d\'intervention</item>
+        <item quantity="other">%1$d dossiers d\'intervention</item>
+    </plurals>
+
+    <string name="backup_title">Sauvegarde</string>
+    <string name="backup_back">Retour</string>
+    <string name="backup_last_backup">Dernière sauvegarde</string>
+    <string name="backup_never">Jamais</string>
+    <string name="backup_set_explained">Un jeu de sauvegarde se compose de deux fichiers dans le dossier que vous choisissez : les données, et les pièces jointes à côté. C\'est la seule copie en dehors de ce téléphone.</string>
+    <string name="backup_export_set">Exporter le jeu de sauvegarde</string>
+    <string name="backup_folder_not_writable">Impossible d\'écrire dans ce dossier</string>
+    <string name="backup_restore_section">Restauration</string>
+    <string name="backup_restore_data_explained">La restauration des données supprime d\'abord tout ce qui se trouve sur ce téléphone, puis charge le fichier.</string>
+    <string name="backup_restore_data">Restaurer les données</string>
+    <string name="backup_restore_files_explained">Restaurez ensuite l\'archive des fichiers du même jeu pour remettre en place les pièces jointes. Elle ajoute des fichiers et ne supprime rien.</string>
+    <string name="backup_restore_files">Restaurer les fichiers</string>
+    <string name="backup_replace_title">Tout remplacer ?</string>
+    <string name="backup_replace_body">Tous les équipements, tags et liens de ce téléphone sont supprimés et remplacés par le contenu du fichier. Cette opération est irréversible.</string>
+    <string name="backup_replace_type_word">Saisissez %1$s pour confirmer</string>
+    <string name="backup_replace_confirm">Remplacer</string>
+    <string name="backup_cancel">Annuler</string>
+    <string name="backup_restore_empty_title">Restaurer cette sauvegarde ?</string>
+    <string name="backup_restore_empty_body">Ce téléphone ne contient encore aucun enregistrement : il n\'y a donc rien à remplacer.</string>
+    <string name="backup_restore_confirm">Restaurer</string>
+
+    <string name="backup_no_attachment_folder">Choisissez d\'abord un dossier de pièces jointes dans les paramètres</string>
+    <string name="backup_exported_as">Exporté sous %1$s</string>
+
+    <string name="backup_export_failed_entangled">Échec de l\'exportation : des enregistrements de ce téléphone pointent encore vers un équipement transféré</string>
+    <string name="backup_export_failed_files_archive">Échec de l\'exportation : l\'archive des fichiers n\'a pas pu être écrite</string>
+    <string name="backup_export_failed">Échec de l\'exportation : %1$s</string>
+    <string name="backup_nothing_saved">%1$s. Rien n\'a été enregistré.</string>
+    <string name="backup_not_saved">Sauvegarde non enregistrée : %1$s</string>
+    <plurals name="backup_left_behind">
+        <item quantity="one">%1$s. Impossible de supprimer %2$s — supprimez-le vous-même.</item>
+        <item quantity="other">%1$s. Impossible de supprimer %2$s — supprimez-les vous-même.</item>
+    </plurals>
+    <plurals name="backup_incomplete_missing">
+        <item quantity="one">%1$d pièce jointe est manquante</item>
+        <item quantity="other">%1$d pièces jointes sont manquantes</item>
+    </plurals>
+    <plurals name="backup_incomplete_changed">
+        <item quantity="one">%1$d pièce jointe a été modifiée depuis son ajout</item>
+        <item quantity="other">%1$d pièces jointes ont été modifiées depuis leur ajout</item>
+    </plurals>
+    <string name="backup_incomplete_both">%1$s et %2$s</string>
+    <string name="backup_incomplete_not_covered">l\'archive des fichiers ne couvrait pas toutes les pièces jointes</string>
+
+    <string name="backup_restored_data">Importé : %1$s, %2$s, %3$s</string>
+    <string name="backup_restored_data_attachments">Importé : %1$s, %2$s, %3$s · %4$s</string>
+    <plurals name="backup_restored_assets">
+        <item quantity="one">%1$d équipement</item>
+        <item quantity="other">%1$d équipements</item>
+    </plurals>
+    <plurals name="backup_restored_tags">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
+    <plurals name="backup_restored_links">
+        <item quantity="one">%1$d lien</item>
+        <item quantity="other">%1$d liens</item>
+    </plurals>
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="one">%1$d pièce jointe répertoriée ; restaurez l\'archive des fichiers pour récupérer son contenu</item>
+        <item quantity="other">%1$d pièces jointes répertoriées ; restaurez l\'archive des fichiers pour récupérer leur contenu</item>
+    </plurals>
+
+    <plurals name="backup_restored_files">
+        <item quantity="one">Fichiers restaurés : %1$d, ignorés : %2$d</item>
+        <item quantity="other">Fichiers restaurés : %1$d, ignorés : %2$d</item>
+    </plurals>
+    <string name="backup_report_separator">" ; "</string>
+    <plurals name="backup_files_already_present">
+        <item quantity="one">%1$d déjà présent</item>
+        <item quantity="other">%1$d déjà présents</item>
+    </plurals>
+    <plurals name="backup_files_missing_entries">
+        <item quantity="one">%1$d fichier répertorié ne figurait pas dans l\'archive</item>
+        <item quantity="other">%1$d fichiers répertoriés ne figuraient pas dans l\'archive</item>
+    </plurals>
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="one">%1$d fichier de l\'archive n\'était pas répertorié</item>
+        <item quantity="other">%1$d fichiers de l\'archive n\'étaient pas répertoriés</item>
+    </plurals>
+    <string name="backup_set_mismatch">Ces fichiers appartiennent au jeu de sauvegarde %1$s, et non à %2$s</string>
+    <string name="backup_restore_failed">Échec de la restauration : %1$s</string>
+    <string name="backup_restore_transferred_out_one">Échec de la restauration : cette sauvegarde contient encore %1$s, qui a été transféré depuis ce téléphone. Rien n\'a été remplacé.</string>
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="one">Échec de la restauration : cette sauvegarde contient encore %1$d équipement qui a été transféré depuis ce téléphone. Rien n\'a été remplacé.</item>
+        <item quantity="other">Échec de la restauration : cette sauvegarde contient encore %1$d équipements qui ont été transférés depuis ce téléphone. Rien n\'a été remplacé.</item>
+    </plurals>
+
+    <string name="backup_cannot_create">impossible de créer %1$s dans le dossier choisi</string>
+    <string name="backup_cannot_open_for_writing">impossible d\'ouvrir %1$s en écriture</string>
+    <string name="backup_cannot_open_for_reading">impossible d\'ouvrir %1$s en lecture</string>
+</resources>
