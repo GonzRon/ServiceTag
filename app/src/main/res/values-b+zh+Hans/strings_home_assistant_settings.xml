@@ -72,7 +72,7 @@
     <string name="settings_provider">提供方</string>
     <string name="settings_provider_unknown">未知</string>
     <string name="settings_folder_access_lost">访问权限已丢失 — 请重新选择文件夹</string>
-    <string name="settings_folder_help">文件会以普通文档的形式写入此文件夹；设备外的任何副本都由 Syncthing 等同步工具负责。</string>
+    <string name="settings_folder_help">文件会以普通文档的形式写入此文件夹；此手机之外的任何副本都由 Syncthing 等同步工具负责。</string>
     <string name="settings_choose_folder">选择文件夹</string>
     <string name="settings_moving_attachments_later">将附件移至其他文件夹的功能将在后续版本中推出</string>
     <string name="settings_different_folder">这是另一个文件夹。请选择原来的文件夹以恢复访问权限。</string>

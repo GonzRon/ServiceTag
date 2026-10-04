@@ -34,7 +34,7 @@
     <string name="service_field_notes">Notizen</string>
     <string name="service_cost_needs_currency">Kosten brauchen eine Währung</string>
     <string name="service_cost_negative">Die Kosten dürfen nicht negativ sein</string>
-    <string name="service_cost_example">Gib die Kosten wie %1$s ein</string>
+    <string name="service_cost_example">Gib einen Betrag wie %1$s ein</string>
     <string name="service_save_case">Fall speichern</string>
     <string name="service_title_required">Gib dem Fall einen Titel</string>
     <string name="service_could_not_save">Dieser Fall konnte nicht gespeichert werden.</string>

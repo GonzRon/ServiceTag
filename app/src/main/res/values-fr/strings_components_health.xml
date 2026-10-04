@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_components_health.xml. -->
+<resources>
+    <string name="ui_action_cancel">Annuler</string>
+    <string name="ui_action_save">Enregistrer</string>
+    <string name="ui_typed_confirm_label">Saisissez %1$s pour confirmer</string>
+
+    <string name="ui_instrument_header_reading">Relevé</string>
+    <string name="ui_instrument_header_value">Valeur</string>
+    <string name="ui_instrument_header_target">Cible</string>
+    <string name="ui_instrument_required">Obligatoire</string>
+    <string name="ui_instrument_not_a_number">Ce n\'est pas un nombre</string>
+    <string name="ui_instrument_check_value">Vérifiez cette valeur</string>
+    <string name="ui_instrument_yes">Oui</string>
+    <string name="ui_instrument_no">Non</string>
+
+    <string name="ui_ledger_day_month">%1$s %2$s</string>
+
+    <string name="condition_word_operational">OPÉRATIONNEL</string>
+    <string name="condition_word_degraded">DÉGRADÉ</string>
+    <string name="condition_word_down">EN PANNE</string>
+    <string name="condition_not_recorded">État non renseigné</string>
+    <string name="condition_option_operational">Opérationnel</string>
+    <string name="condition_helper_operational">Disponible pour un usage normal.</string>
+    <string name="condition_option_degraded">Dégradé</string>
+    <string name="condition_helper_degraded">Fonctionne, mais avec un problème connu.</string>
+    <string name="condition_option_down">En panne</string>
+    <string name="condition_helper_down">Indisponible pour l\'usage prévu.</string>
+    <string name="condition_no_reason_given">Aucune raison indiquée</string>
+    <string name="condition_log_incident">Noter un incident</string>
+    <string name="condition_since">depuis le %1$s</string>
+    <string name="condition_component_line">%1$s %2$s — %3$s</string>
+
+    <string name="condition_title">État</string>
+    <string name="condition_change">Changer l\'état</string>
+    <string name="condition_what_is_wrong">Quel est le problème ? (facultatif)</string>
+    <string name="condition_when_did_this_change">Quand l\'état a-t-il changé ?</string>
+    <string name="condition_save">Enregistrer l\'état</string>
+    <string name="condition_date_not_later_than_today">La date ne peut pas être postérieure à aujourd\'hui.</string>
+    <string name="condition_log_incident_details_question">Noter les détails de l\'incident ?</string>
+    <string name="condition_log_incident_details_body">%1$s est %2$s. Noter ce qui n\'a pas fonctionné dans le carnet d\'entretien ?</string>
+    <string name="condition_log_incident_details">Noter les détails de l\'incident</string>
+    <string name="condition_save_only">Enregistrer l\'état uniquement</string>
+    <string name="condition_saving_also_records">L\'enregistrement marque aussi %1$s comme %2$s.</string>
+
+    <string name="condition_mark_operational">Marquer opérationnel</string>
+    <string name="condition_mark_operational_title">Marquer opérationnel ?</string>
+    <string name="condition_mark_operational_body">L\'état %1$s précédent reste dans l\'historique.</string>
+    <string name="condition_operational_offer_body">Vous avez noté %1$s. Est-ce que %2$s fonctionne de nouveau normalement ?</string>
+    <string name="condition_not_yet">Pas encore</string>
+    <string name="condition_start_season">Démarrer la saison</string>
+    <string name="condition_end_season">Terminer la saison</string>
+    <string name="condition_start_season_question">Démarrer la saison maintenant ?</string>
+    <string name="condition_end_season_question">Terminer la saison maintenant ?</string>
+    <string name="condition_you_logged">Vous avez noté %1$s.</string>
+    <string name="condition_did_this_affect_use">Cela a-t-il empêché ou limité l\'utilisation de l\'équipement ?</string>
+    <string name="condition_mark_down">Marquer en panne</string>
+    <string name="condition_mark_degraded">Marquer dégradé</string>
+    <string name="condition_no_change">Aucun changement</string>
+
+    <string name="health_band_nominal">NOMINAL</string>
+    <string name="health_band_warning">ALERTE</string>
+    <string name="health_band_critical">CRITIQUE</string>
+    <string name="health_not_tracked">NON SUIVI</string>
+    <string name="health_badge_label">%1$s %2$d</string>
+    <string name="health_replaced">Remplacé le %1$s, il y a %2$s</string>
+    <string name="health_no_replacement_recorded">Aucun remplacement enregistré pour l\'instant</string>
+    <string name="health_replacement_action_removed">L\'action rapide de remplacement a été supprimée.</string>
+    <string name="health_up_to_date">%1$s est à jour</string>
+    <string name="health_postponed">%1$s a été décalé au %2$s</string>
+    <string name="health_not_tracked_out_of_season">Non suivi hors saison</string>
+    <string name="health_not_tracked_paused">Non suivi tant que le plan est en pause</string>
+    <string name="health_not_tracked_link">Non suivi : le plan lié n\'a pas de règle de date ou appartient à un autre équipement.</string>
+    <string name="health_subject_score">%1$s %2$d</string>
+    <string name="health_aggregate_line">%1$d — %2$s</string>
+    <string name="health_critical_line">Critique : %1$s %2$d</string>
+    <string name="health_dashboard_row">%1$s %2$s</string>
+
+    <string name="health_name">Nom</string>
+    <string name="health_what_is_it">De quoi s\'agit-il ?</string>
+    <string name="health_kind_whole_asset">L\'équipement entier</string>
+    <string name="health_kind_part">Une pièce</string>
+    <string name="health_kind_medium">Un élément entretenu, comme l\'eau</string>
+    <string name="health_what_wears_it_down">Qu\'est-ce qui l\'use ?</string>
+    <string name="health_driver_age">Âge depuis le remplacement</string>
+    <string name="health_driver_overdue">Entretien en retard</string>
+    <string name="health_replacement_quick_action">Action rapide de remplacement</string>
+    <string name="health_any_replacement">N\'importe quel remplacement</string>
+    <string name="health_maintenance_schedule">Plan d\'entretien</string>
+    <string name="health_age_threshold_nominal">Comme neuf pendant (jours)</string>
+    <string name="health_age_threshold_warning">Alerte après (jours)</string>
+    <string name="health_age_threshold_critical">Critique après (jours)</string>
+    <string name="health_overdue_threshold_grace">Délai de grâce (jours de retard)</string>
+    <string name="health_overdue_threshold_warning">Alerte à (jours de retard)</string>
+    <string name="health_overdue_threshold_critical">Critique à (jours de retard)</string>
+    <string name="health_thresholds_must_rise">Chaque nombre doit être supérieur au précédent.</string>
+    <string name="health_enter_all_three_numbers">Saisissez les trois nombres, ou utilisez un point de départ.</string>
+    <string name="health_use_a_starting_point">Utiliser un point de départ</string>
+    <string name="health_starting_point_engine_service">Entretien moteur : %1$d / %2$d / %3$d jours de retard</string>
+    <string name="health_starting_point_water_care">Entretien de l\'eau : %1$d / %2$d / %3$d jours de retard</string>
+    <string name="health_starting_points_not_safety_limits">Ce sont des points de départ, pas des limites de sécurité. Vérifiez-les pour cet équipement avant d\'enregistrer.</string>
+    <string name="health_use_these_numbers">Utiliser ces nombres</string>
+    <string name="health_weight">Pondération</string>
+    <string name="health_schedule_already_drives_another">Ce plan alimente déjà un autre indicateur.</string>
+    <string name="health_archive_subject">Archiver l\'indicateur</string>
+    <string name="health_restore_subject">Restaurer l\'indicateur</string>
+
+    <string name="dashboard_all_categories">Toutes les catégories</string>
+    <string name="dashboard_all_statuses">Tous les statuts</string>
+    <string name="dashboard_category_label">Catégorie</string>
+    <string name="dashboard_status_label">Statut d\'entretien</string>
+    <string name="dashboard_chip_not_recorded">Non renseigné</string>
+    <string name="dashboard_settings">Paramètres</string>
+    <string name="dashboard_child_assets_listed_on_parent">Les équipements rattachés sont listés sur l\'équipement dont ils font partie.</string>
+    <string name="dashboard_nothing_matches">Aucun résultat.</string>
+    <string name="dashboard_backup_eyebrow">SAUVEGARDE</string>
+    <string name="dashboard_no_backup_yet">Aucune sauvegarde pour l\'instant</string>
+    <string name="dashboard_backup_why">Vos tags ne survivent à un changement de téléphone que si vous avez une sauvegarde.</string>
+    <string name="dashboard_export_now">Exporter maintenant</string>
+    <string name="dashboard_nothing_here_yet">Rien ici pour l\'instant</string>
+    <string name="dashboard_add_first_asset">Ajouter votre premier équipement</string>
+    <string name="dashboard_scan_a_tag">Scanner un tag</string>
+    <string name="dashboard_no_schedule_yet">Aucun plan pour l\'instant</string>
+</resources>

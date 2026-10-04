@@ -41,11 +41,11 @@
     <string name="condition_log_incident_details_body">%1$s: %2$s. Записать в журнал обслуживания, что пошло не так?</string>
     <string name="condition_log_incident_details">Записать подробности неисправности</string>
     <string name="condition_save_only">Сохранить только состояние</string>
-    <string name="condition_saving_also_records">При сохранении для объекта «%1$s» также будет записано состояние %2$s.</string>
+    <string name="condition_saving_also_records">При сохранении для объекта «%1$s» также будет записано состояние «%2$s».</string>
 
     <string name="condition_mark_operational">Отметить как работающий</string>
     <string name="condition_mark_operational_title">Отметить как работающий?</string>
-    <string name="condition_mark_operational_body">Прежняя запись о состоянии %1$s останется в истории.</string>
+    <string name="condition_mark_operational_body">Прежняя запись о состоянии «%1$s» останется в истории.</string>
     <string name="condition_operational_offer_body">Вы записали «%1$s». Объект «%2$s» снова работает нормально?</string>
     <string name="condition_not_yet">Пока нет</string>
     <string name="condition_start_season">Начать сезон</string>
