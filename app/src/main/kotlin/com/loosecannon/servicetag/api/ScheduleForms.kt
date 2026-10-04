@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
@@ -77,13 +78,14 @@ internal object ScheduleForms {
      * null when the id names nothing — `SaveSchedule` answers that 404). [acceptsFlags] is true on
      * a PATCH only.
      *
-     * The order is the contract's: the body is JSON (415, 400), its form is decided (the mixed 422),
+     * The order is the contract's: the body is one JSON object (415, 400 — a key with no value or a
+     * missing comma is the 400, never a 500; #94), its form is decided (the mixed 422),
      * a legacy body over a stored PRE_SERVICE schedule is refused (its 422) — before the typed decode,
      * so a PRE_SERVICE row's own null triple sent back is refused by name rather than as a null in a
      * non-null field — and only then is the body decoded strictly, unknown keys refused by name.
      */
     fun read(request: ApiRequest, stored: MaintenanceSchedule?, acceptsFlags: Boolean): Parsed {
-        val raw = request.decode(JsonObject.serializer())
+        val raw = readObject(request)
         val form = classify(raw)
         if (form == Form.LEGACY && stored?.servicePolicy == ServicePolicy.PRE_SERVICE) {
             throw ApiFailure(
@@ -98,6 +100,26 @@ internal object ScheduleForms {
         if (acceptsFlags) refuseNullProviders(raw)
         val body = strict(ScheduleCommandRequest.serializer(), JsonObject(raw.filterKeys { it !in flagKeys }))
         return Parsed(form, body, flags.unlinkHealthSubject)
+    }
+
+    /**
+     * The body as one JSON object, through the shipped 415 and 400 paths only (#94, 1.7.1).
+     *
+     * The raw read used to go through `JsonObject.serializer()`, whose map decoder answers a key
+     * with no value — `{"title":}` — with a bare `IllegalArgumentException` that nothing mapped,
+     * so the create and the PATCH answered **500** for a caller's typo. The element parser refuses
+     * the same body, and a missing comma between two pairs, with a `SerializationException`, which
+     * `decodeOr400` turns into the shipped 400 carrying the parser's own message (the #91 shape).
+     * A body that parses but is not an object — `[]`, `"x"`, `null`, a number — is handed to the map
+     * decoder, which refuses every one of them, so that 400 is the one it always was, byte for byte.
+     */
+    private fun readObject(request: ApiRequest): JsonObject {
+        val element = request.decode(JsonElement.serializer())
+        if (element is JsonObject) return element
+        request.decode(JsonObject.serializer())
+        // Unreachable: the map decoder refuses every non-object. Kept so a decoder that one day
+        // accepted one would still be a 400 here rather than a cast failure.
+        throw ApiFailure.badRequest("the body must be a JSON object")
     }
 
     /**
