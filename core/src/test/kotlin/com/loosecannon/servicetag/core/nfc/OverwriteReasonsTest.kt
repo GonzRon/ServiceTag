@@ -6,7 +6,6 @@ import com.loosecannon.nfc.tagcore.OverwriteReason
 import com.loosecannon.servicetag.core.model.TagId
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class OverwriteReasonsTest {
@@ -25,24 +24,27 @@ class OverwriteReasonsTest {
     @Test fun sameV1IdProceeds() = assertEquals(OverwriteDecision.Proceed, OverwriteReasons.decide(TagPayload.V1(mine), mine))
     /**
      * #70 R70-4: the v1 question is worded by `OverwriteSubjects` (core/usecase), which knows what
-     * the id means on this phone; `sentence` no longer has a uuid sentence to fall back on.
+     * the id means on this phone. #102: no sentence is built in core at all — the token and its
+     * detail are the whole answer here, and the app words them.
      */
     @Test fun differentV1IdConfirms() {
         val c = assertIs<OverwriteDecision.Confirm>(OverwriteReasons.decide(TagPayload.V1(other), mine))
         assertEquals(OverwriteReason.OTHER_TAG_SAME_PRODUCT, c.reason)
-        assertFailsWith<IllegalStateException> { OverwriteReasons.sentence(c) }
     }
     @Test fun newerVersionConfirms() {
         val c = assertIs<OverwriteDecision.Confirm>(OverwriteReasons.decide(TagPayload.NewerVersion(3), mine))
-        assertEquals("a ServiceTag tag written by a newer app (format 3)", OverwriteReasons.sentence(c))
+        assertEquals(OverwriteReason.SAME_PRODUCT_UNSUPPORTED, c.reason)
+        assertEquals("3", c.detail)
     }
     @Test fun foreignConfirms() {
         val c = assertIs<OverwriteDecision.Confirm>(OverwriteReasons.decide(TagPayload.Foreign("tnf=1 type=U"), mine))
-        assertEquals("foreign NDEF content (tnf=1 type=U)", OverwriteReasons.sentence(c))
+        assertEquals(OverwriteReason.FOREIGN, c.reason)
+        assertEquals("tnf=1 type=U", c.detail)
     }
     @Test fun malformedConfirms() {
         val c = assertIs<OverwriteDecision.Confirm>(OverwriteReasons.decide(TagPayload.Malformed("x"), mine))
-        assertEquals("unreadable NDEF content (x)", OverwriteReasons.sentence(c))
+        assertEquals(OverwriteReason.UNREADABLE, c.reason)
+        assertEquals("x", c.detail)
     }
     /** The question carries what is on the tag, not just that something is: the id the sheet looks up. */
     @Test fun reasonNamesTheTagThatIsThere() {

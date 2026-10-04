@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.links.DeepLink
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.prefs.AppearanceMode
 import com.loosecannon.servicetag.ui.nav.ServiceTagRoot
 import com.loosecannon.servicetag.ui.nav.Route
@@ -98,7 +99,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun malformed(): Route? {
-        messages.tryEmit("That link doesn't point at anything here.")
+        messages.tryEmit(localized(R.string.nav_link_points_nowhere))
         return null
     }
 

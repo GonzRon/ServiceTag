@@ -8,11 +8,13 @@ import android.os.Bundle
 import android.widget.Toast
 import com.loosecannon.nfc.tagcore.android.ndefRecords
 import com.loosecannon.servicetag.MainActivity
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.nfc.TagRoute
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.scan.TagResultWire
 import com.loosecannon.servicetag.ui.scan.asTagResult
 import kotlinx.coroutines.MainScope
@@ -56,7 +58,7 @@ class NfcDispatchActivity : Activity() {
             null
         }
         if (payload == null) {
-            Toast.makeText(this, "Nothing to resolve.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, localized(R.string.nfc_nothing_to_resolve), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -64,7 +66,8 @@ class NfcDispatchActivity : Activity() {
             val resolution = try {
                 graph.resolveTag.run(payload)
             } catch (e: Exception) {
-                handOff(TagResultWire.FORMAT_NONE, "could not resolve this tag: ${e.javaClass.simpleName}")
+                // The not-ours key is prose the sheet shows as is (TagResultWire), so it is worded here.
+                handOff(TagResultWire.FORMAT_NONE, localized(R.string.nfc_could_not_resolve, e.javaClass.simpleName))
                 return@launch
             }
             route(resolution)

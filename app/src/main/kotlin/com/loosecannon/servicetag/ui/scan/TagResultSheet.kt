@@ -37,10 +37,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
@@ -53,6 +56,7 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.transfer.TransferStrings
 import com.loosecannon.servicetag.ui.theme.SheetShape
 import com.loosecannon.servicetag.ui.theme.SheetSentence
+import java.util.Locale
 
 /**
  * What a scanned (format, key) pair turned out to be — including "not ours"
@@ -112,7 +116,10 @@ fun TagResultSheet(
 
     SheetHost(onDismiss = onDismiss) {
         when (val result = state) {
-            TagResult.Loading -> NfcSheet(eyebrow = "Reading tag", sentence = "Looking this tag up…")
+            TagResult.Loading -> NfcSheet(
+                eyebrow = stringResource(R.string.tag_eyebrow_reading),
+                sentence = stringResource(R.string.tag_looking_up),
+            )
 
             is TagResult.OpensAsset -> if (inspecting) {
                 // 2.7.1 (#41) — a deliberate inspect inspects. The tag is named and opening the
@@ -122,14 +129,14 @@ fun TagResultSheet(
                 // asset" goes through the same callback the screen already wires, which clears the
                 // answer and navigates — so the hold ends when the owner leaves, and not before.
                 NfcSheet(
-                    eyebrow = "ServiceTag tag",
+                    eyebrow = stringResource(R.string.tag_eyebrow_servicetag),
                     accent = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
                     glyph = ServiceTagIcons.NfcTag,
                     sentence = result.asset.name,
                     identifier = result.tag.identityLine(),
                     actions = {
-                        FilledAction("Open asset") { onOpenAsset(result.asset.id.value) }
-                        TextAction("Cancel", onDismiss)
+                        FilledAction(stringResource(R.string.tag_open_asset)) { onOpenAsset(result.asset.id.value) }
+                        TextAction(stringResource(R.string.tag_cancel), onDismiss)
                     },
                 ) {
                     // #49 AC 3: the placement when the owner set one, nothing extra when they did not.
@@ -141,7 +148,7 @@ fun TagResultSheet(
                 // actionable maintenance, to the completion sheet that opens before it (#50).
                 LaunchedEffect(result) { openResolved(result, onOpenAsset, onOpenMaintenance) }
                 NfcSheet(
-                    eyebrow = "Tag detected",
+                    eyebrow = stringResource(R.string.tag_eyebrow_detected),
                     accent = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
                     glyph = ServiceTagIcons.NfcTag,
                     sentence = result.asset.name,
@@ -150,18 +157,18 @@ fun TagResultSheet(
                     // #49 AC 3, review fix round 1 finding 4: spec §2.7 says "the scan result"
                     // without naming a branch, so the ambient path surfaces the placement too.
                     result.tag.placementOrNull()?.let { PlacementLine(it) }
-                    QuietLine("Opening asset…")
+                    QuietLine(stringResource(R.string.tag_opening_asset))
                 }
             }
 
             is TagResult.PreSplitLink -> NfcSheet(
-                eyebrow = "Tag detected",
+                eyebrow = stringResource(R.string.tag_eyebrow_detected),
                 accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
                 sentence = PRE_SPLIT_LINK_SENTENCE,
                 identifier = result.tag.identityLine(),
-                actions = { TextAction("Cancel", onDismiss) },
+                actions = { TextAction(stringResource(R.string.tag_cancel), onDismiss) },
             )
 
             // #77 (C20): P77-36 over P77-37 — the asset left this phone; nothing here opens or writes it.
@@ -171,61 +178,63 @@ fun TagResultSheet(
                 glyph = ServiceTagIcons.Handover,
                 sentence = result.handedOver,
                 identifier = result.tag.identityLine(),
-                actions = { TextAction("Cancel", onDismiss) },
+                actions = { TextAction(stringResource(R.string.tag_cancel), onDismiss) },
             )
 
             is TagResult.Unregistered -> NfcSheet(
-                eyebrow = "Unregistered tag",
+                eyebrow = stringResource(R.string.tag_eyebrow_unregistered),
                 accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
-                sentence = "This tag is not assigned to anything yet.",
+                sentence = stringResource(R.string.tag_not_assigned),
                 identifier = result.tag.identityLine(),
                 problem = problem,
                 actions = {
-                    FilledAction("Bind to asset") { picking = true }
-                    TextAction("Cancel", onDismiss)
+                    FilledAction(stringResource(R.string.tag_bind_to_asset)) { picking = true }
+                    TextAction(stringResource(R.string.tag_cancel), onDismiss)
                 },
             )
 
             is TagResult.Revoked -> NfcSheet(
-                eyebrow = if (result.tag.status == TagStatus.LOST) "Tag marked lost" else "Tag retired",
+                eyebrow = stringResource(
+                    if (result.tag.status == TagStatus.LOST) R.string.tag_eyebrow_marked_lost else R.string.tag_eyebrow_retired,
+                ),
                 accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
-                sentence = "This tag was taken out of service. Binding it again puts it back to work.",
+                sentence = stringResource(R.string.tag_revoked_sentence),
                 identifier = result.tag.identityLine(),
                 problem = problem,
                 actions = {
-                    FilledAction("Bind to asset") { picking = true }
-                    TextAction("Cancel", onDismiss)
+                    FilledAction(stringResource(R.string.tag_bind_to_asset)) { picking = true }
+                    TextAction(stringResource(R.string.tag_cancel), onDismiss)
                 },
             )
 
             is TagResult.NotInRecords -> NfcSheet(
-                eyebrow = "Unregistered tag",
+                eyebrow = stringResource(R.string.tag_eyebrow_unregistered),
                 accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
-                sentence = "This ServiceTag tag is not in this phone's records.",
+                sentence = stringResource(R.string.tag_not_in_records),
                 identifier = identityLine(result.tagId),
                 problem = problem,
                 actions = {
-                    FilledAction("Bind to asset") { picking = true }
-                    OutlinedAction("Write a new tag over it") { onWriteTag(Route.WriteTag("none", null, null)) }
-                    TextAction("Cancel", onDismiss)
+                    FilledAction(stringResource(R.string.tag_bind_to_asset)) { picking = true }
+                    OutlinedAction(stringResource(R.string.tag_write_over_it)) { onWriteTag(Route.WriteTag("none", null, null)) }
+                    TextAction(stringResource(R.string.tag_cancel), onDismiss)
                 },
             )
 
             is TagResult.NotOurs -> NfcSheet(
-                eyebrow = "Not a ServiceTag tag",
+                eyebrow = stringResource(R.string.tag_eyebrow_not_ours),
                 accent = MaterialTheme.colorScheme.onSurfaceVariant,
                 glyph = Icons.Outlined.Info,
-                sentence = "This tag holds something else.",
+                sentence = stringResource(R.string.tag_holds_something_else),
                 problem = problem,
                 actions = {
-                    FilledAction("Write a new tag over it") { onWriteTag(Route.WriteTag("none", null, null)) }
-                    TextAction("Cancel", onDismiss)
+                    FilledAction(stringResource(R.string.tag_write_over_it)) { onWriteTag(Route.WriteTag("none", null, null)) }
+                    TextAction(stringResource(R.string.tag_cancel), onDismiss)
                 },
             ) {
                 QuietLine(result.reason)
@@ -327,7 +336,8 @@ internal fun NfcSheet(
                     Icon(imageVector = glyph, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
                 }
                 Text(
-                    text = eyebrow.uppercase(),
+                    // The eyebrow's capitals follow the rules of the language it is written in (#102).
+                    text = eyebrow.uppercase(LocalConfiguration.current.locales[0] ?: Locale.getDefault()),
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = accent,
                 )
@@ -352,7 +362,7 @@ internal fun NfcSheet(
 internal fun PlacementLine(value: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-            text = "Tag placement",
+            text = stringResource(R.string.tag_placement),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -394,18 +404,23 @@ private fun BindTargetPicker(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(
-                text = "BIND THIS TAG TO",
+                text = stringResource(R.string.tag_picker_title),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            PickerRow(title = "New asset…", detail = "Create it, then scan this tag again", onClick = onNewAsset)
+            PickerRow(
+                title = stringResource(R.string.tag_picker_new_asset),
+                detail = stringResource(R.string.tag_picker_new_asset_detail),
+                onClick = onNewAsset,
+            )
             if (targets.assets.isEmpty()) {
-                QuietLine("Nothing to bind to yet")
+                QuietLine(stringResource(R.string.tag_picker_empty))
             }
+            val uncategorised = stringResource(R.string.tag_picker_asset)
             targets.assets.forEach { asset ->
                 PickerRow(
                     title = asset.name,
-                    detail = asset.category.ifBlank { "Asset" },
+                    detail = asset.category.ifBlank { uncategorised },
                     onClick = { onPick(TagTarget.AssetTarget(asset.id)) },
                 )
             }

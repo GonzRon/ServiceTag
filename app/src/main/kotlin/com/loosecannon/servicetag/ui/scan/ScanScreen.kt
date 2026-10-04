@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,6 +47,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -122,10 +124,10 @@ fun ScanScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Read / inspect tag") },
+                title = { Text(stringResource(R.string.scan_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.scan_back))
                     }
                 },
             )
@@ -209,11 +211,11 @@ private fun ReadyToScan(reading: Boolean) {
         ) {
             Halo()
             Text(
-                text = if (reading) "READING TAG" else "READY TO SCAN",
+                text = stringResource(if (reading) R.string.scan_reading else R.string.scan_ready),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
             )
             Text(
-                text = "Hold the top of your phone near the equipment tag.",
+                text = stringResource(R.string.scan_hold_hint),
                 style = SheetSentence,
                 textAlign = TextAlign.Center,
             )
@@ -263,10 +265,10 @@ private fun Halo() {
 @Composable
 private fun NfcAvailability(readerMode: ReaderMode) {
     val line = when {
-        !readerMode.present -> "Scanning needs the app's own window."
-        !readerMode.available -> "This phone has no NFC hardware."
-        !readerMode.enabled -> "NFC is turned off. Enable it in system settings, then come back."
+        !readerMode.present -> R.string.scan_needs_window
+        !readerMode.available -> R.string.nfc_no_hardware
+        !readerMode.enabled -> R.string.nfc_turned_off
         else -> null
     }
-    line?.let { QuietLine(it) }
+    line?.let { QuietLine(stringResource(it)) }
 }
