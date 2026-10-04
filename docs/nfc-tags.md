@@ -69,6 +69,20 @@ A simple rule of thumb is:
 
 You do not need an advanced, high-security, or specialty NFC tag for ordinary ServiceTag use. The important things are that the tag is compatible with NFC, physically suited to where you are mounting it, and easy for your phone to reach.
 
+## Should I lock the tag?
+
+ServiceTag can optionally make a compatible NFC tag **permanently read-only** as part of the write process.
+
+On the **Write a tag** screen, turn on **Lock permanently** if this is a tag you are installing for good. ServiceTag will warn you that the choice is irreversible. It writes the ServiceTag identity, reads the tag back to verify it, and only then attempts the permanent lock.
+
+A locked tag still scans normally. What changes is that its contents can no longer be rewritten, whether by ServiceTag or by another NFC-writing app.
+
+This can be useful for permanently mounted equipment because it prevents someone with physical access from casually overwriting the ServiceTag identity. It does **not** hide or encrypt the identifier; NFC readers can still read it.
+
+Leave the tag unlocked if you expect to reuse or repurpose it later. Not every NFC tag supports permanent locking, so the option only succeeds when the tag hardware supports Android's read-only operation.
+
+See [NFC tag privacy and how passive tags work](nfc-privacy.md) for the broader privacy/security model.
+
 ## Where to put the tag
 
 Choose a location that is:
@@ -102,9 +116,11 @@ The basic ServiceTag workflow is intentionally simple:
 
 1. Create or open the Asset in ServiceTag.
 2. Use ServiceTag's NFC workflow to write/bind the tag to that Asset.
-3. Attach the tag to the equipment.
-4. Scan it once from its final location to make sure your phone can read it comfortably.
-5. From then on, tap the tag whenever you want to open that equipment's maintenance record.
+3. If the tag will be installed permanently and you do not intend to reuse it, optionally choose **Lock permanently** before writing.
+4. ServiceTag writes and verifies the tag; if locking was selected and the tag supports it, the verified tag is then made permanently read-only.
+5. Attach the tag to the equipment.
+6. Scan it once from its final location to make sure your phone can read it comfortably.
+7. From then on, tap the tag whenever you want to open that equipment's maintenance record.
 
 ServiceTag stores the useful equipment and maintenance information in its local database. The NFC tag carries the stable identity needed to get you back to the correct Asset.
 
