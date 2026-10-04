@@ -14,7 +14,7 @@ ServiceTag is **local-first**. It does not require an account or a cloud service
 
 The NFC tag is the doorway; the Asset record is the product.
 
-A ServiceTag Asset can describe a complete system or a component of another Asset. Its Service Record keeps an auditable history of maintenance events, repairs, replacements, notes, typed measurements, meter readings, materials used, photos, manuals, receipts, and references. Quick actions make recurring work fast to record, while custom readings and profiles let different equipment collect the information that actually matters.
+A ServiceTag Asset can describe a complete system or a child Asset that belongs to another Asset. Its Service Record keeps an auditable history of maintenance events, repairs, replacements, notes, typed measurements, meter readings, materials used, photos, manuals, receipts, and references. Quick actions make recurring work fast to record, while custom readings and profiles let different equipment collect the information that actually matters.
 
 Maintenance is modeled separately from history. A schedule can repeat by calendar time, by meter usage, or by whichever comes first. Related equipment can be maintained as a group. Local notifications can surface due work and let you complete, snooze, or open it from the reminder.
 
@@ -32,12 +32,14 @@ That separation matters. A snowblower may need service before winter, a hot tub 
 ## What it does today
 
 - **NFC identity and binding** — create Assets, write and verify ServiceTag tags, safely rebind or replace tags, and scan directly into the correct Asset.
-- **Asset records and hierarchy** — identity, category, make/model/serial, location, purchase/warranty information, parent systems and components, archive/retirement state, operating season, condition, and health.
+- **Asset records and hierarchy** — identity, category, make/model/serial, location, purchase/warranty information, parent systems and child Assets, archive/retirement state, operating season, condition, and health.
 - **Lending** — lend an Asset to a person or organisation picked from Android Contacts, with an optional due-back reminder; the Asset shows who has it and when it is due back, an overdue loan reaches the Dashboard, and "Mark returned" keeps the loan as history.
 - **Replace asset** — replace an Asset with a distinct successor: the old Asset is retired with its history intact, you review what carries forward, the NFC tags you choose move, and each Asset links to the other ("Replaced by …" / "Replaces …").
 - **Service history and measurements** — maintenance journal, repairs, replacements, notes, typed readings, meters, derived readings, consumables recorded on events, and configurable quick-action profiles.
 - **Maintenance scheduling and local reminders** — time and meter rules, maintenance groups, due/overdue state, snooze/postpone, seasonal service policy, maintenance breaks, completion flows, and reminder-health diagnostics.
-- **Documents and references** — attach photos, manuals, receipts and other files; save web/reference links; share a document, image, URL, or note into an Asset from Android's share sheet.
+- **Supply items** — a catalog of the products your equipment takes, such as filters, batteries, belts, cartridges, chemicals and fluids, each with its part number, preferred unit and specifications; an Asset says which supply items it takes and in what role, and a quick action's or journal entry's material line can name one.
+- **Installed components** — record what is fitted inside an Asset, one unit inside another, with its install date, the supply item it is and what it is made of; replacing or removing one keeps it as history.
+- **Documents and references** — attach photos, manuals, receipts and other files; save web/reference links; share a document, image, URL, or note into an Asset from Android's share sheet, and a document, image or URL into a supply item or an installed component too. Files and links belong to an Asset, a supply item or an installed component; a supply item's are kept once and reached from everywhere it is used.
 - **Save as document** — turn an Asset's https web link into a real attachment: ServiceTag downloads it when you tap it on the phone, or when your paired workstation asks through the Developer API while its screen is open, checks that its contents match a supported format (PDF; PNG, JPEG, GIF, WebP; RTF; DOC, XLS, PPT; DOCX, XLSX, PPTX; ODT, ODS, ODP; TXT, Markdown, CSV, TSV), and keeps where it came from; a web or login page is never saved.
 - **Backup, restore, and merge foundations** — export logical backups with stable IDs and attachment artifacts, restore onto a replacement installation, and use conflict-safe additive merge machinery without silently overwriting existing rows.
 - **Transfer Packs** — when equipment changes hands, select the Assets that are leaving, export their history, documents and NFC identities as a Transfer Pack, share it to another ServiceTag that imports it, and mark them transferred out here; a later pack can bring an Asset back.
@@ -55,9 +57,7 @@ ServiceTag 1.6.0 lets a paired workstation do the jobs that used to need the pho
 
 ServiceTag 1.7.0 adds a catalog of supply items with the assets that take them, installed components — what is fitted inside an Asset, with its replacement history — files and links that belong to a supply item or an installed component, with Share to all three, and an operating season that can follow Home Assistant ([release notes](docs/releases/1.7.0.md)).
 
-The next product phase is **supplies and consumables**: a canonical catalog for filters, batteries, belts, cartridges, chemicals, fluids and other service materials, with their specifications, the assets they fit, and replacement-on-cadence through ordinary maintenance schedules. After that, ServiceTag can attach manuals, receipts, photos, links and share-intake resources directly to those supply identities.
-
-Larger ideas such as installed-component tracking, richer backup conflict resolution, telemetry/BLE ingestion, Home Assistant integrations beyond the season sync below, and LLM-assisted equipment research remain later work rather than prerequisites for the core maintenance app.
+Larger ideas such as richer backup conflict resolution, telemetry/BLE ingestion, Home Assistant integrations beyond the season sync below, and LLM-assisted equipment research remain later work rather than prerequisites for the core maintenance app.
 
 ## Local-first by design
 

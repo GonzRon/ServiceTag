@@ -640,6 +640,32 @@ class VersionAgreementTest {
     }
 
     /**
+     * The README's capability lines for 1.7.0: supply items and installed components, each anchored at
+     * its own bullet, as the 1.5.0 case does. The two sentences that promised supplies and
+     * installed-component tracking as future work must be gone, and the README links the release
+     * notes, which must exist.
+     */
+    @Test fun theReadmeNamesSupplyItemsAndInstalledComponents() {
+        val readme = repoFile("README.md").readText()
+        for (lead in listOf("Supply items", "Installed components")) {
+            assertTrue(
+                "the README must carry the 1.7.0 capability bullet \"$lead\"",
+                Regex("""^- \*\*$lead\*\* — """, RegexOption.MULTILINE).containsMatchIn(readme),
+            )
+        }
+        assertFalse(
+            "the README must no longer promise supplies as the next product phase",
+            readme.contains("The next product phase is **supplies"),
+        )
+        assertFalse(
+            "the README must no longer list installed-component tracking as later work",
+            readme.contains("installed-component tracking"),
+        )
+        assertTrue("the README must link the 1.7.0 release notes", readme.contains("](docs/releases/1.7.0.md)"))
+        assertTrue("the 1.7.0 release notes must exist", repoFile("docs/releases/1.7.0.md").isFile)
+    }
+
+    /**
      * D9's Attachments row claimed two controls this app has never had: sniffing the type on
      * import, and a configurable size cap. Spec §4.3 retires both. A stated control that does not
      * exist is worse than an absent one, so the claims go and the row says instead why trusting
