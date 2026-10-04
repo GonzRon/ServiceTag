@@ -57,6 +57,13 @@ Boundaries that earn their keep (they hide foreign vocabularies):
 >   `deadline_local_delivery` precedent: no backup, export, merge or Transfer Pack carries them, and the backup
 >   format stays 20.
 
+> **Network-boundary amendment (2026-10-04, #85, #16, #101).** The original target document predates
+> two released outbound paths. **Save as document** (#85) uses an explicit HTTPS fetch of the owner's chosen
+> reference; **Home Assistant season sync** (#16) uses authenticated GETs to the configured Home Assistant
+> endpoint under its network-eligibility rules. The Developer API remains loopback-only. The current permission
+> and privacy inventory is maintained in `docs/local-first-and-permissions.md`, and the manifest comment is kept
+> in step with those two intentional outbound uses.
+
 ## 2. Component diagram
 
 ```
