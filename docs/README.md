@@ -7,6 +7,7 @@ ServiceTag documentation follows **progressive disclosure**: start with the prod
 ## Product
 
 - [NFC tags for ServiceTag](nfc-tags.md) — beginner guide to NFC, choosing indoor/outdoor/on-metal tags, placement, and scanning.
+- [NFC tag privacy and passive power](nfc-privacy.md) — what is stored on a tag, how the phone powers it, and what another reader can see.
 - [Current capabilities](capabilities.md) — what the released app can do today.
 - [Local-first design, privacy, and Android permissions](local-first-and-permissions.md) — where data lives, when ServiceTag uses the network, and why Android permissions exist.
 - [Home Assistant season sync](home-assistant-season-sync.md) — setup, behavior, network choices, security boundaries, and a fictional example.
@@ -30,7 +31,7 @@ ServiceTag documentation follows **progressive disclosure**: start with the prod
 
 ## Where to start
 
-If NFC tags are new to you, start with [NFC tags for ServiceTag](nfc-tags.md).
+If NFC tags are new to you, start with [NFC tags for ServiceTag](nfc-tags.md), then read [NFC tag privacy and passive power](nfc-privacy.md) if you want to understand what the tag stores and what a stranger can see.
 
 If you are evaluating ServiceTag, read [Current capabilities](capabilities.md).
 
