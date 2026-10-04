@@ -56,10 +56,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs160AndCode19() {
-        assertEquals("1.6.0", BuildConfig.VERSION_NAME)
-        assertEquals(19, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.6.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs170AndCode20() {
+        assertEquals("1.7.0", BuildConfig.VERSION_NAME)
+        assertEquals(20, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.7.0", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -154,7 +154,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.6.0", status.appVersion)
+        assertEquals("1.7.0", status.appVersion)
         assertEquals(21, status.schemaVersion)
         assertEquals(20, status.backupFormatVersion)
     }
@@ -379,6 +379,61 @@ class VersionAgreementTest {
         assertEquals("the 1.5.0 / 18 row must still be there, once", 1, previous.size)
         assertTrue(
             "the 1.6.0 row must follow the 1.5.0 row",
+            previous.single().range.first < text.indexOf(rows.single()),
+        )
+    }
+
+    /**
+     * The 1.7.0 / 20 row: a MINOR, so it names its four issues, the schema and the format it ships,
+     * and the forward-only reason it is a MINOR, as the 1.6.0 row does. It is the first release whose
+     * schema and format differ — #16's two tables are device-local — so the row must say why the
+     * format stays 20, and it names the two things a script could meet: a line sent without
+     * `supplyId` clears its link, and 409 `SEASON_SYNC_ENABLED`. It links release notes that exist.
+     * Anchored at the start of the row; `versionCode` 20 is claimed by this row and by nothing else,
+     * and the 1.6.0 row it follows is still there, once (`versioningRecords160` holds what that row
+     * says).
+     */
+    @Test fun versioningRecords170() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.7\.0\s*\|\s*20\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.7.0 / 20 row", 1, rows.size)
+        val row = rows.single()
+        for (issue in listOf("#15", "#47", "#69", "#16")) {
+            assertTrue("the row must name $issue", Regex("""$issue\b""").containsMatchIn(row))
+        }
+        assertTrue(
+            "the row must name the schema and the format it ships",
+            Regex("""schema \*\*21\*\*.*format \*\*20\*\*""").containsMatchIn(row),
+        )
+        assertTrue(
+            "the row must say why the format stays 20 under schema 21",
+            row.contains("device-local") && row.contains("format stays 20"),
+        )
+        assertTrue("the row must say the format bump is forward-only", row.contains("forward-only"))
+        assertTrue(
+            "the row must give the forward-only reason it is a MINOR",
+            row.contains("`BackupNewerFormat`") && row.contains("MINOR by the rule above"),
+        )
+        assertTrue(
+            "the row must name the two things a script could meet",
+            row.contains("`supplyId`") && row.contains("409 `SEASON_SYNC_ENABLED`"),
+        )
+        assertTrue(
+            "the row must link the 1.7.0 release notes, which must exist",
+            row.contains("`docs/releases/1.7.0.md`") && repoFile("docs/releases/1.7.0.md").isFile,
+        )
+        assertTrue("the row must name its tag", row.contains("`servicetag-v1.7.0`"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 20",
+            1,
+            Regex("""^\|[^\n]*\|\s*20\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        val previous = Regex("""^\|\s*1\.6\.0\s*\|\s*19\s*\|""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("the 1.6.0 / 19 row must still be there, once", 1, previous.size)
+        assertTrue(
+            "the 1.7.0 row must follow the 1.6.0 row",
             previous.single().range.first < text.indexOf(rows.single()),
         )
     }
