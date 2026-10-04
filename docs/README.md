@@ -18,6 +18,7 @@ ServiceTag documentation follows **progressive disclosure**: start with the prod
 - [Developer API v1](api/v1.md) — the loopback HTTP contract exposed while the Developer API screen is open.
 - [ServiceTag MCP tools](../tools/servicetag-mcp/README.md) — workstation-side MCP bridge built on the Developer API.
 - [Versioning and release policy](versioning.md) — ServiceTag's product SemVer rules and supported release history.
+- [GNU AGPLv3 license](../LICENSE) — licensing terms for ServiceTag.
 - [Release proofs](release-proofs.md) — recorded release/gate evidence.
 
 ## Architecture and design record
