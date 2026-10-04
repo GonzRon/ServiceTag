@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_transfer.xml. -->
+<resources>
+    <string name="replace_asset">Gerät ersetzen</string>
+    <string name="replace_back">Zurück</string>
+    <string name="replace_old_asset">Altes Gerät</string>
+    <string name="replace_will_be_retired">%1$s wird ausgemustert. Verlauf, Dokumente und Serviceprotokoll bleiben unverändert erhalten.</string>
+    <string name="replace_was_retired_on">%1$s wurde am %2$s ausgemustert. Verlauf, Dokumente und Serviceprotokoll bleiben unverändert erhalten.</string>
+    <string name="replace_new_asset">Neues Gerät</string>
+    <string name="replace_separate_asset">Ein eigenständiges Gerät mit eigener Identität. Nichts vom Verlauf des alten Geräts wird kopiert.</string>
+    <string name="replace_carry_forward">Übernehmen</string>
+    <string name="replace_only_what_you_tick">Nur was du ankreuzt, wird kopiert, und zwar als neue Datensätze ohne Verlauf.</string>
+    <string name="replace_season_and_break">Betriebssaison und Wartungspause</string>
+    <string name="replace_description_and_notes">Beschreibung und Notizen</string>
+    <string name="replace_add_to">Zu %1$s hinzufügen</string>
+    <string name="replace_schedules_start_on">Kopierte Pläne beginnen am</string>
+    <string name="replace_needs_setup">Erfordert „Messwerte &amp; Aktionen“.</string>
+    <string name="replace_needs_season">Erfordert „Betriebssaison und Wartungspause“.</string>
+    <string name="replace_move_to_new">Zum neuen Gerät verschieben</string>
+    <string name="replace_leave_with_old">Beim alten Gerät lassen</string>
+    <string name="replace_moved_tag_not_rewritten">Ein verschobenes Tag wird nicht neu beschrieben. Beim Scannen öffnet es das neue Gerät.</string>
+    <plurals name="replace_children_stay">
+        <item quantity="one">%1$s bleibt Teil von %2$s.</item>
+        <item quantity="other">%1$s bleiben Teil von %2$s.</item>
+    </plurals>
+    <string name="replace_lent_out">%1$s ist verliehen. Der Verleih bleibt bei diesem Gerät.</string>
+    <string name="replace_retire_on">%1$s am %2$s ausmustern</string>
+    <string name="replace_stays_retired_from">%1$s bleibt seit %2$s ausgemustert</string>
+    <string name="replace_create">%1$s anlegen</string>
+    <string name="replace_nothing_carried">Nichts übernommen</string>
+    <string name="replace_could_not_replace">%1$s konnte nicht ersetzt werden. Es wurde nichts geändert.</string>
+    <string name="replace_changed_while_reviewing">Das Gerät oder zugehörige Daten wurden geändert, während du sie geprüft hast. Es wurde nichts geändert.</string>
+    <string name="replace_replaced_by">Am %2$s durch %1$s ersetzt</string>
+    <string name="replace_replaces">Ersetzt %1$s</string>
+    <string name="replace_was_in_season_on">War das neue Gerät am %1$s in der Saison?</string>
+
+    <string name="transfer_assets">Geräte übergeben</string>
+    <string name="transfer_back">Zurück</string>
+    <string name="transfer_select_what_leaves">Wähle aus, was ServiceTag auf diesem Telefon verlässt</string>
+    <string name="transfer_components_go_with">Untergeräte werden mit dem Gerät übergeben, zu dem sie gehören.</string>
+    <string name="transfer_review">Prüfen</string>
+    <string name="transfer_pack">Übergabepaket</string>
+    <string name="transfer_may_contain">Diese Daten können Seriennummern, Standorte, Kaufinformationen, Belege und den Serviceverlauf enthalten.</string>
+    <string name="transfer_note_label">Notiz für den neuen Besitzer (optional)</string>
+    <string name="transfer_create">Übergabepaket erstellen</string>
+    <string name="transfer_mixed_group">%1$s umfasst auch %2$s, die hier bleiben. Eine Gruppe wird nur zusammen mit allen Geräten übergeben, die sie je umfasst hat.</string>
+    <string name="transfer_parent_not_selected">%1$s ist ein Untergerät von %2$s. Wähle auch %2$s aus.</string>
+    <string name="transfer_lent_out">%1$s ist verliehen. Erfasse zuerst die Rückgabe.</string>
+    <string name="transfer_outside_reference">%1$s hat einen Datensatz, der auf etwas außerhalb dieser Übergabe verweist.</string>
+    <string name="transfer_creating">Übergabepaket wird erstellt…</string>
+    <string name="transfer_not_created">Übergabepaket nicht erstellt: %1$s. Es wurde nichts geändert.</string>
+    <string name="transfer_not_created_entangled">Übergabepaket nicht erstellt: Daten auf diesem Telefon verweisen noch auf ein übergebenes Gerät. Es wurde nichts geändert.</string>
+    <string name="transfer_not_created_generic">Übergabepaket nicht erstellt: Die Datei konnte nicht geschrieben werden. Es wurde nichts geändert.</string>
+    <string name="transfer_ready">Übergabepaket bereit</string>
+    <string name="transfer_share">Teilen</string>
+    <string name="transfer_save_a_copy">Kopie speichern</string>
+    <string name="transfer_size">Größe: %1$s</string>
+    <string name="transfer_share_title">Übergabepaket teilen</string>
+    <string name="transfer_saved">Gespeichert</string>
+    <string name="transfer_mark_question">Diese Geräte auf diesem Telefon als übergeben markieren?</string>
+    <string name="transfer_mark">Als übergeben markieren</string>
+    <string name="transfer_mark_consequence">Ihre Erinnerungen enden, und sie verschwinden aus deinen Listen. Unter „Archiviert“ kannst du sie weiterhin öffnen.</string>
+    <string name="transfer_transferred">Übergeben</string>
+    <string name="transfer_transferred_out">Übergeben</string>
+    <string name="transfer_transferred_on">Übergeben am %1$s</string>
+    <string name="transfer_pack_line">Übergabepaket %1$s</string>
+    <string name="transfer_scan_title">Gerät übergeben</string>
+    <string name="transfer_handed_over">%1$s wurde am %2$s übergeben. Dieses Telefon verwaltet es nicht mehr.</string>
+    <string name="transfer_changed_since">%1$s wurde geändert, nachdem dieses Übergabepaket erstellt wurde. Erstelle es erneut.</string>
+    <string name="transfer_could_not_mark">Diese Geräte konnten nicht markiert werden. Es wurde nichts geändert.</string>
+    <string name="transfer_could_not_save">Die Kopie konnte nicht gespeichert werden.</string>
+    <string name="transfer_nothing_to_offer">Es können keine Geräte übergeben werden.</string>
+    <string name="transfer_already_transferred">Diese Geräte sind bereits als übergeben markiert.</string>
+    <string name="transfer_too_large">Diese Geräte haben zu viele Daten für ein Übergabepaket. Übergib weniger auf einmal.</string>
+    <string name="transfer_pack_gone">Dieses Übergabepaket ist nicht mehr auf diesem Telefon. Erstelle es erneut.</string>
+    <string name="transfer_included_with">Zusammen mit %1$s enthalten</string>
+    <string name="transfer_withdraw_record">Übergabevermerk zurückziehen</string>
+    <string name="transfer_withdraw_title">Vermerk für Übergabepaket %1$s zurückziehen?</string>
+    <string name="transfer_withdraw_body">Nutze das nur, wenn dieses Übergabepaket nicht weitergegeben wurde oder der Vermerk eines anderen Telefons gelten soll. Seine Geräte bleiben archiviert.</string>
+    <string name="transfer_withdraw">Zurückziehen</string>
+    <string name="transfer_could_not_withdraw">Dieser Vermerk konnte nicht zurückgezogen werden. Es wurde nichts geändert.</string>
+    <string name="transfer_withdraw_entangled">Dieser Vermerk konnte nicht zurückgezogen werden: Daten auf diesem Telefon würden noch auf ein übergebenes Gerät verweisen. Es wurde nichts geändert.</string>
+    <string name="transfer_bearer">Jeder, der diese Datei hat, kann diese Geräte importieren. Teile sie nur mit der Person oder dem Telefon, für die sie bestimmt ist.</string>
+    <string name="transfer_mark_entangled">Diese Geräte konnten nicht markiert werden: Daten auf diesem Telefon verweisen noch auf ein übergebenes Gerät. Es wurde nichts geändert.</string>
+
+    <string name="transfer_import_asset_transferred_out">Dieses Gerät wurde übergeben.</string>
+    <string name="transfer_import_title">Übergabepaket importieren</string>
+    <string name="transfer_import_note">Notiz: %1$s</string>
+    <string name="transfer_import_created">Erstellt am %1$s</string>
+    <string name="transfer_import_contains">Enthält</string>
+    <string name="transfer_import_import">Importieren</string>
+    <string name="transfer_import_already_here">Dieses Übergabepaket ist bereits auf diesem Telefon.</string>
+    <string name="transfer_import_conflicts">Dieses Übergabepaket steht im Konflikt mit Daten auf diesem Telefon, daher wurde nichts importiert.</string>
+    <string name="transfer_import_tag_used_here">Ein NFC-Tag in diesem Paket wird hier bereits für %1$s verwendet.</string>
+    <string name="transfer_import_duplicate">%1$s ist hier möglicherweise schon als %2$s vorhanden.</string>
+    <string name="transfer_import_not_a_pack">Diese Datei ist kein Übergabepaket.</string>
+    <string name="transfer_import_newer">Dieses Übergabepaket erfordert eine neuere Version von ServiceTag.</string>
+    <string name="transfer_import_damaged">Dieses Übergabepaket ist beschädigt und kann nicht importiert werden.</string>
+    <string name="transfer_import_imported">Übergabepaket importiert: %1$s</string>
+    <string name="transfer_import_could_not_import">Dieses Übergabepaket konnte nicht importiert werden. Es wurde nichts geändert.</string>
+    <string name="transfer_import_coming_back">Kommt zurück: %1$s</string>
+    <string name="transfer_import_not_brought_back">%1$s wurde von diesem Telefon übergeben, und dieses Übergabepaket bringt es nicht zurück.</string>
+
+    <plurals name="transfer_count_assets">
+        <item quantity="one">%1$d Gerät</item>
+        <item quantity="other">%1$d Geräte</item>
+    </plurals>
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="one">%1$d NFC-Tag</item>
+        <item quantity="other">%1$d NFC-Tags</item>
+    </plurals>
+    <plurals name="transfer_count_records">
+        <item quantity="one">%1$d Eintrag</item>
+        <item quantity="other">%1$d Einträge</item>
+    </plurals>
+    <plurals name="transfer_count_schedules">
+        <item quantity="one">%1$d Plan</item>
+        <item quantity="other">%1$d Pläne</item>
+    </plurals>
+    <plurals name="transfer_count_documents">
+        <item quantity="one">%1$d Dokument oder Foto</item>
+        <item quantity="other">%1$d Dokumente und Fotos</item>
+    </plurals>
+    <plurals name="transfer_count_service_cases">
+        <item quantity="one">%1$d Servicefall</item>
+        <item quantity="other">%1$d Servicefälle</item>
+    </plurals>
+
+    <string name="backup_title">Sicherung</string>
+    <string name="backup_back">Zurück</string>
+    <string name="backup_last_backup">Letzte Sicherung</string>
+    <string name="backup_never">Nie</string>
+    <string name="backup_set_explained">Ein Sicherungssatz besteht aus zwei Dateien in dem Ordner, den du wählst: den Daten und daneben den Anhangdateien. Er ist die einzige Kopie außerhalb dieses Telefons.</string>
+    <string name="backup_export_set">Sicherungssatz exportieren</string>
+    <string name="backup_folder_not_writable">In diesen Ordner kann nicht geschrieben werden</string>
+    <string name="backup_restore_section">Wiederherstellen</string>
+    <string name="backup_restore_data_explained">Beim Wiederherstellen der Daten wird zuerst alles auf diesem Telefon gelöscht und dann die Datei geladen.</string>
+    <string name="backup_restore_data">Daten wiederherstellen</string>
+    <string name="backup_restore_files_explained">Stelle danach das Dateiarchiv desselben Satzes wieder her, um die Anhangdateien zurückzuholen. Dabei werden Dateien hinzugefügt und nichts gelöscht.</string>
+    <string name="backup_restore_files">Dateien wiederherstellen</string>
+    <string name="backup_replace_title">Alles ersetzen?</string>
+    <string name="backup_replace_body">Alle Geräte, Tags und Verknüpfungen auf diesem Telefon werden gelöscht und durch den Inhalt der Datei ersetzt. Das kann nicht rückgängig gemacht werden.</string>
+    <string name="backup_replace_type_word">Gib %1$s ein, um zu bestätigen</string>
+    <string name="backup_replace_confirm">Ersetzen</string>
+    <string name="backup_cancel">Abbrechen</string>
+    <string name="backup_restore_empty_title">Diese Sicherung wiederherstellen?</string>
+    <string name="backup_restore_empty_body">Auf diesem Telefon gibt es noch keine Daten, daher wird nichts ersetzt.</string>
+    <string name="backup_restore_confirm">Wiederherstellen</string>
+
+    <string name="backup_no_attachment_folder">Wähle zuerst in den Einstellungen einen Anhangordner</string>
+    <string name="backup_exported_as">Exportiert als %1$s</string>
+
+    <string name="backup_export_failed_entangled">Export fehlgeschlagen: Daten auf diesem Telefon verweisen noch auf ein übergebenes Gerät</string>
+    <string name="backup_export_failed_files_archive">Export fehlgeschlagen: Das Dateiarchiv konnte nicht geschrieben werden</string>
+    <string name="backup_export_failed">Export fehlgeschlagen: %1$s</string>
+    <string name="backup_nothing_saved">%1$s. Es wurde nichts gespeichert.</string>
+    <string name="backup_not_saved">Sicherung nicht gespeichert: %1$s</string>
+    <plurals name="backup_left_behind">
+        <item quantity="one">%1$s. %2$s konnte nicht entfernt werden — lösche die Datei selbst.</item>
+        <item quantity="other">%1$s. %2$s konnten nicht entfernt werden — lösche sie selbst.</item>
+    </plurals>
+    <plurals name="backup_incomplete_missing">
+        <item quantity="one">%1$d Anhangdatei fehlt</item>
+        <item quantity="other">%1$d Anhangdateien fehlen</item>
+    </plurals>
+    <plurals name="backup_incomplete_changed">
+        <item quantity="one">%1$d Anhangdatei wurde seit dem Hinzufügen geändert</item>
+        <item quantity="other">%1$d Anhangdateien wurden seit dem Hinzufügen geändert</item>
+    </plurals>
+    <string name="backup_incomplete_both">%1$s und %2$s</string>
+    <string name="backup_incomplete_not_covered">das Dateiarchiv hat nicht alle Anhänge abgedeckt</string>
+
+    <string name="backup_restored_data">Importiert: %1$s, %2$s, %3$s</string>
+    <string name="backup_restored_data_attachments">Importiert: %1$s, %2$s, %3$s · %4$s</string>
+    <plurals name="backup_restored_assets">
+        <item quantity="one">%1$d Gerät</item>
+        <item quantity="other">%1$d Geräte</item>
+    </plurals>
+    <plurals name="backup_restored_tags">
+        <item quantity="one">%1$d NFC-Tag</item>
+        <item quantity="other">%1$d NFC-Tags</item>
+    </plurals>
+    <plurals name="backup_restored_links">
+        <item quantity="one">%1$d Verknüpfung</item>
+        <item quantity="other">%1$d Verknüpfungen</item>
+    </plurals>
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="one">%1$d Anhang aufgeführt; stelle das Dateiarchiv wieder her, um seinen Inhalt zu erhalten</item>
+        <item quantity="other">%1$d Anhänge aufgeführt; stelle das Dateiarchiv wieder her, um ihren Inhalt zu erhalten</item>
+    </plurals>
+
+    <plurals name="backup_restored_files">
+        <item quantity="one">%1$d Datei wiederhergestellt, %2$d übersprungen</item>
+        <item quantity="other">%1$d Dateien wiederhergestellt, %2$d übersprungen</item>
+    </plurals>
+    <string name="backup_report_separator">"; "</string>
+    <plurals name="backup_files_already_present">
+        <item quantity="one">%1$d bereits vorhanden</item>
+        <item quantity="other">%1$d bereits vorhanden</item>
+    </plurals>
+    <plurals name="backup_files_missing_entries">
+        <item quantity="one">%1$d aufgeführte Datei war nicht im Archiv</item>
+        <item quantity="other">%1$d aufgeführte Dateien waren nicht im Archiv</item>
+    </plurals>
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="one">%1$d Datei im Archiv war nicht aufgeführt</item>
+        <item quantity="other">%1$d Dateien im Archiv waren nicht aufgeführt</item>
+    </plurals>
+    <string name="backup_set_mismatch">Diese Dateien gehören zum Sicherungssatz %1$s, nicht zu %2$s</string>
+    <string name="backup_restore_failed">Wiederherstellung fehlgeschlagen: %1$s</string>
+    <string name="backup_restore_transferred_out_one">Wiederherstellung fehlgeschlagen: Diese Sicherung enthält noch %1$s, ein Gerät, das von diesem Telefon übergeben wurde. Es wurde nichts ersetzt.</string>
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="one">Wiederherstellung fehlgeschlagen: Diese Sicherung enthält noch %1$d Gerät, das von diesem Telefon übergeben wurde. Es wurde nichts ersetzt.</item>
+        <item quantity="other">Wiederherstellung fehlgeschlagen: Diese Sicherung enthält noch %1$d Geräte, die von diesem Telefon übergeben wurden. Es wurde nichts ersetzt.</item>
+    </plurals>
+
+    <string name="backup_cannot_create">%1$s kann im gewählten Ordner nicht erstellt werden</string>
+    <string name="backup_cannot_open_for_writing">%1$s kann nicht zum Schreiben geöffnet werden</string>
+    <string name="backup_cannot_open_for_reading">%1$s kann nicht zum Lesen geöffnet werden</string>
+</resources>
