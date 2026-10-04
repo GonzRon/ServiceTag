@@ -204,3 +204,14 @@ tasks.withType<Test>().configureEach {
         root.dir("docs/api").asFileTree,
     ).withPropertyName("releaseProofPolicyScope").withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+// #102: the unit tests render the app's words from src/main/res (EnglishResources), and the localization tests read
+// every language pack and the Kotlin sources they guard. A change to a string's text alone does not change the R
+// class, so without these inputs an edited translation or English string would be answered from the cache.
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        layout.projectDirectory.dir("src/main/res").asFileTree,
+        layout.projectDirectory.dir("src/main/kotlin").asFileTree,
+        rootProject.layout.projectDirectory.file("docs/localization-glossary.md"),
+    ).withPropertyName("localizationScope").withPathSensitivity(PathSensitivity.RELATIVE)
+}

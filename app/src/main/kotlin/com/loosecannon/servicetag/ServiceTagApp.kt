@@ -1,8 +1,12 @@
 package com.loosecannon.servicetag
 
 import android.app.Application
+import android.content.res.Configuration
+import android.os.LocaleList
 import android.util.Log
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.AndroidLocalizedText
+import com.loosecannon.servicetag.l10n.AppText
 import com.loosecannon.servicetag.reminders.BackstopWorker
 import com.loosecannon.servicetag.reminders.NotificationChannels
 import com.loosecannon.servicetag.reminders.QuickActionDispatch
@@ -18,14 +22,21 @@ class ServiceTagApp : Application() {
     lateinit var graph: AppGraph
         private set
 
+    /** #102: the languages the notification channels were last named in. */
+    private var channelLocales: LocaleList? = null
+
     override fun onCreate() {
         super.onCreate()
+        // #102: before anything can render a word — the channels below, a receiver, a worker, the first screen. A
+        // process started for any of them runs this first, so none of them can read text from an empty catalog.
+        AppText.install(AndroidLocalizedText(this))
         // #77 (R77-18): taken first, so the start-up sweep below spares any copy this process makes.
         val startedAt = System.currentTimeMillis()
         graph = AppGraph(this)
         // Idempotent: Android never rewrites an importance the user has changed, and CHANNELS'
         // importances are fixed, so calling this on every process start is safe (spec §5.5).
         NotificationChannels.ensure(this)
+        channelLocales = resources.configuration.locales
         // Synchronously, here, before this method returns (B05's ReminderDispatch KDoc): a
         // BOOT_COMPLETED broadcast is the one event the owner never sees to retry, and
         // `Application.onCreate` always completes before any component's `onReceive` or any
@@ -89,6 +100,20 @@ class ServiceTagApp : Application() {
             } catch (e: Exception) {
                 Log.w("ServiceTagApp", "the launch health check failed; nothing else is affected", e)
             }
+        }
+    }
+
+    /**
+     * #102: a language change — the device's, or this app's own in Android's per-app language settings — renames
+     * the notification channels in system settings. Re-creating an existing channel updates only its name and
+     * description; its importance and the owner's choices stay as they are. Any other change (a rotation, the
+     * dark theme) leaves the channels alone.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.locales != channelLocales) {
+            channelLocales = newConfig.locales
+            NotificationChannels.ensure(this)
         }
     }
 }
