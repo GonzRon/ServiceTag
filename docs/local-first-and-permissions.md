@@ -22,6 +22,8 @@ ServiceTag is distinct from [NoteTag](https://github.com/GonzRon/NoteTag). Servi
 
 The physical NFC tag is not an internet-connected device. It contains only a ServiceTag marker and opaque tag identity used to resolve a record in this phone's local database. Someone else who reads the tag does not receive the Asset's private record, although ordinary NFC identifiers should be treated as readable rather than secret.
 
+For compatible tags that will be installed permanently, ServiceTag can optionally make the NFC contents **permanently read-only after a verified write**. This prevents later rewriting but does not make the identifier secret, and the choice cannot be undone or repurposed later.
+
 See [NFC tag privacy and how passive tags work](nfc-privacy.md).
 
 ## Network use
