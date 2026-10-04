@@ -78,7 +78,7 @@ class DocumentsDescriptionLineTest {
         rule.onNode(
             hasTextExactly(
                 "Deck manual.pdf",
-                "Manual · 2.0 KB · 2026-09-20",
+                "Manual · 2.0 KB · 20 Sep 2026",
                 "Section 4 covers the pump seal",
             ),
         ).assertIsDisplayed()
@@ -92,7 +92,7 @@ class DocumentsDescriptionLineTest {
     @Test fun aRowWithNoDescriptionDrawsNoSecondLine() {
         draw(row("a", "Deck manual.pdf", ""))
 
-        rule.onNode(hasTextExactly("Deck manual.pdf", "Manual · 2.0 KB · 2026-09-20"))
+        rule.onNode(hasTextExactly("Deck manual.pdf", "Manual · 2.0 KB · 20 Sep 2026"))
             .assertIsDisplayed()
     }
 

@@ -2,6 +2,9 @@ package com.loosecannon.servicetag.ui.attachments
 
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.testing.EnglishResources
+import com.loosecannon.servicetag.testing.ResourcePack
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -22,6 +25,26 @@ class DocumentsSectionTest {
         assertEquals("1.0 MB", (1024L * 1024L).asFileSize())
         assertEquals("2.5 MB", (2L * 1024L * 1024L + 512L * 1024L).asFileSize())
         assertEquals("256.0 MB", (256L * 1024L * 1024L).asFileSize())
+    }
+
+    /**
+     * #102 (PR #106 review): the size's decimal separator is the rendering language's — "1,5 KB" in German, "1,5 Ko"
+     * in French — with the same one decimal; English keeps "1.5 KB".
+     */
+    @Test fun aSizesDecimalSeparatorIsTheLanguages() {
+        AppText.install(ResourcePack.pack("de"))
+        try {
+            assertEquals("1023 B", 1023L.asFileSize())
+            assertEquals("1,0 KB", 1024L.asFileSize())
+            assertEquals("1,5 KB", 1536L.asFileSize())
+            assertEquals("2,5 MB", (2L * 1024L * 1024L + 512L * 1024L).asFileSize())
+            AppText.install(ResourcePack.pack("fr"))
+            assertEquals("1,5 Ko", 1536L.asFileSize())
+        } finally {
+            AppText.install(EnglishResources())
+        }
+        assertEquals("1.5 KB", 1536L.asFileSize())
+        assertEquals("2.5 MB", (2L * 1024L * 1024L + 512L * 1024L).asFileSize())
     }
 
     @Test fun everyKindHasASentenceCaseLabel() {

@@ -34,6 +34,7 @@ import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.routeForDeepLink
 import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -297,7 +298,7 @@ class MaintenanceSheetViewModelTest {
         val item = model.state.value.items.single()
 
         assertEquals(DueStatus.OVERDUE, item.status)
-        assertEquals("Overdue since 2026-11-01.", item.whyNow)
+        assertEquals("Overdue since 1 Nov 2026.", item.whyNow)
         assertEquals("the canonical date is unchanged", "2026-12-20", item.effectiveDueOn)
     }
 
@@ -1009,11 +1010,11 @@ class MaintenanceSheetViewModelTest {
         assertNotNull("a dated rule shows its date", item.effectiveDueOn)
         assertEquals(
             "the RATIFIED per-item form for this status, and no new sentence template",
-            "Overdue since ${item.effectiveDueOn}.",
+            "Overdue since ${localizedDate(item.effectiveDueOn!!)}.",
             item.whyNow,
         )
         assertEquals("the ratified meter line, threshold and current value", "Due at 170 h, now 120.", item.meter)
-        assertEquals("2026-03-01", item.lastCompletedOn)
+        assertEquals("the last completion's day, as the owner reads it", "1 Mar 2026", item.lastCompletedOn)
         assertEquals(listOf("120 h"), item.lastReadings)
         assertEquals("quick versus form, before any selection", ONE_TAP, item.completionTakes)
         assertNull("an asset target has no round to report progress on", item.progress)

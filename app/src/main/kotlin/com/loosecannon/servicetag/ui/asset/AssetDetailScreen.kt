@@ -97,6 +97,7 @@ import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.warranty.WarrantyStatus
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.AppText
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.l10n.localizedList
@@ -1070,11 +1071,14 @@ private fun WarrantyBadge(label: String, inWarranty: Boolean) {
     }
 }
 
-/** The stored price through [Money], which owns minor units both ways; null when there is none. */
+/**
+ * The stored price through [Money], which owns minor units both ways, drawn with the language's decimal separator
+ * ([amountLine], #102); null when there is none.
+ */
 private fun priceLine(asset: Asset): String? {
     val minor = asset.purchasePriceMinor ?: return null
     val code = asset.currency ?: return null
-    return runCatching { Money.format(minor, code) }.getOrNull()
+    return runCatching { amountLine(minor, code) }.getOrNull()
 }
 
 /**
@@ -1593,6 +1597,7 @@ private fun categoryIcon(category: String): ImageVector {
 /** Any leap year: a stored `MM-DD` window edge drawn as a day and month, so 29 February keeps its day. */
 private const val ANY_LEAP_YEAR = 2000
 private val ledgerDay = DateTimeFormatter.ofPattern("dd")
+// The month's name is the rendering language's (#102): `withLocale(AppText.current.locale)` where it is formatted.
 private val ledgerMonth = DateTimeFormatter.ofPattern("MMM")
 private val ledgerYear = DateTimeFormatter.ofPattern("uuuu")
 
@@ -1605,7 +1610,7 @@ private fun String.asDayDate(): String =
 /** The ledger's 64dp date column wants the three parts apart, not one formatted string. */
 private fun Long.asLedgerDate(): Triple<String, String, String> {
     val at = zoned()
-    return Triple(at.format(ledgerDay), at.format(ledgerMonth), at.format(ledgerYear))
+    return Triple(at.format(ledgerDay), at.format(ledgerMonth.withLocale(AppText.current.locale)), at.format(ledgerYear))
 }
 
 /**
@@ -1616,5 +1621,5 @@ private fun Long.asLedgerDate(): Triple<String, String, String> {
 private fun String.asLedgerDate(): Triple<String, String, String> {
     val date = runCatching { LocalDate.parse(this) }.getOrNull()
         ?: return Triple(this, "", "")
-    return Triple(date.format(ledgerDay), date.format(ledgerMonth), date.format(ledgerYear))
+    return Triple(date.format(ledgerDay), date.format(ledgerMonth.withLocale(AppText.current.locale)), date.format(ledgerYear))
 }

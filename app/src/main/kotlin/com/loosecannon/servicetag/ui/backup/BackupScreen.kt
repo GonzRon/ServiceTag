@@ -46,6 +46,7 @@ import com.loosecannon.servicetag.backup.SafBackupSetWriter
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDateTime
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -53,9 +54,8 @@ import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.ControlShape
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -324,7 +324,10 @@ private fun RestoreEmptyStoreDialog(onDismiss: () -> Unit, onRestore: () -> Unit
     )
 }
 
-/** "Never" is a fact worth stating plainly; anything else is the instant, to the minute. */
+/**
+ * "Never" is a fact worth stating plainly; anything else is the instant, to the minute, in this phone's zone and the
+ * language's own date-and-time display.
+ */
 private fun lastBackupLine(at: Long?): String = at
-    ?.let { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(it)) } // l10n-ok: date-time pattern
+    ?.let { localizedDateTime(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime()) }
     ?: localized(R.string.backup_never)

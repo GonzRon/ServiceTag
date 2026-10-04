@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -247,8 +248,9 @@ class ScheduleOperationsTest {
         rule.onNodeWithText("Close this round").performClick()
         rule.awaitText("Close this round? The members not marked done will not be recorded as serviced.")
         // The date defaults to today, and it is the picked value — the field is read-only, so a date
-        // outside the round's range is unreachable rather than merely refused.
-        rule.awaitText(today.toString())
+        // outside the round's range is unreachable rather than merely refused. It reads as the display
+        // date; the closure below still stores the ISO day.
+        rule.awaitText(localizedDate(today))
         rule.onAllNodesWithText("Close this round")[1].performClick()
 
         rule.waitUntil(5_000) { runBlocking { graph.closures.all() }.size == 1 }

@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.condition.OfferBatch
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.ComponentCondition
@@ -525,7 +526,7 @@ class MaintenanceSheetViewModel(
             meter = meterLine(row),
             whyNow = whyNow(row),
             completionTakes = if (row.completionMode == CompletionMode.FORM) THE_FULL_FORM else ONE_TAP,
-            lastCompletedOn = row.lastCompletedOn?.toString(),
+            lastCompletedOn = row.lastCompletedOn?.let { localizedDate(it) },
             lastReadings = eventId?.let { readings.forEvent(it) }.orEmpty().map(::readingLine),
             progress = progressLine(row),
             // A meter-only schedule has no occurrence date to move and `PostponeSchedule` refuses
@@ -710,13 +711,14 @@ class MaintenanceSheetViewModel(
          *
          * The date is the **actionable** one (1.4), the date the status word is measured against,
          * so a row the policy pulled before its season says "Overdue since" the day it became late
-         * and never the later canonical date it would otherwise name.
+         * and never the later canonical date it would otherwise name. #102: drawn as the language's
+         * display date, never the ISO day.
          */
         fun whyNow(row: DueItem): String? {
             val due = row.actionableDueOn ?: return null
             return when (row.status) {
-                DueStatus.OVERDUE -> localized(R.string.maintenance_why_now_overdue_since, due.toString())
-                DueStatus.DUE, DueStatus.DUE_SOON -> localized(R.string.maintenance_why_now_due, due.toString())
+                DueStatus.OVERDUE -> localized(R.string.maintenance_why_now_overdue_since, localizedDate(due))
+                DueStatus.DUE, DueStatus.DUE_SOON -> localized(R.string.maintenance_why_now_due, localizedDate(due))
                 else -> null
             }
         }

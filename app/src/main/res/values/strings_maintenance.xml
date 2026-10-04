@@ -170,9 +170,9 @@
     <string name="maintenance_tag_placement">Tag placement</string>
     <!-- S139: the maintenance block when the sheet opened for the asset's condition and nothing is due. -->
     <string name="maintenance_nothing_due">Nothing due</string>
-    <!-- RATIFIED (§17.1e): an overdue item's line. %1$s: the date it became due (yyyy-mm-dd). -->
+    <!-- RATIFIED (§17.1e): an overdue item's line. %1$s: the display date it became due ("1 Mar 2026"). -->
     <string name="maintenance_why_now_overdue_since">Overdue since %1$s.</string>
-    <!-- RATIFIED (§17.1e): a due item's line. %1$s: the date it is due (yyyy-mm-dd). -->
+    <!-- RATIFIED (§17.1e): a due item's line. %1$s: the display date it is due ("1 Mar 2026"). -->
     <string name="maintenance_why_now_due">Due %1$s.</string>
     <!-- One reading of the last completion. %1$s: the value; %2$s: its unit. -->
     <string name="maintenance_reading_with_unit">%1$s %2$s</string>

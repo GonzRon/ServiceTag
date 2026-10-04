@@ -265,13 +265,13 @@
     <string name="season_sync_forced_in">Forced in season. %1$s is still checked, but it does not change the season until you choose Follow Home Assistant.</string>
     <!-- P16-29: the source line under Force out of season. %1$s: the entity ID. "Follow Home Assistant" is P16-23. -->
     <string name="season_sync_forced_out">Forced out of season. %1$s is still checked, but it does not change the season until you choose Follow Home Assistant.</string>
-    <!-- P16-30: %1$s: the date and time of the last successful check ("2026-03-01 14:05"). -->
+    <!-- P16-30: %1$s: the date and time of the last successful check, formatted ("1 Mar 2026, 14:05"). -->
     <string name="season_sync_last_success">Last successful check %1$s</string>
     <!-- P16-31: no valid reading yet. -->
     <string name="season_sync_no_reading_yet">No reading from Home Assistant yet.</string>
     <!-- P16-32: the stale marker — no successful check within one interval. -->
     <string name="season_sync_not_checked_in_time">Not checked successfully within the chosen interval.</string>
-    <!-- P16-33: Home Assistant's own change time, for information. %1$s: date and time ("2026-03-01 14:05"). -->
+    <!-- P16-33: Home Assistant's own change time, for information. %1$s: date and time, formatted ("1 Mar 2026, 14:05"). -->
     <string name="season_sync_changed_in_ha">Changed in Home Assistant %1$s</string>
     <!-- P16-34: provenance line. %1$s: the date, already formatted. -->
     <string name="season_sync_started_from_ha">Started from Home Assistant on %1$s</string>

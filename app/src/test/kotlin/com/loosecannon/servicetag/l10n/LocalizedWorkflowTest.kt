@@ -98,7 +98,8 @@ import org.junit.Test
  *   one object per JVM and other classes may read it first; a name missing outright is also
  *   `LocalizationCoverageTest`'s failure.
  * - **The owner's text is shown as entered** (acceptance 8): the asset's name and notes, the tag placement and the
- *   schedule title, at every step that shows them, in every language; ids and ISO dates likewise.
+ *   schedule title, at every step that shows them, in every language; ids likewise, and a date field the owner types
+ *   into keeps its ISO day. A date the owner reads inside a sentence is the pack's display date, never the ISO day.
  * - **What is stored is the same in every language** (acceptance 7): after the completion, every table the workflow
  *   can write — the scan stamps, the completion event, the recomputed schedule state — equals the English walk's,
  *   row for row. The event's title is the schedule's and its notes are empty: the workflow writes no word of its own.
@@ -243,10 +244,11 @@ class LocalizedWorkflowTest {
             assertEquals(DueStatus.OVERDUE, item.status)
             val dueOn = item.effectiveDueOn ?: error("$language: an overdue time rule has a date")
             assertEquals(
-                "$language: the why-now line is the pack's sentence around the ISO date",
-                String.format(pack.locale, pack.stringNamed("maintenance_why_now_overdue_since"), dueOn),
+                "$language: the why-now line is the pack's sentence around the pack's display date",
+                String.format(pack.locale, pack.stringNamed("maintenance_why_now_overdue_since"), localizedDate(dueOn)),
                 item.whyNow,
             )
+            assertFalse("$language: no ISO day inside the localized sentence", item.whyNow.orEmpty().contains(dueOn))
             assertDrawnFromPack(
                 pack,
                 "the completion sheet",

@@ -51,6 +51,8 @@ import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
+import com.loosecannon.servicetag.l10n.localizedDecimal
 import com.loosecannon.servicetag.ui.asset.FieldLabel
 import com.loosecannon.servicetag.ui.asset.KEY_DOCUMENTS
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -60,7 +62,6 @@ import com.loosecannon.servicetag.ui.components.StatusBlock
 import com.loosecannon.servicetag.ui.references.openRefusal
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.io.File
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -350,9 +351,9 @@ private fun rememberThumbnail(file: File): ImageBitmap? {
     return state.value
 }
 
-/** `kind · size · captured-on`, with the parts that are not there left out. */
+/** `kind · size · captured-on`, with the parts that are not there left out; the day is the display date. */
 private fun AttachmentRowState.quietLine(): String =
-    listOfNotNull(kind.label(), sizeBytes.asFileSize(), capturedOn).joinToString(" · ")
+    listOfNotNull(kind.label(), sizeBytes.asFileSize(), capturedOn?.let { localizedDate(it) }).joinToString(" · ")
 
 /** Sentence case, as the chips in the edit sheet show them too (spec §8.1). */
 internal fun AttachmentKind.label(): String = when (this) {
@@ -378,10 +379,11 @@ private fun AttachmentKind.glyph(): ImageVector = when (this) {
 /**
  * Under a kibibyte is plain bytes, then one decimal of KB, then one decimal of MB (spec §8.1).
  * It lives in this file because nothing else needs it; `internal` only so a test can name it.
- * #102: the number keeps its shipped formatting; only the unit word comes from the resources.
+ * #102: the unit word comes from the resources and the decimal separator is the language's ("1.5 KB",
+ * "1,5 KB" in German); the one decimal is the shipped rule in every language.
  */
 internal fun Long.asFileSize(): String = when {
     this < 1024L -> localized(R.string.documents_size_bytes, this.toString())
-    this < 1024L * 1024L -> localized(R.string.documents_size_kb, String.format(Locale.US, "%.1f", this / 1024.0))
-    else -> localized(R.string.documents_size_mb, String.format(Locale.US, "%.1f", this / (1024.0 * 1024.0)))
+    this < 1024L * 1024L -> localized(R.string.documents_size_kb, localizedDecimal(this / 1024.0, decimals = 1))
+    else -> localized(R.string.documents_size_mb, localizedDecimal(this / (1024.0 * 1024.0), decimals = 1))
 }

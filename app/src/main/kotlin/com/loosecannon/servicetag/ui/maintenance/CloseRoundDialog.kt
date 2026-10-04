@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import java.time.Instant
 import java.time.LocalDate
@@ -90,7 +91,9 @@ fun CloseRoundDialog(
                 // idiom (`AssetEditScreen.kt`), instantiated rather than re-worded.
                 val dateLabel = stringResource(R.string.maintenance_date)
                 MaintenanceField(
-                    value = closedOn.toString(),
+                    // Nothing parses this text, so it is the language's display date; the confirm
+                    // button still hands on the ISO day.
+                    value = localizedDate(closedOn),
                     onValueChange = {},
                     label = dateLabel,
                     // Read-only on purpose: the calendar is the only way to change it, so a date

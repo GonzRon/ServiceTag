@@ -47,6 +47,7 @@ import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -219,8 +220,9 @@ fun ScheduleDetailScreen(
                 StatusBadge(label = word, colors = colors, icon = statusIcon(state.status!!))
                 Spacer(Modifier.height(8.dp))
             }
-            state.effectiveDueOn?.let { LabelValue(label = stringResource(R.string.maintenance_date), value = it) }
-            state.postponedDueOn?.let { LabelValue(label = POSTPONE, value = it) }
+            // The state keeps the ISO days (Postpone and Close read them); the owner reads the display date.
+            state.effectiveDueOn?.let { LabelValue(label = stringResource(R.string.maintenance_date), value = localizedDate(it)) }
+            state.postponedDueOn?.let { LabelValue(label = POSTPONE, value = localizedDate(it)) }
             state.description.takeIf { it.isNotBlank() }?.let { QuietLine(it) }
             state.progress?.let { QuietLine(it) }
 
@@ -319,7 +321,7 @@ fun ScheduleDetailScreen(
                         thickness = 1.dp,
                         color = MaterialTheme.colorScheme.outlineVariant,
                     )
-                    LabelValue(label = row.assetName, value = row.occurredOn)
+                    LabelValue(label = row.assetName, value = localizedDate(row.occurredOn))
                 }
             }
 
@@ -332,7 +334,7 @@ fun ScheduleDetailScreen(
                         thickness = 1.dp,
                         color = MaterialTheme.colorScheme.outlineVariant,
                     )
-                    LabelValue(label = row.occurrenceOn, value = row.closedOn)
+                    LabelValue(label = localizedDate(row.occurrenceOn), value = localizedDate(row.closedOn))
                 }
             }
             Spacer(Modifier.height(24.dp))
