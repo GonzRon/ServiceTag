@@ -22,7 +22,7 @@ jobs:
       - name: assert the shared library is initialised at the pinned tag
         run: bash tools/check-submodule-pin.sh
       - name: unit tests and debug build
-        run: ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin :share-test-sender:assembleDebug --console=plain
+        run: ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin :app:lintDebug :share-test-sender:assembleDebug --console=plain
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
