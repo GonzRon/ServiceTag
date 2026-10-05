@@ -21,6 +21,7 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -41,6 +42,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -50,6 +52,8 @@ import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
 import com.loosecannon.servicetag.core.seasonsync.LastAppliedSource
 import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
@@ -86,6 +90,9 @@ import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_REFRESH
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_LINK_MANUAL
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_ENTER_MANUALLY
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_CHOOSE_ENTITY
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_CHANGE_ENTITY
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_READING_ENTITIES
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_SEARCH_ENTITIES
 import com.loosecannon.servicetag.ui.asset.CANCEL_BUTTON
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_LINK_CALENDAR
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_LINK_YEAR_ROUND
@@ -121,7 +128,10 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -140,8 +150,9 @@ import org.junit.runner.RunWith
  * screen shows; the rules behind them are the JVM rows' (66–69: the view models, the use cases, the strings).
  *
  * **No network and no Keystore** (B9 proved both). The card's and the sheet's models are built here from their
- * primary constructors over the real Room stores, with three in-process doubles: an in-memory [SecretStore] holding
- * `fictional-token-1`, a [SeasonSyncScheduler] that does nothing (no work, no read), and Sync now as a recorder.
+ * primary constructors over the real Room stores, with four in-process doubles: an in-memory [SecretStore] holding
+ * `fictional-token-1`, a [SeasonSyncScheduler] that does nothing (no work, no read), Sync now as a recorder, and the
+ * sheet's entity list (#105) as a scripted answer — three fictional `input_boolean.example_*` helpers, or a case's own.
  * They are seeded under the keys the screen asks for, through a [ViewModelStoreOwner] of the test's own, the way
  * `DeveloperApiListenerTest` seeds its model; a key the screen stopped using fails loudly (the graph's model would
  * answer P16-11, since the graph's store holds no token). The Home Assistant screen and the editor read the graph
@@ -161,6 +172,17 @@ class SeasonSyncScreensTest {
     private var shown by mutableStateOf(true)
 
     private val resumes = AtomicInteger()
+
+    /**
+     * #105: the setup sheet's one list read, answered in process — [HELPERS] unless a case scripts its own — and
+     * counted, so "nothing is read until Choose entity" and "Refresh reads again" are numbers. No socket is opened.
+     */
+    private val listReads = AtomicInteger()
+    @Volatile private var entityList: suspend () -> HaListOutcome? = { HaListOutcome.Listed(HELPERS) }
+    private val listEntities: suspend () -> HaListOutcome? = {
+        listReads.incrementAndGet()
+        entityList()
+    }
     private val resumeHook = ResumeRefresh { resumes.incrementAndGet() }
     private val deepLinks = MutableSharedFlow<Route>(replay = 1, extraBufferCapacity = 4)
     private val snackbars = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 4)
@@ -363,8 +385,8 @@ class SeasonSyncScreensTest {
 
     /**
      * Pins: the sheet opened by Link draws the mode's sentence (P16-44) above Save before anything is written — Save
-     * held until an entity is given (#105 row 16), then enabled — and a strands refusal draws S55 inside the sheet,
-     * which stays open. Targets: P16-44, Save, S55.
+     * held until an entity is given (#105 row 16), then enabled by a pick in the browser — and a strands refusal draws
+     * S55 inside the sheet, which stays open with the pick. Targets: P16-44, Save, the helper's row, S55.
      */
     @Test fun theSetupSheetShowsItsSentenceBeforeSaveAndKeepsS55Open() {
         connect()
@@ -380,21 +402,21 @@ class SeasonSyncScreensTest {
         assertTrue("the sentence comes before Save", top(SEASON_SYNC_LINK_CALENDAR) < top(SAVE_LABEL))
         assertNull("nothing is written before Save", binding(heater))
 
-        typeEntityId()
+        pickHelper(HEATER_HELPER)
         rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsEnabled().performClick()
 
         val strands = seasonStrands(listOf(PRE_SEASON_TITLE))
         rule.awaitText(strands)
         rule.onNodeWithText(strands).performScrollTo().assertIsDisplayed()
-        // Still the sheet: its sentence and its field stay on the tree (a keyboard may cover them, never removes them).
+        // Still the sheet: its sentence and its chosen entity stay on the tree.
         rule.onNodeWithText(SEASON_SYNC_LINK_CALENDAR).assertExists()
-        rule.onNode(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)).assertExists()
+        rule.onNode(chosenRow(HEATER_HELPER)).assertExists()
         assertNull("a refusal writes nothing", binding(heater))
     }
 
     /**
      * #105 row 18 (B3): the setup sheet opens on the Choose entity row — no typed field — and Enter entity ID manually
-     * brings the field back, after which typing and Save link exactly as before.
+     * brings the field back, after which typing and Save link exactly as before; the drawn sheet read no list (§4).
      */
     @Test fun theSetupSheetOffersChooseEntityAndManualEntryBringsTheFieldBack() {
         connect()
@@ -413,13 +435,13 @@ class SeasonSyncScreensTest {
 
         rule.waitUntil(TIMEOUT_MS) { binding(heater) != null }
         assertEquals(ENTITY_ID, binding(heater)!!.entityId)
+        assertEquals("nothing is read until Choose entity", 0, listReads.get())
     }
 
     /**
-     * #105 row 19 (B3): Choose entity opens the browser in the sheet's place — its title, its scope line, Refresh and
-     * the manual path — and Cancel returns to the form with nothing chosen and nothing written. The rows, the
-     * sentences and the pick need a Home Assistant to answer, which the emulator has none of: those are the JVM's
-     * (`LinkSeasonSyncViewModelTest`); the read this tap starts is cancelled when the browser closes.
+     * #105 rows 18–19 (B3): Choose entity opens the browser in the sheet's place — its scope line, Refresh and the
+     * manual path — reads the list once and draws each helper as one row, its friendly name over its entity id; Cancel
+     * returns to the form with nothing chosen and nothing written. The list is the class's scripted answer.
      */
     @Test fun chooseEntityOpensTheBrowserAndCancelReturnsToTheForm() {
         connect()
@@ -433,6 +455,13 @@ class SeasonSyncScreensTest {
         rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).performScrollTo().performClick()
 
         rule.awaitText(SEASON_SYNC_SCOPE_LINE)
+        HELPERS.forEach { helper ->
+            val name = checkNotNull(helper.friendlyName)
+            rule.awaitText(name)
+            rule.onNode(browserRow(helper)).performScrollTo().assertIsDisplayed()
+            assertTrue("${helper.entityId}: the name over the id", top(name) < top(helper.entityId))
+        }
+        assertEquals("one read, on Choose entity", 1, listReads.get())
         rule.onNodeWithText(SEASON_SYNC_REFRESH).assertExists()
         rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).assertExists()
         rule.onAllNodesWithText(SEASON_SYNC_LINK_MANUAL).assertCountEquals(0)
@@ -441,7 +470,131 @@ class SeasonSyncScreensTest {
 
         rule.awaitText(SEASON_SYNC_LINK_MANUAL)
         rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).assertExists()
+        rule.onAllNodesWithText(SEASON_SYNC_CHANGE_ENTITY).assertCountEquals(0)
         assertNull("nothing chosen, nothing written", binding(heater))
+    }
+
+    /**
+     * #105 rows 16 and 18: Link's Save is held while nothing is chosen; a tap on a helper's row is the pick, after
+     * which the sheet's row draws its friendly name over its id with Change (P105-2), Save is enabled, and Save links
+     * that exact id. Targets: Save, P105-1, the helper's row, P105-2.
+     */
+    @Test fun aPickFillsTheRowAndSaveLinksTheExactId() {
+        connect()
+        val heater = heater(MANUAL_OUT)
+        openLinkSheet(heater)
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsNotEnabled()
+
+        pickHelper(POOL_PUMP_HELPER)
+
+        rule.onNode(chosenRow(POOL_PUMP_HELPER)).performScrollTo().assertIsDisplayed()
+        assertTrue(
+            "the name over the id",
+            top(checkNotNull(POOL_PUMP_HELPER.friendlyName)) < top(POOL_PUMP_HELPER.entityId),
+        )
+        rule.onNodeWithText(SEASON_SYNC_CHANGE_ENTITY).performScrollTo().assertIsDisplayed()
+        rule.onAllNodes(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)).assertCountEquals(0)
+        assertNull("a pick writes nothing", binding(heater))
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsEnabled().performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { binding(heater) != null }
+        assertEquals("the exact id picked", POOL_PUMP_HELPER.entityId, binding(heater)!!.entityId)
+    }
+
+    /**
+     * #105 row 18 (§9a): Enter entity ID manually after a pick brings the field back holding the picked id, with
+     * Choose entity offered under it and Save still enabled. Targets: P105-3, P16-42's field, P105-1.
+     */
+    @Test fun enterManuallyAfterAPickPrefillsTheFieldWithThePickedId() {
+        connect()
+        val heater = heater(MANUAL_OUT)
+        openLinkSheet(heater)
+        pickHelper(SPRINKLER_HELPER)
+
+        rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).performScrollTo().performClick()
+
+        val shown = hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)
+        rule.waitUntil(TIMEOUT_MS) { rule.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("the field holds the picked id", SPRINKLER_HELPER.entityId, inputOf(rule.onNode(shown)))
+        rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).performScrollTo().assertIsDisplayed()
+        rule.onAllNodesWithText(SEASON_SYNC_CHANGE_ENTITY).assertCountEquals(0)
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsEnabled()
+        assertNull("nothing written before Save", binding(heater))
+    }
+
+    /**
+     * #105 row 19: in the drawn browser Refresh reads again; a failed read draws its ratified sentence (UNREACHABLE's)
+     * above the last good rows, which stay; the search field narrows the rows as typed. Targets: P105-7, the failure
+     * sentence, the rows, P105-4's field.
+     */
+    @Test fun refreshDrawsAFailureOverTheRowsAndTheSearchNarrowsThem() {
+        connect()
+        val heater = heater(MANUAL_OUT)
+        openLinkSheet(heater)
+        rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).performScrollTo().performClick()
+        HELPERS.forEach { rule.awaitText(checkNotNull(it.friendlyName)) }
+
+        entityList = { HaListOutcome.Failed(SyncErrorKind.UNREACHABLE, null) }
+        rule.onNodeWithText(SEASON_SYNC_REFRESH).performScrollTo().performClick()
+
+        rule.awaitText(HA_COULD_NOT_REACH)
+        assertEquals("Refresh reads again", 2, listReads.get())
+        rule.onNodeWithText(HA_COULD_NOT_REACH).performScrollTo().assertIsDisplayed()
+        HELPERS.forEach { rule.onNode(browserRow(it)).assertExists() }
+        // The rows sort by name, so the heater's is the top one.
+        assertTrue(
+            "the sentence over the rows",
+            top(HA_COULD_NOT_REACH) < top(checkNotNull(HEATER_HELPER.friendlyName)),
+        )
+
+        val search = rule.onNode(hasSetTextAction() and hasText(SEASON_SYNC_SEARCH_ENTITIES))
+        search.performScrollTo().performClick()
+        search.performTextInput(POOL_QUERY)
+
+        rule.waitUntil(TIMEOUT_MS) {
+            none(checkNotNull(HEATER_HELPER.friendlyName)) && none(checkNotNull(SPRINKLER_HELPER.friendlyName))
+        }
+        rule.onNode(browserRow(POOL_PUMP_HELPER)).assertExists()
+        assertEquals("a query reads nothing", 2, listReads.get())
+        assertNull("nothing written", binding(heater))
+    }
+
+    /**
+     * #105 (review of #107): the back key while the browser is still reading closes the whole sheet through the
+     * model's dismissal, which cancels the read — nothing written, nothing crashed — and the next opening reads and
+     * lists afresh. The key goes to the sheet's own window, as a gesture does. Targets: P105-5, Link, the rows.
+     */
+    @Test fun backWhileTheListIsReadingCancelsItAndAReopenLists() {
+        connect()
+        val heater = heater(MANUAL_OUT)
+        val pending = CompletableDeferred<HaListOutcome?>()
+        val cancelled = AtomicBoolean(false)
+        entityList = {
+            try {
+                pending.await()
+            } catch (e: CancellationException) {
+                cancelled.set(true)
+                throw e
+            }
+        }
+        openLinkSheet(heater, openings = 2)
+        rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).performScrollTo().performClick()
+        rule.awaitText(SEASON_SYNC_READING_ENTITIES)
+
+        Espresso.pressBack()
+
+        rule.waitUntil(TIMEOUT_MS) { cancelled.get() }
+        rule.waitUntil(TIMEOUT_MS) { none(SEASON_SYNC_SCOPE_LINE) && none(SEASON_SYNC_READING_ENTITIES) }
+        assertNull("nothing written", binding(heater))
+
+        entityList = { HaListOutcome.Listed(HELPERS) }
+        rule.onNodeWithText(SEASON_SYNC_LINK).performScrollTo().performClick()
+        rule.awaitText(SEASON_SYNC_CHOOSE_ENTITY)
+        rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).performScrollTo().performClick()
+
+        HELPERS.forEach { rule.awaitText(checkNotNull(it.friendlyName)) }
+        assertEquals("the reopened sheet read once more", 2, listReads.get())
+        assertNull("still nothing written", binding(heater))
     }
 
     /**
@@ -455,7 +608,7 @@ class SeasonSyncScreensTest {
         rule.awaitText(SEASON_SYNC_LINK)
         rule.onNodeWithText(SEASON_SYNC_LINK).performScrollTo().performClick()
         rule.awaitText(SEASON_SYNC_LINK_YEAR_ROUND)
-        typeEntityId()
+        pickHelper(HEATER_HELPER)
         rule.onNodeWithText(SAVE_LABEL).performScrollTo().performClick()
 
         rule.awaitText(notTiedToSeason(1))
@@ -549,9 +702,9 @@ class SeasonSyncScreensTest {
         ServiceTagRoot(graph = graph, deepLinks = deepLinks, snackbars = snackbars, resumeRefresh = resumeHook)
     }
 
-    /** Asset detail with the card's model (and the sheet's, for [sheet]'s first opening) seeded over the doubles. */
-    private fun detail(assetId: AssetId, sheet: SeasonSyncSheetPurpose? = null) {
-        val owner = seeded(assetId, sheet)
+    /** Asset detail with the card's model (and the sheet's, for [sheet]'s first [openings]) seeded over the doubles. */
+    private fun detail(assetId: AssetId, sheet: SeasonSyncSheetPurpose? = null, openings: Int = 1) {
+        val owner = seeded(assetId, sheet, openings)
         show(owner) {
             AssetDetailScreen(
                 graph = graph,
@@ -564,7 +717,7 @@ class SeasonSyncScreensTest {
         }
     }
 
-    private fun seeded(assetId: AssetId, sheet: SeasonSyncSheetPurpose?): ViewModelStoreOwner {
+    private fun seeded(assetId: AssetId, sheet: SeasonSyncSheetPurpose?, openings: Int): ViewModelStoreOwner {
         val owner = object : ViewModelStoreOwner {
             override val viewModelStore = ViewModelStore()
         }
@@ -576,13 +729,17 @@ class SeasonSyncScreensTest {
                 initializer {
                     LinkSeasonSyncViewModel(
                         assetId, sheet ?: SeasonSyncSheetPurpose.LINK, graph.assets, graph.schedules,
-                        graph.haConnections, link, resume,
+                        graph.haConnections, link, resume, listEntities,
                     )
                 }
             },
         )
         provider["season-sync:${assetId.value}", SeasonSyncBlockViewModel::class.java]
-        if (sheet != null) provider["season-sync-sheet:${assetId.value}:1", LinkSeasonSyncViewModel::class.java]
+        if (sheet != null) {
+            (1..openings).forEach {
+                provider["season-sync-sheet:${assetId.value}:$it", LinkSeasonSyncViewModel::class.java]
+            }
+        }
         return owner
     }
 
@@ -660,21 +817,40 @@ class SeasonSyncScreensTest {
         assertTrue("the fixture's binding was not rewritten", written)
     }
 
-    /**
-     * Types the fictional entity id into the sheet's field and waits for the field to hold it, first opening the field
-     * with Enter entity ID manually (P105-3) when the sheet shows the Choose entity row instead (#105).
-     */
+    /** Types the fictional entity id into the sheet's field (shown by Enter entity ID manually) and waits for it. */
     private fun typeEntityId() {
-        val shown = hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)
-        if (rule.onAllNodes(shown).fetchSemanticsNodes().isEmpty()) {
-            rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).performScrollTo().performClick()
-            rule.waitUntil(TIMEOUT_MS) { rule.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
-        }
-        val field = rule.onNode(shown)
+        val field = rule.onNode(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID))
         field.performScrollTo().performClick()
         field.performTextInput(ENTITY_ID)
         rule.waitUntil(TIMEOUT_MS) { inputOf(field) == ENTITY_ID }
     }
+
+    /** Asset detail with the sheet's model seeded, then Link: the sheet's form, on its Choose entity row (#105). */
+    private fun openLinkSheet(assetId: AssetId, openings: Int = 1) {
+        detail(assetId, sheet = SeasonSyncSheetPurpose.LINK, openings = openings)
+        rule.awaitText(SEASON_SYNC_LINK)
+        rule.onNodeWithText(SEASON_SYNC_LINK).performScrollTo().performClick()
+        rule.awaitText(SEASON_SYNC_CHOOSE_ENTITY)
+    }
+
+    /**
+     * #105: Choose entity (P105-1) on the sheet's form, the browser's row for [helper] — the pick — and back on the
+     * form with it chosen: the browser's scope line gone, Change (P105-2) drawn.
+     */
+    private fun pickHelper(helper: HaEntityCandidate) {
+        rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).performScrollTo().performClick()
+        rule.awaitText(checkNotNull(helper.friendlyName))
+        rule.onNode(browserRow(helper)).performScrollTo().performClick()
+        rule.waitUntil(TIMEOUT_MS) { none(SEASON_SYNC_SCOPE_LINE) }
+        rule.awaitText(SEASON_SYNC_CHANGE_ENTITY)
+    }
+
+    /** A browser row: one tappable node carrying the helper's friendly name and its entity id (#105). */
+    private fun browserRow(helper: HaEntityCandidate): SemanticsMatcher =
+        hasText(checkNotNull(helper.friendlyName)) and hasText(helper.entityId) and hasClickAction()
+
+    /** The form's row after a pick: the same two lines on one tappable node, Change beside it (#105). */
+    private fun chosenRow(helper: HaEntityCandidate): SemanticsMatcher = browserRow(helper)
 
     private fun none(text: String): Boolean = rule.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty()
 
@@ -741,6 +917,17 @@ class SeasonSyncScreensTest {
         const val CHANGED_IN_HA_WORDS = "Changed in Home Assistant "
         const val STARTED_FROM_HA_WORDS = "Started from Home Assistant on "
         val MANUAL_OUT = SeasonModeCommand(SeasonMode.MANUAL, manualPhase = SeasonPhase.OUT_OF_SEASON)
+
+        /** #105: the scripted list — fictional on/off helpers with friendly names; the heater's is [ENTITY_ID]. */
+        val HEATER_HELPER = HaEntityCandidate(ENTITY_ID, "Example Heater In Season")
+        val POOL_PUMP_HELPER =
+            HaEntityCandidate("input_boolean.example_pool_pump_in_season", "Example Pool Pump In Season")
+        val SPRINKLER_HELPER =
+            HaEntityCandidate("input_boolean.example_sprinkler_in_season", "Example Sprinkler In Season")
+        val HELPERS = listOf(HEATER_HELPER, POOL_PUMP_HELPER, SPRINKLER_HELPER)
+
+        /** A search that only the pool pump's name and id contain. */
+        const val POOL_QUERY = "pool"
 
         /** Any drawn text — a label, a line or a field's shown value — that carries the token. */
         val drawsTheToken = SemanticsMatcher("draws the token") { node ->
