@@ -499,6 +499,63 @@ class LinkSeasonSyncViewModelTest {
         assertFalse(sheet.now.browse!!.loading)
     }
 
+    /**
+     * Row 14 (review of #107): the whole sheet going away — Cancel, back, a scrim tap or a swipe all call [dismiss] —
+     * cancels a read still running. The model is keyed per opening and outlives its sheet, so nothing else would.
+     */
+    @Test fun dismissingTheSheetCancelsAReadStillRunning() = runTest {
+        connect()
+        handAsset()
+        val slow = CompletableDeferred<HaListOutcome?>()
+        var cancelled = false
+        entityList = {
+            try {
+                slow.await()
+            } catch (e: CancellationException) {
+                cancelled = true
+                throw e
+            }
+        }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+        act { sheet.chooseEntity() }
+        assertTrue(sheet.now.browse!!.loading)
+
+        act { sheet.dismiss() }
+
+        assertTrue("the sheet's dismissal cancels its read", cancelled)
+        assertNull(sheet.now.browse)
+        assertNull("nothing written", binding("hand"))
+    }
+
+    /**
+     * Row 16 (review of #107): Link's Save waits for an entity — a pick, or typed text that is not blank — so the
+     * browse-first sheet never answers P16-49 before anything was chosen. Resume sends no entity and waits for none.
+     */
+    @Test fun linkSaveWaitsForAnEntityAndResumeDoesNot() = runTest {
+        connect()
+        handAsset()
+        entityList = { HaListOutcome.Listed(listOf(stove)) }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+        assertNotNull("the sentence is read", sheet.now.sentence)
+        assertFalse("nothing chosen, nothing typed", sheet.now.canSave)
+        act { sheet.save() }
+        assertNull("a held Save writes nothing", binding("hand"))
+        assertNull("and refuses nothing", sheet.now.entityLine)
+
+        act { sheet.enterManually() }
+        sheet.onEntityId("   ")
+        assertFalse("blank text is no entity", sheet.now.canSave)
+        sheet.onEntityId(stove.entityId)
+        assertTrue("typed text is", sheet.now.canSave)
+
+        sheet.onEntityId("")
+        act { sheet.chooseEntity() }
+        act { sheet.pick(stove) }
+        assertTrue("so is a pick", sheet.now.canSave)
+
+        assertTrue("Resume waits for no entity", open("hand", SeasonSyncSheetPurpose.RESUME).now.canSave)
+    }
+
     /** Rows 14, 17: no connection and no token draw their sentences; no state value carries the token. */
     @Test fun noConnectionAndNoTokenDrawTheirSentencesAndNoStateCarriesTheToken() = runTest {
         connect()

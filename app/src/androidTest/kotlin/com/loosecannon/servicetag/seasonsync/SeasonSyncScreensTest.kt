@@ -362,8 +362,9 @@ class SeasonSyncScreensTest {
     // --- The setup sheet ------------------------------------------------------------------------------------------
 
     /**
-     * Pins: the sheet opened by Link draws the mode's sentence (P16-44) above an enabled Save before anything is
-     * written, and a strands refusal draws S55 inside the sheet, which stays open. Targets: P16-44, Save, S55.
+     * Pins: the sheet opened by Link draws the mode's sentence (P16-44) above Save before anything is written — Save
+     * held until an entity is given (#105 row 16), then enabled — and a strands refusal draws S55 inside the sheet,
+     * which stays open. Targets: P16-44, Save, S55.
      */
     @Test fun theSetupSheetShowsItsSentenceBeforeSaveAndKeepsS55Open() {
         connect()
@@ -375,12 +376,12 @@ class SeasonSyncScreensTest {
 
         rule.awaitText(SEASON_SYNC_LINK_CALENDAR)
         rule.onNodeWithText(SEASON_SYNC_LINK_CALENDAR).performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsEnabled()
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsNotEnabled()
         assertTrue("the sentence comes before Save", top(SEASON_SYNC_LINK_CALENDAR) < top(SAVE_LABEL))
         assertNull("nothing is written before Save", binding(heater))
 
         typeEntityId()
-        rule.onNodeWithText(SAVE_LABEL).performScrollTo().performClick()
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsEnabled().performClick()
 
         val strands = seasonStrands(listOf(PRE_SEASON_TITLE))
         rule.awaitText(strands)
@@ -659,9 +660,17 @@ class SeasonSyncScreensTest {
         assertTrue("the fixture's binding was not rewritten", written)
     }
 
-    /** Types the fictional entity id into the sheet's field and waits for the field to hold it. */
+    /**
+     * Types the fictional entity id into the sheet's field and waits for the field to hold it, first opening the field
+     * with Enter entity ID manually (P105-3) when the sheet shows the Choose entity row instead (#105).
+     */
     private fun typeEntityId() {
-        val field = rule.onNode(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID))
+        val shown = hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)
+        if (rule.onAllNodes(shown).fetchSemanticsNodes().isEmpty()) {
+            rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).performScrollTo().performClick()
+            rule.waitUntil(TIMEOUT_MS) { rule.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
+        }
+        val field = rule.onNode(shown)
         field.performScrollTo().performClick()
         field.performTextInput(ENTITY_ID)
         rule.waitUntil(TIMEOUT_MS) { inputOf(field) == ENTITY_ID }

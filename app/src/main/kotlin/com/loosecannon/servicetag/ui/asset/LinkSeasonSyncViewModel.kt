@@ -81,7 +81,9 @@ internal data class LinkSeasonSyncState(
     val manualEntry: Boolean = false,
     val browse: EntityBrowseState? = null,
 ) {
-    val canSave: Boolean get() = sentence != null && !saving && prompt == null && finished == null
+    /** Link also waits for something to send (#105 row 16): a pick, or typed text. Resume sends no entity. */
+    val canSave: Boolean get() = sentence != null && !saving && prompt == null && finished == null &&
+        (purpose == SeasonSyncSheetPurpose.RESUME || entityToLink.isNotEmpty())
 
     val entityToLink: String get() = chosen?.entityId ?: entityId.trim()
 }
@@ -160,6 +162,13 @@ internal class LinkSeasonSyncViewModel(
         stopReading()
         _state.update { it.copy(browse = null) }
     }
+
+    /**
+     * The sheet is going away without a Save — Cancel, back, a scrim tap or a swipe: a list read still running stops,
+     * which disconnects it. Each opening's model is keyed under the asset page and outlives its sheet, so nothing else
+     * would stop it.
+     */
+    fun dismiss() = closeBrowse()
 
     /** Enter entity ID manually: the field, prefilled with a pick's id if there was one, which it then replaces. */
     fun enterManually() {

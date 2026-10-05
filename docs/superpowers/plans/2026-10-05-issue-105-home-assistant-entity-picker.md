@@ -247,8 +247,8 @@ nothing → 14; names are presentation only → 12 and §4; JVM/Android/fake-HA 
   each small: `HaListOutcome.Listed` carries the entities only (the count bound is `pickerRows`'s, §3 amended);
   `HaStateMapper.kt`'s `stringOrNull` and `bounded` became `internal`, the latter taking its bound as a parameter, so
   the list mapper applies C5 rule 4 through the same code (behaviour unchanged; the file is otherwise untouched);
-  Save stays enabled with nothing chosen and nothing typed — today's P16-49 refusal on Save — so the shipped device
-  assertion that Save is enabled before an entity is given still holds (row 16 reads so); the two device rows prove the
+  ~~Save stays enabled with nothing chosen and nothing typed~~ (reversed by the PR review, below: row 16 holds as
+  written); the two device rows prove the
   form's Choose entity row, the manual path and the browser's static parts and its Cancel, while the rows, the
   sentences and the pick are the JVM's (no Home Assistant answers on the emulator); `enterManually` prefills the field
   with a pick's id. Translations are drafts until a native speaker reviews them.
@@ -265,6 +265,14 @@ nothing → 14; names are presentation only → 12 and §4; JVM/Android/fake-HA 
   list. Noted, not changed: the system back gesture while the browser is open closes the whole sheet (no pick, nothing
   written), as the shipped sheet's back does; a key-store or database failure before the read draws no sentence, as
   Save's does (none is ratified for it).
+- **PR review (#107, at `206a00e`).** Two blocking findings, fixed together: (1) the sheet's own dismissals — back, a
+  scrim tap, a swipe and the form's Cancel — called the screen's close directly, so a list read still running outlived
+  the sheet (each opening's model is keyed under the asset page, which stays); they now go through the model's
+  `dismiss()`, which cancels it; (2) Save is held on Link until there is an entity to send — a pick or non-blank typed
+  text — as row 16 specifies; Resume is unchanged. The fix also caught two shipped device rows (the S55 sheet and #78's
+  YEAR_ROUND link) that typed into a field the browse-first sheet no longer shows: their typing now opens Enter
+  entity ID manually first, and the S55 row asserts Save held, then enabled. **Proof gate kept by the review:** the
+  connected `SeasonSyncScreensTest` on `emulator-5554` before merge (CI does not run connected tests).
 
 ## 10. Proofs at the tip (controller)
 

@@ -71,6 +71,12 @@ internal fun LinkSeasonSyncSheet(
     // Swipe, scrim and back all ask this first: Hidden is refused while saving, so a refusal is never left in a hidden
     // sheet (MaterializeSheet's idiom).
     val saving by rememberUpdatedState(state.saving)
+    // Every way out but Save — Cancel, back, the scrim, a swipe — goes through the model first, so a list read still
+    // running stops with the sheet (#105).
+    val dismiss = {
+        model.dismiss()
+        done()
+    }
     LaunchedEffect(state.finished) {
         when (state.finished) {
             SeasonSheetExit.CLOSED -> done()
@@ -89,7 +95,7 @@ internal fun LinkSeasonSyncSheet(
             dismissButton = { TextButton(onClick = model::keepSchedules) { Text(KEEP_SCHEDULES_AS_IS) } },
         )
         null -> ModalBottomSheet(
-            onDismissRequest = { if (!state.saving) onDone() },
+            onDismissRequest = { if (!state.saving) dismiss() },
             sheetState = rememberModalBottomSheetState(
                 skipPartiallyExpanded = true,
                 confirmValueChange = { it != SheetValue.Hidden || !saving },
@@ -112,7 +118,7 @@ internal fun LinkSeasonSyncSheet(
                     onChooseEntity = model::chooseEntity,
                     onEnterManually = model::enterManually,
                     onSave = model::save,
-                    onCancel = onDone,
+                    onCancel = dismiss,
                 )
             }
         }
