@@ -115,9 +115,16 @@ Open Settings › Utilities › **Home Assistant**.
 
 ## On the phone: linking an Asset
 
-With a connection saved, an Asset's season card offers **Link to Home Assistant**. Enter the **Entity ID**
-(`input_boolean.example_heater_in_season`): lowercase letters, digits and underscores, with one dot. Before
-anything is written, the sheet says what linking does to the Asset's operating season:
+With a connection saved, an Asset's season card offers **Link to Home Assistant**. Tap **Choose entity**: the sheet
+reads Home Assistant's on/off helpers (its `input_boolean` entities) once and lists them by name, each over its exact
+entity ID; search by the name or by the ID, tap the one that is on while this Asset is in season, and it is shown
+on the sheet with **Change** beside it. The list is read only when you tap Choose entity or **Refresh**, over the
+same address, token and network rule as every other check; if it cannot be read, the sheet says why and keeps
+whatever you had chosen. **Enter entity ID manually** is always there instead: type the **Entity ID**
+(`input_boolean.example_heater_in_season`): lowercase letters, digits and underscores, with one dot. Either way the
+link stores the exact entity ID and never a name: a helper renamed in Home Assistant keeps working, and the next
+list shows its new name. Before anything is written, the sheet says what linking does to the Asset's operating
+season:
 
 - **Started and ended by hand already:** "From now on Home Assistant starts and ends this asset's season. Its season
   history stays as it is."
@@ -190,6 +197,10 @@ it came from. Neither shows the address, the home Wi-Fi's name or the token, and
   deletes the link's record of its last change; the season history stays.
 - **Proven on an emulator, not yet on a phone.** A phone's own Wi-Fi, its private DNS and Android's battery saving
   (Doze) have not been observed, and a background check's read of the Wi-Fi name is proven only on an emulator.
+- **The entity list is `input_boolean` helpers only**, read through the REST states list; a switch or a sensor is
+  entered by hand. Devices are not shown: Home Assistant's device and display registries are not read in this
+  release. Lists past the first 2,000 helpers are cut, and the sheet asks you to search; a list over 8 MB is refused
+  as unreadable, and manual entry remains.
 - **Some cases are silent.** If the phone's key store or database fails during Sync now or a card action, nothing
   is shown and the last status stays; try again. A capture that reads a blank Wi-Fi name, or a name Android hides
   without a reason, captures nothing and shows no line.

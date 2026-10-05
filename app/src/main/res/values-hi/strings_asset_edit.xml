@@ -159,4 +159,14 @@
     <string name="season_sync_link_manual">अब से Home Assistant इस उपकरण का मौसम शुरू और खत्म करेगा। इसके मौसम का इतिहास जैसा है वैसा ही रहेगा।</string>
     <string name="season_sync_follows_ha">इस उपकरण का मौसम Home Assistant के अनुसार चलता है। इसे यहाँ बदलने के लिए उपकरण के पेज पर “सिंक करना बंद करें” चुनें।</string>
     <string name="season_sync_bad_entity_id">input_boolean.example_heater_in_season जैसी एंटिटी ID डालें: अंग्रेज़ी के छोटे अक्षर, अंक और अंडरस्कोर, एक बिंदु के साथ।</string>
+    <string name="season_sync_choose_entity">एंटिटी चुनें</string>
+    <string name="season_sync_change_entity">बदलें</string>
+    <string name="season_sync_enter_manually">एंटिटी ID मैन्युअल रूप से दर्ज करें</string>
+    <string name="season_sync_search_entities">नाम या एंटिटी ID से खोजें</string>
+    <string name="season_sync_reading_entities">Home Assistant से एंटिटी पढ़ी जा रही हैं…</string>
+    <string name="season_sync_scope_line">Home Assistant के चालू/बंद हेल्पर (input_boolean) दिखाए जा रहे हैं।</string>
+    <string name="season_sync_refresh">रीफ़्रेश करें</string>
+    <string name="season_sync_no_helpers">Home Assistant में कोई चालू/बंद हेल्पर नहीं मिला। Home Assistant में एक बनाएँ, या एंटिटी ID मैन्युअल रूप से दर्ज करें।</string>
+    <string name="season_sync_no_match">आपकी खोज से कोई एंटिटी मेल नहीं खाती।</string>
+    <string name="season_sync_only_first_shown">केवल पहली %1$d दिखाई जा रही हैं। सूची छोटी करने के लिए खोजें।</string>
 </resources>

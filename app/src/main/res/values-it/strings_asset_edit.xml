@@ -159,4 +159,14 @@
     <string name="season_sync_link_manual">D\'ora in poi Home Assistant avvia e termina la stagione di questa attrezzatura. La sua cronologia della stagione resta com\'è.</string>
     <string name="season_sync_follows_ha">La stagione di questa attrezzatura segue Home Assistant. Usa “Interrompi sincronizzazione” nella pagina dell\'attrezzatura per modificarla qui.</string>
     <string name="season_sync_bad_entity_id">Inserisci un ID entità come input_boolean.example_heater_in_season: lettere minuscole, cifre e trattini bassi, con un punto.</string>
+    <string name="season_sync_choose_entity">Scegli entità</string>
+    <string name="season_sync_change_entity">Cambia</string>
+    <string name="season_sync_enter_manually">Inserisci l\'ID entità manualmente</string>
+    <string name="season_sync_search_entities">Cerca per nome o ID entità</string>
+    <string name="season_sync_reading_entities">Lettura delle entità da Home Assistant…</string>
+    <string name="season_sync_scope_line">Sono mostrati gli helper on/off di Home Assistant (input_boolean).</string>
+    <string name="season_sync_refresh">Aggiorna</string>
+    <string name="season_sync_no_helpers">Nessun helper on/off trovato in Home Assistant. Creane uno in Home Assistant, oppure inserisci un ID entità manualmente.</string>
+    <string name="season_sync_no_match">Nessuna entità corrisponde alla ricerca.</string>
+    <string name="season_sync_only_first_shown">Sono mostrate solo le prime %1$d. Cerca per restringere l\'elenco.</string>
 </resources>

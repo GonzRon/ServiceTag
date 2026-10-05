@@ -304,4 +304,24 @@
     <string name="season_sync_follows_ha">This asset\'s season follows Home Assistant. Stop syncing on the asset\'s page to change it here.</string>
     <!-- P16-49: under the Entity ID field. input_boolean.example_heater_in_season is an example entity ID: keep it. -->
     <string name="season_sync_bad_entity_id">Enter an entity ID such as input_boolean.example_heater_in_season: lowercase letters, digits and underscores, with one dot.</string>
+    <!-- P105-1: the setup sheet's row with nothing chosen, and the browser's title (#105). -->
+    <string name="season_sync_choose_entity">Choose entity</string>
+    <!-- P105-2: the form's row after a pick. -->
+    <string name="season_sync_change_entity">Change</string>
+    <!-- P105-3: the advanced path on the form and in the browser. -->
+    <string name="season_sync_enter_manually">Enter entity ID manually</string>
+    <!-- P105-4: the browser's search field hint. -->
+    <string name="season_sync_search_entities">Search by name or entity ID</string>
+    <!-- P105-5: the bounded loading line while the list is read. -->
+    <string name="season_sync_reading_entities">Reading entities from Home Assistant…</string>
+    <!-- P105-6: the scope line over the rows. input_boolean is a Home Assistant domain: keep it as is. -->
+    <string name="season_sync_scope_line">Showing Home Assistant\'s on/off helpers (input_boolean).</string>
+    <!-- P105-7: the browser's button. -->
+    <string name="season_sync_refresh">Refresh</string>
+    <!-- P105-8: the scope is empty. -->
+    <string name="season_sync_no_helpers">No Home Assistant on/off helpers found. Create one in Home Assistant, or enter an entity ID manually.</string>
+    <!-- P105-9: the search matches nothing. -->
+    <string name="season_sync_no_match">No entities match your search.</string>
+    <!-- P105-10: more matched than are drawn; %1$d is the number drawn. -->
+    <string name="season_sync_only_first_shown">Only the first %1$d are shown. Search to narrow the list.</string>
 </resources>

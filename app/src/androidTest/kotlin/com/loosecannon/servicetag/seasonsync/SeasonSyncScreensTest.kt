@@ -81,6 +81,12 @@ import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_FOLLOWS_HA
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_FORCE_IN
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_FORCE_OUT
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_LINK
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_SCOPE_LINE
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_REFRESH
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_LINK_MANUAL
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_ENTER_MANUALLY
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_CHOOSE_ENTITY
+import com.loosecannon.servicetag.ui.asset.CANCEL_BUTTON
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_LINK_CALENDAR
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_LINK_YEAR_ROUND
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_NOT_CHECKED_IN_TIME
@@ -356,8 +362,9 @@ class SeasonSyncScreensTest {
     // --- The setup sheet ------------------------------------------------------------------------------------------
 
     /**
-     * Pins: the sheet opened by Link draws the mode's sentence (P16-44) above an enabled Save before anything is
-     * written, and a strands refusal draws S55 inside the sheet, which stays open. Targets: P16-44, Save, S55.
+     * Pins: the sheet opened by Link draws the mode's sentence (P16-44) above Save before anything is written — Save
+     * held until an entity is given (#105 row 16), then enabled — and a strands refusal draws S55 inside the sheet,
+     * which stays open. Targets: P16-44, Save, S55.
      */
     @Test fun theSetupSheetShowsItsSentenceBeforeSaveAndKeepsS55Open() {
         connect()
@@ -369,12 +376,12 @@ class SeasonSyncScreensTest {
 
         rule.awaitText(SEASON_SYNC_LINK_CALENDAR)
         rule.onNodeWithText(SEASON_SYNC_LINK_CALENDAR).performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsEnabled()
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsNotEnabled()
         assertTrue("the sentence comes before Save", top(SEASON_SYNC_LINK_CALENDAR) < top(SAVE_LABEL))
         assertNull("nothing is written before Save", binding(heater))
 
         typeEntityId()
-        rule.onNodeWithText(SAVE_LABEL).performScrollTo().performClick()
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().assertIsEnabled().performClick()
 
         val strands = seasonStrands(listOf(PRE_SEASON_TITLE))
         rule.awaitText(strands)
@@ -383,6 +390,58 @@ class SeasonSyncScreensTest {
         rule.onNodeWithText(SEASON_SYNC_LINK_CALENDAR).assertExists()
         rule.onNode(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)).assertExists()
         assertNull("a refusal writes nothing", binding(heater))
+    }
+
+    /**
+     * #105 row 18 (B3): the setup sheet opens on the Choose entity row — no typed field — and Enter entity ID manually
+     * brings the field back, after which typing and Save link exactly as before.
+     */
+    @Test fun theSetupSheetOffersChooseEntityAndManualEntryBringsTheFieldBack() {
+        connect()
+        val heater = heater(MANUAL_OUT)
+        detail(heater, sheet = SeasonSyncSheetPurpose.LINK)
+        rule.awaitText(SEASON_SYNC_LINK)
+        rule.onNodeWithText(SEASON_SYNC_LINK).performScrollTo().performClick()
+
+        rule.awaitText(SEASON_SYNC_CHOOSE_ENTITY)
+        rule.onAllNodes(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)).assertCountEquals(0)
+        rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).performScrollTo().performClick()
+        rule.onNode(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)).assertExists()
+
+        typeEntityId()
+        rule.onNodeWithText(SAVE_LABEL).performScrollTo().performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { binding(heater) != null }
+        assertEquals(ENTITY_ID, binding(heater)!!.entityId)
+    }
+
+    /**
+     * #105 row 19 (B3): Choose entity opens the browser in the sheet's place — its title, its scope line, Refresh and
+     * the manual path — and Cancel returns to the form with nothing chosen and nothing written. The rows, the
+     * sentences and the pick need a Home Assistant to answer, which the emulator has none of: those are the JVM's
+     * (`LinkSeasonSyncViewModelTest`); the read this tap starts is cancelled when the browser closes.
+     */
+    @Test fun chooseEntityOpensTheBrowserAndCancelReturnsToTheForm() {
+        connect()
+        val heater = heater(MANUAL_OUT)
+        detail(heater, sheet = SeasonSyncSheetPurpose.LINK)
+        rule.awaitText(SEASON_SYNC_LINK)
+        rule.onNodeWithText(SEASON_SYNC_LINK).performScrollTo().performClick()
+        rule.awaitText(SEASON_SYNC_CHOOSE_ENTITY)
+        rule.awaitText(SEASON_SYNC_LINK_MANUAL)
+
+        rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).performScrollTo().performClick()
+
+        rule.awaitText(SEASON_SYNC_SCOPE_LINE)
+        rule.onNodeWithText(SEASON_SYNC_REFRESH).assertExists()
+        rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).assertExists()
+        rule.onAllNodesWithText(SEASON_SYNC_LINK_MANUAL).assertCountEquals(0)
+
+        rule.onNodeWithText(CANCEL_BUTTON).performScrollTo().performClick()
+
+        rule.awaitText(SEASON_SYNC_LINK_MANUAL)
+        rule.onNodeWithText(SEASON_SYNC_CHOOSE_ENTITY).assertExists()
+        assertNull("nothing chosen, nothing written", binding(heater))
     }
 
     /**
@@ -601,9 +660,17 @@ class SeasonSyncScreensTest {
         assertTrue("the fixture's binding was not rewritten", written)
     }
 
-    /** Types the fictional entity id into the sheet's field and waits for the field to hold it. */
+    /**
+     * Types the fictional entity id into the sheet's field and waits for the field to hold it, first opening the field
+     * with Enter entity ID manually (P105-3) when the sheet shows the Choose entity row instead (#105).
+     */
     private fun typeEntityId() {
-        val field = rule.onNode(hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID))
+        val shown = hasSetTextAction() and hasText(SEASON_SYNC_ENTITY_ID)
+        if (rule.onAllNodes(shown).fetchSemanticsNodes().isEmpty()) {
+            rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).performScrollTo().performClick()
+            rule.waitUntil(TIMEOUT_MS) { rule.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
+        }
+        val field = rule.onNode(shown)
         field.performScrollTo().performClick()
         field.performTextInput(ENTITY_ID)
         rule.waitUntil(TIMEOUT_MS) { inputOf(field) == ENTITY_ID }

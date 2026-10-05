@@ -159,4 +159,14 @@
     <string name="season_sync_link_manual">Ab jetzt startet und beendet Home Assistant die Saison dieses Geräts. Sein Saisonverlauf bleibt unverändert.</string>
     <string name="season_sync_follows_ha">Die Saison dieses Geräts folgt Home Assistant. Wähle auf der Seite des Geräts „Synchronisierung beenden“, um sie hier zu ändern.</string>
     <string name="season_sync_bad_entity_id">Gib eine Entitäts-ID wie input_boolean.example_heater_in_season ein: Kleinbuchstaben, Ziffern und Unterstriche, mit einem Punkt.</string>
+    <string name="season_sync_choose_entity">Entität wählen</string>
+    <string name="season_sync_change_entity">Ändern</string>
+    <string name="season_sync_enter_manually">Entitäts-ID manuell eingeben</string>
+    <string name="season_sync_search_entities">Nach Name oder Entitäts-ID suchen</string>
+    <string name="season_sync_reading_entities">Entitäten werden aus Home Assistant gelesen …</string>
+    <string name="season_sync_scope_line">Angezeigt werden die Ein/Aus-Helfer von Home Assistant (input_boolean).</string>
+    <string name="season_sync_refresh">Aktualisieren</string>
+    <string name="season_sync_no_helpers">Keine Ein/Aus-Helfer in Home Assistant gefunden. Lege einen in Home Assistant an oder gib eine Entitäts-ID manuell ein.</string>
+    <string name="season_sync_no_match">Keine Entität passt zu deiner Suche.</string>
+    <string name="season_sync_only_first_shown">Nur die ersten %1$d werden angezeigt. Suche, um die Liste einzugrenzen.</string>
 </resources>

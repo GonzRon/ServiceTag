@@ -73,14 +73,17 @@ fun parseObject(body: ByteArray): JsonObject? = try {
 }
 
 /** The member's text when it is a JSON string; null when it is absent, `null`, a number, a boolean or a container. */
-private fun JsonObject.stringOrNull(key: String): String? =
+internal fun JsonObject.stringOrNull(key: String): String? =
     (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
-/** C5 rule 4: at most [MAX_HA_TEXT_LENGTH] characters (never half a surrogate pair), control characters as `?`. */
-private fun bounded(text: String): String {
+/**
+ * C5 rule 4: at most [max] characters (never half a surrogate pair), control characters as `?`. [max] defaults to
+ * [MAX_HA_TEXT_LENGTH]; the entity list (#105) bounds a friendly name at [MAX_HA_NAME_LENGTH] through the same rule.
+ */
+internal fun bounded(text: String, max: Int = MAX_HA_TEXT_LENGTH): String {
     var kept = text
-    if (kept.length > MAX_HA_TEXT_LENGTH) {
-        kept = kept.substring(0, MAX_HA_TEXT_LENGTH)
+    if (kept.length > max) {
+        kept = kept.substring(0, max)
         if (kept.last().isHighSurrogate()) kept = kept.dropLast(1)
     }
     return buildString(kept.length) {

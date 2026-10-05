@@ -58,6 +58,7 @@ The phone supports:
 - **Force in season**
 - **Force out of season**
 - **Sync now**
+- choosing the helper from a searchable list of Home Assistant's `input_boolean` entities, or entering its entity ID by hand;
 - polling every 12 hours, daily, weekly, or monthly;
 - HTTPS on any network, or a selected home Wi-Fi mode with optional background checks.
 
