@@ -138,6 +138,8 @@ Every gate script and every implementer brief calls it first.
 
 Cut as 1.7.0 (code 20): the phones ran 1.6.0 (schema 17) and 1.5.0 (schema 16), so the proofs are 1.6.0 → 1.7.0 and 1.5.0 → 1.7.0. Erratum (2026-10-04): the four sentences "Master builds carry schema 18/19/20/21 … until that release" in the schema-18 to schema-21 paragraphs are historical as of this release — 1.7.0 is that release.
 
+Cut as 1.8.0 (code 21): no schema or format change; the phones ran 1.7.0, so the proof is 1.7.0 → 1.8.0 in place, and it repeats the token-survival check.
+
 ## Environment notes that cost a day
 
 - **Pin the emulator.** A physical phone may be attached. `ANDROID_SERIAL=emulator-5554` must be

@@ -1263,7 +1263,7 @@ by every later feature lane.
   > screen is still only a pushed destination. The scan *completion sheet* 1.2 adds is a sheet
   > over the ambient read, not a destination.
   >
-  > **Amended again (2026-10-04, ServiceTag 1.7.1 / #103).** Maintenance hosts due work and
+  > **Amended again (2026-10-04, ServiceTag 1.8.0 / #103).** Maintenance hosts due work and
   > schedules, then one grouped section — "Groups, supplies and components" — whose three rows push
   > the Maintenance groups list, the Supplies list and a read-only cross-asset Installed components
   > list. **Reminder health left the tab**: it is under Settings › Utilities › Reminder health, and
