@@ -94,9 +94,9 @@ its English spelling (#74). Localizing them needs language-neutral keys for the 
 
 Haitian Creole is deferred from the initial programme (#102).
 
-**Translation status.** The first packs were drafted with the glossary and checked mechanically (coverage,
-placeholders, plural forms, product names). They have not yet had a native speaker's review; permission, security
-and network text (Home Assistant, Location, notifications, the Developer API) should be reviewed first.
+**Translation status.** The packs are drafted with the glossary and checked mechanically (coverage, placeholders,
+plural forms, date patterns, product names). They are not natively reviewed; a correction to a pack is an ordinary
+change.
 
 ## Choosing the language
 
@@ -128,7 +128,8 @@ English string without every pack, compares rendered words or draws a date or nu
   `values/strings_<area>.xml` with the id in the comment, and in every pack in the same change.
 - **A branch cut before the resource layer** (1.7.1 was) brings its words in on merge: each new constant becomes a
   resource and a getter, with nine translations, before the merge is pushed.
-- **A translation is a draft until a native speaker reviews it**; say so in the pull request when a change adds one.
+- **Translations are not natively reviewed.** A change that adds words translates them with the glossary, and
+  `LocalizationCoverageTest` checks them mechanically.
 
 ## Tests
 
