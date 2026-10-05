@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -24,6 +25,7 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -94,8 +96,9 @@ class ReminderHealthScreenTest {
         // #103: Settings › Utilities › Reminder health. The row sits below the fold on a settings
         // screen, and a node that is in the tree but off screen takes a click that goes nowhere,
         // which reads exactly like a route that failed to open: scroll to it, the way a person would.
+        // The section heading is drawn in capitals (`SectionHeader`), so it is awaited as drawn.
         rule.onNodeWithContentDescription("Settings").performClick()
-        rule.awaitText("Utilities")
+        rule.awaitText(localized(R.string.settings_utilities).uppercase())
         rule.onNode(hasText(REMINDER_HEALTH_TITLE) and hasClickAction()).performScrollTo().performClick()
         rule.awaitText(ALARM_FINDING)
     }
