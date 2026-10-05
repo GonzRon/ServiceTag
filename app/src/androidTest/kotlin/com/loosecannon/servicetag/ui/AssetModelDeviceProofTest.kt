@@ -27,6 +27,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.l10n.dateFieldText
 import com.loosecannon.servicetag.ui.asset.NO_PARENT
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -286,7 +287,7 @@ class AssetModelDeviceProofTest {
 
             // The date field opens on today, which the user may then backdate.
             rule.awaitText("Retire this asset?")
-            rule.onNodeWithText(LocalDate.now().toString()).assertIsDisplayed()
+            rule.onNodeWithText(dateFieldText(LocalDate.now().toString())).assertIsDisplayed()
             rule.onNodeWithText("Retire").performClick()
 
             // The offer comes after the write, so declining it leaves the asset retired.

@@ -35,6 +35,7 @@ import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.ServiceCaseCommand
+import com.loosecannon.servicetag.l10n.dateFieldText
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -171,7 +172,7 @@ class ServiceCaseScreensTest {
         rule.onNodeWithText(ADD_UPDATE).performScrollTo().performClick()
         rule.awaitText(SAVE_UPDATE)
         field("Date").assertIsDisplayed()
-        rule.onNode(hasSetTextAction() and hasText(today)).assertIsDisplayed()
+        rule.onNode(hasSetTextAction() and hasText(dateFieldText(today))).assertIsDisplayed()
         field("Time").assertIsDisplayed()
         field(WHAT_HAPPENED).assertIsDisplayed()
         listOf(STATUS_SENT_OUT, STATUS_AT_THE_SERVICE_CENTER, STATUS_RETURNED, STATUS_CLOSED, STATUS_CANCELLED).forEach {

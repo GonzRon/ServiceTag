@@ -285,7 +285,7 @@ class AssetEditorSeasonAndHealthTest {
         rule.awaitText("Snowblower")
         rule.onNodeWithText(SAME_DATES_EVERY_YEAR).performScrollTo().assertIsSelected()
         field(SEASON_STARTS).performScrollTo()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("11-01")))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(monthDayFieldText("11-01"))))
         rule.onAllNodesWithText("Off means this asset is only in use", substring = true).assertCountEquals(0)
         rule.onAllNodesWithText("Set both season dates or neither").assertCountEquals(0)
     }

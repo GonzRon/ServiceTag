@@ -43,6 +43,9 @@ import org.junit.Test
 
 private const val TOKEN = "ABCD2345"
 
+/** What `InputStream.read()` returns at the end of the stream. */
+private const val END_OF_STREAM = -1
+
 /**
  * 1.1.0 (#46) — the listener itself, over a real loopback socket, on the JVM.
  *
@@ -161,12 +164,15 @@ class LoopbackApiServerTest {
 
         server.stop()
         assertEquals(0, server.boundPort)
-        try {
+        val first = try {
             Socket("127.0.0.1", port).use { it.getInputStream().read() }
-            fail("the port is still answering after stop()")
         } catch (e: IOException) {
             // Refused, which is the whole point of the lifecycle binding.
+            END_OF_STREAM
         }
+        // A runner's stack can accept the connect and close it straight away: end of stream with no byte is nobody
+        // answering. One byte is an answer.
+        if (first != END_OF_STREAM) fail("the port is still answering after stop()")
     }
 
     /** What the screen's third line counts: answers given, refusals included. */

@@ -26,6 +26,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.loosecannon.servicetag.MainActivity
+import com.loosecannon.servicetag.l10n.dateFieldText
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -452,8 +453,9 @@ private fun ComposeTestRule.logWaterTest(
     awaitTag("value-ph")
     if (on != null) {
         // Backdating is ordinary (§4): the date is a plain field holding today until it is changed.
-        onNode(hasSetTextAction() and hasText(LocalDate.now().toString()))
-            .performTextReplacement(on.toString())
+        // #102: the field draws and reads the phone's own order, so the day is found and typed that way.
+        onNode(hasSetTextAction() and hasText(dateFieldText(LocalDate.now().toString())))
+            .performTextReplacement(dateFieldText(on.toString()))
     }
     onNodeWithTag("value-ph").performTextReplacement(ph)
     entryList().performScrollToNode(hasTestTag("value-free_chlorine"))

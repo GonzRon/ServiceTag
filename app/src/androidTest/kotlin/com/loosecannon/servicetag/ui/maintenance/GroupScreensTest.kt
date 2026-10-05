@@ -129,7 +129,21 @@ class GroupScreensTest {
 
     private fun openMaintenance() {
         rule.onNode(hasText("Maintenance") and hasClickAction()).performClick()
-        rule.awaitText("Maintenance groups")
+        rule.awaitText(GROUPS_SECTION)
+    }
+
+    /**
+     * #103 (1.7.1): the groups left the tab for their own pushed list, so the way to a group is the
+     * person's way — the Maintenance tab, then the grouped section's "Maintenance groups" row, then the
+     * group's row on the list that opens. The list draws once the store has answered, which is what
+     * waiting for [group]'s row waits for — by its exact text, since the tab's due row carries the
+     * same name as its subtitle.
+     */
+    private fun openGroupList(group: String = "North run") {
+        rule.onNode(hasTextExactly(GROUPS_SECTION) and hasClickAction()).performScrollTo().performClick()
+        rule.waitUntil(WAIT_MS) {
+            rule.onAllNodes(hasTextExactly(group) and hasClickAction()).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     private fun openAssets() {
@@ -144,10 +158,11 @@ class GroupScreensTest {
     @Test fun theListOpensAGroupAndAMemberRowOpensThatAssetsOwnScreen() {
         aStoreWithGroups()
         openMaintenance()
+        openGroupList()
 
         // `hasTextExactly` and not `hasText`: the group's name is also the **subtitle** of its
-        // schedule's due row, which is clickable too and opens the schedule. A list row says the
-        // group's name and nothing else, which is what tells the two apart.
+        // schedule's due row on the tab, which is clickable too and opens the schedule. A list row
+        // says the group's name and nothing else, which is what tells the two apart.
         rule.onNode(hasTextExactly("North run") and hasClickAction()).performScrollTo().performClick()
 
         rule.awaitText("Maintenance group")
@@ -201,6 +216,7 @@ class GroupScreensTest {
     @Test fun aMemberIsSoftRemovedAndReAddedWithTheListReadAtEachStep() {
         aStoreWithGroups()
         openMaintenance()
+        openGroupList("South run")
         rule.onNode(hasTextExactly("South run") and hasClickAction()).performScrollTo().performClick()
 
         rule.awaitText("Maintenance group")
@@ -249,6 +265,7 @@ class GroupScreensTest {
         aStoreWithGroups()
         openMaintenance()
         rule.awaitText("Head check")
+        openGroupList()
 
         rule.onNode(hasTextExactly("North run") and hasClickAction()).performScrollTo().performClick()
         rule.awaitText("Maintenance group")
@@ -257,9 +274,16 @@ class GroupScreensTest {
 
         rule.onNodeWithContentDescription("Back").performClick()
 
-        // Still listed, and marked; its round has left the due lists entirely.
+        // Still listed, and marked.
         rule.awaitText("North run")
         rule.awaitText("ARCHIVED")
+
+        // And its round has left the due lists entirely: back on the tab, the sprinkler's own
+        // schedule is listed and the group's is not. The tab's lists are read live, so the wait is
+        // for the archived round to leave them; the asset's own schedule says they are drawn.
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.awaitText("Nozzle clean")
+        rule.waitUntil(WAIT_MS) { rule.onAllNodesWithText("Head check").fetchSemanticsNodes().isEmpty() }
         rule.onAllNodesWithText("Head check").assertCountEquals(0)
 
         val stored = runBlocking { app.graph.groups.all().single { it.name == "North run" } }
@@ -284,6 +308,7 @@ class GroupScreensTest {
     @Test fun theRoundsChecklistCompletesTheSelectedMemberThroughTheRatifiedAction() {
         aStoreWithGroups()
         openMaintenance()
+        openGroupList()
         rule.onNode(hasTextExactly("North run") and hasClickAction()).performScrollTo().performClick()
 
         rule.awaitText("1 of 3 complete")
@@ -327,6 +352,7 @@ class GroupScreensTest {
     @Test fun theSchedulesSectionOffersCreationOnlyWhileTheGroupHasAMember() {
         aStoreWithGroups()
         openMaintenance()
+        openGroupList()
         rule.onNode(hasTextExactly("North run") and hasClickAction()).performScrollTo().performClick()
         rule.awaitText("Maintenance group")
 
@@ -339,9 +365,12 @@ class GroupScreensTest {
         rule.awaitText("This applies to")
         rule.awaitText("A maintenance group")
 
-        // And the group with nobody in it offers nothing to tap.
+        // And the group with nobody in it offers nothing to tap: back on the group list.
         rule.onNodeWithContentDescription("Cancel").performClick()
         rule.onNodeWithContentDescription("Back").performClick()
+        rule.waitUntil(WAIT_MS) {
+            rule.onAllNodes(hasTextExactly("Emptied run") and hasClickAction()).fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNode(hasTextExactly("Emptied run") and hasClickAction()).performScrollTo().performClick()
         rule.awaitText("Maintenance group")
         // The ratified empty state stands in for the schedules it has none of.
@@ -351,4 +380,8 @@ class GroupScreensTest {
 
     private fun assetIdOf(name: String): String =
         runBlocking { app.graph.assets.all().single { it.name == name }.id.value }
+
+    private companion object {
+        const val WAIT_MS = 10_000L
+    }
 }
