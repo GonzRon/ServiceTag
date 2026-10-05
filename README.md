@@ -12,7 +12,7 @@ The tag itself carries only a stable ServiceTag identity. The useful information
 
 ServiceTag is **local-first**. It does not require an account or a cloud service to identify equipment, keep maintenance history, calculate due work, or deliver local reminders. The phone remains the source of truth. Files can live in storage you control, backups are portable, and a deliberately narrow local Developer API and MCP bridge make larger maintenance inventories automatable without turning the app into a hosted service.
 
-The current **ServiceTag 1.7.0** release includes maintenance scheduling and reminders, operating seasons and maintenance policy, condition and derived health, lending and ownership handoff, SupplyItems, fitted Installed Components and replacement history, documents/references on Assets and their supporting records, and optional Home Assistant operating-season synchronization.
+The current **ServiceTag 1.8.0** release includes maintenance scheduling and reminders, operating seasons and maintenance policy, condition and derived health, lending and ownership handoff, SupplyItems, fitted Installed Components and replacement history, documents/references on Assets and their supporting records, and optional Home Assistant operating-season synchronization, in English and nine more languages.
 
 ## Learn more
 
@@ -29,8 +29,8 @@ ServiceTag's documentation uses **progressive disclosure**: start here, then ope
 
 ## Project status
 
-Latest released baseline: **[ServiceTag 1.7.0](https://github.com/GonzRon/ServiceTag/releases/tag/servicetag-v1.7.0)**  
-Release details: **[1.7.0 release notes](docs/releases/1.7.0.md)**  
+Latest released baseline: **[ServiceTag 1.8.0](https://github.com/GonzRon/ServiceTag/releases/tag/servicetag-v1.8.0)**  
+Release details: **[1.8.0 release notes](docs/releases/1.8.0.md)**; the previous release: [1.7.0 release notes](docs/releases/1.7.0.md)  
 Current roadmap and release sequencing: **[issue #104](https://github.com/GonzRon/ServiceTag/issues/104)**
 
 ServiceTag is distinct from [NoteTag](https://github.com/GonzRon/NoteTag): ServiceTag tags identify physical equipment and open its maintenance record; NoteTag handles the separate tag-to-note/link use case.

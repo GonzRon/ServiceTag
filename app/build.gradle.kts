@@ -42,17 +42,16 @@ android {
         // `targetSdk` stays 36 on purpose: `targetSdk 37` plus the `DISPATCH_NFC_MESSAGE`
         // permission on the dispatch activity is Phase 7 (spec §5.8), not 1.2.
         targetSdk = 36
-        // 1.7.0 is a MINOR: new user-facing capability (supply items #15, installed components #47,
-        // files and links on supply items and installed components with Share to all three #69, and
-        // the Home Assistant season sync #16), with a forward-only backup-format bump — schema 21 /
-        // format 20 (#16's two tables are device-local, so the format stays 20), the new app
-        // reading every older archive and 1.6.x and 1.5.x refusing a format-20 archive or Transfer
-        // Pack rather than dropping rows (docs/versioning.md). `versionCode` is +1 on every release
-        // and is never reset; it must agree with the tag `servicetag-v1.7.0` or the release
-        // workflow refuses to publish. VersionAgreementTest asserts these two against the schema
-        // and format numbers.
-        versionCode = 20
-        versionName = "1.7.0"
+        // 1.8.0 is a MINOR: new user-facing capability (nine language packs offered in Android's
+        // per-app language setting, with dates and decimals in the language's own form #102), with
+        // the former 1.7.1 train (#94 #99 #101 #103) and the Home Assistant entity browser (#105)
+        // folded in. No schema or backup-format change — schema 21 / format 20, as 1.7.0, so a
+        // 1.8.0 archive restores into 1.7.0 and a 1.7.0 archive into 1.8.0 (docs/versioning.md).
+        // `versionCode` is +1 on every release and is never reset; it must agree with the tag
+        // `servicetag-v1.8.0` or the release workflow refuses to publish. VersionAgreementTest
+        // asserts these two against the schema and format numbers.
+        versionCode = 21
+        versionName = "1.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ndefTagPath"] = "/$tagExternalDomain:$tagTypeName"

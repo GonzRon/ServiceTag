@@ -56,10 +56,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs170AndCode20() {
-        assertEquals("1.7.0", BuildConfig.VERSION_NAME)
-        assertEquals(20, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.7.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs180AndCode21() {
+        assertEquals("1.8.0", BuildConfig.VERSION_NAME)
+        assertEquals(21, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.8.0", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -154,7 +154,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.7.0", status.appVersion)
+        assertEquals("1.8.0", status.appVersion)
         assertEquals(21, status.schemaVersion)
         assertEquals(20, status.backupFormatVersion)
     }
@@ -434,6 +434,57 @@ class VersionAgreementTest {
         assertEquals("the 1.6.0 / 19 row must still be there, once", 1, previous.size)
         assertTrue(
             "the 1.7.0 row must follow the 1.6.0 row",
+            previous.single().range.first < text.indexOf(rows.single()),
+        )
+    }
+
+    /**
+     * The 1.8.0 / 21 row: a MINOR with no schema or format change, so it names its six issues across
+     * the three streams it carries, says the schema and the format are the ones 1.7.0 shipped,
+     * unchanged, and names its reason for being a MINOR — the language packs, a new user-facing
+     * capability — rather than a forward-only bump. It names the one `/v1` change a script could
+     * meet: a schedule command body with a key and no value is 400 where it was 500 (#94). It links
+     * release notes that exist and names its tag. Anchored at the start of the row; `versionCode` 21
+     * is claimed by this row and by nothing else, and the 1.7.0 row it follows is still there, once
+     * (`versioningRecords170` holds what that row says).
+     */
+    @Test fun versioningRecords180() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.8\.0\s*\|\s*21\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.8.0 / 21 row", 1, rows.size)
+        val row = rows.single()
+        for (issue in listOf("#102", "#94", "#99", "#101", "#103", "#105")) {
+            assertTrue("the row must name $issue", Regex("""$issue\b""").containsMatchIn(row))
+        }
+        assertTrue(
+            "the row must name the schema and the format, unchanged",
+            Regex("""schema \*\*21\*\*.*format \*\*20\*\*""").containsMatchIn(row) && row.contains("unchanged"),
+        )
+        assertTrue(
+            "the row must give the new-capability reason it is a MINOR",
+            row.contains("new user-facing capability") && row.contains("MINOR by the rule above"),
+        )
+        assertTrue(
+            "the row must name the 500 that became a 400 on the schedule command",
+            row.contains("`POST /v1/schedules`") && row.contains("`PATCH /v1/schedules/{id}`") &&
+                row.contains("400") && row.contains("500"),
+        )
+        assertTrue(
+            "the row must link the 1.8.0 release notes, which must exist",
+            row.contains("`docs/releases/1.8.0.md`") && repoFile("docs/releases/1.8.0.md").isFile,
+        )
+        assertTrue("the row must name its tag", row.contains("`servicetag-v1.8.0`"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 21",
+            1,
+            Regex("""^\|[^\n]*\|\s*21\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        val previous = Regex("""^\|\s*1\.7\.0\s*\|\s*20\s*\|""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("the 1.7.0 / 20 row must still be there, once", 1, previous.size)
+        assertTrue(
+            "the 1.8.0 row must follow the 1.7.0 row",
             previous.single().range.first < text.indexOf(rows.single()),
         )
     }
