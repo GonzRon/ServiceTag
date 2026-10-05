@@ -29,6 +29,10 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.espresso.Espresso
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.pressBack
+import androidx.test.espresso.matcher.RootMatchers
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.contacts.ContactRow
 import com.loosecannon.servicetag.contacts.ContactRowQuery
@@ -313,13 +317,19 @@ class LendingSectionDeviceTest {
         rule.onNodeWithText(CHOOSE_FROM_CONTACTS).performClick()
         rule.awaitText("Sample Borrower")
         field(DUE_BACK).performScrollTo().performTextReplacement(due.toString())
+        // Typing the date raised the soft keyboard, and the platform gives Back to a showing keyboard
+        // before any window: left up, it can be carried over the rationale and swallow the key under
+        // test (the gate's logcat: the IME re-shown over the dialog, the key spent hiding it). The
+        // keyboard is put away first, as a person does before reading the question.
+        Espresso.closeSoftKeyboard()
         rule.onNodeWithText(ONCE).performScrollTo().performClick()
         rule.onNodeWithText(SAVE_LOAN).performScrollTo().performClick()
         rule.awaitText(LOAN_NOTIFICATION_RATIONALE)
         val atTheQuestion = loans().single()
 
         // A key to the focused dialog window, as a gesture is: never the activity's own dispatcher.
-        Espresso.pressBack()
+        // Espresso injects it only once the dialog's own window holds focus.
+        onView(isRoot()).inRoot(RootMatchers.isDialog()).perform(pressBack())
         rule.waitUntil(WAIT_MS) { done.get() == 1 }
         rule.waitForIdle()
 
