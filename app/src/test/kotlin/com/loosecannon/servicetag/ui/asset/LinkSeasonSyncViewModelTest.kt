@@ -12,6 +12,14 @@ import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.ui.homeassistant.Notice
+import com.loosecannon.servicetag.ui.homeassistant.HA_TOKEN_REFUSED
+import com.loosecannon.servicetag.ui.homeassistant.HA_NOT_CONNECTED
+import com.loosecannon.servicetag.ui.homeassistant.HA_ENTER_TOKEN_AGAIN
+import com.loosecannon.servicetag.ui.homeassistant.HA_COULD_NOT_REACH
+import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
+import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
@@ -55,6 +63,10 @@ class LinkSeasonSyncViewModelTest {
 
     private val helper = "input_boolean.example_heater_in_season"
 
+    /** #105: the sheet's list seam, scripted per case; counted, so "nothing is read on open" is a number. */
+    private var listReads = 0
+    private var entityList: suspend () -> HaListOutcome? = { listReads++; HaListOutcome.Listed(emptyList()) }
+
     private val calendarSentence =
         "Linking this asset to Home Assistant replaces its calendar dates. From today, its season starts and ends " +
             "when Home Assistant says. Maintenance that counts from the start of the season will count from today."
@@ -88,7 +100,7 @@ class LinkSeasonSyncViewModelTest {
         val model = LinkSeasonSyncViewModel(
             AssetId(id), purpose, graph.assets, graph.schedules, graph.haConnections, graph.linkSeasonSync,
             graph.resumeSeasonSync,
-        )
+        ) { entityList() }
         advanceUntilIdle()
         return model
     }
@@ -134,7 +146,7 @@ class LinkSeasonSyncViewModelTest {
         val pending = LinkSeasonSyncViewModel(
             AssetId("late"), SeasonSyncSheetPurpose.LINK, graph.assets, graph.schedules, graph.haConnections,
             graph.linkSeasonSync, graph.resumeSeasonSync,
-        )
+        ) { entityList() }
         assertNull("the read is pending", pending.now.sentence)
         assertFalse(pending.now.canSave)
         pending.onEntityId(helper)
@@ -330,5 +342,140 @@ class LinkSeasonSyncViewModelTest {
         listOf(unconnected, archived, tokenless, gone).forEach { assertNull(it.now.finished) }
         assertEquals(SeasonMode.YEAR_ROUND, graph.assets.get(AssetId("hand"))!!.seasonMode)
         assertNull(binding("old"))
+    }
+
+    // --- #105 (B3): the entity browser, rows 11–17 ---------------------------------------------------------------
+
+    private val stove = HaEntityCandidate("input_boolean.pellet_stove_in_season", "Pellet Stove In Season")
+    private val heaterHelper = HaEntityCandidate("input_boolean.example_heater_in_season", "Example Heater In Season")
+    private val lamp = HaEntityCandidate("switch.example_lamp", "Example Lamp")
+
+    private suspend fun handAsset() = graph.assets.upsert(assetRow("hand", seasonMode = SeasonMode.MANUAL))
+
+    /** Rows 11, 12: nothing is read on open; Choose entity reads once and lists the scope sorted; a pick links the exact id. */
+    @Test fun chooseEntityReadsOnceAndAPickLinksTheExactId() = runTest {
+        connect()
+        handAsset()
+        entityList = { listReads++; HaListOutcome.Listed(listOf(lamp, stove, heaterHelper)) }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+        assertEquals("nothing is read on open", 0, listReads)
+        assertNull(sheet.now.browse)
+
+        act { sheet.chooseEntity() }
+
+        assertEquals(1, listReads)
+        val browse = sheet.now.browse!!
+        assertEquals(listOf(heaterHelper, stove), browse.rows)
+        assertFalse(browse.loading)
+        assertTrue(browse.loadedOnce)
+        assertEquals(emptyList<Notice>(), browse.failure)
+
+        act { sheet.pick(stove) }
+
+        assertNull("the browser closed on the pick", sheet.now.browse)
+        assertEquals(stove, sheet.now.chosen)
+        assertEquals("", sheet.now.entityId)
+        assertEquals(stove.entityId, sheet.now.entityToLink)
+        act { sheet.save() }
+        assertEquals("the exact id, through the shipped link", stove.entityId, binding("hand")!!.entityId)
+        assertEquals(SeasonSheetExit.CLOSED, sheet.now.finished)
+        assertEquals("no second read", 1, listReads)
+    }
+
+    /** Row 13: typing clears the pick; Enter entity ID manually prefills the field with the pick; a bad shape is P16-49 as today. */
+    @Test fun typingClearsThePickAndManualEntryPrefillsTheField() = runTest {
+        connect()
+        handAsset()
+        entityList = { HaListOutcome.Listed(listOf(stove)) }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+        act { sheet.chooseEntity() }
+        act { sheet.pick(stove) }
+
+        act { sheet.enterManually() }
+        assertTrue(sheet.now.manualEntry)
+        assertNull(sheet.now.chosen)
+        assertEquals("the field starts with the pick's id", stove.entityId, sheet.now.entityId)
+
+        sheet.onEntityId("not an id")
+        assertEquals("not an id", sheet.now.entityToLink)
+        act { sheet.save() }
+        assertEquals(SEASON_SYNC_BAD_ENTITY_ID, sheet.now.entityLine)
+        assertNull("a refusal writes nothing", binding("hand"))
+
+        act { sheet.chooseEntity() }
+        act { sheet.pick(stove) }
+        assertFalse("a pick leaves manual entry", sheet.now.manualEntry)
+        assertEquals("", sheet.now.entityId)
+        assertEquals(stove, sheet.now.chosen)
+    }
+
+    /** Row 14: a failed first read draws its sentence and no rows; a failed refresh keeps the rows; nothing is chosen by a failure. */
+    @Test fun aFailedFirstReadDrawsTheSentenceAndAFailedRefreshKeepsTheRows() = runTest {
+        connect()
+        handAsset()
+        entityList = { HaListOutcome.Failed(SyncErrorKind.UNREACHABLE, null) }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+
+        act { sheet.chooseEntity() }
+        var browse = sheet.now.browse!!
+        assertEquals(listOf(Notice(HA_COULD_NOT_REACH)), browse.failure)
+        assertEquals(emptyList<HaEntityCandidate>(), browse.rows)
+        assertFalse(browse.loadedOnce)
+        assertFalse(browse.scopeEmpty)
+        assertFalse(browse.noMatch)
+
+        entityList = { HaListOutcome.Listed(listOf(stove, heaterHelper)) }
+        act { sheet.refreshEntities() }
+        browse = sheet.now.browse!!
+        assertEquals(emptyList<Notice>(), browse.failure)
+        assertEquals(listOf(heaterHelper, stove), browse.rows)
+
+        entityList = { HaListOutcome.Failed(SyncErrorKind.AUTH_REFUSED, null) }
+        act { sheet.refreshEntities() }
+        browse = sheet.now.browse!!
+        assertEquals(listOf(Notice(HA_TOKEN_REFUSED)), browse.failure)
+        assertEquals("the last good list stays", listOf(heaterHelper, stove), browse.rows)
+
+        act { sheet.closeBrowse() }
+        assertNull(sheet.now.browse)
+        assertNull("nothing was chosen by a failure", sheet.now.chosen)
+        assertNull(binding("hand"))
+    }
+
+    /** Row 15: an empty scope and a query that matches nothing are two states; the search is live over the list. */
+    @Test fun noHelpersAndNoMatchAreTwoDifferentStates() = runTest {
+        connect()
+        handAsset()
+        entityList = { HaListOutcome.Listed(listOf(lamp)) }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+        act { sheet.chooseEntity() }
+        assertTrue("a switch is out of scope: nothing to list", sheet.now.browse!!.scopeEmpty)
+        assertFalse(sheet.now.browse!!.noMatch)
+
+        entityList = { HaListOutcome.Listed(listOf(lamp, stove, heaterHelper)) }
+        act { sheet.refreshEntities() }
+        assertFalse(sheet.now.browse!!.scopeEmpty)
+        sheet.onQuery("pellet")
+        assertEquals(listOf(stove), sheet.now.browse!!.rows)
+        sheet.onQuery("zzz")
+        assertTrue(sheet.now.browse!!.noMatch)
+        assertFalse(sheet.now.browse!!.scopeEmpty)
+        sheet.onQuery("")
+        assertEquals(listOf(heaterHelper, stove), sheet.now.browse!!.rows)
+    }
+
+    /** Rows 14, 17: no connection and no token draw their sentences; no state value carries the token. */
+    @Test fun noConnectionAndNoTokenDrawTheirSentencesAndNoStateCarriesTheToken() = runTest {
+        connect()
+        handAsset()
+        entityList = { null }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+        act { sheet.chooseEntity() }
+        assertEquals(listOf(Notice(HA_NOT_CONNECTED)), sheet.now.browse!!.failure)
+
+        entityList = { HaListOutcome.Failed(SyncErrorKind.NEEDS_TOKEN, null) }
+        act { sheet.refreshEntities() }
+        assertEquals(listOf(Notice(HA_ENTER_TOKEN_AGAIN)), sheet.now.browse!!.failure)
+        assertFalse(sheet.now.toString().contains("fictional-token"))
     }
 }

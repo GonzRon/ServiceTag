@@ -1,8 +1,8 @@
 # #105 — browse and pick a Home Assistant entity during season-sync setup: design and plan (rev 1.0, 2026-10-05)
 
-> **Status: PLANNING.** Dispatch waits on the owner's rulings Q1–Q6 (§8) and the ratification of §5's strings. Nothing of
-> this plan is built. **Release:** content of **ServiceTag 1.8.0** (#104: the former 1.7.2 folds into 1.8.0; no release
-> of its own). **Classification stands as the issue states:** a UX improvement to the shipped #16 setup flow — the stored
+> **Status: RULED 2026-10-05; B1, B2 and B3 authorized** (§8 carries the rulings verbatim in substance; §5's ten strings
+> are RATIFIED). **Release:** content of **ServiceTag 1.8.0** — the former 1.7.2 work, folded into the combined 1.8.0
+> train with the former 1.7.1 work and #102 (#104); no release of its own. **Classification stands as the issue states:** a UX improvement to the shipped #16 setup flow — the stored
 > binding is still the exact entity id, `on`/`off` are still the only season decisions, no new integration type.
 
 **Base:** master `c994341` (1.7.0 / code 20 released; on master unreleased: #102's localization layer and nine language
@@ -30,14 +30,24 @@ the form with the choice shown; **Enter entity ID manually** keeps the typed pat
 exact entity id. Nothing about the binding, the poll, the applier, the modes, the token, the network gate, the schema,
 the backup, the API or the MCP changes.
 
+**What validates a picked entity, and when (owner correction 2026-10-05).** `LinkSeasonSync.run()` checks the entity
+id's shape, **commits** the binding (and any switch into MANUAL) and only then asks the scheduler for a fresh read: the
+fresh Home Assistant read happens **after** the binding is written, exactly as #16 shipped it. For a picker-selected
+entity the pre-save evidence is the successful foreground `/api/states` list that produced that exact candidate; Save
+passes the exact id through `LinkSeasonSync` unchanged; the existing post-commit fresh read remains the authoritative
+runtime check, and a helper that has since disappeared or reports a state that is neither on nor off is drawn on the
+card by the existing status lines (P16-17, P16-18). **No per-entity network request is added to change that order.**
+Manual entry keeps today's behaviour in full.
+
 Three things the design settles up front:
 
 1. **Entity-first, REST-only in this cut (Q1).** The list comes from `GET /api/states` — the one authenticated read
    endpoint the client already speaks, over the same origin, policy, headers, timeouts and failure map — filtered on the
    phone to `input_boolean.*`, with `attributes.friendly_name` as the display name. Home Assistant's display-registry and
    device-registry lists are WebSocket-only; #16's scope ruling (R16-0) excludes a second transport, and a device view is
-   a convenience the issue names as optional. So **no device grouping in this cut**; the acceptance bullet about device
-   context is met as "none shown because none is read", and a later issue may add the WebSocket registry read.
+   a convenience the issue names as optional. So **no device grouping in this cut**: the acceptance bullet about device
+   context is **deferred by owner ruling** (Q1), not satisfied; helpers without a device remain fully selectable; a later
+   issue may add the WebSocket registry reads.
 2. **The browser is a mode of the sheet, not a route (Q6).** The sheet already fills the height
    (`skipPartiallyExpanded = true`); its one view model gains a browse state, so the pick needs no result passing between
    destinations and a rotation keeps both the list and the choice. Nothing is read until the owner taps Choose entity.
@@ -57,9 +67,10 @@ Three things the design settles up front:
   friendly name is bounded by C5's rule 4 (`MAX_HA_TEXT_LENGTH` for the id, a longer bound for the name, §3); at most
   `MAX_LISTED_ENTITIES` candidates are kept after filtering (§3). A truncated or non-array answer is `MALFORMED`, drawn
   as P16-19.
-- **Exact id, exact rules.** The chosen id goes to `LinkSeasonSync.run` unchanged; C4's shape check still runs; the
-  fresh check after Save (#16, "on the fresh check a link asks for") is the validation the issue asks for before the
-  binding takes effect, and a `NOT_FOUND`/`UNSUPPORTED_STATE` there draws P16-17/18 on the card as today.
+- **Exact id, exact rules.** A picker candidate was observed in the explicit foreground list before selection; the
+  chosen id goes to `LinkSeasonSync.run` unchanged, which validates the shape and writes exactly as #16 does today; the
+  existing fresh read runs **after the commit** and reports a vanished or unsupported helper through the card's existing
+  status (P16-17/18). No extra pre-save request.
 - **A failed read changes nothing**: not the typed or chosen id, not the binding, not the season. Refresh keeps the
   current selection and the last good list until a new one arrives.
 - **Strings are resources from the first commit** (`docs/localization.md`): each §5 string in `values/strings_asset_edit.xml`
@@ -75,7 +86,7 @@ Three things the design settles up front:
 // C/seasonsync/HaEntityList.kt (B1)
 data class HaEntityCandidate(val entityId: String, val friendlyName: String?)      // name null when HA gave none
 sealed interface HaListOutcome {
-    data class Listed(val entities: List<HaEntityCandidate>, val truncatedList: Boolean) : HaListOutcome
+    data class Listed(val entities: List<HaEntityCandidate>) : HaListOutcome         // the count bound is pickerRows's
     data class Failed(val kind: SyncErrorKind, val detail: String?) : HaListOutcome   // the poll's kinds, reused
 }
 const val MAX_HA_NAME_LENGTH = 128
@@ -121,7 +132,8 @@ connection or no token answers `Failed(NEEDS_TOKEN)` / `NO_CONNECTION`'s sentenc
   **Change** affordance (P105-2); Save enabled.
 - **Enter entity ID manually** (P105-3) swaps the row for today's text field (P16-42/43/49 unchanged); a typed id clears
   the chosen candidate; **Choose entity** is still offered under the field, and a pick clears the typed text.
-- Save: `link.run(assetId, id)` with the exact id; every refusal and the #78 question exactly as today.
+- Save: `link.run(assetId, id)` with the exact id — the picked candidate's or the trimmed typed text — so the shape
+  check, the commit and the post-commit fresh read are #16's unchanged; every refusal and the #78 question exactly as today.
 
 **The browser.**
 - Opens on Choose entity; reads once (`loading`, P105-5 while it does, bounded by the client's `CALL_MILLIS`); draws a
@@ -139,7 +151,7 @@ connection or no token answers `Failed(NEEDS_TOKEN)` / `NO_CONNECTION`'s sentenc
 **Home Assistant's rename of a bound helper** changes nothing: the card draws the stored id as today (P16-27); the
 browser shows the new name next time it is opened.
 
-## 5. Strings — PENDING, for the owner's gate (P105-1…10)
+## 5. Strings — RATIFIED by the owner 2026-10-05 (P105-1…10; P105-8 and P105-9 in the owner's wording)
 
 Voice as #16's §5. Each is one resource in `values/strings_asset_edit.xml` (prefix `season_sync_`), with the P105 id in
 its comment, and in every pack. Reused unchanged: P16-42 `Entity ID`, P16-43 the helper, P16-49 the shape refusal,
@@ -154,8 +166,8 @@ P16-19 `MALFORMED`, P16-13/14/15/16/20/21/50/51/52 by kind, `Save`, `Cancel`.
 | P105-5 | `Reading entities from Home Assistant…` | the bounded loading line |
 | P105-6 | `Showing Home Assistant's on/off helpers (input_boolean).` | the scope line over the rows |
 | P105-7 | `Refresh` | the button |
-| P105-8 | `Home Assistant has no on/off helpers. Make one in Home Assistant, or enter an entity ID.` | the scope is empty |
-| P105-9 | `No entity matches that.` | the query matches nothing |
+| P105-8 | `No Home Assistant on/off helpers found. Create one in Home Assistant, or enter an entity ID manually.` | the scope is empty |
+| P105-9 | `No entities match your search.` | the query matches nothing |
 | P105-10 | `Only the first %1$d are shown. Search to narrow the list.` | `truncatedList` — `%1$d` is `MAX_LISTED_ENTITIES` |
 
 ## 6. Briefs, order, files
@@ -201,30 +213,49 @@ the applier, the guard, the schema, `BackupData`, the codec, `docs/api/v1.md`, t
 The fake Home Assistant is the client test's scripted `HttpURLConnection` (`Harness`, `Script`) with a states-array body;
 no socket in any JVM test. The view-model tests script `listEntities` directly.
 
-## 8. Owner decisions (the gate)
+## 8. Owner rulings (2026-10-05; binding on every brief)
 
-- **Q1 — transport.** Recommended: **REST `GET /api/states` only**, no WebSocket; device grouping deferred to a later
-  issue. Alternative: add a one-shot WebSocket read of `config/entity_registry/list_for_display` and
-  `config/device_registry/list` for display names and device context — a second transport, its own auth handshake,
-  its own failure map, and a new place a token travels; the planner does not recommend it for this cut.
-- **Q2 — the list cap.** Recommended **8 MiB** for the one list call (a few thousand entities with attributes is
-  low single-digit megabytes); the poll's 64 KiB stays. Beyond the cap the answer is MALFORMED (P16-19) and manual entry
-  remains.
-- **Q3 — scope.** Recommended: **`input_boolean` only** in this cut, with manual entry for anything else; no "All
-  compatible on/off entities" filter, so no warning string is needed and nothing is made to look like a season helper.
-  Alternative: a second scope `switch.`/`binary_sensor.` behind a warning line, as the issue allows.
-- **Q4 — changing a linked asset's entity.** Core's `ChangeSeasonSyncEntity` (C17) has no phone surface today; #105's
-  flow is the setup sheet. Recommended: **out of scope**; the owner unlinks (Disconnect or a later Stop/Link) as today.
-- **Q5 — the strings** of §5.
-- **Q6 — placement.** Recommended: the browser as a mode of the existing sheet (§1 point 2). Alternative: a pushed
-  `Route`, which needs a result path between destinations the app does not have.
+- **Q1 — APPROVED, with a scope amendment.** REST `GET /api/states` only for 1.8.0; no WebSocket transport merely to
+  obtain the entity, display or device registries. Device grouping/context, `config/entity_registry/list_for_display`
+  and `config/device_registry/list` are **explicitly deferred**. The acceptance bullet about device context is deferred
+  by this ruling, not satisfied; helpers without devices remain fully selectable.
+- **Q2 — APPROVED.** An **8 MiB cap for the explicit foreground `/api/states` list call** only; the ordinary #16 poll
+  stays at 64 KiB and its cap is not raised globally. Beyond 8 MiB the read fails boundedly (MALFORMED, P16-19) and
+  manual entry remains.
+- **Q3 — APPROVED.** The browser exposes **`input_boolean.*` only** in this release; manual entry is the escape hatch for
+  anything else; no "all on/off entities" mode and no warning copy in #105.
+- **Q4 — APPROVED.** Changing the entity of an already-linked Asset is out of scope; `ChangeSeasonSyncEntity` is not
+  surfaced by this work. #105 improves initial linking only.
+- **Q5 — RATIFIED** with two wording edits (P105-8, P105-9), as §5 now reads. All ten go into the ten packs.
+- **Q6 — APPROVED.** The browser is a mode of the existing setup sheet, not a pushed destination: one setup transaction.
+- **Required correction, applied** (§1, §2, §4, §9): the fresh read happens after the commit, as shipped; a picked
+  candidate's pre-save evidence is the foreground list it came from; no per-entity request is added.
+- **Administrative:** #105 is no longer a standalone 1.7.2 item; it is retitled and reclassified as 1.8.0 content.
 
 ## 9. Acceptance map (#105's bullets → rows)
 
 choose without knowing the id → 18; searchable by name, id shown → 6, 18; search matches the id → 6; default results
-are `input_boolean` → 5; helpers without a device remain selectable → 1, 5 (no device read at all); device context →
-none shown, by Q1; exact id into the #16 flow → 12; manual entry remains → 13, 18; no writes, #16's rules → 9, 17 and
-§2; failed discovery changes nothing → 14; names are presentation only → 12 and §4; JVM/Android/fake-HA coverage → §7.
+are `input_boolean` → 5; helpers without a device remain selectable → 1, 5 (no device is read, so none can gate a row);
+device context → **deferred by owner ruling Q1** (not met in 1.8.0); exact id into the #16 flow → 12 (the candidate was
+observed in the foreground list; `LinkSeasonSync` validates the shape and commits; the post-commit fresh read reports
+through the card); manual entry remains → 13, 18; no writes, #16's rules → 9, 17 and §2; failed discovery changes
+nothing → 14; names are presentation only → 12 and §4; JVM/Android/fake-HA coverage → §7.
+
+## 9a. Execution record (2026-10-05)
+
+- **B1, B2, B3 and B4 executed** on `claude/sleepy-fermat-h5k5ul` after the rulings. Deviations from the text above,
+  each small: `HaListOutcome.Listed` carries the entities only (the count bound is `pickerRows`'s, §3 amended);
+  `HaStateMapper.kt`'s `stringOrNull` and `bounded` became `internal`, the latter taking its bound as a parameter, so
+  the list mapper applies C5 rule 4 through the same code (behaviour unchanged; the file is otherwise untouched);
+  Save stays enabled with nothing chosen and nothing typed — today's P16-49 refusal on Save — so the shipped device
+  assertion that Save is enabled before an entity is given still holds (row 16 reads so); the two device rows prove the
+  form's Choose entity row, the manual path and the browser's static parts and its Cancel, while the rows, the
+  sentences and the pick are the JVM's (no Home Assistant answers on the emulator); `enterManually` prefills the field
+  with a pick's id. Translations are drafts until a native speaker reviews them.
+- **Gates run here:** `:core:test` (the two B1 classes, 8 cases, and the whole core suite green). **Not run here:**
+  `:app:testDebugUnitTest` (no Android SDK in the planning environment; CI on the branch is the proof of record for
+  the client rows, the view-model rows, `LocalizationCoverageTest` and `UiLiteralGuardTest`) and the connected class
+  (R2 on `emulator-5554`, the controller's step).
 
 ## 10. Proofs at the tip (controller)
 

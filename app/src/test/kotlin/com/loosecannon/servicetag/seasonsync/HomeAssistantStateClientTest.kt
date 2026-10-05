@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.fetch.TransportFailure
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
+import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome.NoDecision
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome.Observed
@@ -172,6 +174,94 @@ class HomeAssistantStateClientTest {
             "exactly 64 KiB is whole",
             Observed(HaSwitchState.ON, LAST_CHANGED),
             exactly.client().read(HOME_HTTP, ENTITY, TOKEN),
+        )
+    }
+
+    // --- #105 (B2): the setup sheet's one foreground list read ---------------------------------------------------
+
+    /** Row 9: `GET <base>/api/states` with the four headers, no redirect, no cache; the array maps to candidates. */
+    @Test
+    fun listStatesGetsTheStatesPathWithTheSameHeadersAndMapsTheArray() = runBlocking {
+        val h = Harness().apply { ha.answer = { Script(200, body = statesJson()) } }
+
+        val outcome = h.client().listStates(HOME_HTTP, TOKEN)
+
+        assertEquals(
+            HaListOutcome.Listed(
+                listOf(
+                    HaEntityCandidate(ENTITY, "Example Heater In Season"),
+                    HaEntityCandidate("input_boolean.example_pump", null),
+                ),
+            ),
+            outcome,
+        )
+        assertEquals(listOf(URL("http://192.168.0.10:8123/api/states")), h.ha.opened)
+        val connection = h.ha.connections.single()
+        assertEquals("GET", connection.methodAtHead)
+        assertEquals(false, connection.followAtHead)
+        assertEquals(false, connection.cachesAtHead)
+        assertEquals(
+            listOf(
+                "Authorization" to "Bearer fictional-token-1",
+                "Accept" to "application/json",
+                "Accept-Encoding" to "identity",
+                "User-Agent" to "ServiceTag",
+            ),
+            connection.properties,
+        )
+        assertEquals(10_000 to 15_000, connection.connectTimeoutAtHead to connection.readTimeoutAtHead)
+    }
+
+    /** Row 9: the same gate — off the home Wi-Fi nothing opens; a refused address opens nothing; 401 is AUTH_REFUSED. */
+    @Test
+    fun listStatesIsUnderTheSameGateAndFailureMap() = runBlocking {
+        val elsewhere = Harness(network = NetworkReading(CurrentNetwork.Other, null))
+        assertEquals(
+            HaListOutcome.Failed(SyncErrorKind.NOT_ON_LOCAL_NETWORK, null),
+            elsewhere.client().listStates(HOME_HTTP, TOKEN),
+        )
+        assertEquals(emptyList<URL>(), elsewhere.ha.opened)
+
+        val refused = Harness()
+        assertEquals(
+            HaListOutcome.Failed(SyncErrorKind.ENDPOINT_REFUSED, null),
+            refused.client().listStates(HOME_HTTP.copy(baseUrl = "http://192.0.2.10:8123"), TOKEN),
+        )
+        assertEquals(emptyList<URL>(), refused.ha.opened)
+
+        val denied = Harness().apply { ha.answer = { Script(401) } }
+        assertEquals(HaListOutcome.Failed(SyncErrorKind.AUTH_REFUSED, null), denied.client().listStates(HOME_HTTP, TOKEN))
+
+        val missing = Harness().apply { ha.answer = { Script(404) } }
+        assertEquals(
+            "a 404 on the list is an HTTP error, not a missing entity",
+            HaListOutcome.Failed(SyncErrorKind.HTTP_ERROR, "404"),
+            missing.client().listStates(HOME_HTTP, TOKEN),
+        )
+    }
+
+    /** Row 10: the list reads up to 8 MiB and no further; the poll's 64 KiB cap is untouched. */
+    @Test
+    fun listStatesReadsUpToEightMebibytesAndThePollStaysAtSixtyFourKib() = runBlocking {
+        val cap = 8 * 1024 * 1024
+        val over = Harness().apply { ha.answer = { Script(200, body = paddedStatesJson(cap + 1)) } }
+        assertEquals(
+            HaListOutcome.Failed(SyncErrorKind.MALFORMED, null),
+            over.client().listStates(HOME_HTTP, TOKEN),
+        )
+
+        val exactly = Harness().apply { ha.answer = { Script(200, body = paddedStatesJson(cap)) } }
+        assertEquals(
+            "exactly 8 MiB is whole",
+            HaListOutcome.Listed(listOf(HaEntityCandidate(ENTITY, null))),
+            exactly.client().listStates(HOME_HTTP, TOKEN),
+        )
+
+        val poll = Harness().apply { ha.answer = { Script(200, body = paddedStateJson(64 * 1024 + 1)) } }
+        assertEquals(
+            "the poll's cap did not move",
+            NoDecision(SyncErrorKind.MALFORMED, null),
+            poll.client().read(HOME_HTTP, ENTITY, TOKEN),
         )
     }
 
@@ -467,6 +557,21 @@ class HomeAssistantStateClientTest {
         val LOOPBACK = byteArrayOf(127, 0, 0, 1)
 
         fun failure(kind: SyncErrorKind, detail: String? = null) = ConnectionTestOutcome.Failed(kind, detail)
+
+        /** A states list of two fictional helpers, one named, one not (#105). */
+        fun statesJson(): ByteArray = (
+            """[{"entity_id":"$ENTITY","state":"on","attributes":{"friendly_name":"Example Heater In Season"}},""" +
+                """{"entity_id":"input_boolean.example_pump","state":"off","attributes":{}}]"""
+            ).toByteArray()
+
+        /** A valid one-entity list of exactly [size] bytes: the padding is an attribute (#105). */
+        fun paddedStatesJson(size: Int): ByteArray {
+            val head = """[{"entity_id":"$ENTITY","state":"on","attributes":{"pad":""""
+            val tail = "\"}}]"
+            return (head + "x".repeat(size - head.length - tail.length) + tail).toByteArray().also {
+                check(it.size == size)
+            }
+        }
 
         fun stateJson(state: String): ByteArray =
             """{"entity_id":"$ENTITY","state":"$state","last_changed":"$LAST_CHANGED","attributes":{}}""".toByteArray()

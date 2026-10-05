@@ -157,4 +157,14 @@
     <string name="season_sync_link_manual">从现在起，由 Home Assistant 开始和结束此设备的使用季。其使用季历史保持不变。</string>
     <string name="season_sync_follows_ha">此设备的使用季跟随 Home Assistant。如需在此处更改，请先在设备页面上选择“停止同步”。</string>
     <string name="season_sync_bad_entity_id">请输入实体 ID，例如 input_boolean.example_heater_in_season：只能包含小写字母、数字和下划线，并带有一个点。</string>
+    <string name="season_sync_choose_entity">选择实体</string>
+    <string name="season_sync_change_entity">更改</string>
+    <string name="season_sync_enter_manually">手动输入实体 ID</string>
+    <string name="season_sync_search_entities">按名称或实体 ID 搜索</string>
+    <string name="season_sync_reading_entities">正在从 Home Assistant 读取实体…</string>
+    <string name="season_sync_scope_line">显示 Home Assistant 的开关型辅助元素（input_boolean）。</string>
+    <string name="season_sync_refresh">刷新</string>
+    <string name="season_sync_no_helpers">未在 Home Assistant 中找到开关型辅助元素。请在 Home Assistant 中创建一个，或手动输入实体 ID。</string>
+    <string name="season_sync_no_match">没有与搜索匹配的实体。</string>
+    <string name="season_sync_only_first_shown">仅显示前 %1$d 个。请通过搜索缩小范围。</string>
 </resources>

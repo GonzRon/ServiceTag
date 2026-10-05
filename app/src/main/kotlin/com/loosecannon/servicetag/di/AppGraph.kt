@@ -75,6 +75,8 @@ import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.seasonsync.EditSeasonSyncEntity
 import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult
 import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
@@ -698,6 +700,24 @@ class AppGraph(private val context: Context) {
         currentNetwork = currentNetworkReader,
         resolver = InetHostResolver(networkPermissionGranted),
     )
+
+    /**
+     * #105: the setup sheet's foreground entity list — the stored connection and its token, then one `GET /api/states`
+     * through [haStateClient] under every #16 rule. Null when no connection is stored (the sheet draws P16-10);
+     * `NEEDS_TOKEN` when the token is gone (P16-11); otherwise the client's own outcome. Nothing reads this in the
+     * background: only Choose entity and Refresh do.
+     */
+    val listHaEntities: suspend () -> HaListOutcome? = {
+        val connection = haConnections.get()
+        if (connection == null) {
+            null
+        } else {
+            when (val token = secretStore.get(connection.id)) {
+                null -> HaListOutcome.Failed(SyncErrorKind.NEEDS_TOKEN, null)
+                else -> haStateClient.listStates(connection, token)
+            }
+        }
+    }
 
     /** A cache file the camera can write into through the FileProvider (spec §9.3). */
     fun cameraCaptureUri(): Uri {

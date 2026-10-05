@@ -192,3 +192,35 @@ internal val SEASON_SYNC_FOLLOWS_HA: String get() = localized(R.string.season_sy
 
 /** P16-49 — C16's `BAD_ENTITY_ID`, under the field. */
 internal val SEASON_SYNC_BAD_ENTITY_ID: String get() = localized(R.string.season_sync_bad_entity_id)
+
+// #105 (B3) — the setup sheet's entity browser, P105-1…10 RATIFIED 2026-10-05; resources in `strings_asset_edit.xml`.
+
+/** P105-1 — the form's row with nothing chosen, and the browser's title. */
+internal val SEASON_SYNC_CHOOSE_ENTITY: String get() = localized(R.string.season_sync_choose_entity)
+
+/** P105-2 — the form's row after a pick. */
+internal val SEASON_SYNC_CHANGE_ENTITY: String get() = localized(R.string.season_sync_change_entity)
+
+/** P105-3 — the advanced path, on the form and in the browser. */
+internal val SEASON_SYNC_ENTER_MANUALLY: String get() = localized(R.string.season_sync_enter_manually)
+
+/** P105-4 — the search field's hint. */
+internal val SEASON_SYNC_SEARCH_ENTITIES: String get() = localized(R.string.season_sync_search_entities)
+
+/** P105-5 — the bounded loading line. */
+internal val SEASON_SYNC_READING_ENTITIES: String get() = localized(R.string.season_sync_reading_entities)
+
+/** P105-6 — the scope line over the rows. */
+internal val SEASON_SYNC_SCOPE_LINE: String get() = localized(R.string.season_sync_scope_line)
+
+/** P105-7 — the browser's button. */
+internal val SEASON_SYNC_REFRESH: String get() = localized(R.string.season_sync_refresh)
+
+/** P105-8 — the scope is empty. */
+internal val SEASON_SYNC_NO_HELPERS: String get() = localized(R.string.season_sync_no_helpers)
+
+/** P105-9 — the search matches nothing. */
+internal val SEASON_SYNC_NO_MATCH: String get() = localized(R.string.season_sync_no_match)
+
+/** P105-10 — more matched than are drawn; [shown] is the number drawn. */
+internal fun seasonSyncOnlyFirstShown(shown: Int): String = localized(R.string.season_sync_only_first_shown, shown)

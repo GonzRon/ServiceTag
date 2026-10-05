@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.seasonsync.HaEndpoint
 import com.loosecannon.servicetag.core.seasonsync.HaEndpointPolicy
 import com.loosecannon.servicetag.core.seasonsync.HaHostKind
 import com.loosecannon.servicetag.core.seasonsync.HaHttpAnswer
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaScheme
 import com.loosecannon.servicetag.core.seasonsync.HaStateReader
@@ -19,6 +20,7 @@ import com.loosecannon.servicetag.core.seasonsync.eligibleNow
 import com.loosecannon.servicetag.core.seasonsync.isJsonMediaType
 import com.loosecannon.servicetag.core.seasonsync.isPrivateLanAddress
 import com.loosecannon.servicetag.core.seasonsync.mapHaAnswer
+import com.loosecannon.servicetag.core.seasonsync.mapHaStatesAnswer
 import com.loosecannon.servicetag.core.seasonsync.parseObject
 import com.loosecannon.servicetag.fetch.FailurePhase
 import com.loosecannon.servicetag.fetch.transportFailureOf
@@ -106,19 +108,36 @@ class HomeAssistantStateClient(
             is Exchange.Failed -> ConnectionTestOutcome.Failed(exchange.outcome.kind, exchange.outcome.detail)
         }
 
+    /**
+     * #105 (B2; owner ruling Q2): the setup sheet's one foreground `GET <base>/api/states`, under exactly the rules
+     * above — the same gate, headers, timeouts and failure map — with its own body cap, [LIST_MAX_BODY_BYTES], because
+     * a whole installation's states run to megabytes where one entity's run to bytes. The poll's cap is untouched.
+     * Called only when the owner taps Choose entity or Refresh; never by the runner or the worker.
+     */
+    suspend fun listStates(connection: HaConnection, token: Secret): HaListOutcome =
+        when (val exchange = exchange(connection, STATES_LIST_PATH, token, LIST_MAX_BODY_BYTES)) {
+            is Exchange.Answered -> mapHaStatesAnswer(exchange.answer)
+            is Exchange.Failed -> HaListOutcome.Failed(exchange.outcome.kind, exchange.outcome.detail)
+        }
+
     private sealed interface Exchange {
         class Answered(val answer: HaHttpAnswer) : Exchange
 
         class Failed(val outcome: HaReadOutcome.NoDecision) : Exchange
     }
 
-    private suspend fun exchange(connection: HaConnection, path: String, token: Secret): Exchange {
+    private suspend fun exchange(
+        connection: HaConnection,
+        path: String,
+        token: Secret,
+        maxBodyBytes: Int = MAX_BODY_BYTES,
+    ): Exchange {
         val endpoint = when (val check = HaEndpointPolicy.classify(connection.baseUrl)) {
             is EndpointCheck.Allowed -> check.endpoint
             is EndpointCheck.Refused -> return failed(SyncErrorKind.ENDPOINT_REFUSED)
         }
         if (!networkPermissionGranted()) return failed(SyncErrorKind.DENIED)
-        return withTimeoutOrNull(CALL_MILLIS) { checkedExchange(connection, endpoint, path, token) }
+        return withTimeoutOrNull(CALL_MILLIS) { checkedExchange(connection, endpoint, path, token, maxBodyBytes) }
             ?: failed(SyncErrorKind.TIMED_OUT)
     }
 
@@ -127,6 +146,7 @@ class HomeAssistantStateClient(
         endpoint: HaEndpoint,
         path: String,
         token: Secret,
+        maxBodyBytes: Int,
     ): Exchange {
         val homeOnly = when (endpoint.scheme) {
             HaScheme.HTTP -> true
@@ -152,7 +172,7 @@ class HomeAssistantStateClient(
             return failed(SyncErrorKind.ENDPOINT_REFUSED)
         }
         if (!sameAsciiHost(url.host.orEmpty(), endpoint.host)) return failed(SyncErrorKind.ENDPOINT_REFUSED)
-        return withContext(io) { get(url, token) }
+        return withContext(io) { get(url, token, maxBodyBytes) }
     }
 
     /** C19 step 1b: null when every answer is private (C8 rule 5); else the outcome, nothing opened. */
@@ -166,7 +186,7 @@ class HomeAssistantStateClient(
         return if (local) null else failed(SyncErrorKind.NAME_NOT_LOCAL)
     }
 
-    private suspend fun get(url: URL, token: Secret): Exchange {
+    private suspend fun get(url: URL, token: Secret, maxBodyBytes: Int): Exchange {
         val connection = try {
             connectionFor(url, token)
         } catch (e: Throwable) {
@@ -176,7 +196,7 @@ class HomeAssistantStateClient(
             cont.invokeOnCancellation { disconnectQuietly(connection) }
             if (!cont.isActive) return@suspendCancellableCoroutine
             val exchange = try {
-                answerOf(connection)
+                answerOf(connection, maxBodyBytes)
             } catch (e: Throwable) {
                 failedBy(e, FailurePhase.CONNECT)
             } finally {
@@ -200,31 +220,31 @@ class HomeAssistantStateClient(
         return connection
     }
 
-    /** Blocks for the head, then reads a 200's body under the cap; any other status answers no body. */
-    private fun answerOf(connection: HttpURLConnection): Exchange {
+    /** Blocks for the head, then reads a 200's body under [maxBodyBytes]; any other status answers no body. */
+    private fun answerOf(connection: HttpURLConnection, maxBodyBytes: Int): Exchange {
         val status = connection.responseCode
         if (status < 0) return failed(SyncErrorKind.UNREACHABLE)
         if (status != OK) return Exchange.Answered(HaHttpAnswer(status, connection.contentType, ByteArray(0), false))
         val contentType = connection.contentType
         return try {
-            val (body, truncated) = capped(connection.inputStream)
+            val (body, truncated) = capped(connection.inputStream, maxBodyBytes)
             Exchange.Answered(HaHttpAnswer(status, contentType, body, truncated))
         } catch (e: Throwable) {
             failedBy(e, FailurePhase.BODY)
         }
     }
 
-    /** At most [MAX_BODY_BYTES], and whether more followed. */
-    private fun capped(input: InputStream): Pair<ByteArray, Boolean> = input.use {
+    /** At most [maxBodyBytes], and whether more followed; never a byte past the cap is read (review NOTE-5). */
+    private fun capped(input: InputStream, maxBodyBytes: Int): Pair<ByteArray, Boolean> = input.use {
         val kept = ByteArrayOutputStream()
         val buffer = ByteArray(BUFFER_BYTES)
-        while (kept.size() <= MAX_BODY_BYTES) {
-            val read = it.read(buffer, 0, minOf(buffer.size, MAX_BODY_BYTES + 1 - kept.size()))
+        while (kept.size() <= maxBodyBytes) {
+            val read = it.read(buffer, 0, minOf(buffer.size, maxBodyBytes + 1 - kept.size()))
             if (read < 0) break
             kept.write(buffer, 0, read)
         }
         val bytes = kept.toByteArray()
-        if (bytes.size > MAX_BODY_BYTES) bytes.copyOf(MAX_BODY_BYTES) to true else bytes to false
+        if (bytes.size > maxBodyBytes) bytes.copyOf(maxBodyBytes) to true else bytes to false
     }
 
     /** N-4: TLS first, since #85's rule would fold it into `UNREACHABLE`; a cancellation or an Error propagates. */
@@ -241,11 +261,17 @@ class HomeAssistantStateClient(
     private companion object {
         const val STATES_PATH = "/api/states/"
         const val API_ROOT_PATH = "/api/"
+
+        /** #105: the whole states list, read only on Choose entity and Refresh. */
+        const val STATES_LIST_PATH = "/api/states"
         const val OK = 200
         const val CONNECT_MILLIS = 10_000
         const val IDLE_MILLIS = 15_000
         const val CALL_MILLIS = 30_000L
         const val MAX_BODY_BYTES = 64 * 1024
+
+        /** #105 (owner ruling Q2): the list call's own cap; the poll keeps [MAX_BODY_BYTES]. */
+        const val LIST_MAX_BODY_BYTES = 8 * 1024 * 1024
         const val BUFFER_BYTES = 8 * 1024
         const val MAX_CAUSE_DEPTH = 16
 

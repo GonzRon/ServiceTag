@@ -160,4 +160,14 @@
     <string name="season_sync_link_manual">A partir de ahora, Home Assistant inicia y termina la temporada de este equipo. Su historial de temporadas se queda como está.</string>
     <string name="season_sync_follows_ha">La temporada de este equipo sigue a Home Assistant. Usa “Dejar de sincronizar” en la página del equipo para cambiarla aquí.</string>
     <string name="season_sync_bad_entity_id">Introduce un ID de entidad como input_boolean.example_heater_in_season: letras minúsculas, dígitos y guiones bajos, con un punto.</string>
+    <string name="season_sync_choose_entity">Elegir entidad</string>
+    <string name="season_sync_change_entity">Cambiar</string>
+    <string name="season_sync_enter_manually">Introducir el ID de entidad manualmente</string>
+    <string name="season_sync_search_entities">Buscar por nombre o ID de entidad</string>
+    <string name="season_sync_reading_entities">Leyendo entidades de Home Assistant…</string>
+    <string name="season_sync_scope_line">Se muestran los ayudantes de encendido/apagado de Home Assistant (input_boolean).</string>
+    <string name="season_sync_refresh">Actualizar</string>
+    <string name="season_sync_no_helpers">No se encontraron ayudantes de encendido/apagado en Home Assistant. Crea uno en Home Assistant o introduce un ID de entidad manualmente.</string>
+    <string name="season_sync_no_match">Ninguna entidad coincide con tu búsqueda.</string>
+    <string name="season_sync_only_first_shown">Solo se muestran los primeros %1$d. Busca para acotar la lista.</string>
 </resources>

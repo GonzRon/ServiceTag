@@ -163,4 +163,14 @@
     <string name="season_sync_link_manual">С этого момента Home Assistant начинает и завершает сезон этого объекта. История сезонов остаётся без изменений.</string>
     <string name="season_sync_follows_ha">Сезон этого объекта следует за Home Assistant. Чтобы изменить его здесь, выберите «Остановить синхронизацию» на странице объекта.</string>
     <string name="season_sync_bad_entity_id">Введите ID сущности, например input_boolean.example_heater_in_season: строчные буквы, цифры и подчёркивания, с одной точкой.</string>
+    <string name="season_sync_choose_entity">Выбрать сущность</string>
+    <string name="season_sync_change_entity">Изменить</string>
+    <string name="season_sync_enter_manually">Ввести ID сущности вручную</string>
+    <string name="season_sync_search_entities">Поиск по имени или ID сущности</string>
+    <string name="season_sync_reading_entities">Чтение сущностей из Home Assistant…</string>
+    <string name="season_sync_scope_line">Показаны вспомогательные переключатели (вкл./выкл.) Home Assistant (input_boolean).</string>
+    <string name="season_sync_refresh">Обновить</string>
+    <string name="season_sync_no_helpers">В Home Assistant не найдено вспомогательных переключателей (вкл./выкл.). Создайте его в Home Assistant или введите ID сущности вручную.</string>
+    <string name="season_sync_no_match">Ни одна сущность не соответствует вашему запросу.</string>
+    <string name="season_sync_only_first_shown">Показаны только первые %1$d. Уточните запрос, чтобы сократить список.</string>
 </resources>

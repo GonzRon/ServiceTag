@@ -6,13 +6,17 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.seasonsync.EntityScope
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefusal
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefused
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinked
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncNotLinked
+import com.loosecannon.servicetag.core.seasonsync.pickerRows
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
@@ -20,6 +24,7 @@ import com.loosecannon.servicetag.core.usecase.liveContinuousCount
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.homeassistant.HA_ENTER_TOKEN_AGAIN
 import com.loosecannon.servicetag.ui.homeassistant.HA_NOT_CONNECTED
+import com.loosecannon.servicetag.ui.homeassistant.Notice
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,10 +39,33 @@ internal enum class SeasonSyncSheetPurpose { LINK, RESUME }
 internal enum class SeasonSheetExit { CLOSED, REVIEW_SCHEDULES }
 
 /**
+ * #105 (B3) — the entity browser as drawn, one immutable value, inside the sheet's state while the browser is open.
+ * [all] is the last successful list (kept across a failed refresh); [rows] and [truncatedList] are `pickerRows` over it
+ * for [query]; [scopeEmpty] says the scope had nothing even with no query, which is P105-8 rather than P105-9;
+ * [failure] is the latest read's ratified sentences, empty after a success. The token is never here.
+ */
+internal data class EntityBrowseState(
+    val loading: Boolean = false,
+    val query: String = "",
+    val all: List<HaEntityCandidate> = emptyList(),
+    val rows: List<HaEntityCandidate> = emptyList(),
+    val truncatedList: Boolean = false,
+    val scopeEmpty: Boolean = false,
+    val loadedOnce: Boolean = false,
+    val failure: List<Notice> = emptyList(),
+) {
+    /** P105-9: a read succeeded, the scope has helpers, and the query matches none of them. */
+    val noMatch: Boolean get() = loadedOnce && failure.isEmpty() && !scopeEmpty && rows.isEmpty()
+}
+
+/**
  * #16 (C27) — the setup sheet as drawn, one immutable value. [sentence] is the asset's mode's reconciliation sentence
  * (P16-44/45/46), null until the asset is read; Save is held until it is there, so nothing is written before the owner
  * has seen it. [entityLine] is P16-49 under the field; [refusal] is S55 or another refusal's sentence, the sheet open;
  * [prompt] is #78's question after a written link or resume out of YEAR_ROUND; [finished] tells the screen to close.
+ * #105: [chosen] is the candidate picked in the browser, [manualEntry] whether the typed field is shown instead of the
+ * Choose entity row, and [browse] the browser while it is open; [entityToLink] is what Save sends — the picked id,
+ * else the trimmed text — through the shipped link, unchanged.
  */
 internal data class LinkSeasonSyncState(
     val purpose: SeasonSyncSheetPurpose,
@@ -48,8 +76,13 @@ internal data class LinkSeasonSyncState(
     val prompt: EditPrompt? = null,
     val saving: Boolean = false,
     val finished: SeasonSheetExit? = null,
+    val chosen: HaEntityCandidate? = null,
+    val manualEntry: Boolean = false,
+    val browse: EntityBrowseState? = null,
 ) {
     val canSave: Boolean get() = sentence != null && !saving && prompt == null && finished == null
+
+    val entityToLink: String get() = chosen?.entityId ?: entityId.trim()
 }
 
 /**
@@ -66,11 +99,17 @@ internal class LinkSeasonSyncViewModel(
     private val connections: HaConnectionRepository,
     private val link: LinkSeasonSync,
     private val resume: ResumeSeasonSync,
+    /**
+     * #105: the one foreground list read, over the stored connection and its token (`AppGraph.listHaEntities`): null
+     * when no connection is stored, else the client's outcome. Called only by Choose entity and Refresh, never on
+     * construction. No default: a wiring that forgets it does not compile.
+     */
+    private val listEntities: suspend () -> HaListOutcome?,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, assetId: AssetId, purpose: SeasonSyncSheetPurpose) : this(
         assetId, purpose, graph.assets, graph.schedules, graph.haConnections, graph.linkSeasonSync,
-        graph.resumeSeasonSync,
+        graph.resumeSeasonSync, graph.listHaEntities,
     )
 
     private val _state = MutableStateFlow(LinkSeasonSyncState(purpose))
@@ -83,7 +122,83 @@ internal class LinkSeasonSyncViewModel(
         }
     }
 
-    fun onEntityId(text: String) = _state.update { it.copy(entityId = text, entityLine = null, refusal = null) }
+    /** A typed id is the manual path: it clears any pick, so Save sends what the owner can see in the field. */
+    fun onEntityId(text: String) =
+        _state.update { it.copy(entityId = text, chosen = null, entityLine = null, refusal = null) }
+
+    // --- #105: the browser ----------------------------------------------------------------------------------------
+
+    /** Choose entity: open the browser and read the list once. Nothing was read before this. */
+    fun chooseEntity() {
+        _state.update { it.copy(browse = EntityBrowseState(), entityLine = null, refusal = null) }
+        readEntities()
+    }
+
+    /** Refresh: read again; the last good list and the selection stay until the answer arrives. */
+    fun refreshEntities() {
+        if (_state.value.browse == null) return
+        readEntities()
+    }
+
+    fun onQuery(text: String) = _state.update { state ->
+        state.browse?.let { state.copy(browse = withRows(it.copy(query = text))) } ?: state
+    }
+
+    /** The pick: the exact candidate, the typed text cleared, the browser closed, the form back. */
+    fun pick(candidate: HaEntityCandidate) = _state.update {
+        it.copy(chosen = candidate, entityId = "", manualEntry = false, browse = null, entityLine = null, refusal = null)
+    }
+
+    /** Back from the browser without a pick: whatever was chosen or typed before stays. */
+    fun closeBrowse() = _state.update { it.copy(browse = null) }
+
+    /** Enter entity ID manually: the field, prefilled with a pick's id if there was one, which it then replaces. */
+    fun enterManually() = _state.update {
+        it.copy(manualEntry = true, entityId = it.chosen?.entityId ?: it.entityId, chosen = null, browse = null)
+    }
+
+    private fun readEntities() {
+        _state.update { state -> state.browse?.let { state.copy(browse = it.copy(loading = true)) } ?: state }
+        viewModelScope.launch {
+            val outcome: HaListOutcome? = try {
+                listEntities()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A store failed before anything was asked of Home Assistant: no sentence is ratified for it; the
+                // list and the selection stay as they were.
+                _state.update { state -> state.browse?.let { state.copy(browse = it.copy(loading = false)) } ?: state }
+                return@launch
+            }
+            _state.update { state ->
+                // The browser was closed while the read ran: its answer is dropped, nothing else changes.
+                val browse = state.browse ?: return@update state
+                state.copy(
+                    browse = when (outcome) {
+                        null -> browse.copy(loading = false, failure = listOf(Notice(HA_NOT_CONNECTED)))
+                        is HaListOutcome.Failed -> browse.copy(
+                            loading = false,
+                            failure = seasonSyncErrorNotices(outcome.kind, outcome.detail, entityId = ""),
+                        )
+                        is HaListOutcome.Listed -> withRows(
+                            browse.copy(loading = false, all = outcome.entities, loadedOnce = true, failure = emptyList()),
+                        )
+                    },
+                )
+            }
+        }
+    }
+
+    /** The rows for the browser's query over its last good list, and whether the scope is empty outright. */
+    private fun withRows(browse: EntityBrowseState): EntityBrowseState {
+        val shown = pickerRows(browse.all, EntityScope.INPUT_BOOLEANS, browse.query)
+        val whole = pickerRows(browse.all, EntityScope.INPUT_BOOLEANS, "")
+        return browse.copy(
+            rows = shown.rows,
+            truncatedList = shown.truncatedList,
+            scopeEmpty = browse.loadedOnce && whole.rows.isEmpty(),
+        )
+    }
 
     fun save() {
         val asked = _state.value
@@ -92,7 +207,7 @@ internal class LinkSeasonSyncViewModel(
         viewModelScope.launch {
             val next = try {
                 val written = when (asked.purpose) {
-                    SeasonSyncSheetPurpose.LINK -> link.run(assetId, asked.entityId.trim())
+                    SeasonSyncSheetPurpose.LINK -> link.run(assetId, asked.entityToLink)
                     SeasonSyncSheetPurpose.RESUME -> resume.run(assetId)
                 }
                 afterWrite(written)
