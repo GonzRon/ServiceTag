@@ -17,9 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.contacts.ContactOpener
 import com.loosecannon.servicetag.contacts.contactOpenFailure
 import com.loosecannon.servicetag.contacts.rememberContactPick
@@ -108,7 +110,7 @@ private fun OpenLoan(
     val (lentTo, lentOn, due) = block.lines
     BodyLine(lentTo)
     QuietLine(lentOn)
-    if (due == NO_DUE_DATE) QuietLine(due) else BodyLine(due)
+    if (block.hasDueDate) BodyLine(due) else QuietLine(due)
     block.reminderLine?.let { QuietLine(it) }
     block.notes.takeIf { it.isNotBlank() }?.let { BodyLine(it) }
     if (LoanAction.OPEN_CONTACT in block.actions) {
@@ -159,6 +161,6 @@ private fun ReturnDialog(
             DateField(value = prompt.date, onValueChange = onDate, label = RETURNED_ON, problem = prompt.problem)
         },
         confirmButton = { TextButton(onClick = onConfirm, enabled = !prompt.saving) { Text(MARK_RETURNED) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.loan_cancel)) } },
     )
 }

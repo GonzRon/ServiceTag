@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: service cases (#79), lending (#72) and the journal (entries and readings) — English source. Comments carry
+  the ratification ids and what each string is for. Borrower names, case titles, notes, event titles, readings'
+  labels and units are the owner's text: they arrive as arguments and are never translated.
+-->
+<resources>
+
+    <!-- ============================================================ Service cases (#79, ui/service) -->
+
+    <!-- P79-15: the asset detail's section header (drawn upper-case). -->
+    <string name="service_cases_section">Service cases</string>
+    <!-- P79-16: the section's empty state. -->
+    <string name="service_no_cases_yet">No service cases yet</string>
+    <!-- P79-17 / P79-18: the line above the case rows while at least one case is open (hidden at zero). %1$d: the number of open cases. -->
+    <plurals name="service_open_cases">
+        <item quantity="one">%1$d open service case</item>
+        <item quantity="other">%1$d open service cases</item>
+    </plurals>
+    <!-- P79-19: the asset detail's action and the new-case editor's title. -->
+    <string name="service_new_case">New service case</string>
+    <!-- P79-20: the Incident entry's overflow menu item, after Edit. -->
+    <string name="service_start_case">Start service case</string>
+    <!-- P79-60 (R79-4): the Incident delete confirm's second line, after "Its readings go with it.". -->
+    <string name="service_case_links_this_entry">A service case links this entry. Its documents go with it.</string>
+    <!-- P79-21: the case screen's title, and the editor's title when editing a case. -->
+    <string name="service_case_screen_title">Service case</string>
+    <!-- P79-22: the editor's title field (the case's own name). -->
+    <string name="service_field_title">Title</string>
+    <!-- P79-23: the label over the case type chips, and the case's Type fact. -->
+    <string name="service_field_type">Type</string>
+    <!-- P79-24: a case type chip and fact value. -->
+    <string name="service_type_warranty_service">Warranty service</string>
+    <!-- P79-25: a case type chip and fact value. -->
+    <string name="service_type_repair">Repair</string>
+    <!-- P79-26: a case type chip and fact value. -->
+    <string name="service_type_other_service">Other service</string>
+    <!-- P79-27: the editor's date field and the case fact: the day the case was opened. -->
+    <string name="service_field_opened_on">Opened on</string>
+    <!-- P79-28: the editor's field and the case fact: who is doing the service. -->
+    <string name="service_field_provider">Service provider</string>
+    <!-- P79-29: the editor's field and the case fact: the provider's phone or contact. -->
+    <string name="service_field_phone_or_contact">Phone or contact</string>
+    <!-- P79-30: the editor's field and the case fact: the provider's reference number. -->
+    <string name="service_field_case_or_rma">Case or RMA number</string>
+    <!-- P79-31: the label over the coverage chips, and the case's Coverage fact. -->
+    <string name="service_field_coverage">Coverage</string>
+    <!-- P79-32: a coverage chip, fact value and row word. -->
+    <string name="service_coverage_in_warranty">In warranty</string>
+    <!-- P79-33: a coverage chip, fact value and row word. -->
+    <string name="service_coverage_out_of_warranty">Out of warranty</string>
+    <!-- P79-34: a coverage chip, fact value and row word. -->
+    <string name="service_coverage_unknown">Unknown</string>
+    <!-- P79-35 (R79-6): a coverage chip, fact value and row word. -->
+    <string name="service_coverage_partly_covered">Partly covered</string>
+    <!-- P79-36: under Coverage on a new case only — the chosen coverage is a suggestion. -->
+    <string name="service_coverage_suggested">Suggested from the warranty date. Change it if the provider decides otherwise.</string>
+    <!-- P79-44: the editor's field and the case fact: the tracking number of the shipment to the provider. -->
+    <string name="service_field_outbound_tracking">Outbound tracking</string>
+    <!-- P79-45: the editor's field and the case fact: the tracking number of the shipment back. -->
+    <string name="service_field_return_tracking">Return tracking</string>
+    <!-- P79-46: the editor's carrier field beside each leg's tracking number. -->
+    <string name="service_field_carrier">Carrier</string>
+    <!-- P79-47: the editor's field and the case fact: what the service cost. -->
+    <string name="service_field_cost">Cost</string>
+    <!-- The editor's currency code field, beside Cost. -->
+    <string name="service_field_currency">Currency</string>
+    <!-- The editor's notes field and the case's Notes fact. -->
+    <string name="service_field_notes">Notes</string>
+    <!-- P79-48: under Currency, a cost with no currency. -->
+    <string name="service_cost_needs_currency">A cost needs a currency</string>
+    <!-- P79-49: under Cost. -->
+    <string name="service_cost_negative">Cost cannot be negative</string>
+    <!-- P79-62: under Cost, digits that do not read as a price. %1$s: an example price in the currency's own form, e.g. "123.45". -->
+    <string name="service_cost_example">Enter a cost like %1$s</string>
+    <!-- P79-51: the editor's save button. -->
+    <string name="service_save_case">Save case</string>
+    <!-- P79-52: under Title when it is blank. -->
+    <string name="service_title_required">Give the case a title</string>
+    <!-- P79-61: snackbar, an unexpected save, link or removal failure. -->
+    <string name="service_could_not_save">Could not save this case.</string>
+    <!-- P79-37: the case's Status fact, and the label over the update sheet's status chips. -->
+    <string name="service_field_status">Status</string>
+    <!-- P79-38: a case status (fact value, chip and row word). -->
+    <string name="service_status_open">Open</string>
+    <!-- P79-39: a case status — shipped to the provider. -->
+    <string name="service_status_sent_out">Sent out</string>
+    <!-- P79-40: a case status. -->
+    <string name="service_status_at_service_center">At the service center</string>
+    <!-- P79-41: a case status — back from the provider. -->
+    <string name="service_status_returned">Returned</string>
+    <!-- P79-42: a case status. -->
+    <string name="service_status_closed">Closed</string>
+    <!-- P79-43: a case status. -->
+    <string name="service_status_cancelled">Cancelled</string>
+    <!-- P79-50: the case fact, once the case is closed. -->
+    <string name="service_field_closed_on">Closed on</string>
+    <!-- P79-53: the case screen's section of updates. -->
+    <string name="service_timeline">Timeline</string>
+    <!-- P79-54: the case screen's action and the update sheet's title. -->
+    <string name="service_add_update">Add update</string>
+    <!-- P79-55: the update sheet's note field. -->
+    <string name="service_what_happened">What happened</string>
+    <!-- P79-56: the update sheet's save button. -->
+    <string name="service_save_update">Save update</string>
+    <!-- P79-57: the label of the link row to the Incident entry the case was opened on. -->
+    <string name="service_link_incident">Incident</string>
+    <!-- P79-58: the label of the link row to the journal entry that resolved the case. -->
+    <string name="service_link_repair_record">Repair record</string>
+    <!-- P79-59: the case screen's action and the picker's title (link an existing entry). -->
+    <string name="service_link_repair_record_action">Link repair record</string>
+    <!-- C20: a case row's quiet line on the asset detail. %1$s: the status word (P79-38…43); %2$s: the coverage word (P79-32…35). -->
+    <string name="service_case_row_line">%1$s · %2$s</string>
+    <!-- The case editor's close (✕) button, for TalkBack. -->
+    <string name="service_close">Close</string>
+    <!-- The case screen's back arrow, for TalkBack. -->
+    <string name="service_back">Back</string>
+    <!-- The case screen's app bar action: edit the case header. -->
+    <string name="service_edit">Edit</string>
+    <!-- The Repair record link row's action: unlink it (the entry stays). -->
+    <string name="service_remove">Remove</string>
+    <!-- The repair picker's and the update sheet's cancel button. -->
+    <string name="service_cancel">Cancel</string>
+    <!-- The update sheet's date field. -->
+    <string name="service_field_date">Date</string>
+    <!-- The update sheet's time field. -->
+    <string name="service_field_time">Time</string>
+    <!-- The update sheet's time placeholder: the 24-hour form the field takes. -->
+    <string name="service_time_placeholder">HH:MM</string>
+    <!-- Under a date field whose text is not a date (the shipped date refusal). %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="service_enter_a_date">Enter a date as %1$s</string>
+    <!-- Under the update sheet's time field whose text is not a time. -->
+    <string name="service_enter_a_time">Enter a time as HH:MM</string>
+
+    <!-- ============================================================ Lending (#72, ui/loan) -->
+
+    <!-- P72-1: the loan badge while the loan is out (drawn upper-case; TalkBack reads this text). -->
+    <string name="loan_lent_out">Lent out</string>
+    <!-- P72-2: the loan badge after the due day, and the Dashboard row's badge. -->
+    <string name="loan_overdue">Loan overdue</string>
+    <!-- P72-3: the asset detail's section header. -->
+    <string name="loan_section">Lending</string>
+    <!-- P72-4: the open loan's and a past loan's first line. %1$s: the borrower's name, as entered or picked. -->
+    <string name="loan_lent_to">Lent to %1$s</string>
+    <!-- P72-5: the day the asset was lent. %1$s: the date. -->
+    <string name="loan_lent_on_line">Lent %1$s</string>
+    <!-- P72-6: an open loan's due day, through the due day. %1$s: the date. -->
+    <string name="loan_due_back_line">Due back %1$s</string>
+    <!-- P72-7: an open loan's due day, after it has passed. %1$s: the date. -->
+    <string name="loan_was_due_back_line">Was due back %1$s</string>
+    <!-- P72-8: an open loan with no due date. -->
+    <string name="loan_no_due_date">No due date</string>
+    <!-- P72-9: an open loan whose reminder fires once, on the due day. -->
+    <string name="loan_reminder_when_due">Reminder: when it is due back</string>
+    <!-- P72-10 (R72-7): an open loan whose reminder repeats daily until the return. -->
+    <string name="loan_reminder_until_returned">Reminder: every day until returned</string>
+    <!-- P72-11: the open loan's button that opens the borrower in Contacts. -->
+    <string name="loan_open_contact">Open contact</string>
+    <!-- P72-12: the open loan's button, and the return dialog's confirm. -->
+    <string name="loan_mark_returned">Mark returned</string>
+    <!-- P72-13: the open loan's correction button, and the editor's title on an edit. -->
+    <string name="loan_edit">Edit loan</string>
+    <!-- P72-14: the section's action on an asset with nothing lent, and the new-loan editor's title. -->
+    <string name="loan_lend_out">Lend out</string>
+    <!-- P72-15: the label over the returned loans. -->
+    <string name="loan_past_loans">Past loans</string>
+    <!-- P72-16: a past loan's return day. %1$s: the date. -->
+    <string name="loan_returned_on_line">Returned %1$s</string>
+    <!-- P72-17: a loan with a borrower name but no linked contact. -->
+    <string name="loan_no_contact_linked">No contact linked</string>
+    <!-- P72-18: the editor's borrower action, and the open loan's relink button. -->
+    <string name="loan_choose_from_contacts">Choose from Contacts</string>
+    <!-- P72-19 (R72-4): under "Open contact" — whether the link still resolves cannot be known. -->
+    <string name="loan_if_contact_does_not_open">If the contact does not open, choose it again.</string>
+    <!-- P72-21: the editor's borrower label. -->
+    <string name="loan_field_borrower">Borrower</string>
+    <!-- P72-22: the editor's date field: the day it was lent. -->
+    <string name="loan_field_lent_on">Lent on</string>
+    <!-- P72-23: the editor's due date field (also the loan reminder's title in core). -->
+    <string name="loan_field_due_back">Due back</string>
+    <!-- P72-24: the label over the reminder chips. -->
+    <string name="loan_field_reminder">Reminder</string>
+    <!-- P72-25: a reminder chip — remind once, on the due day. -->
+    <string name="loan_reminder_once">Once</string>
+    <!-- P72-26: a reminder chip — remind every day until returned. -->
+    <string name="loan_reminder_until_returned_chip">Until returned</string>
+    <!-- P72-27: under the disabled reminder chips while there is no due date. -->
+    <string name="loan_add_due_date_for_reminder">Add a due date to get a reminder.</string>
+    <!-- The editor's notes field. -->
+    <string name="loan_field_notes">Notes</string>
+    <!-- P72-28: the editor's save button. -->
+    <string name="loan_save">Save loan</string>
+    <!-- P72-29: under Borrower, a new loan with no borrower picked. -->
+    <string name="loan_choose_a_borrower">Choose a borrower</string>
+    <!-- P72-30: a picked contact with no name to show. -->
+    <string name="loan_contact_has_no_name">This contact has no name to show.</string>
+    <!-- P72-31: under Due back, a due date before the lent date. -->
+    <string name="loan_due_before_lent">The due date cannot be before the day it was lent.</string>
+    <!-- P72-32: snackbar, a save that failed for no reason the form can mark. -->
+    <string name="loan_could_not_save">Could not save this loan.</string>
+    <!-- P72-34: the return dialog's title. -->
+    <string name="loan_mark_returned_question">Mark returned?</string>
+    <!-- P72-35: the return dialog's date field. -->
+    <string name="loan_field_returned_on">Returned on</string>
+    <!-- P72-36: under Returned on, a return date before the lent date. -->
+    <string name="loan_return_before_lent">The return date cannot be before the day it was lent.</string>
+    <!-- P72-37: snackbar, a stale form — the asset was lent meanwhile. -->
+    <string name="loan_already_lent_out">This asset is already lent out.</string>
+    <!-- P72-44 (R72-14 b): the Dashboard row's line. %1$s: the borrower's name; %2$s: the due date. -->
+    <string name="loan_dashboard_line">Lent to %1$s · due back %2$s</string>
+    <!-- P72-45: snackbar, the phone has no app that can pick a contact. -->
+    <string name="loan_no_contact_picker">No app can pick a contact</string>
+    <!-- P72-46: a picked contact that could not be read. -->
+    <string name="loan_could_not_read_contact">Could not read this contact.</string>
+    <!-- Under a date field whose text is not a date (the shipped date refusal). %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="loan_enter_a_date">Enter a date as %1$s</string>
+    <!-- The lend form's close (✕) button, for TalkBack. -->
+    <string name="loan_close">Close</string>
+    <!-- The return dialog's cancel button. -->
+    <string name="loan_cancel">Cancel</string>
+    <!-- P72-33's confirm: go on to the notification permission request. -->
+    <string name="loan_ok">OK</string>
+
+    <!-- ============================================================ Journal (entries and readings, ui/journal) -->
+
+    <!-- D12 §9: a measurement definition with no target range. -->
+    <string name="journal_no_target">No target</string>
+    <!-- Spec §7: a yes/no reading's value (the label asks the question, e.g. "Passed"). -->
+    <string name="journal_yes">Yes</string>
+    <!-- Spec §7: a yes/no reading's value. -->
+    <string name="journal_no">No</string>
+    <!-- Spec §10: a reading's state badge — below its target range. Upper-case by design. -->
+    <string name="journal_state_low">LOW</string>
+    <!-- Spec §10: a reading's state badge — inside its target range. -->
+    <string name="journal_state_in_range">IN RANGE</string>
+    <!-- Spec §10: a reading's state badge — above its target range. -->
+    <string name="journal_state_high">HIGH</string>
+    <!-- Spec §10: a reading's state badge — its definition has no target. -->
+    <string name="journal_state_no_target">NO TARGET SET</string>
+    <!-- An event profile's quick action button. %1$s: the profile's name, first letter lower-cased unless it is an acronym (e.g. "water test"). -->
+    <string name="journal_log_profile">Log %1$s</string>
+    <!-- The entry screen's app bar title until the asset's name is known. -->
+    <string name="journal_detail_title_fallback">Entry</string>
+    <!-- The entry screen's back arrow, for TalkBack. -->
+    <string name="journal_back">Back</string>
+    <!-- The entry screen while the entry is being read. -->
+    <string name="journal_loading">Loading…</string>
+    <!-- The entry screen's section of the readings the entry carries. -->
+    <string name="journal_readings">Readings</string>
+    <!-- Spec §5: the eyebrow over a reading computed from other readings, never entered. -->
+    <string name="journal_derived">Derived</string>
+    <!-- A reading row whose definition is gone. -->
+    <string name="journal_reading_fallback">Reading</string>
+    <!-- The section of materials and consumables that went in (entry screen and entry form). -->
+    <string name="journal_materials_used">Materials used</string>
+    <!-- The materials section's empty state. -->
+    <string name="journal_no_materials">None recorded</string>
+    <!-- The notes section header and the entry form's notes field. -->
+    <string name="journal_notes">Notes</string>
+    <!-- The notes section's empty state. -->
+    <string name="journal_no_notes">No notes</string>
+    <!-- The entry screen's overflow menu button, for TalkBack. -->
+    <string name="journal_more">More</string>
+    <!-- The overflow menu item: edit this entry. -->
+    <string name="journal_edit">Edit</string>
+    <!-- The overflow menu item and the delete confirm's button: delete this entry. -->
+    <string name="journal_delete">Delete</string>
+    <!-- The delete confirm's title. -->
+    <string name="journal_delete_title">Delete this entry?</string>
+    <!-- The delete confirm's first line: the entry's readings are deleted with it. -->
+    <string name="journal_delete_readings_go">Its readings go with it.</string>
+    <!-- The delete confirm's cancel button. -->
+    <string name="journal_cancel">Cancel</string>
+    <!-- The entry form's close (✕) button, for TalkBack. -->
+    <string name="journal_close">Close</string>
+    <!-- The entry form's app bar save action. -->
+    <string name="journal_save">Save</string>
+    <!-- The entry form's title field, shown only when no profile names the entry. -->
+    <string name="journal_field_entry">Entry</string>
+    <!-- The entry form's bottom button when editing a stored entry. -->
+    <string name="journal_save_entry">Save entry</string>
+    <!-- The entry form's bottom button for a new entry. -->
+    <string name="journal_record_entry">Record entry</string>
+    <!-- The entry form's section with the date and time it happened. -->
+    <string name="journal_logged">Logged</string>
+    <!-- The entry form's date field. -->
+    <string name="journal_field_date">Date</string>
+    <!-- The entry form's time field. -->
+    <string name="journal_field_time">Time</string>
+    <!-- The entry form's time placeholder: the 24-hour form the field takes. -->
+    <string name="journal_time_placeholder">HH:MM</string>
+    <!-- A material row's name field. -->
+    <string name="journal_field_material">Material</string>
+    <!-- A material row's quantity field (short: the field is narrow). -->
+    <string name="journal_field_qty">Qty</string>
+    <!-- A material row's unit field. -->
+    <string name="journal_field_unit">Unit</string>
+    <!-- A material row's remove (✕) button, for TalkBack. -->
+    <string name="journal_remove_material">Remove material</string>
+    <!-- The materials section's button that adds an empty row. -->
+    <string name="journal_add_material">Add material</string>
+    <!-- Snackbar: the entry being edited was deleted meanwhile. -->
+    <string name="journal_entry_gone">This entry is no longer there.</string>
+    <!-- Snackbar: the entry's date is not a date. %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="journal_enter_a_date">Enter a date as %1$s</string>
+    <!-- Snackbar: the entry's time is not a time. -->
+    <string name="journal_enter_a_time">Enter a time as HH:MM</string>
+    <!-- Snackbar: an entry with no profile and a blank title. -->
+    <string name="journal_title_required">Give the entry a title</string>
+    <!-- Snackbar: a material row that does not read. %1$d: the row's position, counting from 1. -->
+    <string name="journal_check_material">Check material %1$d</string>
+    <!-- Snackbar: a required reading left blank. %1$s: the reading's label (owner's text, e.g. "pH"). -->
+    <string name="journal_field_required">%1$s is required</string>
+    <!-- Snackbar: a number reading that does not read as a number. %1$s: the reading's label (owner's text). -->
+    <string name="journal_field_not_a_number">%1$s is not a number</string>
+    <!-- Snackbar and the service case update sheet: a refused save no field can explain. -->
+    <string name="journal_cannot_save">Could not save this entry.</string>
+    <!-- Spec §7: the title a new entry of this kind opens with, before the owner edits it. -->
+    <string name="journal_preset_title_maintenance">Maintenance</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_inspection">Inspection</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_measurement">Measurement</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_treatment">Treatment</string>
+    <!-- Spec §7, #82 (R82-3): a new entry's preset title; also the combined condition flow's Incident when the reason has no first line. -->
+    <string name="journal_preset_title_incident">Incident</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_replacement">Replacement</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_season_start">Season start</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_season_end">Season end</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_note">Note</string>
+    <!-- Spec §7: a new entry's preset title. -->
+    <string name="journal_preset_title_custom">Custom</string>
+</resources>

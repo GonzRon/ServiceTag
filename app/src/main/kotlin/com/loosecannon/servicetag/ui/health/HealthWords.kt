@@ -1,55 +1,62 @@
 package com.loosecannon.servicetag.ui.health
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.health.DriverLine
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedList
+import com.loosecannon.servicetag.l10n.localizedPlural
 import java.time.LocalDate
 
 /*
  * The words of derived health (spec §6.6, §10.7), RATIFIED and drawn by number, verbatim. The
  * engine hands over data — a band, a score, a `DriverLine` — and every surface turns it into words
  * here, so the scan sheet, the dashboard (B13) and asset detail (B14) cannot say it three ways.
+ * #102: the words are string resources (`strings_components_health.xml`, and `plurals.xml` for the
+ * quantity-bearing lines), read when drawn; each sentence is one format string.
  */
 
 /** S95. */
-const val BAND_NOMINAL = "NOMINAL"
+val BAND_NOMINAL: String get() = localized(R.string.health_band_nominal)
 
 /** S96. */
-const val BAND_WARNING = "WARNING"
+val BAND_WARNING: String get() = localized(R.string.health_band_warning)
 
 /** S97. */
-const val BAND_CRITICAL = "CRITICAL"
+val BAND_CRITICAL: String get() = localized(R.string.health_band_critical)
 
 /** S98: a subject or an aggregate with no value. It is drawn as these words, never as a number (inv. 118). */
-const val NOT_TRACKED = "NOT TRACKED"
+val NOT_TRACKED: String get() = localized(R.string.health_not_tracked)
 
 /** S100. */
-const val NO_REPLACEMENT_RECORDED = "No replacement recorded yet"
+val NO_REPLACEMENT_RECORDED: String get() = localized(R.string.health_no_replacement_recorded)
 
 /** S101. */
-const val REPLACEMENT_ACTION_REMOVED = "The replacement quick action was removed."
+val REPLACEMENT_ACTION_REMOVED: String get() = localized(R.string.health_replacement_action_removed)
 
 /** S105. */
-const val NOT_TRACKED_OUT_OF_SEASON = "Not tracked while out of season"
+val NOT_TRACKED_OUT_OF_SEASON: String get() = localized(R.string.health_not_tracked_out_of_season)
 
 /** S106. */
-const val NOT_TRACKED_PAUSED = "Not tracked while the schedule is paused"
+val NOT_TRACKED_PAUSED: String get() = localized(R.string.health_not_tracked_paused)
 
 /** S142. */
-const val NOT_TRACKED_LINK = "Not tracked: the linked schedule has no date rule or belongs to another asset."
+val NOT_TRACKED_LINK: String get() = localized(R.string.health_not_tracked_link)
 
 /**
  * The two quantity-bearing substitutions (plan decision 29): S99's `<age>` and S102 whole. The
- * `other` form is the ratified text; the `one` form drops only the unit's "s" ("1 day", "… is 1 day
- * overdue") — an inflection of a ratified string, not a new one (master plan §17.2).
+ * `other` form is the ratified text; English's `one` form drops only the unit's "s" ("1 day", "… is 1
+ * day overdue") — an inflection of a ratified string, not a new one (master plan §17.2).
  *
- * The forms are **four plain strings read by id**, chosen by **English** rules — `one` exactly when
- * the number is 1 — whatever the device language; there is no Android plurals resource, whose device
- * rules could read 0 or 21 as "1 day" (the controller's rulings on B12's review, I-2 and RS-3).
- * [AndroidHealthPlurals] is the production implementation over those strings. It is an interface
- * because `:app`'s JVM tests have no Robolectric: they pass a fake and prove the quantity reaches it,
- * and a connected contract test proves the strings themselves.
+ * #102: the forms are the Android plurals `health_age_days` and `health_days_overdue` in `plurals.xml`,
+ * picked by the rendering language's own plural rules. Every form shows its number through a
+ * placeholder, never as a literal "1", so whichever form a language's rules select — `one` takes 21
+ * in Russian and 0 in French — still says the right number. [AndroidHealthPlurals] is the production
+ * implementation over those plurals. It is an interface because `:app`'s JVM tests have no
+ * Robolectric: they pass a fake and prove the quantity reaches it, and a connected contract test
+ * proves the resources themselves.
  */
 interface HealthPlurals {
     /** S99's `<age>`: "1 day" or "`<n>` days". */
@@ -75,7 +82,7 @@ fun bandWord(band: HealthBand?): String = when (band) {
 fun healthBadgeLabel(band: HealthBand?, score: Int?): String = when {
     band == null -> NOT_TRACKED
     score == null -> bandWord(band)
-    else -> "${bandWord(band)} $score"
+    else -> localized(R.string.health_badge_label, bandWord(band), score)
 }
 
 /**
@@ -89,13 +96,13 @@ fun healthBadgeLabel(band: HealthBand?, score: Int?): String = when {
  */
 fun driverLineText(line: DriverLine, plurals: HealthPlurals, format: (LocalDate) -> String): String? =
     when (line) {
-        is DriverLine.Replaced -> "Replaced ${format(line.on)}, ${plurals.ageDays(line.ageDays)} ago"
+        is DriverLine.Replaced -> localized(R.string.health_replaced, format(line.on), plurals.ageDays(line.ageDays))
         DriverLine.NoReplacement -> NO_REPLACEMENT_RECORDED
         DriverLine.ProfileRemoved -> REPLACEMENT_ACTION_REMOVED
         is DriverLine.Overdue -> plurals.daysOverdue(line.title, line.days)
-        is DriverLine.UpToDate -> "${line.title} is up to date"
-        is DriverLine.Grace -> "Within the ${line.days}-day grace period"
-        is DriverLine.Postponed -> "${line.title} was postponed to ${format(line.to)}"
+        is DriverLine.UpToDate -> localized(R.string.health_up_to_date, line.title)
+        is DriverLine.Grace -> localizedPlural(R.plurals.health_grace_period, line.days, line.days)
+        is DriverLine.Postponed -> localized(R.string.health_postponed, line.title, format(line.to))
         DriverLine.NotTrackedOutOfSeason -> NOT_TRACKED_OUT_OF_SEASON
         DriverLine.NotTrackedPaused -> NOT_TRACKED_PAUSED
         DriverLine.NotTrackedLink -> NOT_TRACKED_LINK
@@ -113,8 +120,10 @@ fun driverLines(subject: SubjectHealth, plurals: HealthPlurals, format: (LocalDa
 fun aggregateLine(score: Int, contributors: List<SubjectHealth>): String {
     val named = contributors
         .filter { it.subject.archivedAt == null }
-        .mapNotNull { subject -> (subject.value as? SubjectValue.Scored)?.let { "${subject.subject.name} ${it.score}" } }
-    return "$score — ${named.joinToString(", ")}"
+        .mapNotNull { subject ->
+            (subject.value as? SubjectValue.Scored)?.let { localized(R.string.health_subject_score, subject.subject.name, it.score) }
+        }
+    return localized(R.string.health_aggregate_line, score, localizedList(named))
 }
 
 /**
@@ -124,8 +133,8 @@ fun aggregateLine(score: Int, contributors: List<SubjectHealth>): String {
 fun criticalLine(subject: SubjectHealth): String {
     val value = subject.value
     require(value is SubjectValue.Scored) { "only a scored subject is critical: ${subject.subject.id}" }
-    return "Critical: ${subject.subject.name} ${value.score}"
+    return localized(R.string.health_critical_line, subject.subject.name, value.score)
 }
 
 /** S110, "<subject> <BAND>": a health row on the dashboard. */
-fun dashboardHealthRow(fact: SubjectBandFact): String = "${fact.subjectName} ${bandWord(fact.band)}"
+fun dashboardHealthRow(fact: SubjectBandFact): String = localized(R.string.health_dashboard_row, fact.subjectName, bandWord(fact.band))

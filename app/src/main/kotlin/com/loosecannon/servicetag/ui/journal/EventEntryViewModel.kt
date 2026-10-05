@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.ui.journal
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.util.Log
+import com.loosecannon.servicetag.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.journal.Derived
@@ -43,6 +44,11 @@ import com.loosecannon.servicetag.core.usecase.NoSuchEvent
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.datePlaceholder
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDecimal
+import com.loosecannon.servicetag.l10n.localizedDecimalSeparator
+import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.EntryOffers
 import com.loosecannon.servicetag.ui.condition.EventOffer
@@ -78,10 +84,10 @@ data class FieldRow(
     val text: String,
     val problem: FieldProblem?,
 ) {
-    /** The badge while typing: a number reads against its target the moment it parses. */
+    /** The badge while typing: a number reads against its target the moment it parses, in the owner's language. */
     val liveState: RangeState?
         get() = if (definition.valueType == ValueType.NUMBER) {
-            text.trim().toDoubleOrNull()?.let { classify(it, definition.rangeLow, definition.rangeHigh) }
+            parseLocalizedDecimal(text)?.let { classify(it, definition.rangeLow, definition.rangeHigh) }
         } else {
             null
         }
@@ -147,10 +153,24 @@ data class EventEntryState(
 
 /**
  * The title a preset kind opens with (spec §7). One word, and editable like any other title: the
- * entry is the user's, and the preset is only there so the common case needs no typing.
+ * entry is the user's, and the preset is only there so the common case needs no typing. #102: the
+ * kind's name in the owner's language ("Season start" for SEASON_START in English); once saved it is
+ * the owner's title like any other.
  */
-private fun presetTitle(kind: EventKind): String =
-    kind.name.lowercase().replaceFirstChar { it.uppercase() }.replace('_', ' ')
+private fun presetTitle(kind: EventKind): String = localized(
+    when (kind) {
+        EventKind.MAINTENANCE -> R.string.journal_preset_title_maintenance
+        EventKind.INSPECTION -> R.string.journal_preset_title_inspection
+        EventKind.MEASUREMENT -> R.string.journal_preset_title_measurement
+        EventKind.TREATMENT -> R.string.journal_preset_title_treatment
+        EventKind.INCIDENT -> R.string.journal_preset_title_incident
+        EventKind.REPLACEMENT -> R.string.journal_preset_title_replacement
+        EventKind.SEASON_START -> R.string.journal_preset_title_season_start
+        EventKind.SEASON_END -> R.string.journal_preset_title_season_end
+        EventKind.NOTE -> R.string.journal_preset_title_note
+        EventKind.CUSTOM -> R.string.journal_preset_title_custom
+    },
+)
 
 /**
  * New entry ([eventId] null) or edit of a stored one. A new entry takes its rows from the profile;
@@ -199,7 +219,7 @@ class EventEntryViewModel(
 
     init {
         require(pending == null || (recordWithIncident != null && eventId == null)) {
-            "a pending condition needs the combined write, and only a new entry carries one"
+            "a pending condition needs the combined write, and only a new entry carries one" // l10n-ok: exception message
         }
     }
 
@@ -244,7 +264,7 @@ class EventEntryViewModel(
 
     private val _state = MutableStateFlow(
         EventEntryState(
-            occurredOn = clock.nowMillis().at(zone).toLocalDate().format(DATE),
+            occurredOn = clock.nowMillis().at(zone).toLocalDate().toString(),
             occurredTime = clock.nowMillis().at(zone).toLocalTime().format(TIME),
             editing = eventId != null,
         ),
@@ -359,7 +379,7 @@ class EventEntryViewModel(
         if (derivedDefinitions.isEmpty()) return emptyList()
         val typed = fields.mapIndexedNotNull { index, row ->
             if (row.definition.valueType != ValueType.NUMBER) return@mapIndexedNotNull null
-            val value = row.text.trim().toDoubleOrNull()?.takeIf { it.isFinite() }
+            val value = parseLocalizedDecimal(row.text)?.takeIf { it.isFinite() }
                 ?: return@mapIndexedNotNull null
             Measurement(
                 id = "",
@@ -499,9 +519,12 @@ class EventEntryViewModel(
                 occurredTime = form.occurredTime?.takeIf { it.isNotBlank() },
                 tzId = zone.id,
                 notes = form.notes,
+                // A number goes on as the use case reads it, whatever the owner's decimal separator (#102).
                 values = form.fields
                     .filter { it.text.isNotBlank() }
-                    .associate { it.definition.id to it.text },
+                    .associate {
+                        it.definition.id to if (it.definition.valueType == ValueType.NUMBER) neutralNumber(it.text) else it.text
+                    },
                 consumables = submitted.map { it.second },
             )
             val held = pending
@@ -671,7 +694,7 @@ class EventEntryViewModel(
      * the form names is not this asset's any more. Say so once and leave the form as it was typed.
      */
     private fun refuse(cause: Throwable) {
-        val line = if (cause is NoSuchEvent) "This entry is no longer there." else cause.transferredOutOr(CANNOT_SAVE)
+        val line = if (cause is NoSuchEvent) localized(R.string.journal_entry_gone) else cause.transferredOutOr(CANNOT_SAVE)
         _state.update { it.copy(saving = false, firstProblem = line) }
     }
 
@@ -688,13 +711,12 @@ class EventEntryViewModel(
         .filterNot { (_, row) ->
             row.name.isBlank() && row.quantity.isBlank() && row.unit.isBlank() && row.supplyId == null
         }
-        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit, row.supplyId) }
+        .map { (index, row) -> index to ConsumableInput(row.name, neutralNumber(row.quantity), row.unit, row.supplyId) }
 
     private companion object {
         const val TAG = "EventEntry"
         val NO_EVENT = EventId("")
-        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd")
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm") // l10n-ok: the form's 24-hour HH:mm, the time field's shape in every language
     }
 }
 
@@ -720,29 +742,31 @@ private fun incidentDraft(reason: String): Pair<String?, String> {
 private fun List<FieldProblem>.firstProblemText(fields: List<FieldRow>): String {
     firstNotNullOfOrNull { problem ->
         when (problem) {
-            is FieldProblem.BadDate -> "Enter a date as YYYY-MM-DD"
-            is FieldProblem.BadTime -> "Enter a time as HH:MM"
-            FieldProblem.TitleRequired -> "Give the entry a title"
-            is FieldProblem.BadConsumable -> "Check material ${problem.index + 1}"
+            is FieldProblem.BadDate -> localized(R.string.journal_enter_a_date, datePlaceholder())
+            is FieldProblem.BadTime -> localized(R.string.journal_enter_a_time)
+            FieldProblem.TitleRequired -> localized(R.string.journal_title_required)
+            is FieldProblem.BadConsumable -> localized(R.string.journal_check_material, problem.index + 1)
             else -> null
         }
     }?.let { return it }
 
     val row = fields.firstOrNull { it.problem != null } ?: return CANNOT_SAVE
     return when (row.problem) {
-        is FieldProblem.Required -> "${row.definition.label} is required"
-        is FieldProblem.NotANumber -> "${row.definition.label} is not a number"
+        is FieldProblem.Required -> localized(R.string.journal_field_required, row.definition.label)
+        is FieldProblem.NotANumber -> localized(R.string.journal_field_not_a_number, row.definition.label)
         else -> CANNOT_SAVE
     }
 }
 
 /** The line for a refusal no row can explain. */
-internal const val CANNOT_SAVE = "Could not save this entry."
+internal val CANNOT_SAVE: String get() = localized(R.string.journal_cannot_save)
 
 
 /**
  * A stored value back as the text that produced it — the entry field holds what was typed, not a
- * formatted reading, so an edit that changes nothing else re-saves the same number.
+ * formatted reading, so an edit that changes nothing else re-saves the same number. Every digit it
+ * has, in the owner's decimal separator (#102), and a whole number keeps its one decimal ("2.0",
+ * "2,0" in German) where the definition has decimals.
  */
 private fun Measurement?.asText(definition: MeasurementDefinition): String {
     val m = this ?: return ""
@@ -750,7 +774,12 @@ private fun Measurement?.asText(definition: MeasurementDefinition): String {
         ValueType.TEXT -> m.valueText.orEmpty()
         ValueType.BOOLEAN -> if (m.valueNum == 1.0) "1" else "0"
         ValueType.NUMBER -> m.valueNum?.let { value ->
-            if (definition.decimals == 0) formatNumber(value) else value.toString()
+            if (definition.decimals == 0) {
+                formatNumber(value)
+            } else {
+                val separator = localizedDecimalSeparator()
+                localizedDecimal(value).let { if (separator in it) it else "$it${separator}0" }
+            }
         }.orEmpty()
     }
 }

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_documents.xml. -->
+<resources>
+    <string name="documents_header">Документы</string>
+    <string name="documents_header_count">Документы · %1$d</string>
+    <string name="documents_empty">Документов пока нет</string>
+    <string name="documents_add_file">Добавить файл</string>
+    <string name="documents_take_photo">Сделать фото</string>
+    <string name="documents_storage_headline">Хранилище вложений</string>
+    <string name="documents_storage_not_set_up">Хранилище вложений не настроено</string>
+    <string name="documents_storage_detail">Выберите папку в настройках</string>
+    <string name="documents_open_settings">Открыть настройки</string>
+    <string name="documents_no_app_can_pick_files">Нет приложения для выбора файлов</string>
+    <string name="documents_no_app_can_open_file">Нет приложения, чтобы открыть этот файл</string>
+    <string name="documents_no_camera_app">На этом устройстве нет приложения камеры</string>
+    <string name="documents_not_on_device">Нет на этом устройстве</string>
+    <string name="documents_more_for">Ещё: %1$s</string>
+    <string name="documents_more_for_role">Ещё: %1$s, %2$s</string>
+
+    <string name="documents_kind_photo">Фото</string>
+    <string name="documents_kind_label_photo">Фото таблички</string>
+    <string name="documents_kind_receipt">Чек</string>
+    <string name="documents_kind_manual">Руководство</string>
+    <string name="documents_kind_warranty">Гарантия</string>
+    <string name="documents_kind_document">Документ</string>
+    <string name="documents_kind_other">Другое</string>
+
+    <string name="documents_size_bytes">%1$s Б</string>
+    <string name="documents_size_kb">%1$s КБ</string>
+    <string name="documents_size_mb">%1$s МБ</string>
+
+    <string name="attachments_name_label">Название</string>
+    <string name="attachments_kind_header">Вид</string>
+    <string name="attachments_notes_label">Заметки</string>
+    <string name="attachments_cancel">Отмена</string>
+    <string name="attachments_save">Сохранить</string>
+    <string name="attachments_captured_on_label">Дата создания</string>
+    <string name="attachments_delete">Удалить</string>
+    <string name="attachments_delete_title">Удалить файл?</string>
+    <string name="attachments_delete_body">Удалить «%1$s»? Файл будет удалён из вашей папки вложений.</string>
+
+    <string name="attachments_role_header">Роль</string>
+    <string name="attachments_role_purchase_invoice_or_receipt">Счёт или чек о покупке</string>
+    <string name="attachments_role_user_manual">Руководство пользователя</string>
+    <string name="attachments_role_service_manual">Сервисное руководство</string>
+    <string name="attachments_role_none">Без роли</string>
+    <string name="attachments_adding_progress">Добавление %1$d из %2$d…</string>
+    <string name="attachments_could_not_save">Не удалось сохранить «%1$s»</string>
+    <string name="attachments_could_not_delete">Не удалось удалить этот файл</string>
+    <string name="attachments_could_not_add">Не удалось добавить «%1$s»</string>
+    <string name="attachments_blank_name">Дайте файлу название</string>
+    <string name="attachments_no_store">Сначала выберите папку вложений в настройках</string>
+    <string name="attachments_store_unavailable">Папка вложений недоступна</string>
+    <string name="attachments_too_large">Этот файл больше 256 МБ</string>
+    <string name="attachments_owner_missing">Этого файла здесь больше нет</string>
+    <string name="attachments_scan_failed">Не удалось проверить папку вложений</string>
+    <string name="attachments_folder_fallback">Папка</string>
+
+    <string name="references_header">Веб-ссылки</string>
+    <string name="references_header_count">Веб-ссылки · %1$d</string>
+    <string name="references_empty">Веб-ссылок пока нет</string>
+    <string name="references_add_link">Добавить ссылку</string>
+    <string name="references_more">Ещё</string>
+    <string name="references_open">Открыть</string>
+    <string name="references_edit">Изменить</string>
+    <string name="references_remove">Убрать</string>
+    <string name="references_kind_web_link">Веб-страница</string>
+    <string name="references_kind_note">Заметка</string>
+    <string name="references_kind_other">Другое</string>
+    <string name="references_blocked_at_open">ServiceTag не открывает такие ссылки.</string>
+    <string name="links_no_handler">Нет приложения, чтобы открыть эту ссылку</string>
+
+    <string name="references_edit_title">Изменить веб-ссылку</string>
+    <string name="references_link_label">Ссылка</string>
+    <string name="references_name_label">Название</string>
+    <string name="references_description_label">Описание</string>
+    <string name="references_cancel">Отмена</string>
+    <string name="references_save">Сохранить</string>
+    <string name="references_remove_title">Убрать эту веб-ссылку?</string>
+    <string name="references_removed_from_asset">Ссылка будет убрана из этого объекта. В другом приложении ничего не изменится.</string>
+    <string name="references_removed_from_supply">Ссылка будет убрана из этого расходного материала. В другом приложении ничего не изменится.</string>
+    <string name="references_removed_from_installed_component">Ссылка будет убрана из этого установленного компонента. В другом приложении ничего не изменится.</string>
+    <string name="references_unknown_scheme_title">Сохранить эту ссылку?</string>
+    <string name="references_unknown_scheme_body">ServiceTag не знает ссылок вида «%1$s». Ссылка будет сохранена как есть и откроется в том приложении, которое её поддерживает.</string>
+
+    <string name="references_blank_name">Дайте веб-ссылке название</string>
+    <string name="references_not_a_link">Это не ссылка.</string>
+    <string name="references_uri_too_long">Эта ссылка слишком длинная, чтобы её сохранить.</string>
+    <string name="references_scheme_blocked">ServiceTag не сохраняет такие ссылки.</string>
+    <string name="references_duplicate_on_asset">Эта ссылка уже есть у этого объекта</string>
+    <string name="references_duplicate_on_supply">Эта ссылка уже есть у этого расходного материала</string>
+    <string name="references_duplicate_on_installed_component">Эта ссылка уже есть у этого установленного компонента</string>
+
+    <string name="references_save_as_document">Сохранить как документ</string>
+    <string name="references_downloading_from">Скачивание с %1$s…</string>
+    <string name="references_download_progress">%1$s из %2$s</string>
+    <string name="references_from_host">Источник: %1$s</string>
+    <string name="references_type_line">%1$s · %2$s</string>
+    <string name="references_saved_as_document">Сохранено как документ</string>
+    <string name="references_saved_to_documents">Сохранено в документах</string>
+    <string name="references_downloaded_from">Скачано %2$s с %1$s</string>
+    <string name="references_open_source_link">Открыть исходную ссылку</string>
+    <string name="references_network_denied">ServiceTag не разрешено использовать сеть, поэтому он не может скачать этот файл. Разрешите доступ к сети в настройках приложения, затем закройте ServiceTag и откройте его снова.</string>
+    <string name="references_unreachable">Не удалось связаться с %1$s. Проверьте подключение и повторите попытку.</string>
+    <string name="references_timed_out">Скачивание заняло слишком много времени и было остановлено.</string>
+    <string name="references_not_a_document">Эта ссылка не ведёт к документу поддерживаемого типа. Ссылка останется как есть.</string>
+    <string name="references_needs_sign_in">Для этого файла нужен вход в аккаунт, поэтому ServiceTag не может его скачать. Ссылка останется как есть.</string>
+    <string name="references_server_error">Сервер не отправил файл (ошибка %1$d).</string>
+    <string name="references_redirect_refused">Эта ссылка перенаправляет туда, куда ServiceTag не переходит. Ссылка останется как есть.</string>
+    <string name="references_already_have_on_asset">У этого объекта уже есть этот файл: %1$s.</string>
+    <string name="references_already_have_on_supply">У этого расходного материала уже есть этот файл: %1$s.</string>
+    <string name="references_already_have_on_installed_component">У этого установленного компонента уже есть этот файл: %1$s.</string>
+    <string name="references_interrupted">Не удалось завершить скачивание. Повторите попытку.</string>
+    <string name="references_local_address">Эта ссылка указывает на адрес в локальной сети, поэтому ServiceTag не будет скачивать файл. Ссылка останется как есть.</string>
+
+    <string name="contacts_no_app_can_open">Нет приложения, чтобы открыть этот контакт</string>
+
+    <string name="share_title">Сохранить в ServiceTag</string>
+    <string name="share_received">Получено</string>
+    <string name="share_attach_to">Прикрепить к</string>
+    <string name="share_choose_asset">Выберите объект</string>
+    <string name="share_name">Название</string>
+    <string name="share_description">Описание (необязательно)</string>
+    <string name="share_type">Тип</string>
+    <string name="share_save">Сохранить</string>
+    <string name="share_cancel">Отмена</string>
+    <string name="share_close">Закрыть</string>
+    <string name="share_save_as_note">Сохранить как заметку</string>
+    <string name="share_not_a_link">Это не ссылка.</string>
+    <string name="share_no_assets">Сначала добавьте объект в ServiceTag, затем поделитесь этим снова.</string>
+    <string name="share_no_folder">Выберите папку вложений в настройках ServiceTag, затем поделитесь этим снова.</string>
+    <string name="share_stream_refused">Этот файл нельзя принять от приложения, которое им поделилось.</string>
+    <string name="share_unreadable">Не удалось прочитать то, чем поделились</string>
+    <string name="share_uri_too_long">Эта ссылка слишком длинная, чтобы её сохранить.</string>
+    <string name="share_scheme_blocked">ServiceTag не сохраняет такие ссылки.</string>
+    <string name="share_duplicate_uri">Эта ссылка уже есть у этого объекта</string>
+    <string name="share_empty_file">Этот файл пуст</string>
+    <string name="share_too_large">Этот файл больше 256 МБ</string>
+    <string name="share_blank_file_name">Дайте файлу название</string>
+    <string name="share_blank_reference_name">Дайте веб-ссылке название</string>
+    <string name="share_confirm_title">Сохранить эту ссылку?</string>
+    <string name="share_confirm_body">ServiceTag не знает ссылок вида «%1$s». Ссылка будет сохранена как есть и откроется в том приложении, которое её поддерживает.</string>
+    <string name="share_change">Изменить</string>
+    <string name="share_no_active_assets">Нет активных объектов</string>
+    <string name="share_search_installed_components">Поиск установленных компонентов</string>
+    <string name="share_search_supplies">Поиск расходных материалов</string>
+    <string name="share_path_step">%1$s › %2$s</string>
+    <string name="share_this_asset">Этот объект</string>
+    <string name="share_supply_shared">Расходный материал — общий для всех применений</string>
+    <string name="share_show_inside">Показать содержимое: %1$s</string>
+    <string name="share_on_supply">Будет сохранено в расходном материале «%1$s» и доступно везде, где он используется.</string>
+    <string name="share_saved_to_supply">Сохранено в расходном материале «%1$s».</string>
+    <string name="share_saved_to">Сохранено: %1$s</string>
+    <string name="share_back">Назад</string>
+</resources>

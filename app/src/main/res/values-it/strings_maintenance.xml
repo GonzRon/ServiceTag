@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Italian translation of values/strings_maintenance.xml. -->
+<resources>
+    <string name="maintenance_loading">Caricamento…</string>
+    <string name="maintenance_back">Indietro</string>
+    <string name="maintenance_cancel">Annulla</string>
+    <string name="maintenance_save">Salva</string>
+    <string name="maintenance_ok">OK</string>
+    <string name="maintenance_edit">Modifica</string>
+    <string name="maintenance_more">Altro</string>
+    <string name="maintenance_archive">Archivia</string>
+    <string name="maintenance_unarchive">Togli dall\'archivio</string>
+    <string name="maintenance_archived">In archivio</string>
+    <string name="maintenance_date">Data</string>
+    <string name="maintenance_pick_field">Scegli %1$s</string>
+    <string name="maintenance_name">Nome</string>
+    <string name="maintenance_description">Descrizione</string>
+    <string name="maintenance_dismiss">Chiudi</string>
+    <string name="maintenance_not_now">Non ora</string>
+
+    <string name="maintenance_title">Manutenzione</string>
+    <string name="maintenance_section_due_work">Lavori da fare</string>
+    <string name="maintenance_section_schedules">Piani</string>
+    <string name="maintenance_section_groups">Gruppi di manutenzione</string>
+    <string name="maintenance_section_groups_supplies_components">Gruppi, materiali di consumo e componenti</string>
+    <string name="maintenance_health_title">Stato dei promemoria</string>
+    <string name="maintenance_health_no_problems">Nessun problema trovato.</string>
+    <string name="maintenance_health_last_checked">Ultimo controllo il %1$s alle %2$s</string>
+    <string name="maintenance_health_checks_passed">Controlli superati</string>
+    <string name="maintenance_health_passed_notifications">Le notifiche sono consentite</string>
+    <string name="maintenance_health_passed_reminders_on">I promemoria sono attivati</string>
+    <string name="maintenance_health_passed_digest_alarm">Il controllo giornaliero dei promemoria è pianificato</string>
+    <string name="maintenance_health_passed_backstop">Il controllo di sicurezza in background è attivo</string>
+    <string name="maintenance_health_passed_app_restriction">Questo telefono non limita ServiceTag in background</string>
+    <string name="maintenance_health_passed_delivery">Ogni piano con promemoria può inviarli</string>
+    <string name="maintenance_health_passed_meter_baselines">Ogni piano a contatore ha una lettura iniziale</string>
+    <string name="maintenance_no_schedules_yet">Ancora nessun piano di manutenzione. Aggiungine uno da un\'attrezzatura o da un gruppo di manutenzione.</string>
+    <string name="maintenance_reminders_blocked">I promemoria sono disattivati perché le notifiche sono bloccate.</string>
+    <string name="maintenance_reminder_failed">PROMEMORIA NON RIUSCITO</string>
+    <string name="maintenance_scan_tag">Scansiona tag</string>
+    <string name="maintenance_add_asset">Aggiungi attrezzatura</string>
+    <string name="maintenance_log_maintenance">Registra manutenzione</string>
+
+    <string name="maintenance_status_ok">OK</string>
+    <string name="maintenance_status_due_soon">A BREVE</string>
+    <string name="maintenance_status_due">DA FARE</string>
+    <string name="maintenance_status_overdue">IN RITARDO</string>
+    <string name="maintenance_status_out_of_season">FUORI STAGIONE</string>
+    <string name="maintenance_status_paused">IN PAUSA</string>
+    <string name="maintenance_status_no_baseline">SENZA LETTURA INIZIALE</string>
+    <string name="maintenance_status_deferred">RINVIATO</string>
+    <string name="maintenance_dashboard_section_attention">ATTENZIONE</string>
+    <string name="maintenance_dashboard_section_upcoming">PROSSIMI</string>
+    <string name="maintenance_dashboard_section_current">IN REGOLA</string>
+    <string name="maintenance_dashboard_section_deferred">Rinviati</string>
+    <string name="maintenance_dashboard_section_out_of_season">FUORI STAGIONE</string>
+
+    <string name="maintenance_log_meter_reading">Registra lettura del contatore</string>
+    <string name="maintenance_meter_line">Da fare a %1$s %2$s, ora %3$s.</string>
+    <string name="maintenance_meter_line_no_unit">Da fare a %1$s, ora %2$s.</string>
+    <string name="maintenance_snoozed_until">Posticipato fino al %1$s</string>
+    <string name="maintenance_progress">%1$d di %2$d completati</string>
+    <string name="maintenance_part_of">Fa parte di %1$s</string>
+    <string name="maintenance_promoted_subtitle">%1$s · %2$s</string>
+
+    <string name="maintenance_why_held_until">Rinviato al %1$s per la pausa di manutenzione</string>
+    <string name="maintenance_why_before_season">Anticipato a prima dell\'inizio della stagione</string>
+    <string name="maintenance_why_before_break">Anticipato a prima della pausa di manutenzione</string>
+    <string name="maintenance_why_moved_from">Spostato dal %1$s perché la stagione non era in corso</string>
+    <string name="maintenance_why_out_of_season_until">Fuori stagione fino al %1$s</string>
+    <string name="maintenance_why_until_you_start">Fuori stagione finché non la avvii</string>
+    <string name="maintenance_why_reminders_wait">I promemoria attendono la fine della pausa di manutenzione</string>
+
+    <string name="maintenance_when_was_this_done">Quando è stato fatto?</string>
+    <string name="maintenance_time">Ora</string>
+    <string name="maintenance_time_placeholder">HH:MM</string>
+    <string name="maintenance_complete_all">Completa tutti</string>
+    <string name="maintenance_complete_selected">Completa selezionati</string>
+    <string name="maintenance_close_this_round">Chiudi questo giro</string>
+    <string name="maintenance_close_this_round_confirmation">Chiudere questo giro? I membri non segnati come fatti non verranno registrati come sottoposti a manutenzione.</string>
+
+    <string name="maintenance_group_noun">Gruppo di manutenzione</string>
+    <string name="maintenance_open_asset">Apri attrezzatura</string>
+    <string name="maintenance_members_section">Attrezzature</string>
+
+    <string name="maintenance_sheet_open_asset">Apri attrezzatura</string>
+    <string name="maintenance_review_maintenance">Rivedi manutenzione</string>
+    <string name="maintenance_tag_placement">Posizione del tag</string>
+    <string name="maintenance_nothing_due">Niente da fare</string>
+    <string name="maintenance_why_now_overdue_since">In ritardo dal %1$s.</string>
+    <string name="maintenance_why_now_due">Da fare il %1$s.</string>
+    <string name="maintenance_reading_with_unit">%1$s %2$s</string>
+
+    <string name="maintenance_snooze">Posticipa</string>
+    <string name="maintenance_postpone">Rimanda</string>
+    <string name="maintenance_remove">Rimuovi</string>
+    <string name="maintenance_service_record">Registro interventi</string>
+    <string name="maintenance_no_service_recorded">Ancora nessun intervento registrato</string>
+
+    <string name="maintenance_this_applies_to">Si applica a</string>
+    <string name="maintenance_one_asset">Un\'attrezzatura</string>
+    <string name="maintenance_a_maintenance_group">Un gruppo di manutenzione</string>
+    <string name="maintenance_every_n">Ogni N</string>
+    <string name="maintenance_repeats_from">Si ripete da</string>
+    <string name="maintenance_the_scheduled_date">la data pianificata</string>
+    <string name="maintenance_when_i_complete_it">quando lo completo</string>
+    <string name="maintenance_remind_me_n_days_early">Avvisami N giorni prima</string>
+    <string name="maintenance_also_due_by_use">Da fare anche in base all\'uso</string>
+    <string name="maintenance_every_n_unit_of_use">Ogni &lt;n&gt; &lt;unit&gt; di utilizzo</string>
+    <string name="maintenance_last_done_at">Ultima esecuzione a</string>
+    <string name="maintenance_remind_me_n_unit_early">Avvisami &lt;n&gt; &lt;unit&gt; prima</string>
+    <string name="maintenance_completing_this_takes">Per completarlo serve</string>
+    <string name="maintenance_one_tap">Un tocco</string>
+    <string name="maintenance_the_full_form">Il modulo completo</string>
+    <string name="maintenance_use_this_form">Usa questo modulo</string>
+    <string name="maintenance_quick_action">Azione rapida</string>
+    <string name="maintenance_none">Nessuno</string>
+    <string name="maintenance_remind_me_through">Avvisami tramite</string>
+    <string name="maintenance_similar_through_a_group">Questa attrezzatura ha già un piano simile tramite un altro gruppo.</string>
+    <string name="maintenance_no_target">Nessun obiettivo</string>
+    <string name="maintenance_unit_day">GIORNO</string>
+    <string name="maintenance_unit_week">SETTIMANA</string>
+    <string name="maintenance_unit_month">MESE</string>
+    <string name="maintenance_unit_year">ANNO</string>
+
+    <string name="maintenance_when_should_this_be_done">Quando va eseguita questa manutenzione?</string>
+    <string name="maintenance_before_the_season_starts">Prima che inizi la stagione</string>
+    <string name="maintenance_when_the_season_starts">Quando inizia la stagione</string>
+    <string name="maintenance_whenever_it_is_due">Quando è da fare</string>
+    <string name="maintenance_before_the_maintenance_break">Prima della pausa di manutenzione</string>
+    <string name="maintenance_after_the_maintenance_break">Dopo la pausa di manutenzione</string>
+    <string name="maintenance_days_before_it_starts">Giorni prima dell\'inizio</string>
+    <string name="maintenance_days_after_it_starts">Giorni dopo l\'inizio</string>
+    <string name="maintenance_start_counting_from">Inizia a contare da</string>
+    <string name="maintenance_the_seasons_start">L\'inizio della stagione</string>
+    <string name="maintenance_its_own_date_not_before_the_season">La sua data, ma non prima dell\'inizio della stagione</string>
+    <string name="maintenance_first_due_outside_the_season">La prima scadenza cade fuori dalla stagione di questa attrezzatura, quindi attenderà l\'inizio della stagione.</string>
+    <string name="maintenance_nothing_to_be_ready_before">Questa attrezzatura non ha una stagione né una pausa di manutenzione per cui essere pronta, quindi questa manutenzione è da fare quando arriva la sua data.</string>
+    <string name="maintenance_helper_before_the_season">Una data nella stagione o nella pausa di manutenzione diventa da fare in un giorno consentito prima dell\'inizio della stagione.</string>
+    <string name="maintenance_helper_before_the_break">Una data nella pausa di manutenzione diventa da fare prima dell\'inizio della pausa.</string>
+    <string name="maintenance_helper_when_the_season_starts">Questa manutenzione resta in attesa mentre la stagione è ferma e torna attiva quando la stagione inizia.</string>
+    <string name="maintenance_helper_after_the_break">Una data nella pausa di manutenzione si sposta al primo giorno dopo la pausa.</string>
+    <string name="maintenance_helper_whenever_it_is_due">La stagione e la pausa di manutenzione non cambiano mai quando questa manutenzione è da fare.</string>
+    <string name="maintenance_enter_the_number_of_days">Inserisci il numero di giorni.</string>
+    <string name="maintenance_after_the_season_ends">Cade dopo la fine della stagione, quindi non diventerebbe mai da fare.</string>
+
+    <string name="maintenance_the_subject_health_follows">La salute dell\'attrezzatura segue questo indicatore. Scegli prima un altro modo di calcolare la salute.</string>
+    <string name="maintenance_schedule_drives_subject">Questo piano determina l\'indicatore di salute %1$s. Archiviare anche quell\'indicatore?</string>
+    <string name="maintenance_archive_both">Archivia entrambi</string>
+
+    <string name="maintenance_repair_open_notification_settings">Apri impostazioni notifiche</string>
+    <string name="maintenance_repair_reschedule_check">Ripianifica il controllo</string>
+    <string name="maintenance_repair_restart_check">Riavvia il controllo</string>
+    <string name="maintenance_repair_open_battery_settings">Apri impostazioni batteria</string>
+    <string name="maintenance_repair_turn_reminders_on">Attiva i promemoria</string>
+    <string name="maintenance_repair_open_schedule">Apri il piano</string>
+    <string name="maintenance_repair_fix_delivery">Correggi l\'invio dei promemoria</string>
+</resources>

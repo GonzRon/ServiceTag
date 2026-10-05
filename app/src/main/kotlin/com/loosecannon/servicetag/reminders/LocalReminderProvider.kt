@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
@@ -27,6 +28,8 @@ import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.reminders.SubjectState
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDecimal
 import com.loosecannon.servicetag.prefs.AppPrefs
 import java.time.LocalDate
 
@@ -113,21 +116,14 @@ class ScheduleDeliveryFacts(
     }
 
     /**
-     * The same digits B08's dashboard row shows for the same two values, and **locale-independent**
-     * (fix round 1, nit 9).
-     *
-     * `"%.2f".format(v)` resolves `Locale.getDefault()`, so on a comma-decimal locale the ratified
-     * "Due at \<n\> \<unit\>, now \<n\>." would read "Due at 500,0 hours, now 512,0." — a comma
-     * inside a sentence whose own separator is a comma. `Long.toString` and `Double.toString` are
-     * locale-invariant, which is why this is the shape `ui/journal/JournalFormat.kt:70`'s
-     * `formatNumber` uses and the shape `ui/maintenance/DueItemRow.kt:141`'s `meterLine` renders
-     * this very string with. Transcribed rather than imported: the delivery path does not depend on
-     * a UI formatting file, and the two must agree — a reviewer changing one should change both.
+     * The same digits B08's dashboard row shows for the same two values (fix round 1, nit 9): only the
+     * decimals the number needs, "500" rather than "500.0", in the language the notification's own
+     * words are in (#102) — "512.5" in English, "512,5" in German, never the device default's
+     * `"%.2f"`. This is the shape `ui/journal/JournalFormat.kt`'s `formatNumber` uses and
+     * `ui/maintenance/DueItemRow.kt`'s `meterLine` renders this very string with; both go through
+     * [localizedDecimal], so the delivery path does not depend on a UI formatting file and the two agree.
      */
-    private fun format(value: Double): String {
-        val whole = value.toLong()
-        return if (value == whole.toDouble()) whole.toString() else value.toString()
-    }
+    private fun format(value: Double): String = localizedDecimal(value)
 }
 
 /**
@@ -288,7 +284,9 @@ class LocalReminderProvider(
      * three (spec §5.5, §5.8). The sentences are RATIFIED verbatim (master plan §17.1a) and are
      * drawn **here and nowhere else** in the repository: B10's health check folds these three in
      * rather than re-deriving them. The repair **labels** are B10's to draw, so only the
-     * repair's code appears here, from the one list of codes in [ReminderRepair].
+     * repair's code appears here, from the one list of codes in [ReminderRepair]. #102: their text
+     * is in `strings_supplies_reminders.xml`, read in the owner's language each time this runs; the
+     * finding's `code` is what identifies it.
      */
     override suspend fun health(): List<ReminderHealthFinding> = buildList {
         if (!notificationsAvailable()) {
@@ -296,7 +294,7 @@ class LocalReminderProvider(
                 ReminderHealthFinding(
                     code = "NOTIFICATIONS_BLOCKED",
                     severity = ReminderHealthSeverity.ERROR,
-                    message = "Notifications are turned off, so maintenance reminders will not arrive.",
+                    message = localized(R.string.reminders_health_notifications_blocked),
                     repair = RepairAction.OpenSystemSettings(ReminderRepair.OPEN_NOTIFICATION_SETTINGS),
                 ),
             )
@@ -306,7 +304,7 @@ class LocalReminderProvider(
                 ReminderHealthFinding(
                     code = "REMINDERS_GLOBALLY_OFF",
                     severity = ReminderHealthSeverity.INFO,
-                    message = "Reminders are turned off in ServiceTag.",
+                    message = localized(R.string.reminders_health_reminders_globally_off),
                     repair = RepairAction.OpenInApp(ReminderRepair.TURN_REMINDERS_ON),
                 ),
             )
@@ -321,7 +319,7 @@ class LocalReminderProvider(
                 ReminderHealthFinding(
                     code = "DIGEST_ALARM_MISSING",
                     severity = ReminderHealthSeverity.WARN,
-                    message = "The daily reminder check is not scheduled, so today's maintenance may go unannounced.",
+                    message = localized(R.string.reminders_health_digest_alarm_missing),
                     // Unambiguous and idempotent, which is the whole test for an automatic repair.
                     repair = RepairAction.Automatic(ReminderRepair.ARM_DIGEST_ALARM),
                 ),
@@ -380,7 +378,7 @@ class LocalReminderProvider(
          * diagnostics report renders, and the owner-facing sentence for the same fact is the
          * ratified `NOTIFICATIONS_BLOCKED` finding above.
          */
-        const val SILENCED = "reminders are switched off or notifications are blocked; nothing was posted"
+        const val SILENCED = "reminders are switched off or notifications are blocked; nothing was posted" // l10n-ok: diagnostics only
     }
 }
 

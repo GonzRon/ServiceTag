@@ -11,8 +11,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.loosecannon.servicetag.R
 
 /**
  * The date column's width — also the left indent a row's own content (such as a `TagPlacement`
@@ -40,7 +42,7 @@ fun LedgerEntry(
     Row(modifier = modifier.padding(vertical = 10.dp)) {
         Column(modifier = Modifier.width(LedgerDateColumnWidth)) {
             Text(
-                text = "$day ${month.uppercase()}",
+                text = stringResource(R.string.ui_ledger_day_month, day, month.uppercase()),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

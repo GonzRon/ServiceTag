@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_setup.xml. -->
+<resources>
+    <string name="setup_loading">लोड हो रहा है…</string>
+    <string name="setup_back">वापस जाएँ</string>
+    <string name="setup_cancel">रद्द करें</string>
+    <string name="setup_save">सहेजें</string>
+    <string name="setup_more">ज़्यादा</string>
+    <string name="setup_edit">बदलाव करें</string>
+    <string name="setup_move_up">ऊपर ले जाएँ</string>
+    <string name="setup_move_down">नीचे ले जाएँ</string>
+    <string name="setup_archive">संग्रहित करें</string>
+    <string name="setup_unarchive">संग्रह से निकालें</string>
+    <string name="setup_delete">मिटाएँ</string>
+    <string name="setup_remove">हटाएँ</string>
+    <string name="setup_archived_badge">संग्रहित</string>
+    <string name="setup_ok">ठीक है</string>
+
+    <string name="setup_title_fallback">रीडिंग और कार्य</string>
+    <string name="setup_eyebrow">रीडिंग और कार्य</string>
+    <string name="setup_readings_header">रीडिंग</string>
+    <string name="setup_readings_empty">अभी कोई रीडिंग नहीं · इस उपकरण को मापना शुरू करने के लिए एक रीडिंग जोड़ें</string>
+    <string name="setup_add_reading">रीडिंग जोड़ें</string>
+    <string name="setup_actions_header">कार्य</string>
+    <string name="setup_actions_empty">अभी कोई कार्य नहीं · एक टैप में इस उपकरण की प्रविष्टि दर्ज करने के लिए एक कार्य जोड़ें</string>
+    <string name="setup_add_action">कार्य जोड़ें</string>
+    <string name="setup_delete_reading_title">यह रीडिंग मिटाएँ?</string>
+    <string name="setup_delete_reading_body">इसे पहले जैसा नहीं किया जा सकता।</string>
+    <string name="setup_delete_action_title">यह कार्य मिटाएँ?</string>
+    <string name="setup_delete_action_body">पिछली प्रविष्टियों की रीडिंग बनी रहती हैं।</string>
+    <string name="setup_meter_tag">मीटर</string>
+    <plurals name="setup_profile_row_meta">
+        <item quantity="one">%1$s · %2$d फ़ील्ड</item>
+        <item quantity="other">%1$s · %2$d फ़ील्ड</item>
+    </plurals>
+    <string name="setup_formula_percent_drop_line">= (%1$s − %2$s) / %1$s × 100</string>
+
+    <string name="setup_refusal_title">यह रीडिंग मिटाई नहीं जा सकती</string>
+    <plurals name="setup_refusal_readings_logged">
+        <item quantity="one">%1$d रीडिंग दर्ज</item>
+        <item quantity="other">%1$d रीडिंग दर्ज</item>
+    </plurals>
+    <string name="setup_refusal_used_by">इस्तेमाल करने वाली: %1$s</string>
+    <string name="setup_refusal_offered_by">इन कार्यों में शामिल: %1$s</string>
+    <string name="setup_refusal_archive_hint">इसके बजाय इसे संग्रहित करें, ताकि यह फ़ॉर्म से हट जाए और इसका इतिहास बना रहे।</string>
+
+    <string name="setup_failed_reorder_readings">रीडिंग का क्रम नहीं बदला जा सका।</string>
+    <string name="setup_failed_reorder_actions">कार्यों का क्रम नहीं बदला जा सका।</string>
+    <string name="setup_failed_change_reading">वह रीडिंग नहीं बदली जा सकी।</string>
+    <string name="setup_failed_change_action">वह कार्य नहीं बदला जा सका।</string>
+    <string name="setup_failed_delete_that_reading">वह रीडिंग मिटाई नहीं जा सकी।</string>
+    <string name="setup_failed_delete_that_action">वह कार्य मिटाया नहीं जा सका।</string>
+
+    <string name="setup_event_kind_maintenance">रखरखाव</string>
+    <string name="setup_event_kind_inspection">निरीक्षण</string>
+    <string name="setup_event_kind_measurement">माप</string>
+    <string name="setup_event_kind_treatment">ट्रीटमेंट</string>
+    <string name="setup_event_kind_incident">खराबी</string>
+    <string name="setup_event_kind_replacement">रिप्लेसमेंट</string>
+    <string name="setup_event_kind_season_start">मौसम की शुरुआत</string>
+    <string name="setup_event_kind_season_end">मौसम का अंत</string>
+    <string name="setup_event_kind_note">नोट</string>
+    <string name="setup_event_kind_custom">कस्टम</string>
+
+    <string name="setup_definition_title_edit">रीडिंग में बदलाव करें</string>
+    <string name="setup_definition_title_new">नई रीडिंग</string>
+    <string name="setup_definition_label">लेबल</string>
+    <string name="setup_definition_key">कुंजी</string>
+    <string name="setup_definition_kind">किस्म</string>
+    <string name="setup_definition_kind_entered">दर्ज की गई</string>
+    <string name="setup_definition_kind_derived">गणना की गई</string>
+    <string name="setup_definition_type">प्रकार</string>
+    <string name="setup_value_type_number">संख्या</string>
+    <string name="setup_value_type_text">टेक्स्ट</string>
+    <string name="setup_value_type_boolean">हाँ / नहीं</string>
+    <string name="setup_definition_formula">फ़ॉर्मूला</string>
+    <string name="setup_formula_percent_drop">प्रतिशत गिरावट: (A − B) / A × 100</string>
+    <string name="setup_definition_source_a">स्रोत A</string>
+    <string name="setup_definition_source_b">स्रोत B</string>
+    <string name="setup_definition_choose_source">कोई रीडिंग चुनें</string>
+    <string name="setup_definition_sources_needed">गणना वाली रीडिंग के लिए दो संख्या वाली रीडिंग चाहिए। पहले उन्हें जोड़ें।</string>
+    <string name="setup_definition_unit">इकाई</string>
+    <string name="setup_definition_decimals">दशमलव</string>
+    <string name="setup_definition_target">लक्ष्य</string>
+    <string name="setup_definition_target_low">न्यूनतम</string>
+    <string name="setup_definition_target_high">अधिकतम</string>
+    <string name="setup_definition_meter">मीटर (सिर्फ़ बढ़ता है)</string>
+    <string name="setup_definition_save">रीडिंग सहेजें</string>
+    <plurals name="setup_definition_frozen">
+        <item quantity="one">%1$d रीडिंग में इस्तेमाल</item>
+        <item quantity="other">%1$d रीडिंग में इस्तेमाल</item>
+    </plurals>
+
+    <plurals name="setup_definition_in_use">
+        <item quantity="one">%1$d प्रविष्टि पहले से इस रीडिंग का इस्तेमाल करती है, इसलिए इसकी कुंजी, किस्म और प्रकार नहीं बदले जा सकते।</item>
+        <item quantity="other">%1$d प्रविष्टियाँ पहले से इस रीडिंग का इस्तेमाल करती हैं, इसलिए इसकी कुंजी, किस्म और प्रकार नहीं बदले जा सकते।</item>
+    </plurals>
+    <string name="setup_definition_breaks_derived">%1$s में स्रोत के रूप में इस्तेमाल हो रही है — पहले उस गणना वाली रीडिंग को बदलें।</string>
+    <string name="setup_definition_breaks_profiles">%1$s में फ़ील्ड के रूप में शामिल है — पहले इसे उस कार्य से हटाएँ।</string>
+    <string name="setup_another_reading">कोई दूसरी रीडिंग</string>
+    <string name="setup_names_last_and">%1$s और %2$s</string>
+    <string name="setup_failed_save_reading">यह रीडिंग सहेजी नहीं जा सकी।</string>
+    <string name="setup_failed_delete_this_reading">यह रीडिंग मिटाई नहीं जा सकी।</string>
+
+    <string name="setup_problem_not_a_number">संख्या नहीं है</string>
+    <string name="setup_problem_decimals_range">दशमलव 0–4 होने चाहिए</string>
+    <string name="setup_problem_label_required">रीडिंग को एक लेबल दें</string>
+    <string name="setup_problem_bad_key">कुंजी: सिर्फ़ अंग्रेज़ी के छोटे अक्षर, अंक और _</string>
+    <string name="setup_problem_key_taken">यह कुंजी पहले से किसी दूसरी रीडिंग में इस्तेमाल हो रही है</string>
+    <string name="setup_problem_range_order">न्यूनतम, अधिकतम से ज़्यादा नहीं होना चाहिए</string>
+    <string name="setup_problem_range_on_non_number">सिर्फ़ संख्या वाली रीडिंग का लक्ष्य होता है</string>
+    <string name="setup_problem_meter_on_non_number">सिर्फ़ संख्या वाली रीडिंग ही मीटर हो सकती है</string>
+    <string name="setup_problem_two_sources">दो अलग-अलग संख्या वाली रीडिंग चुनें</string>
+    <string name="setup_problem_unknown_source">वह रीडिंग अब मौजूद नहीं है</string>
+    <string name="setup_problem_source_other_asset">स्रोत इसी उपकरण का होना चाहिए</string>
+    <string name="setup_problem_source_not_entered">स्रोत ऐसी रीडिंग होनी चाहिए जिसे कोई दर्ज करता है</string>
+    <string name="setup_problem_source_not_number">स्रोत संख्या वाली रीडिंग होनी चाहिए</string>
+    <string name="setup_problem_source_is_meter">मीटर स्रोत नहीं हो सकता</string>
+    <string name="setup_problem_derived_not_number">गणना वाली रीडिंग संख्या होती है</string>
+    <string name="setup_problem_derived_is_meter">गणना वाली रीडिंग मीटर नहीं होती</string>
+    <string name="setup_problem_spec_on_entered">दर्ज की जाने वाली रीडिंग का कोई फ़ॉर्मूला नहीं होता</string>
+
+    <string name="setup_profile_eyebrow_edit">कार्य में बदलाव करें</string>
+    <string name="setup_profile_eyebrow_new">नया कार्य</string>
+    <string name="setup_profile_eyebrow_edit_asset">कार्य में बदलाव करें · %1$s</string>
+    <string name="setup_profile_eyebrow_new_asset">नया कार्य · %1$s</string>
+    <string name="setup_profile_name">नाम</string>
+    <string name="setup_profile_kind">किस्म</string>
+    <string name="setup_profile_default_title">डिफ़ॉल्ट शीर्षक</string>
+    <string name="setup_profile_fields_header">फ़ील्ड</string>
+    <string name="setup_profile_fields_empty">अभी कोई फ़ील्ड नहीं · यह कार्य सिर्फ़ एक प्रविष्टि दर्ज करता है</string>
+    <string name="setup_profile_add_field">फ़ील्ड जोड़ें</string>
+    <string name="setup_profile_all_fields_used">इस उपकरण की दर्ज की जाने वाली हर रीडिंग पहले से इस कार्य में है।</string>
+    <string name="setup_field_required">ज़रूरी</string>
+    <string name="setup_field_optional">वैकल्पिक</string>
+    <string name="setup_field_picker_title">फ़ील्ड जोड़ें</string>
+    <string name="setup_profile_materials_header">सामग्री</string>
+    <string name="setup_profile_materials_empty">कोई सामग्री सुझाई नहीं गई · प्रविष्टि फ़ॉर्म में फिर भी कोई भी सामग्री डाली जा सकती है</string>
+    <string name="setup_profile_add_material">सामग्री जोड़ें</string>
+    <string name="setup_material_name">सामग्री</string>
+    <string name="setup_material_quantity">मात्रा</string>
+    <string name="setup_material_unit">इकाई</string>
+    <string name="setup_material_remove">सामग्री हटाएँ</string>
+    <string name="setup_profile_save">कार्य सहेजें</string>
+
+    <string name="setup_problem_action_name_required">कार्य को एक नाम दें</string>
+    <string name="setup_problem_action_name_taken">यह नाम पहले से किसी दूसरे कार्य में इस्तेमाल हो रहा है</string>
+    <string name="setup_problem_bad_material">नाम ज़रूरी है, और मात्रा 0 या उससे ज़्यादा होनी चाहिए</string>
+    <string name="setup_problem_quantity_not_number">मात्रा एक संख्या होनी चाहिए, या खाली</string>
+    <string name="setup_failed_save_action">यह कार्य सहेजा नहीं जा सका।</string>
+    <string name="setup_failed_delete_this_action">यह कार्य मिटाया नहीं जा सका।</string>
+
+    <string name="setup_problem_field_not_this_asset">इस उपकरण की रीडिंग नहीं है</string>
+    <string name="setup_problem_field_derived">गणना वाले मान अपने-आप निकाले जाते हैं, दर्ज नहीं किए जाते</string>
+    <string name="setup_problem_field_archived">संग्रहित</string>
+    <string name="setup_problem_field_listed_twice">दो बार शामिल</string>
+</resources>

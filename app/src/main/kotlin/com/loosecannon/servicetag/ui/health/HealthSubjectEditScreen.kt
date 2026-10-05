@@ -35,18 +35,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.health.HealthSubjectShape
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.ChoiceRow
 import com.loosecannon.servicetag.ui.asset.FieldLabel
 import com.loosecannon.servicetag.ui.asset.RefusalLine
-import com.loosecannon.servicetag.ui.asset.ratifiedParts
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.maintenance.LinkGuardDialog
 import com.loosecannon.servicetag.ui.maintenance.LinkGuardPrompt
@@ -55,95 +57,104 @@ import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
 
 // The health subject editor's words (spec §10.7), RATIFIED, each by its S-number and verbatim. S123,
-// S124, S128 and S136 are each one ratified set of words, split only at their "·" separators. S137 is
-// B08's constant (`THE_SUBJECT_HEALTH_FOLLOWS`), drawn here through B08's own dialog.
+// S124, S128 and S136 are each one ratified set of words, ratified with "·" between the parts; #102 makes
+// each part its own string resource (`strings_components_health.xml`), so no translation has to keep a
+// separator the code splits on. S137 is B08's constant (`THE_SUBJECT_HEALTH_FOLLOWS`), drawn here
+// through B08's own dialog.
 
 /** The shipped field word. */
-internal const val NAME = "Name"
+internal val NAME: String get() = localized(R.string.health_name)
 
 /** S113, field. */
-const val WHAT_IS_IT = "What is it?"
+val WHAT_IS_IT: String get() = localized(R.string.health_what_is_it)
 
 /** S114, option: [HealthSubjectKind.ASSET]. */
-const val THE_WHOLE_ASSET = "The whole asset"
+val THE_WHOLE_ASSET: String get() = localized(R.string.health_kind_whole_asset)
 
 /** S115, option: [HealthSubjectKind.PART]. */
-const val A_PART = "A part"
+val A_PART: String get() = localized(R.string.health_kind_part)
 
 /** S116, option: [HealthSubjectKind.MEDIUM]. */
-const val SOMETHING_MAINTAINED_LIKE_WATER = "Something maintained, like water"
+val SOMETHING_MAINTAINED_LIKE_WATER: String get() = localized(R.string.health_kind_medium)
 
 /** S117, field. */
-const val WHAT_WEARS_IT_DOWN = "What wears it down?"
+val WHAT_WEARS_IT_DOWN: String get() = localized(R.string.health_what_wears_it_down)
 
 /** S118, option: [HealthDriver.AGE]. */
-const val AGE_SINCE_REPLACEMENT = "Age since replacement"
+val AGE_SINCE_REPLACEMENT: String get() = localized(R.string.health_driver_age)
 
 /** S119, option: [HealthDriver.MAINTENANCE_OVERDUE]. */
-const val OVERDUE_MAINTENANCE = "Overdue maintenance"
+val OVERDUE_MAINTENANCE: String get() = localized(R.string.health_driver_overdue)
 
 /** S120, field, under S118. */
-const val REPLACEMENT_QUICK_ACTION = "Replacement quick action"
+val REPLACEMENT_QUICK_ACTION: String get() = localized(R.string.health_replacement_quick_action)
 
 /** S121, option: any REPLACEMENT event is the baseline. */
-const val ANY_REPLACEMENT = "Any replacement"
+val ANY_REPLACEMENT: String get() = localized(R.string.health_any_replacement)
 
 /** S122, field, under S119. */
-const val MAINTENANCE_SCHEDULE = "Maintenance schedule"
+val MAINTENANCE_SCHEDULE: String get() = localized(R.string.health_maintenance_schedule)
 
-/** S123, the three threshold labels of an age subject, one ratified set. */
-const val AGE_THRESHOLD_LABELS = "As new for (days) · Warning after (days) · Critical after (days)"
+/** S123, the three threshold labels of an age subject, one ratified set, in field order. */
+val AGE_THRESHOLD_LABELS: List<String>
+    get() = listOf(
+        localized(R.string.health_age_threshold_nominal),
+        localized(R.string.health_age_threshold_warning),
+        localized(R.string.health_age_threshold_critical),
+    )
 
-/** S124, the three threshold labels of an overdue subject, one ratified set. */
-const val OVERDUE_THRESHOLD_LABELS =
-    "Grace period (days overdue) · Warning at (days overdue) · Critical at (days overdue)"
+/** S124, the three threshold labels of an overdue subject, one ratified set, in field order. */
+val OVERDUE_THRESHOLD_LABELS: List<String>
+    get() = listOf(
+        localized(R.string.health_overdue_threshold_grace),
+        localized(R.string.health_overdue_threshold_warning),
+        localized(R.string.health_overdue_threshold_critical),
+    )
 
 /** S125, refusal: the thresholds do not rise strictly. */
-const val EACH_NUMBER_MUST_BE_LARGER = "Each number must be larger than the one before."
+val EACH_NUMBER_MUST_BE_LARGER: String get() = localized(R.string.health_thresholds_must_rise)
 
 /** S126, refusal: drawn while a threshold is empty and Save is held. */
-const val ENTER_ALL_THREE_NUMBERS = "Enter all three numbers, or use a starting point."
+val ENTER_ALL_THREE_NUMBERS: String get() = localized(R.string.health_enter_all_three_numbers)
 
 /** S127, action: overdue maintenance only. */
-const val USE_A_STARTING_POINT = "Use a starting point"
+val USE_A_STARTING_POINT: String get() = localized(R.string.health_use_a_starting_point)
 
-/** S128, the two starting points' names, one ratified set — see [StartingPoint]. */
-const val STARTING_POINT_NAMES = "Engine service: 14 / 45 / 120 days overdue · Water care: 2 / 7 / 14 days overdue"
+/** S128, the two starting points' names, one ratified set, in [StartingPoint]'s order — see [StartingPoint.label]. */
+val STARTING_POINT_NAMES: List<String> get() = StartingPoint.entries.map(StartingPoint::label)
 
 /** S129, confirmation body. */
-const val STARTING_POINTS_ARE_NOT_SAFETY_LIMITS =
-    "These are starting points, not safety limits. Check them for this equipment before saving."
+val STARTING_POINTS_ARE_NOT_SAFETY_LIMITS: String get() = localized(R.string.health_starting_points_not_safety_limits)
 
 /** S130, confirm: the only way a starting point fills the fields. */
-const val USE_THESE_NUMBERS = "Use these numbers"
+val USE_THESE_NUMBERS: String get() = localized(R.string.health_use_these_numbers)
 
 /** S133, field: a 1–10 stepper, only under Weighted average. */
-const val WEIGHT = "Weight"
+val WEIGHT: String get() = localized(R.string.health_weight)
 
 /** S135, refusal: `HEALTH_SCHEDULE_TAKEN`. */
-const val SCHEDULE_ALREADY_DRIVES_ANOTHER_SUBJECT = "That schedule already drives another subject."
+val SCHEDULE_ALREADY_DRIVES_ANOTHER_SUBJECT: String get() = localized(R.string.health_schedule_already_drives_another)
 
-/** S136, the two actions, one ratified set. */
-const val SUBJECT_ACTIONS = "Archive subject · Restore subject"
-
-/** S136's first action. */
-val ARCHIVE_SUBJECT: String = ratifiedParts(SUBJECT_ACTIONS)[0]
+/** S136's first action (S136 is the two actions, one ratified set). */
+val ARCHIVE_SUBJECT: String get() = localized(R.string.health_archive_subject)
 
 /** S136's second action; the asset editor marks an archived subject with it. */
-val RESTORE_SUBJECT: String = ratifiedParts(SUBJECT_ACTIONS)[1]
+val RESTORE_SUBJECT: String get() = localized(R.string.health_restore_subject)
 
 /** S113's options in their ratified order. */
-private val KIND_CHOICES = listOf(
-    HealthSubjectKind.ASSET to THE_WHOLE_ASSET,
-    HealthSubjectKind.PART to A_PART,
-    HealthSubjectKind.MEDIUM to SOMETHING_MAINTAINED_LIKE_WATER,
-)
+private val KIND_CHOICES: List<Pair<HealthSubjectKind, String>>
+    get() = listOf(
+        HealthSubjectKind.ASSET to THE_WHOLE_ASSET,
+        HealthSubjectKind.PART to A_PART,
+        HealthSubjectKind.MEDIUM to SOMETHING_MAINTAINED_LIKE_WATER,
+    )
 
 /** S117's options in their ratified order. */
-private val DRIVER_CHOICES = listOf(
-    HealthDriver.AGE to AGE_SINCE_REPLACEMENT,
-    HealthDriver.MAINTENANCE_OVERDUE to OVERDUE_MAINTENANCE,
-)
+private val DRIVER_CHOICES: List<Pair<HealthDriver, String>>
+    get() = listOf(
+        HealthDriver.AGE to AGE_SINCE_REPLACEMENT,
+        HealthDriver.MAINTENANCE_OVERDUE to OVERDUE_MAINTENANCE,
+    )
 
 /**
  * Creates ([subjectId] null) or edits one health subject of [assetId] (spec §10.4; master §13.3).
@@ -194,13 +205,13 @@ fun HealthSubjectEditScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Cancel")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.ui_action_cancel))
                     }
                 },
                 actions = {
                     // Held until every answer is given (master dec. 46): no refusal of the form's own
                     // fields is reachable, so none needs a sentence.
-                    TextButton(onClick = model::save, enabled = state.canSave) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.canSave) { Text(stringResource(R.string.ui_action_save)) }
                 },
             )
         },
@@ -213,7 +224,7 @@ fun HealthSubjectEditScreen(
                 title = { Text(point.label) },
                 text = { Text(STARTING_POINTS_ARE_NOT_SAFETY_LIMITS) },
                 confirmButton = { TextButton(onClick = model::confirmStartingPoint) { Text(USE_THESE_NUMBERS) } },
-                dismissButton = { TextButton(onClick = model::cancelStartingPoint) { Text("Cancel") } },
+                dismissButton = { TextButton(onClick = model::cancelStartingPoint) { Text(stringResource(R.string.ui_action_cancel)) } },
             )
         }
         if (state.primaryRefused) {

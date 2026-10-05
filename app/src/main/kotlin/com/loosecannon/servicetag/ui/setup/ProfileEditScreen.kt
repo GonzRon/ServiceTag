@@ -45,12 +45,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
@@ -120,10 +122,13 @@ fun ProfileEditScreen(
     var linking by remember { mutableStateOf<Int?>(null) }
 
     // The entry form's app bar shape (D12 §3): what this screen is, then what it is about.
-    val eyebrow = listOf(
-        if (state.editing) "EDIT ACTION" else "NEW ACTION",
-        state.assetName.uppercase(),
-    ).filter { it.isNotBlank() }.joinToString(" · ")
+    val asset = state.assetName.uppercase()
+    val eyebrow = when {
+        asset.isBlank() && state.editing -> stringResource(R.string.setup_profile_eyebrow_edit)
+        asset.isBlank() -> stringResource(R.string.setup_profile_eyebrow_new)
+        state.editing -> stringResource(R.string.setup_profile_eyebrow_edit_asset, asset)
+        else -> stringResource(R.string.setup_profile_eyebrow_new_asset, asset)
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
@@ -140,11 +145,11 @@ fun ProfileEditScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Cancel")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.setup_cancel))
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = !state.saving) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = !state.saving) { Text(stringResource(R.string.setup_save)) }
                     if (state.editing) {
                         ProfileOverflow(
                             archived = state.archived,
@@ -157,14 +162,14 @@ fun ProfileEditScreen(
         },
     ) { padding ->
         if (!state.loaded) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.setup_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
 
         if (confirming) {
             ConfirmDialog(
-                title = "Delete this action?",
-                body = "Past entries keep their readings.",
+                title = stringResource(R.string.setup_delete_action_title),
+                body = stringResource(R.string.setup_delete_action_body),
                 onDismiss = { confirming = false },
                 onConfirm = {
                     confirming = false
@@ -204,7 +209,7 @@ fun ProfileEditScreen(
             OutlinedTextField(
                 value = state.name,
                 onValueChange = model::onName,
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.setup_profile_name)) },
                 isError = state.problems.containsKey(ProfileForm.NAME),
                 supportingText = state.problems[ProfileForm.NAME]?.let { { Text(it) } },
                 singleLine = true,
@@ -216,7 +221,7 @@ fun ProfileEditScreen(
             OutlinedTextField(
                 value = state.defaultTitle,
                 onValueChange = model::onTitle,
-                label = { Text("Default title") },
+                label = { Text(stringResource(R.string.setup_profile_default_title)) },
                 // Until it is typed in, this field shows the name: the entry it logs is titled
                 // after the action unless someone wants it titled otherwise.
                 singleLine = true,
@@ -226,10 +231,10 @@ fun ProfileEditScreen(
             )
 
             Column {
-                SectionHeader(title = "Fields")
+                SectionHeader(title = stringResource(R.string.setup_profile_fields_header))
                 state.problems[ProfileForm.FIELDS]?.let { Problem(it) }
                 if (state.fields.isEmpty()) {
-                    QuietLine("No fields yet · this action just logs an entry")
+                    QuietLine(stringResource(R.string.setup_profile_fields_empty))
                 } else {
                     LedgerList(count = state.fields.size) { index ->
                         val pick = state.fields[index]
@@ -244,19 +249,19 @@ fun ProfileEditScreen(
                     }
                 }
                 AddRowButton(
-                    text = "Add field",
+                    text = stringResource(R.string.setup_profile_add_field),
                     enabled = state.available.isNotEmpty(),
                     onClick = { picking = true },
                 )
                 if (state.available.isEmpty()) {
-                    Hint("Every entered reading of this asset is already on this action.")
+                    Hint(stringResource(R.string.setup_profile_all_fields_used))
                 }
             }
 
             Column {
-                SectionHeader(title = "Materials")
+                SectionHeader(title = stringResource(R.string.setup_profile_materials_header))
                 if (state.consumables.isEmpty()) {
-                    QuietLine("No materials suggested · the entry form still takes any")
+                    QuietLine(stringResource(R.string.setup_profile_materials_empty))
                 }
                 state.consumables.forEachIndexed { index, row ->
                     ConsumableRowEditor(
@@ -271,7 +276,11 @@ fun ProfileEditScreen(
                         onUnlink = { model.unlinkSupply(index) },
                     )
                 }
-                AddRowButton(text = "Add material", enabled = true, onClick = model::addConsumable)
+                AddRowButton(
+                    text = stringResource(R.string.setup_profile_add_material),
+                    enabled = true,
+                    onClick = model::addConsumable,
+                )
             }
 
             Button(
@@ -280,7 +289,7 @@ fun ProfileEditScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Save action")
+                Text(stringResource(R.string.setup_profile_save))
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -297,7 +306,7 @@ private fun KindPicker(selected: EventKind, onSelect: (EventKind) -> Unit) {
             value = kindLabel(selected),
             onValueChange = {},
             readOnly = true,
-            label = { Text("Kind") },
+            label = { Text(stringResource(R.string.setup_profile_kind)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             shape = ControlShape,
             modifier = Modifier
@@ -349,7 +358,7 @@ private fun FieldRow(
                 )
                 if (pick.definition.archivedAt != null) {
                     StatusBadge(
-                        label = "Archived",
+                        label = stringResource(R.string.setup_archived_badge),
                         colors = ServiceTagTheme.semanticColors.seasonInactive,
                     )
                 }
@@ -357,7 +366,7 @@ private fun FieldRow(
             Text(
                 text = listOfNotNull(
                     pick.definition.unit.takeIf { it.isNotBlank() },
-                    if (pick.required) "Required" else "Optional",
+                    stringResource(if (pick.required) R.string.setup_field_required else R.string.setup_field_optional),
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -397,7 +406,7 @@ private fun ConsumableRowEditor(
             OutlinedTextField(
                 value = row.name,
                 onValueChange = { onChange(it, null, null) },
-                label = { Text("Material") },
+                label = { Text(stringResource(R.string.setup_material_name)) },
                 singleLine = true,
                 isError = problem != null,
                 shape = ControlShape,
@@ -406,7 +415,7 @@ private fun ConsumableRowEditor(
             OutlinedTextField(
                 value = row.quantity,
                 onValueChange = { onChange(null, it, null) },
-                label = { Text("Qty") },
+                label = { Text(stringResource(R.string.setup_material_quantity)) },
                 singleLine = true,
                 isError = problem != null,
                 textStyle = MonoText,
@@ -417,13 +426,13 @@ private fun ConsumableRowEditor(
             OutlinedTextField(
                 value = row.unit,
                 onValueChange = { onChange(null, null, it) },
-                label = { Text("Unit") },
+                label = { Text(stringResource(R.string.setup_material_unit)) },
                 singleLine = true,
                 shape = ControlShape,
                 modifier = Modifier.width(74.dp),
             )
             IconButton(onClick = onRemove) {
-                Icon(Icons.Outlined.Close, contentDescription = "Remove material")
+                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.setup_material_remove))
             }
         }
         SupplyLinkLine(supplyId = row.supplyId, supplies = supplies, onUnlink = onUnlink, onLink = onLink)
@@ -440,7 +449,7 @@ private fun FieldPicker(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add a field") },
+        title = { Text(stringResource(R.string.setup_field_picker_title)) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 available.forEach { definition ->
@@ -468,7 +477,7 @@ private fun FieldPicker(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.setup_cancel)) } },
     )
 }
 
@@ -481,20 +490,20 @@ private fun FieldOverflow(
 ) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.setup_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         DropdownMenuItem(
-            text = { Text("Move up") },
+            text = { Text(stringResource(R.string.setup_move_up)) },
             enabled = canMoveUp,
             onClick = { open = false; onMove(-1) },
         )
         DropdownMenuItem(
-            text = { Text("Move down") },
+            text = { Text(stringResource(R.string.setup_move_down)) },
             enabled = canMoveDown,
             onClick = { open = false; onMove(1) },
         )
-        DropdownMenuItem(text = { Text("Remove") }, onClick = { open = false; onRemove() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.setup_remove)) }, onClick = { open = false; onRemove() })
     }
 }
 
@@ -502,14 +511,14 @@ private fun FieldOverflow(
 private fun ProfileOverflow(archived: Boolean, onArchive: () -> Unit, onDelete: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.setup_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         DropdownMenuItem(
-            text = { Text(if (archived) "Unarchive" else "Archive") },
+            text = { Text(stringResource(if (archived) R.string.setup_unarchive else R.string.setup_archive)) },
             onClick = { open = false; onArchive() },
         )
-        DropdownMenuItem(text = { Text("Delete") }, onClick = { open = false; onDelete() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.setup_delete)) }, onClick = { open = false; onDelete() })
     }
 }
 

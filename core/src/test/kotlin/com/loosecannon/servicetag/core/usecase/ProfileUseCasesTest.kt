@@ -186,7 +186,7 @@ class ProfileUseCasesTest {
         val problems = problemsOf {
             save.run(null, cmd("TDS retest", fields = listOf(ProfileFieldInput(output.id, required = false))))
         }
-        assertEquals(listOf(ProfileProblem.BadField(output.id, "archived")), problems)
+        assertEquals(listOf(ProfileProblem.BadField(output.id, BadFieldCause.ARCHIVED)), problems)
     }
 
     @Test fun updateKeepsChildIds() = runTest {

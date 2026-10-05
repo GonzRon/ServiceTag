@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese (Brazilian usage) translation of values/strings_setup.xml. -->
+<resources>
+    <string name="setup_loading">Carregando…</string>
+    <string name="setup_back">Voltar</string>
+    <string name="setup_cancel">Cancelar</string>
+    <string name="setup_save">Salvar</string>
+    <string name="setup_more">Mais</string>
+    <string name="setup_edit">Editar</string>
+    <string name="setup_move_up">Mover para cima</string>
+    <string name="setup_move_down">Mover para baixo</string>
+    <string name="setup_archive">Arquivar</string>
+    <string name="setup_unarchive">Desarquivar</string>
+    <string name="setup_delete">Excluir</string>
+    <string name="setup_remove">Remover</string>
+    <string name="setup_archived_badge">Arquivada</string>
+    <string name="setup_ok">OK</string>
+
+    <string name="setup_title_fallback">Leituras e ações</string>
+    <string name="setup_eyebrow">LEITURAS E AÇÕES</string>
+    <string name="setup_readings_header">Leituras</string>
+    <string name="setup_readings_empty">Nenhuma leitura ainda · adicione uma para começar a medir este equipamento</string>
+    <string name="setup_add_reading">Adicionar leitura</string>
+    <string name="setup_actions_header">Ações</string>
+    <string name="setup_actions_empty">Nenhuma ação ainda · adicione uma para registrar este equipamento com um toque</string>
+    <string name="setup_add_action">Adicionar ação</string>
+    <string name="setup_delete_reading_title">Excluir esta leitura?</string>
+    <string name="setup_delete_reading_body">Não é possível desfazer isso.</string>
+    <string name="setup_delete_action_title">Excluir esta ação?</string>
+    <string name="setup_delete_action_body">Os registros anteriores mantêm as leituras.</string>
+    <string name="setup_meter_tag">Medidor</string>
+    <plurals name="setup_profile_row_meta">
+        <item quantity="one">%1$s · %2$d campo</item>
+        <item quantity="other">%1$s · %2$d campos</item>
+    </plurals>
+    <string name="setup_formula_percent_drop_line">= (%1$s − %2$s) / %1$s × 100</string>
+
+    <string name="setup_refusal_title">Não é possível excluir esta leitura</string>
+    <plurals name="setup_refusal_readings_logged">
+        <item quantity="one">%1$d leitura registrada</item>
+        <item quantity="other">%1$d leituras registradas</item>
+    </plurals>
+    <string name="setup_refusal_used_by">Usada por %1$s</string>
+    <string name="setup_refusal_offered_by">Oferecida por %1$s</string>
+    <string name="setup_refusal_archive_hint">Em vez disso, arquive-a para tirá-la dos formulários e manter o histórico dela.</string>
+
+    <string name="setup_failed_reorder_readings">Não foi possível reordenar as leituras.</string>
+    <string name="setup_failed_reorder_actions">Não foi possível reordenar as ações.</string>
+    <string name="setup_failed_change_reading">Não foi possível alterar essa leitura.</string>
+    <string name="setup_failed_change_action">Não foi possível alterar essa ação.</string>
+    <string name="setup_failed_delete_that_reading">Não foi possível excluir essa leitura.</string>
+    <string name="setup_failed_delete_that_action">Não foi possível excluir essa ação.</string>
+
+    <string name="setup_event_kind_maintenance">Manutenção</string>
+    <string name="setup_event_kind_inspection">Inspeção</string>
+    <string name="setup_event_kind_measurement">Medição</string>
+    <string name="setup_event_kind_treatment">Tratamento</string>
+    <string name="setup_event_kind_incident">Incidente</string>
+    <string name="setup_event_kind_replacement">Substituição</string>
+    <string name="setup_event_kind_season_start">Início da temporada</string>
+    <string name="setup_event_kind_season_end">Fim da temporada</string>
+    <string name="setup_event_kind_note">Nota</string>
+    <string name="setup_event_kind_custom">Personalizado</string>
+
+    <string name="setup_definition_title_edit">Editar leitura</string>
+    <string name="setup_definition_title_new">Nova leitura</string>
+    <string name="setup_definition_label">Rótulo</string>
+    <string name="setup_definition_key">Chave</string>
+    <string name="setup_definition_kind">Origem</string>
+    <string name="setup_definition_kind_entered">Digitada</string>
+    <string name="setup_definition_kind_derived">Calculada</string>
+    <string name="setup_definition_type">Tipo</string>
+    <string name="setup_value_type_number">Número</string>
+    <string name="setup_value_type_text">Texto</string>
+    <string name="setup_value_type_boolean">Sim / não</string>
+    <string name="setup_definition_formula">Fórmula</string>
+    <string name="setup_formula_percent_drop">Queda percentual: (A − B) / A × 100</string>
+    <string name="setup_definition_source_a">Fonte A</string>
+    <string name="setup_definition_source_b">Fonte B</string>
+    <string name="setup_definition_choose_source">Escolha uma leitura</string>
+    <string name="setup_definition_sources_needed">Uma leitura calculada precisa de duas leituras numéricas como base. Adicione-as primeiro.</string>
+    <string name="setup_definition_unit">Unidade</string>
+    <string name="setup_definition_decimals">Casas decimais</string>
+    <string name="setup_definition_target">Faixa-alvo</string>
+    <string name="setup_definition_target_low">Mínimo</string>
+    <string name="setup_definition_target_high">Máximo</string>
+    <string name="setup_definition_meter">Medidor (só aumenta)</string>
+    <string name="setup_definition_save">Salvar leitura</string>
+    <plurals name="setup_definition_frozen">
+        <item quantity="one">Usada em %1$d leitura</item>
+        <item quantity="other">Usada em %1$d leituras</item>
+    </plurals>
+
+    <plurals name="setup_definition_in_use">
+        <item quantity="one">%1$d registro já usa esta leitura, por isso a chave, a origem e o tipo dela são fixos.</item>
+        <item quantity="other">%1$d registros já usam esta leitura, por isso a chave, a origem e o tipo dela são fixos.</item>
+    </plurals>
+    <string name="setup_definition_breaks_derived">Usada como fonte por %1$s — altere essa leitura calculada primeiro.</string>
+    <string name="setup_definition_breaks_profiles">Oferecida como campo por %1$s — tire-a dessa ação primeiro.</string>
+    <string name="setup_another_reading">outra leitura</string>
+    <string name="setup_names_last_and">%1$s e %2$s</string>
+    <string name="setup_failed_save_reading">Não foi possível salvar esta leitura.</string>
+    <string name="setup_failed_delete_this_reading">Não foi possível excluir esta leitura.</string>
+
+    <string name="setup_problem_not_a_number">Não é um número</string>
+    <string name="setup_problem_decimals_range">As casas decimais devem ser de 0 a 4</string>
+    <string name="setup_problem_label_required">Dê um rótulo à leitura</string>
+    <string name="setup_problem_bad_key">Chave: apenas letras minúsculas, dígitos e _</string>
+    <string name="setup_problem_key_taken">Outra leitura já usa esta chave</string>
+    <string name="setup_problem_range_order">O mínimo não pode ser maior que o máximo</string>
+    <string name="setup_problem_range_on_non_number">Só uma leitura numérica tem faixa-alvo</string>
+    <string name="setup_problem_meter_on_non_number">Só uma leitura numérica pode ser um medidor</string>
+    <string name="setup_problem_two_sources">Escolha duas leituras numéricas diferentes</string>
+    <string name="setup_problem_unknown_source">Essa leitura não existe mais</string>
+    <string name="setup_problem_source_other_asset">A fonte deve pertencer a este equipamento</string>
+    <string name="setup_problem_source_not_entered">A fonte deve ser uma leitura digitada por alguém</string>
+    <string name="setup_problem_source_not_number">A fonte deve ser uma leitura numérica</string>
+    <string name="setup_problem_source_is_meter">Um medidor não pode ser fonte</string>
+    <string name="setup_problem_derived_not_number">Uma leitura calculada é um número</string>
+    <string name="setup_problem_derived_is_meter">Uma leitura calculada não é um medidor</string>
+    <string name="setup_problem_spec_on_entered">Uma leitura digitada não tem fórmula</string>
+
+    <string name="setup_profile_eyebrow_edit">EDITAR AÇÃO</string>
+    <string name="setup_profile_eyebrow_new">NOVA AÇÃO</string>
+    <string name="setup_profile_eyebrow_edit_asset">EDITAR AÇÃO · %1$s</string>
+    <string name="setup_profile_eyebrow_new_asset">NOVA AÇÃO · %1$s</string>
+    <string name="setup_profile_name">Nome</string>
+    <string name="setup_profile_kind">Tipo</string>
+    <string name="setup_profile_default_title">Título padrão</string>
+    <string name="setup_profile_fields_header">Campos</string>
+    <string name="setup_profile_fields_empty">Nenhum campo ainda · esta ação apenas cria um registro</string>
+    <string name="setup_profile_add_field">Adicionar campo</string>
+    <string name="setup_profile_all_fields_used">Todas as leituras digitadas deste equipamento já estão nesta ação.</string>
+    <string name="setup_field_required">Obrigatório</string>
+    <string name="setup_field_optional">Opcional</string>
+    <string name="setup_field_picker_title">Adicionar um campo</string>
+    <string name="setup_profile_materials_header">Materiais</string>
+    <string name="setup_profile_materials_empty">Nenhum material sugerido · o formulário do registro aceita qualquer um</string>
+    <string name="setup_profile_add_material">Adicionar material</string>
+    <string name="setup_material_name">Material</string>
+    <string name="setup_material_quantity">Qtd.</string>
+    <string name="setup_material_unit">Unidade</string>
+    <string name="setup_material_remove">Remover material</string>
+    <string name="setup_profile_save">Salvar ação</string>
+
+    <string name="setup_problem_action_name_required">Dê um nome à ação</string>
+    <string name="setup_problem_action_name_taken">Outra ação já usa este nome</string>
+    <string name="setup_problem_bad_material">Precisa de um nome e de uma quantidade igual ou maior que 0</string>
+    <string name="setup_problem_quantity_not_number">A quantidade deve ser um número ou ficar vazia</string>
+    <string name="setup_failed_save_action">Não foi possível salvar esta ação.</string>
+    <string name="setup_failed_delete_this_action">Não foi possível excluir esta ação.</string>
+
+    <string name="setup_problem_field_not_this_asset">não é uma definição deste equipamento</string>
+    <string name="setup_problem_field_derived">valores calculados são computados, não digitados</string>
+    <string name="setup_problem_field_archived">arquivada</string>
+    <string name="setup_problem_field_listed_twice">listada duas vezes</string>
+</resources>

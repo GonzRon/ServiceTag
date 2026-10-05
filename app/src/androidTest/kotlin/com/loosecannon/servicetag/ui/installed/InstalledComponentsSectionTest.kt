@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.l10n.dateFieldText
 import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.SupplyId
@@ -32,11 +33,11 @@ import com.loosecannon.servicetag.ui.asset.NAME_FIELD
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.supplies.ADD_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.CHOOSE_A_SUPPLY
-import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.LINK_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.REMOVE_LINK
 import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
+import com.loosecannon.servicetag.ui.supplies.linkedTo
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -288,7 +289,7 @@ class InstalledComponentsSectionTest {
         rule.onNodeWithText("Remove").assertExists()
         rule.onNodeWithText("Edit").assertExists()
 
-        rule.onNodeWithText(LINKED_TO.format("Example 12 V Battery")).performClick()
+        rule.onNodeWithText(linkedTo("Example 12 V Battery")).performClick()
         assertEquals(cellId, openedSupply)
         rule.onNodeWithText(INSTALL_INSIDE).performScrollTo().performClick()
         assertEquals(1, insideTaps)
@@ -447,7 +448,7 @@ class InstalledComponentsSectionTest {
 
         rule.onNodeWithText(replaceTitle("Position 1")).assertIsDisplayed()
         rule.onNode(hasSetTextAction() and hasText("Position 1")).assertExists()
-        rule.onNodeWithText(LINKED_TO.format("Example Old Battery")).assertExists()
+        rule.onNodeWithText(linkedTo("Example Old Battery")).assertExists()
         rule.onNodeWithText("ARCHIVED").assertExists()
         rule.onNodeWithText(SUPPLY_ITEM_GONE).assertExists()
         rule.onNodeWithText(SUBTREE_REMOVED_TOO).assertExists()
@@ -672,7 +673,8 @@ class InstalledComponentsSectionTest {
         rule.onNodeWithText(INSTALL_COMPONENT).assertIsDisplayed()
         rule.onAllNodesWithText(CHOOSE_A_SUPPLY).assertCountEquals(0)
         rule.onNode(hasSetTextAction() and hasText("Example Battery Pack")).assertExists()
-        rule.onNode(hasSetTextAction() and hasText("2026-01-05")).assertExists()
+        // The form keeps ISO; the field draws the device's own order (#102).
+        rule.onNode(hasSetTextAction() and hasText(dateFieldText("2026-01-05"))).assertExists()
         rule.onAllNodesWithContentDescription(REMOVE_FROM_COMPOSITION).assertCountEquals(1)
         rule.onNodeWithText("Example 12 V Battery").performScrollTo().assertIsDisplayed()
         assertEquals(0, dismissals)

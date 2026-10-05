@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.setup
 
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
@@ -18,7 +19,9 @@ import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -123,19 +126,19 @@ class AssetSetupViewModel(
         reorderProfiles(ordered.movedBy(id, up) ?: return)
     }
 
-    fun reorderDefinitions(orderedIds: List<DefinitionId>) = attempt("Could not reorder the readings.") {
+    fun reorderDefinitions(orderedIds: List<DefinitionId>) = attempt(R.string.setup_failed_reorder_readings) {
         reorderDefinitions.run(assetId, orderedIds)
     }
 
-    fun reorderProfiles(orderedIds: List<ProfileId>) = attempt("Could not reorder the actions.") {
+    fun reorderProfiles(orderedIds: List<ProfileId>) = attempt(R.string.setup_failed_reorder_actions) {
         reorderProfiles.run(assetId, orderedIds)
     }
 
-    fun archiveDefinition(id: DefinitionId, archived: Boolean) = attempt("Could not change that reading.") {
+    fun archiveDefinition(id: DefinitionId, archived: Boolean) = attempt(R.string.setup_failed_change_reading) {
         archiveDefinition.run(id, archived)
     }
 
-    fun archiveProfile(id: ProfileId, archived: Boolean) = attempt("Could not change that action.") {
+    fun archiveProfile(id: ProfileId, archived: Boolean) = attempt(R.string.setup_failed_change_action) {
         archiveProfile.run(id, archived)
     }
 
@@ -150,17 +153,22 @@ class AssetSetupViewModel(
             when (val failure = outcome.exceptionOrNull()) {
                 null -> Unit
                 is DefinitionReferenced -> _refusal.value = failure
-                else -> _messages.tryEmit(failure.transferredOutOr("Could not delete that reading."))
+                else -> _messages.tryEmit(failure.transferredOutOr(localized(R.string.setup_failed_delete_that_reading)))
             }
         }
     }
 
-    fun deleteProfile(id: ProfileId) = attempt("Could not delete that action.") { deleteProfile.run(id) }
+    fun deleteProfile(id: ProfileId) = attempt(R.string.setup_failed_delete_that_action) { deleteProfile.run(id) }
 
-    /** Every action but the delete refusal: do it, and say one line if it could not be done. */
-    private fun attempt(onFailure: String, block: suspend () -> Unit) {
+    /**
+     * Every action but the delete refusal: do it, and say one line if it could not be done. The line is read
+     * when it is said, in the language of that moment (#102).
+     */
+    private fun attempt(@StringRes onFailure: Int, block: suspend () -> Unit) {
         viewModelScope.launch {
-            runCatching { block() }.exceptionOrNull()?.let { _messages.tryEmit(it.transferredOutOr(onFailure)) }
+            runCatching { block() }.exceptionOrNull()?.let {
+                _messages.tryEmit(it.transferredOutOr(localized(onFailure)))
+            }
         }
     }
 }

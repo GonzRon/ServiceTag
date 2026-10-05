@@ -8,12 +8,13 @@ import com.loosecannon.servicetag.core.usecase.TransferImportOutcome
 import com.loosecannon.servicetag.core.usecase.TransferImportPreview
 import com.loosecannon.servicetag.core.usecase.TransferImportResult
 import com.loosecannon.servicetag.core.transfer.TransferPackManifest
+import com.loosecannon.servicetag.l10n.localizedDate
+import com.loosecannon.servicetag.l10n.localizedList
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import java.io.File
 import java.io.FileInputStream
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,11 @@ data class TransferImportState(
     val duplicates: List<String> = emptyList(),
     /** P77-43; or P77-44 and a P77-45 per bound tag; or a P77-67 per asset not brought back. */
     val outcome: List<String> = emptyList(),
+    /**
+     * What [outcome] says, as the use case decided it. The screen styles the lines by this and never by their words
+     * (#102): "already here" is information, a conflict or an asset not brought back is a refusal.
+     */
+    val outcomeKind: TransferImportOutcome = TransferImportOutcome.READY,
     val importEnabled: Boolean = false,
     val refusal: String? = null,
     val done: String? = null,
@@ -124,12 +130,13 @@ class TransferImportViewModel(
                 phase = TransferImportPhase.PREVIEW,
                 note = preview.manifest.note.takeIf { note -> note.isNotBlank() }?.let(TransferImportStrings::note),
                 created = TransferImportStrings.created(
-                    DISPLAY_DATE.format(Instant.ofEpochMilli(preview.manifest.createdAt).atZone(zone).toLocalDate()),
+                    localizedDate(Instant.ofEpochMilli(preview.manifest.createdAt).atZone(zone).toLocalDate()),
                 ),
                 contains = countsOf(preview.manifest),
                 comingBack = preview.returning.map { asset -> TransferImportStrings.comingBack(asset.name) },
                 duplicates = preview.duplicates.map { d -> TransferImportStrings.duplicate(d.incoming, d.local) },
                 outcome = outcome,
+                outcomeKind = preview.outcome,
                 importEnabled = preview.importable,
             )
         }
@@ -161,7 +168,7 @@ class TransferImportViewModel(
                     _state.update {
                         it.copy(
                             phase = TransferImportPhase.DONE,
-                            done = TransferImportStrings.imported(countsOf(result.manifest).joinToString(", ")),
+                            done = TransferImportStrings.imported(localizedList(countsOf(result.manifest))),
                         )
                     }
                 }
@@ -243,6 +250,5 @@ class TransferImportViewModel(
 
     private companion object {
         const val TAG = "TransferImport"
-        val DISPLAY_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
     }
 }

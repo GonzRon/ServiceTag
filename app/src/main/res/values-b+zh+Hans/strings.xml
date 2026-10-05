@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings.xml. -->
+<resources>
+    <string name="format_date_display">uuuu年M月d日</string>
+    <string name="format_date_month_day">M月d日</string>
+    <string name="format_date_time_display">uuuu年M月d日 HH:mm</string>
+    <string name="format_language">zh</string>
+    <string name="format_list_separator">"、"</string>
+    <string name="format_date_input_letters">DMY</string>
+</resources>

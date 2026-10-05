@@ -66,15 +66,15 @@ class SaveProfile(
         val alreadyOnProfile = existing?.fields?.map { it.definitionId }?.toSet().orEmpty()
         for (input in cmd.fields) {
             val definition = definitions.get(input.definitionId)
-            val reason = when {
-                definition == null || definition.assetId != cmd.assetId -> "not a definition of this asset"
-                definition.kind != DefinitionKind.ENTERED -> "derived values are computed, not entered"
-                definition.archivedAt != null && input.definitionId !in alreadyOnProfile -> "archived"
-                !seen.add(input.definitionId) -> "listed twice"
+            val cause = when {
+                definition == null || definition.assetId != cmd.assetId -> BadFieldCause.NOT_THIS_ASSET
+                definition.kind != DefinitionKind.ENTERED -> BadFieldCause.DERIVED
+                definition.archivedAt != null && input.definitionId !in alreadyOnProfile -> BadFieldCause.ARCHIVED
+                !seen.add(input.definitionId) -> BadFieldCause.LISTED_TWICE
                 else -> null
             }
-            if (reason != null) {
-                problems += ProfileProblem.BadField(input.definitionId, reason)
+            if (cause != null) {
+                problems += ProfileProblem.BadField(input.definitionId, cause)
                 continue
             }
             fields += ProfileField(

@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_supplies_reminders.xml. -->
+<resources>
+    <string name="supplies_section">आपूर्ति सामग्री</string>
+    <string name="supplies_supply_item">आपूर्ति सामग्री</string>
+    <string name="supplies_no_supplies_yet">अभी कोई आपूर्ति सामग्री नहीं।</string>
+    <string name="supplies_part_number_field">पार्ट नंबर</string>
+    <string name="supplies_preferred_unit_field">पसंदीदा इकाई</string>
+    <string name="supplies_specifications_section">स्पेसिफ़िकेशन</string>
+    <string name="supplies_add_specification">स्पेसिफ़िकेशन जोड़ें</string>
+    <string name="supplies_remove_specification">स्पेसिफ़िकेशन हटाएँ</string>
+    <string name="supplies_no_specifications">कोई स्पेसिफ़िकेशन नहीं</string>
+    <string name="supplies_used_by_section">इनमें इस्तेमाल</string>
+    <string name="supplies_not_used_by_any_asset">किसी भी उपकरण में इस्तेमाल नहीं</string>
+    <string name="supplies_specification_needs_label_and_value">हर स्पेसिफ़िकेशन के लिए लेबल और मान ज़रूरी है।</string>
+    <string name="supplies_add_supply">आपूर्ति सामग्री जोड़ें</string>
+    <string name="supplies_no_supplies">कोई आपूर्ति सामग्री नहीं</string>
+    <string name="supplies_choose_a_supply">आपूर्ति सामग्री चुनें</string>
+    <string name="supplies_no_supply_items_yet">अभी कोई आपूर्ति सामग्री नहीं है। “रखरखाव › आपूर्ति सामग्री” में एक जोड़ें।</string>
+    <string name="supplies_edit_role">भूमिका बदलें</string>
+    <string name="supplies_role_taken">इस उपकरण में वह आपूर्ति सामग्री पहले से उसी भूमिका में है।</string>
+    <string name="supplies_item_gone">वह आपूर्ति सामग्री अब उपलब्ध नहीं है।</string>
+    <string name="supplies_link_supply">आपूर्ति सामग्री लिंक करें</string>
+    <string name="supplies_linked_to">%1$s से लिंक है</string>
+    <string name="supplies_remove_link">लिंक हटाएँ</string>
+
+    <string name="supplies_item_archived_badge">संग्रहित</string>
+    <string name="supplies_more">ज़्यादा</string>
+    <string name="supplies_remove_row">हटाएँ</string>
+    <string name="supplies_back">वापस जाएँ</string>
+    <string name="supplies_cancel">रद्द करें</string>
+    <string name="supplies_save">सहेजें</string>
+    <string name="supplies_edit">बदलाव करें</string>
+    <string name="supplies_archive">संग्रहित करें</string>
+    <string name="supplies_unarchive">संग्रह से निकालें</string>
+    <string name="supplies_name_field">नाम</string>
+    <string name="supplies_specification_label_field">लेबल</string>
+    <string name="supplies_specification_value_field">मान</string>
+    <string name="supplies_specification_unit_field">इकाई</string>
+
+    <string name="installed_components_section">लगे हुए पुर्ज़े</string>
+    <string name="installed_no_installed_components">कोई लगा हुआ पुर्ज़ा नहीं</string>
+    <string name="installed_install_component">पुर्ज़ा लगाएँ</string>
+    <string name="installed_install_inside">इसके अंदर लगाएँ</string>
+    <string name="installed_inside_of">%1$s के अंदर</string>
+    <string name="installed_serial_or_lot">सीरियल या लॉट</string>
+    <string name="installed_installed_on">लगाने की तारीख</string>
+    <string name="installed_removed_on">निकालने की तारीख</string>
+    <string name="installed_replace">बदलें</string>
+    <string name="installed_replace_title">%1$s बदलें</string>
+    <string name="installed_remove_title">%1$s निकालें</string>
+    <string name="installed_subtree_removed_too">इसके अंदर लगा सब कुछ भी उसी तारीख को निकाला जाता है।</string>
+    <string name="installed_edit_component">पुर्ज़े में बदलाव करें</string>
+    <string name="installed_history">इतिहास</string>
+    <string name="installed_installed_on_day">%1$s को लगाया गया</string>
+    <string name="installed_install_date_not_recorded">लगाने की तारीख दर्ज नहीं है</string>
+    <string name="installed_removed_on_day">%1$s को निकाला गया</string>
+    <string name="installed_removed_count">निकाले गए (%1$d)</string>
+    <string name="installed_component_changed">यह पुर्ज़ा निकाला या बदला जा चुका है। कुछ भी सहेजा नहीं गया।</string>
+    <string name="installed_removal_before_install">निकालने की तारीख, लगाने की तारीख से पहले की नहीं हो सकती।</string>
+    <string name="installed_composition_line">%1$s × %2$s</string>
+    <string name="installed_more_entries">+%1$d और</string>
+    <string name="installed_composition_section">बनावट</string>
+    <string name="installed_remove_from_composition">बनावट से हटाएँ</string>
+    <string name="installed_composition_quantity_required">हर आपूर्ति सामग्री की मात्रा शून्य से ज़्यादा होनी चाहिए।</string>
+    <string name="installed_documents_and_references">दस्तावेज़ और संदर्भ</string>
+    <string name="installed_this_installed_component">यह लगा हुआ पुर्ज़ा</string>
+    <string name="installed_from_supply">%1$s से</string>
+    <string name="installed_open_the_supply_to_change">इन्हें जोड़ने या बदलने के लिए आपूर्ति सामग्री खोलें।</string>
+
+    <string name="installed_back">वापस जाएँ</string>
+    <string name="installed_remove">निकालें</string>
+    <string name="installed_edit">बदलाव करें</string>
+    <string name="installed_save">सहेजें</string>
+    <string name="installed_cancel">रद्द करें</string>
+    <string name="installed_quantity_field">मात्रा</string>
+    <string name="installed_unit_field">इकाई</string>
+
+    <string name="reminders_permission_rationale_maintenance">रखरखाव देय होने पर आपको याद दिलाने के लिए, ServiceTag को सूचनाएं भेजने की अनुमति चाहिए।</string>
+    <string name="reminders_permission_rationale_warranty">वारंटी खत्म होने से पहले आपको याद दिलाने के लिए, ServiceTag को सूचनाएं भेजने की अनुमति चाहिए।</string>
+    <string name="reminders_permission_rationale_loan">उधार की वापसी की तारीख आने पर आपको याद दिलाने के लिए, ServiceTag को सूचनाएं भेजने की अनुमति चाहिए।</string>
+
+    <string name="reminders_health_notifications_blocked">सूचनाएं बंद हैं, इसलिए रखरखाव के रिमाइंडर नहीं आएँगे।</string>
+    <string name="reminders_health_reminders_globally_off">ServiceTag में रिमाइंडर बंद हैं।</string>
+    <string name="reminders_health_digest_alarm_missing">रोज़ होने वाली रिमाइंडर जाँच शेड्यूल नहीं है, इसलिए हो सकता है कि आज के रखरखाव की सूचना न मिले।</string>
+    <string name="reminders_health_backstop_work_missing">बैकग्राउंड में चलने वाली सुरक्षा जाँच नहीं चल रही है, इसलिए कोई छूटा हुआ रिमाइंडर पकड़ा नहीं जाएगा।</string>
+    <string name="reminders_health_app_restricted">यह फ़ोन ServiceTag को बैकग्राउंड में रोक रहा है, इसलिए रिमाइंडर देर से आ सकते हैं या बिल्कुल नहीं आ सकते।</string>
+    <plurals name="reminders_health_schedule_no_provider">
+        <item quantity="one">%1$d शेड्यूल में रिमाइंडर चालू हैं, लेकिन रिमाइंडर डिलीवरी सेट अप नहीं है।</item>
+        <item quantity="other">%1$d शेड्यूल में रिमाइंडर चालू हैं, लेकिन रिमाइंडर डिलीवरी सेट अप नहीं है।</item>
+    </plurals>
+    <plurals name="reminders_health_schedule_provider_disabled">
+        <item quantity="one">%1$d शेड्यूल में रिमाइंडर चालू हैं, लेकिन उन्हें भेजने का कोई तरीका नहीं है।</item>
+        <item quantity="other">%1$d शेड्यूल में रिमाइंडर चालू हैं, लेकिन उन्हें भेजने का कोई तरीका नहीं है।</item>
+    </plurals>
+    <plurals name="reminders_health_no_baseline">
+        <item quantity="one">%1$d शेड्यूल को देय होने से पहले एक मीटर रीडिंग चाहिए।</item>
+        <item quantity="other">%1$d शेड्यूल को देय होने से पहले एक मीटर रीडिंग चाहिए।</item>
+    </plurals>
+
+    <string name="notification_channel_due_name">रखरखाव देय</string>
+    <string name="notification_channel_due_description">देय रखरखाव के रिमाइंडर।</string>
+    <string name="notification_channel_overdue_name">रखरखाव अतिदेय</string>
+    <string name="notification_channel_overdue_description">अतिदेय रखरखाव के रिमाइंडर।</string>
+    <string name="notification_channel_warranty_name">वारंटी रिमाइंडर</string>
+    <string name="notification_channel_warranty_description">वारंटी खत्म होने से पहले के रिमाइंडर।</string>
+    <string name="notification_channel_loans_name">उधार रिमाइंडर</string>
+    <string name="notification_channel_loans_description">उधार दी गई चीज़ की वापसी की तारीख आने पर रिमाइंडर।</string>
+
+    <plurals name="notification_summary_title">
+        <item quantity="one">रखरखाव के %1$d काम पर ध्यान देना ज़रूरी है</item>
+        <item quantity="other">रखरखाव के %1$d कामों पर ध्यान देना ज़रूरी है</item>
+    </plurals>
+    <plurals name="notification_summary_overdue">
+        <item quantity="one">%1$d अतिदेय</item>
+        <item quantity="other">%1$d अतिदेय</item>
+    </plurals>
+    <plurals name="notification_summary_due">
+        <item quantity="one">%1$d देय</item>
+        <item quantity="other">%1$d देय</item>
+    </plurals>
+    <plurals name="notification_summary_due_soon">
+        <item quantity="one">%1$d जल्द देय</item>
+        <item quantity="other">%1$d जल्द देय</item>
+    </plurals>
+    <string name="notification_summary_body">%1$s।</string>
+
+    <string name="notification_item_title">%1$s — %2$s</string>
+    <string name="notification_item_due_on">%1$s को देय।</string>
+    <string name="notification_item_overdue_since">%1$s से अतिदेय।</string>
+    <string name="notification_item_meter_due">%1$s %2$s पर देय, अभी %3$s।</string>
+    <string name="notification_item_meter_due_no_unit">%1$s पर देय, अभी %2$s।</string>
+
+    <string name="notification_status_due">देय</string>
+    <string name="notification_status_overdue">अतिदेय</string>
+    <string name="notification_status_expires_soon">जल्द खत्म होगी</string>
+    <string name="notification_status_due_back">वापसी देय</string>
+    <string name="notification_status_not_returned">वापस नहीं आया</string>
+
+    <string name="notification_action_done">पूरा</string>
+    <string name="notification_action_snooze_one_day">1 दिन स्नूज़ करें</string>
+    <string name="notification_action_open">खोलें</string>
+
+    <string name="notification_warranty_title">%1$s — वारंटी</string>
+    <string name="notification_warranty_body">वारंटी %1$s को खत्म होगी।</string>
+    <string name="notification_loan_title">%1$s — वापसी की तारीख</string>
+    <string name="notification_loan_body_through">%1$s को उधार दिया गया। वापसी की तारीख: %2$s।</string>
+    <string name="notification_loan_body_after">%1$s को उधार दिया गया। वापसी की तारीख थी: %2$s।</string>
+</resources>

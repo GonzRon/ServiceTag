@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_components_health.xml. -->
+<resources>
+    <string name="ui_action_cancel">取消</string>
+    <string name="ui_action_save">保存</string>
+    <string name="ui_typed_confirm_label">输入%1$s以确认</string>
+
+    <string name="ui_instrument_header_reading">读数</string>
+    <string name="ui_instrument_header_value">数值</string>
+    <string name="ui_instrument_header_target">目标</string>
+    <string name="ui_instrument_required">必填</string>
+    <string name="ui_instrument_not_a_number">不是数字</string>
+    <string name="ui_instrument_check_value">请检查此数值</string>
+    <string name="ui_instrument_yes">是</string>
+    <string name="ui_instrument_no">否</string>
+
+    <string name="ui_ledger_day_month">%2$s%1$s日</string>
+
+    <string name="condition_word_operational">正常运行</string>
+    <string name="condition_word_degraded">性能下降</string>
+    <string name="condition_word_down">停机</string>
+    <string name="condition_not_recorded">未记录状况</string>
+    <string name="condition_option_operational">正常运行</string>
+    <string name="condition_helper_operational">可正常使用。</string>
+    <string name="condition_option_degraded">性能下降</string>
+    <string name="condition_helper_degraded">可以工作，但存在已知问题。</string>
+    <string name="condition_option_down">停机</string>
+    <string name="condition_helper_down">无法用于预期用途。</string>
+    <string name="condition_no_reason_given">未说明原因</string>
+    <string name="condition_log_incident">记录故障</string>
+    <string name="condition_since">自%1$s起</string>
+    <string name="condition_component_line">%1$s %2$s — %3$s</string>
+
+    <string name="condition_title">状况</string>
+    <string name="condition_change">更改状况</string>
+    <string name="condition_what_is_wrong">出了什么问题？（可选）</string>
+    <string name="condition_when_did_this_change">状况何时改变？</string>
+    <string name="condition_save">保存状况</string>
+    <string name="condition_date_not_later_than_today">日期不能晚于今天。</string>
+    <string name="condition_log_incident_details_question">记录故障详情？</string>
+    <string name="condition_log_incident_details_body">%1$s处于%2$s状态。要在服务记录中记下出了什么问题吗？</string>
+    <string name="condition_log_incident_details">记录故障详情</string>
+    <string name="condition_save_only">仅保存状况</string>
+    <string name="condition_saving_also_records">保存时也会将%1$s记录为%2$s。</string>
+
+    <string name="condition_mark_operational">标记为正常运行</string>
+    <string name="condition_mark_operational_title">标记为正常运行？</string>
+    <string name="condition_mark_operational_body">之前的%1$s记录会保留在历史记录中。</string>
+    <string name="condition_operational_offer_body">已记录%1$s。%2$s是否已恢复正常工作？</string>
+    <string name="condition_not_yet">暂未</string>
+    <string name="condition_start_season">开始使用季</string>
+    <string name="condition_end_season">结束使用季</string>
+    <string name="condition_start_season_question">现在开始使用季？</string>
+    <string name="condition_end_season_question">现在结束使用季？</string>
+    <string name="condition_you_logged">已记录%1$s。</string>
+    <string name="condition_did_this_affect_use">这是否影响设备的使用？</string>
+    <string name="condition_mark_down">标记为停机</string>
+    <string name="condition_mark_degraded">标记为性能下降</string>
+    <string name="condition_no_change">不更改</string>
+
+    <string name="health_band_nominal">良好</string>
+    <string name="health_band_warning">警告</string>
+    <string name="health_band_critical">严重</string>
+    <string name="health_not_tracked">未跟踪</string>
+    <string name="health_badge_label">%1$s %2$d</string>
+    <string name="health_replaced">于%1$s更换，距今%2$s</string>
+    <string name="health_no_replacement_recorded">尚无更换记录</string>
+    <string name="health_replacement_action_removed">更换快捷操作已被删除。</string>
+    <string name="health_up_to_date">%1$s未逾期</string>
+    <string name="health_postponed">%1$s已延期至%2$s</string>
+    <string name="health_not_tracked_out_of_season">处于使用季外时不跟踪</string>
+    <string name="health_not_tracked_paused">保养计划暂停期间不跟踪</string>
+    <string name="health_not_tracked_link">未跟踪：关联的保养计划没有日期规则，或属于其他设备。</string>
+    <string name="health_subject_score">%1$s %2$d</string>
+    <string name="health_aggregate_line">%1$d — %2$s</string>
+    <string name="health_critical_line">严重：%1$s %2$d</string>
+    <string name="health_dashboard_row">%1$s %2$s</string>
+
+    <string name="health_name">名称</string>
+    <string name="health_what_is_it">这是什么？</string>
+    <string name="health_kind_whole_asset">整台设备</string>
+    <string name="health_kind_part">某个部件</string>
+    <string name="health_kind_medium">需要维护的介质，如水</string>
+    <string name="health_what_wears_it_down">什么会使它损耗？</string>
+    <string name="health_driver_age">自更换以来的时间</string>
+    <string name="health_driver_overdue">逾期保养</string>
+    <string name="health_replacement_quick_action">更换快捷操作</string>
+    <string name="health_any_replacement">任何更换</string>
+    <string name="health_maintenance_schedule">保养计划</string>
+    <string name="health_age_threshold_nominal">多少天内视为全新</string>
+    <string name="health_age_threshold_warning">多少天后警告</string>
+    <string name="health_age_threshold_critical">多少天后为严重</string>
+    <string name="health_overdue_threshold_grace">宽限期（逾期天数）</string>
+    <string name="health_overdue_threshold_warning">逾期多少天时警告</string>
+    <string name="health_overdue_threshold_critical">逾期多少天时为严重</string>
+    <string name="health_thresholds_must_rise">每个数字都必须大于前一个。</string>
+    <string name="health_enter_all_three_numbers">请输入全部三个数字，或使用参考值。</string>
+    <string name="health_use_a_starting_point">使用参考值</string>
+    <string name="health_starting_point_engine_service">发动机保养：逾期%1$d / %2$d / %3$d天</string>
+    <string name="health_starting_point_water_care">水质维护：逾期%1$d / %2$d / %3$d天</string>
+    <string name="health_starting_points_not_safety_limits">这些是参考值，并非安全限值。保存前请针对此设备进行核对。</string>
+    <string name="health_use_these_numbers">使用这些数字</string>
+    <string name="health_weight">权重</string>
+    <string name="health_schedule_already_drives_another">该保养计划已决定另一个健康指标。</string>
+    <string name="health_archive_subject">归档指标</string>
+    <string name="health_restore_subject">恢复指标</string>
+
+    <string name="dashboard_all_categories">所有类别</string>
+    <string name="dashboard_all_statuses">所有状态</string>
+    <string name="dashboard_category_label">类别</string>
+    <string name="dashboard_status_label">保养状态</string>
+    <string name="dashboard_chip_not_recorded">未记录</string>
+    <string name="dashboard_settings">设置</string>
+    <string name="dashboard_child_assets_listed_on_parent">子设备会列在其所属的设备下。</string>
+    <string name="dashboard_nothing_matches">没有匹配的结果。</string>
+    <string name="dashboard_backup_eyebrow">备份</string>
+    <string name="dashboard_no_backup_yet">尚无备份</string>
+    <string name="dashboard_backup_why">只有存在备份时，标签才能在更换手机后继续使用。</string>
+    <string name="dashboard_export_now">立即导出</string>
+    <string name="dashboard_nothing_here_yet">这里还没有内容</string>
+    <string name="dashboard_add_first_asset">添加第一台设备</string>
+    <string name="dashboard_scan_a_tag">扫描标签</string>
+    <string name="dashboard_no_schedule_yet">尚无保养计划</string>
+</resources>

@@ -21,8 +21,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.StatusBadge
@@ -38,7 +42,6 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.StatusColor
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
  * The RATIFIED status word for each derived status (spec §9.1, D12 §5 `:274-296`).
@@ -51,23 +54,23 @@ import java.time.format.DateTimeFormatter
  * obliges nobody", so such a row is drawn with no status treatment at all rather than a drafted one.
  */
 fun statusLabel(status: DueStatus): String = when (status) {
-    DueStatus.OK -> "OK"
-    DueStatus.DUE_SOON -> "DUE SOON"
-    DueStatus.DUE -> "DUE"
-    DueStatus.OVERDUE -> "OVERDUE"
-    DueStatus.INACTIVE_SEASON -> "OUT OF SEASON"
-    DueStatus.PAUSED -> "PAUSED"
-    DueStatus.NO_DATA -> "NO BASELINE"
-    DueStatus.DEFERRED -> "DEFERRED"
+    DueStatus.OK -> localized(R.string.maintenance_status_ok)
+    DueStatus.DUE_SOON -> localized(R.string.maintenance_status_due_soon)
+    DueStatus.DUE -> localized(R.string.maintenance_status_due)
+    DueStatus.OVERDUE -> localized(R.string.maintenance_status_overdue)
+    DueStatus.INACTIVE_SEASON -> localized(R.string.maintenance_status_out_of_season)
+    DueStatus.PAUSED -> localized(R.string.maintenance_status_paused)
+    DueStatus.NO_DATA -> localized(R.string.maintenance_status_no_baseline)
+    DueStatus.DEFERRED -> localized(R.string.maintenance_status_deferred)
 }
 
 /** The RATIFIED dashboard section labels (D12 §10 `:706-707`; 1.4 spec §10.7 S93 for Deferred). */
 fun sectionLabel(section: AttentionSection): String = when (section) {
-    AttentionSection.ATTENTION -> "ATTENTION"
-    AttentionSection.UPCOMING -> "UPCOMING"
-    AttentionSection.CURRENT -> "CURRENT"
-    AttentionSection.DEFERRED -> "Deferred"
-    AttentionSection.OUT_OF_SEASON -> "OUT OF SEASON"
+    AttentionSection.ATTENTION -> localized(R.string.maintenance_dashboard_section_attention)
+    AttentionSection.UPCOMING -> localized(R.string.maintenance_dashboard_section_upcoming)
+    AttentionSection.CURRENT -> localized(R.string.maintenance_dashboard_section_current)
+    AttentionSection.DEFERRED -> localized(R.string.maintenance_dashboard_section_deferred)
+    AttentionSection.OUT_OF_SEASON -> localized(R.string.maintenance_dashboard_section_out_of_season)
 }
 
 /**
@@ -129,7 +132,7 @@ fun statusColors(status: DueStatus, colors: ServiceTagSemanticColors): StatusCol
 }
 
 /** The RATIFIED repair label, offered only by a **repairable** missing-meter-baseline row. */
-const val LOG_METER_READING = "Log meter reading"
+val LOG_METER_READING: String get() = localized(R.string.maintenance_log_meter_reading)
 
 /**
  * Whether this row is the **repairable** `NO_DATA` — a missing meter baseline, which is what "Log
@@ -157,7 +160,11 @@ fun meterLine(item: DueItem): String? {
     val due = item.computedDueMeter ?: return null
     val now = item.currentMeter ?: return null
     val unit = item.meterUnit.orEmpty()
-    return "Due at ${formatNumber(due)}${if (unit.isEmpty()) "" else " $unit"}, now ${formatNumber(now)}."
+    return if (unit.isEmpty()) {
+        localized(R.string.maintenance_meter_line_no_unit, formatNumber(due), formatNumber(now))
+    } else {
+        localized(R.string.maintenance_meter_line, formatNumber(due), unit, formatNumber(now))
+    }
 }
 
 /**
@@ -177,11 +184,9 @@ fun meterLine(item: DueItem): String? {
 fun snoozeLine(item: DueItem, nowMillis: Long, zone: ZoneId): String? {
     val until = item.snoozedUntil ?: return null
     if (until <= nowMillis) return null
-    return "Snoozed until ${Instant.ofEpochMilli(until).atZone(zone).toLocalDate().format(SNOOZE_DATE)}"
+    // The shipped display-date shape, the same one every other date in the app is drawn with.
+    return localized(R.string.maintenance_snoozed_until, localizedDate(Instant.ofEpochMilli(until).atZone(zone).toLocalDate()))
 }
-
-/** The shipped display-date shape, the same one every other date in the app is drawn with. */
-private val SNOOZE_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
 
 /**
  * The RATIFIED progress form of a group row: "3 of 5 complete".
@@ -206,7 +211,7 @@ fun progressLine(item: DueItem): String? {
  * the reason above: "0 of 0 complete" reads as done.
  */
 fun progressLine(complete: Int, required: Int): String? =
-    if (required == 0) null else "$complete of $required complete"
+    if (required == 0) null else localized(R.string.maintenance_progress, complete, required)
 
 /**
  * One schedule, wherever it is listed: the dashboard's attention sections, the Maintenance
@@ -289,7 +294,7 @@ fun DueItemRow(
             // Beside the status badge, never instead of it: the obligation has not moved (D-13).
             snoozeLine(item, System.currentTimeMillis(), ZoneId.systemDefault())?.let { QuietLine(it) }
             if (onRepair != null && item.isRepairableNoData) {
-                TextButton(onClick = onRepair, shape = ControlShape) { Text(LOG_METER_READING) }
+                TextButton(onClick = onRepair, shape = ControlShape) { Text(stringResource(R.string.maintenance_log_meter_reading)) }
             }
         }
         Icon(
@@ -329,8 +334,8 @@ private fun subtitleOf(item: DueItem): String = promotedSubtitle(item.assetName,
  * that names a component's parent draws — the dashboard's plain and condition rows through this, the
  * schedule and health rows through [promotedSubtitle].
  */
-internal fun partOfLine(parentName: String): String = "Part of $parentName"
+internal fun partOfLine(parentName: String): String = localized(R.string.maintenance_part_of, parentName)
 
 /** "\<asset\> · Part of \<parent\>" for a component, and the asset alone otherwise. */
 internal fun promotedSubtitle(assetName: String, parentName: String?): String =
-    parentName?.let { "$assetName · ${partOfLine(it)}" } ?: assetName
+    parentName?.let { localized(R.string.maintenance_promoted_subtitle, assetName, partOfLine(it)) } ?: assetName

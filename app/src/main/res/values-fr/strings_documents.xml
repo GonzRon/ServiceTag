@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_documents.xml. -->
+<resources>
+    <string name="documents_header">Documents</string>
+    <string name="documents_header_count">Documents · %1$d</string>
+    <string name="documents_empty">Aucun document pour l\'instant</string>
+    <string name="documents_add_file">Ajouter un fichier</string>
+    <string name="documents_take_photo">Prendre une photo</string>
+    <string name="documents_storage_headline">Stockage des pièces jointes</string>
+    <string name="documents_storage_not_set_up">Stockage des pièces jointes non configuré</string>
+    <string name="documents_storage_detail">Choisissez un dossier dans les paramètres</string>
+    <string name="documents_open_settings">Ouvrir les paramètres</string>
+    <string name="documents_no_app_can_pick_files">Aucune application ne permet de choisir des fichiers</string>
+    <string name="documents_no_app_can_open_file">Aucune application ne peut ouvrir ce fichier</string>
+    <string name="documents_no_camera_app">Aucune application d\'appareil photo sur cet appareil</string>
+    <string name="documents_not_on_device">Absent de cet appareil</string>
+    <string name="documents_more_for">Plus d\'options pour %1$s</string>
+    <string name="documents_more_for_role">Plus d\'options pour %1$s, %2$s</string>
+
+    <string name="documents_kind_photo">Photo</string>
+    <string name="documents_kind_label_photo">Photo de la plaque</string>
+    <string name="documents_kind_receipt">Reçu</string>
+    <string name="documents_kind_manual">Manuel</string>
+    <string name="documents_kind_warranty">Garantie</string>
+    <string name="documents_kind_document">Document</string>
+    <string name="documents_kind_other">Autre</string>
+
+    <string name="documents_size_bytes">%1$s o</string>
+    <string name="documents_size_kb">%1$s Ko</string>
+    <string name="documents_size_mb">%1$s Mo</string>
+
+    <string name="attachments_name_label">Nom</string>
+    <string name="attachments_kind_header">Type</string>
+    <string name="attachments_notes_label">Notes</string>
+    <string name="attachments_cancel">Annuler</string>
+    <string name="attachments_save">Enregistrer</string>
+    <string name="attachments_captured_on_label">Daté du</string>
+    <string name="attachments_delete">Supprimer</string>
+    <string name="attachments_delete_title">Supprimer le fichier ?</string>
+    <string name="attachments_delete_body">Supprimer %1$s ? Le fichier est retiré de votre dossier de pièces jointes.</string>
+
+    <string name="attachments_role_header">Rôle</string>
+    <string name="attachments_role_purchase_invoice_or_receipt">Facture ou reçu d\'achat</string>
+    <string name="attachments_role_user_manual">Manuel d\'utilisation</string>
+    <string name="attachments_role_service_manual">Manuel d\'entretien</string>
+    <string name="attachments_role_none">Aucun rôle</string>
+    <string name="attachments_adding_progress">Ajout de %1$d sur %2$d…</string>
+    <string name="attachments_could_not_save">Impossible d\'enregistrer %1$s</string>
+    <string name="attachments_could_not_delete">Impossible de supprimer ce fichier</string>
+    <string name="attachments_could_not_add">Impossible d\'ajouter %1$s</string>
+    <string name="attachments_blank_name">Donnez un nom au fichier</string>
+    <string name="attachments_no_store">Choisissez d\'abord un dossier de pièces jointes dans les paramètres</string>
+    <string name="attachments_store_unavailable">Le dossier des pièces jointes n\'est pas disponible</string>
+    <string name="attachments_too_large">Ce fichier dépasse 256 Mo</string>
+    <string name="attachments_owner_missing">Ce fichier n\'est plus là</string>
+    <string name="attachments_scan_failed">Impossible de vérifier le dossier des pièces jointes</string>
+    <string name="attachments_folder_fallback">Dossier</string>
+
+    <string name="references_header">Références</string>
+    <string name="references_header_count">Références · %1$d</string>
+    <string name="references_empty">Aucune référence pour l\'instant</string>
+    <string name="references_add_link">Ajouter un lien</string>
+    <string name="references_more">Plus d\'options</string>
+    <string name="references_open">Ouvrir</string>
+    <string name="references_edit">Modifier</string>
+    <string name="references_remove">Retirer</string>
+    <string name="references_kind_web_link">Lien web</string>
+    <string name="references_kind_note">Note</string>
+    <string name="references_kind_other">Autre</string>
+    <string name="references_blocked_at_open">ServiceTag n\'ouvrira pas ce type de lien.</string>
+    <string name="links_no_handler">Aucune application ne peut ouvrir ce lien</string>
+
+    <string name="references_edit_title">Modifier la référence</string>
+    <string name="references_link_label">Lien</string>
+    <string name="references_name_label">Nom</string>
+    <string name="references_description_label">Description</string>
+    <string name="references_cancel">Annuler</string>
+    <string name="references_save">Enregistrer</string>
+    <string name="references_remove_title">Retirer cette référence ?</string>
+    <string name="references_removed_from_asset">Le lien est retiré de cet équipement. Rien n\'est modifié dans l\'autre application.</string>
+    <string name="references_removed_from_supply">Le lien est retiré de cette fourniture. Rien n\'est modifié dans l\'autre application.</string>
+    <string name="references_removed_from_installed_component">Le lien est retiré de ce composant installé. Rien n\'est modifié dans l\'autre application.</string>
+    <string name="references_unknown_scheme_title">Enregistrer ce lien ?</string>
+    <string name="references_unknown_scheme_body">ServiceTag ne reconnaît pas les liens « %1$s ». Il sera enregistré tel quel et ouvert avec l\'application qui le prend en charge, quelle qu\'elle soit.</string>
+
+    <string name="references_blank_name">Donnez un nom à la référence</string>
+    <string name="references_not_a_link">Ce n\'est pas un lien.</string>
+    <string name="references_uri_too_long">Ce lien est trop long pour être enregistré.</string>
+    <string name="references_scheme_blocked">ServiceTag n\'enregistrera pas ce type de lien.</string>
+    <string name="references_duplicate_on_asset">Ce lien figure déjà sur cet équipement</string>
+    <string name="references_duplicate_on_supply">Ce lien figure déjà sur cette fourniture</string>
+    <string name="references_duplicate_on_installed_component">Ce lien figure déjà sur ce composant installé</string>
+
+    <string name="references_save_as_document">Enregistrer comme document</string>
+    <string name="references_downloading_from">Téléchargement depuis %1$s…</string>
+    <string name="references_download_progress">%1$s sur %2$s</string>
+    <string name="references_from_host">Depuis %1$s</string>
+    <string name="references_type_line">%1$s · %2$s</string>
+    <string name="references_saved_as_document">Enregistré comme document</string>
+    <string name="references_saved_to_documents">Enregistré dans Documents</string>
+    <string name="references_downloaded_from">Téléchargé depuis %1$s le %2$s</string>
+    <string name="references_open_source_link">Ouvrir le lien d\'origine</string>
+    <string name="references_network_denied">ServiceTag n\'est pas autorisé à utiliser le réseau : il ne peut donc pas télécharger ce fichier. Autorisez l\'accès au réseau dans les paramètres de l\'application, puis fermez ServiceTag et rouvrez-le.</string>
+    <string name="references_unreachable">Impossible de joindre %1$s. Vérifiez la connexion et réessayez.</string>
+    <string name="references_timed_out">Le téléchargement a pris trop de temps et a été interrompu.</string>
+    <string name="references_not_a_document">Ce lien ne mène pas à un type de document pris en charge. Il reste un lien.</string>
+    <string name="references_needs_sign_in">Ce fichier nécessite une connexion à un compte : ServiceTag ne peut donc pas le télécharger. Il reste un lien.</string>
+    <string name="references_server_error">Le serveur n\'a pas envoyé le fichier (erreur %1$d).</string>
+    <string name="references_redirect_refused">Ce lien redirige vers un endroit que ServiceTag ne suivra pas. Il reste un lien.</string>
+    <string name="references_already_have_on_asset">Cet équipement a déjà ce fichier : %1$s.</string>
+    <string name="references_already_have_on_supply">Cette fourniture a déjà ce fichier : %1$s.</string>
+    <string name="references_already_have_on_installed_component">Ce composant installé a déjà ce fichier : %1$s.</string>
+    <string name="references_interrupted">Le téléchargement n\'a pas pu aboutir. Réessayez.</string>
+    <string name="references_local_address">Ce lien pointe vers une adresse du réseau local : ServiceTag ne le téléchargera donc pas. Il reste un lien.</string>
+
+    <string name="contacts_no_app_can_open">Aucune application ne peut ouvrir ce contact</string>
+
+    <string name="share_title">Enregistrer dans ServiceTag</string>
+    <string name="share_received">Reçu</string>
+    <string name="share_attach_to">Joindre à</string>
+    <string name="share_choose_asset">Choisir un équipement</string>
+    <string name="share_name">Nom</string>
+    <string name="share_description">Description (facultative)</string>
+    <string name="share_type">Type</string>
+    <string name="share_save">Enregistrer</string>
+    <string name="share_cancel">Annuler</string>
+    <string name="share_close">Fermer</string>
+    <string name="share_save_as_note">Enregistrer comme note</string>
+    <string name="share_not_a_link">Ce n\'est pas un lien.</string>
+    <string name="share_no_assets">Ajoutez d\'abord un équipement dans ServiceTag, puis partagez à nouveau.</string>
+    <string name="share_no_folder">Choisissez un dossier de pièces jointes dans les paramètres de ServiceTag, puis partagez à nouveau.</string>
+    <string name="share_stream_refused">Ce fichier ne peut pas être accepté depuis l\'application qui l\'a partagé.</string>
+    <string name="share_unreadable">Impossible de lire le contenu partagé</string>
+    <string name="share_uri_too_long">Ce lien est trop long pour être enregistré.</string>
+    <string name="share_scheme_blocked">ServiceTag n\'enregistrera pas ce type de lien.</string>
+    <string name="share_duplicate_uri">Ce lien figure déjà sur cet équipement</string>
+    <string name="share_empty_file">Ce fichier est vide</string>
+    <string name="share_too_large">Ce fichier dépasse 256 Mo</string>
+    <string name="share_blank_file_name">Donnez un nom au fichier</string>
+    <string name="share_blank_reference_name">Donnez un nom à la référence</string>
+    <string name="share_confirm_title">Enregistrer ce lien ?</string>
+    <string name="share_confirm_body">ServiceTag ne reconnaît pas les liens « %1$s ». Il sera enregistré tel quel et ouvert avec l\'application qui le prend en charge, quelle qu\'elle soit.</string>
+    <string name="share_change">Changer</string>
+    <string name="share_no_active_assets">Aucun équipement actif</string>
+    <string name="share_search_installed_components">Rechercher des composants installés</string>
+    <string name="share_search_supplies">Rechercher des fournitures</string>
+    <string name="share_path_step">%1$s › %2$s</string>
+    <string name="share_this_asset">Cet équipement</string>
+    <string name="share_supply_shared">Fourniture — partagée entre plusieurs usages</string>
+    <string name="share_show_inside">Afficher le contenu de %1$s</string>
+    <string name="share_on_supply">Ceci sera enregistré sur la fourniture %1$s et disponible partout où cette fourniture est utilisée.</string>
+    <string name="share_saved_to_supply">Enregistré sur la fourniture %1$s.</string>
+    <string name="share_saved_to">Enregistré sur %1$s</string>
+    <string name="share_back">Retour</string>
+</resources>

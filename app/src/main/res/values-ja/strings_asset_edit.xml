@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_asset_edit.xml. -->
+<resources>
+    <string name="asset_edit_operating_season">稼働シーズン</string>
+    <string name="asset_edit_year_round">通年</string>
+    <string name="asset_edit_same_dates_every_year">毎年同じ日付</string>
+    <string name="asset_edit_started_and_ended_by_hand">手動で開始・終了</string>
+    <string name="asset_edit_season_starts">シーズン開始日</string>
+    <string name="asset_edit_season_ends">シーズン終了日</string>
+    <string name="asset_edit_season_may_run_across_the_new_year">シーズンは年をまたいでもかまいません（例：10月から4月まで）。</string>
+    <string name="asset_edit_is_this_asset_in_season">この機器は現在シーズン中ですか？</string>
+    <string name="asset_edit_in_season_now">シーズン中</string>
+    <string name="asset_edit_out_of_season_now">シーズン外</string>
+    <string name="asset_edit_you_start_and_end_the_season">シーズンは手動で開始・終了します。シーズンに従うよう設定されたメンテナンスは、シーズンが終了している間は待機します。</string>
+    <string name="asset_edit_season_strands">この機器の一部のメンテナンスは、シーズン前に済ませるよう設定されています。先にそれを変更してください：%1$s。</string>
+
+    <string name="asset_edit_maintenance_break">メンテナンス休止期間</string>
+    <string name="asset_edit_no_routine_maintenance_between_two_dates">2つの日付の間は定期メンテナンスを行わない</string>
+    <string name="asset_edit_break_starts">休止開始日</string>
+    <string name="asset_edit_break_ends">休止終了日</string>
+    <string name="asset_edit_break_helper">シーズンに従う、またはシーズン前に済ませるよう設定されたメンテナンスは、休止期間中に期限を迎えません。すでに期限切れの作業は期限切れのままですが、リマインダーは届きません。</string>
+    <string name="asset_edit_break_cannot_cover_the_year">休止期間を1年全体にすることはできません。</string>
+    <string name="asset_edit_break_strands">この機器の一部のメンテナンスは、休止期間前に済ませるよう設定されています。先にそれを変更してください：%1$s。</string>
+
+    <string name="asset_edit_health_subjects">健全性の評価対象</string>
+    <string name="asset_edit_add_health_subject">評価対象を追加</string>
+    <string name="asset_edit_combine_health_by">健全性の集約方法</string>
+    <string name="asset_edit_combine_worst">最も悪い評価対象</string>
+    <string name="asset_edit_combine_one">1つの評価対象</string>
+    <string name="asset_edit_combine_average">平均</string>
+    <string name="asset_edit_combine_weighted">加重平均</string>
+    <string name="asset_edit_which_subject">どの評価対象ですか？</string>
+
+    <plurals name="asset_edit_not_tied_to_season">
+        <item quantity="other">この機器には、稼働シーズンに連動していないメンテナンススケジュールが%1$d件あります。有効な間は、そのメンテナンスを行う時期を変更しない限り、機器がシーズン外でも期限を迎えたり、期限のままになったりすることがあります。</item>
+    </plurals>
+    <string name="asset_edit_review_maintenance_schedules">メンテナンススケジュールを確認</string>
+    <string name="asset_edit_keep_schedules_as_is">スケジュールをそのままにする</string>
+
+    <string name="asset_edit_key_documents">主要ドキュメント</string>
+    <string name="asset_edit_add_purchase_invoice_or_receipt">購入時の請求書または領収書を追加</string>
+    <string name="asset_edit_add_user_manual">取扱説明書を追加</string>
+    <string name="asset_edit_add_service_manual">サービスマニュアルを追加</string>
+    <string name="asset_edit_attached_when_you_save">保存時に添付されます</string>
+    <string name="asset_edit_remove">削除</string>
+    <string name="asset_edit_remove_file">%1$sを削除</string>
+
+    <string name="asset_edit_name_field">名前</string>
+    <string name="asset_edit_manufacturer_field">メーカー</string>
+    <string name="asset_edit_model_field">モデル</string>
+    <string name="asset_edit_serial_number_field">シリアル番号</string>
+    <string name="asset_edit_location_field">設置場所</string>
+    <string name="asset_edit_part_of_field">所属</string>
+    <string name="asset_edit_purchase_date_field">購入日</string>
+    <string name="asset_edit_in_service_date_field">使用開始日</string>
+    <string name="asset_edit_category_field">カテゴリ</string>
+    <string name="asset_edit_description_field">説明</string>
+    <string name="asset_edit_price_field">価格</string>
+    <string name="asset_edit_currency_field">通貨</string>
+    <string name="asset_edit_vendor_field">購入先</string>
+    <string name="asset_edit_warranty_expires_on">有効期限</string>
+    <string name="asset_edit_warranty_notes_field">保証メモ</string>
+    <string name="asset_edit_notes_field">メモ</string>
+
+    <string name="asset_edit_section_identity">識別情報</string>
+    <string name="asset_edit_section_placement">配置</string>
+    <string name="asset_edit_section_purchase">購入</string>
+    <string name="asset_edit_section_warranty">保証</string>
+    <string name="asset_edit_section_notes">メモ</string>
+    <string name="asset_edit_section_template">テンプレート</string>
+
+    <string name="asset_edit_title_edit">機器を編集</string>
+    <string name="asset_edit_cancel">キャンセル</string>
+    <string name="asset_edit_save">保存</string>
+    <string name="asset_edit_save_asset">機器を保存</string>
+    <string name="asset_edit_notifications_ok">OK</string>
+
+    <string name="asset_edit_pick_date">%1$sを選択</string>
+    <string name="asset_edit_calendar_ok">OK</string>
+    <string name="asset_edit_calendar_cancel">キャンセル</string>
+
+    <string name="asset_edit_template_none">なし · 後で設定</string>
+    <string name="asset_edit_template_helper">測定値とクイックアクションを設定した状態で機器を作成します。機器の設定を後で決める場合は「なし」を選んでください。</string>
+
+    <string name="asset_model_condition_history">状態の履歴</string>
+    <string name="asset_model_linked_record_removed">リンクされていた記録は削除されました。</string>
+    <string name="asset_model_health_section">健全性</string>
+    <string name="asset_model_health_footer">健全性は日付と記録から算出した推定値であり、診断ではありません。状態が変更されることはありません。</string>
+    <string name="asset_model_health_fallback_to_worst">基準にする評価対象が見つからないため、最も悪い評価対象を表示しています。</string>
+
+    <string name="asset_model_could_not_update">この機器を更新できませんでした。</string>
+    <string name="asset_model_could_not_retire">この機器を使用終了にできませんでした。</string>
+    <string name="asset_model_could_not_delete">この機器を削除できませんでした。</string>
+    <string name="asset_model_template_not_available">そのテンプレートは利用できません。</string>
+    <string name="asset_model_could_not_set_up">この機器を設定できませんでした。</string>
+    <string name="asset_model_already_set_up">この機器はすでに設定されています。</string>
+
+    <string name="asset_model_could_not_save">この機器を保存できませんでした。</string>
+    <string name="asset_model_parent_cycle">%1$sはすでにこの機器の一部です。</string>
+    <string name="asset_model_no_parent">なし</string>
+    <string name="asset_model_parent_archived">%1$s（アーカイブ済み）</string>
+
+    <string name="asset_model_not_a_real_month_day">存在しない月日です</string>
+    <string name="asset_model_name_required">機器に名前を付けてください</string>
+    <string name="asset_model_bad_date">日付は%1$sの形式で入力してください</string>
+    <string name="asset_model_bad_currency">通貨はUSDのような3文字のコードで入力してください</string>
+    <string name="asset_model_currency_required">価格には通貨が必要です</string>
+    <string name="asset_model_price_negative">価格をマイナスにすることはできません</string>
+    <string name="asset_model_parent_gone">その機器はもう存在しません</string>
+    <string name="asset_model_price_example">%1$sのように価格を入力してください</string>
+    <string name="asset_model_price_hint_amount">金額</string>
+    <string name="asset_model_price_hint_whole">整数のみ</string>
+    <plurals name="asset_model_price_hint_decimals">
+        <item quantity="other">小数点以下%1$d桁まで</item>
+    </plurals>
+
+    <string name="season_in_season_word">シーズン中</string>
+    <string name="season_start_title">シーズンを開始しますか？</string>
+    <string name="season_start_body">シーズンに従うよう設定されたメンテナンスは、%1$sから再び有効になります。</string>
+    <string name="season_end_title">シーズンを終了しますか？</string>
+    <string name="season_end_body">シーズンに従うよう設定されたメンテナンスは、再びシーズンを開始するまで待機します。完了扱いになるものはありません。</string>
+    <string name="season_history_started">シーズン開始</string>
+    <string name="season_history_ended">シーズン終了</string>
+    <string name="season_history_section">シーズンの履歴</string>
+    <string name="season_next_starts">次のシーズン開始：%1$s</string>
+    <string name="season_ends_on">シーズン終了：%1$s</string>
+    <string name="season_choose_date_from">%1$sから今日までの日付を選んでください。</string>
+    <string name="season_already_running">シーズンはすでに開始しています。</string>
+    <string name="season_already_ended">シーズンはすでに終了しています。</string>
+
+    <string name="season_sync_link">Home Assistantと連携</string>
+    <string name="season_sync_follow">Home Assistantに従う</string>
+    <string name="season_sync_force_in">強制的にシーズン中</string>
+    <string name="season_sync_force_out">強制的にシーズン外</string>
+    <string name="season_sync_now">今すぐ同期</string>
+    <string name="season_sync_follows">%1$sに従っています</string>
+    <string name="season_sync_forced_in">強制的にシーズン中にしています。%1$sは引き続き確認されますが、「Home Assistantに従う」を選ぶまでシーズンは変わりません。</string>
+    <string name="season_sync_forced_out">強制的にシーズン外にしています。%1$sは引き続き確認されますが、「Home Assistantに従う」を選ぶまでシーズンは変わりません。</string>
+    <string name="season_sync_last_success">最後に確認に成功した日時：%1$s</string>
+    <string name="season_sync_no_reading_yet">Home Assistantからまだ値を取得できていません。</string>
+    <string name="season_sync_not_checked_in_time">選択した間隔内に確認が成功していません。</string>
+    <string name="season_sync_changed_in_ha">Home Assistantで変更された日時：%1$s</string>
+    <string name="season_sync_started_from_ha">%1$sにHome Assistantから開始</string>
+    <string name="season_sync_ended_from_ha">%1$sにHome Assistantから終了</string>
+    <string name="season_sync_forced_in_on">%1$sに強制的にシーズン中に設定</string>
+    <string name="season_sync_forced_out_on">%1$sに強制的にシーズン外に設定</string>
+    <string name="season_sync_not_maintained_here">この機器はここで管理されなくなったため、Home Assistantがシーズンを変更することはありません。</string>
+    <string name="season_sync_date_before_history">このスマートフォンの日付が最新のシーズン記録より前のため、日付が追いつくまでシーズンはそのままです。</string>
+    <string name="season_sync_not_manual">この機器のシーズンは手動で開始・終了する設定ではなくなったため、Home Assistantから変更できません。「同期を停止」を選んでから「同期を再開」を選んでください。</string>
+    <string name="season_sync_stop">同期を停止</string>
+    <string name="season_sync_resume">同期を再開</string>
+    <string name="season_sync_stopped">同期は停止しています。Home Assistantがこの機器のシーズンを変更することはありません。</string>
+    <string name="season_sync_entity_id">エンティティID</string>
+    <string name="season_sync_entity_id_help">この機器がシーズン中の間オンになるオン/オフのヘルパーです（例：input_boolean.example_heater_in_season）。機器自体の電源スイッチではありません。</string>
+    <string name="season_sync_link_calendar">この機器をHome Assistantと連携すると、カレンダーの日付は置き換えられます。今日から、シーズンはHome Assistantの指示どおりに開始・終了します。シーズン開始から数えるメンテナンスは、今日から数えます。</string>
+    <string name="season_sync_link_year_round">この機器には現在、稼働シーズンがありません。Home Assistantと連携すると稼働シーズンが設定されます。今日からシーズン中となり、その後はHome Assistantの指示どおりに開始・終了します。シーズン開始から数えるメンテナンスは、今日から数えます。</string>
+    <string name="season_sync_link_manual">今後はHome Assistantがこの機器のシーズンを開始・終了します。シーズンの履歴はそのまま残ります。</string>
+    <string name="season_sync_follows_ha">この機器のシーズンはHome Assistantに従っています。ここで変更するには、機器のページで「同期を停止」を選んでください。</string>
+    <string name="season_sync_bad_entity_id">input_boolean.example_heater_in_seasonのようなエンティティIDを入力してください（英小文字、数字、アンダースコアで構成し、ドットを1つ含めます）。</string>
+</resources>

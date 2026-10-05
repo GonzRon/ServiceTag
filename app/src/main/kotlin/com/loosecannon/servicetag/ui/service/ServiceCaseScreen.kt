@@ -35,9 +35,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.model.EventId
@@ -89,14 +91,14 @@ fun ServiceCaseScreen(
                 title = { Text(SERVICE_CASE) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.service_back))
                     }
                 },
                 actions = {
                     // #77 (C19): a transferred-out asset's case is read, never changed.
                     if (current != null && current.editable) {
                         TextButton(onClick = { onEdit(current.case.assetId.value, current.case.id.value) }) {
-                            Text("Edit")
+                            Text(stringResource(R.string.service_edit))
                         }
                     }
                 },
@@ -180,7 +182,7 @@ private fun LinkRow(link: CaseLink, onOpenEvent: (String) -> Unit, onRemove: (()
             }
         }
         if (onRemove != null) {
-            TextButton(onClick = onRemove, enabled = !busy) { Text("Remove") }
+            TextButton(onClick = onRemove, enabled = !busy) { Text(stringResource(R.string.service_remove)) }
         }
     }
 }
@@ -240,7 +242,7 @@ private fun RepairPicker(candidates: List<RepairCandidate>, onPick: (String) -> 
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.service_cancel)) } },
     )
 }
 
@@ -272,13 +274,18 @@ private fun UpdateSheetContent(
                 .padding(bottom = 24.dp),
         ) {
             Text(ADD_UPDATE, style = MaterialTheme.typography.titleLarge)
-            DateField(value = sheet.date, onValueChange = onDate, label = "Date", problem = sheet.problems[UpdateField.DATE])
+            DateField(
+                value = sheet.date,
+                onValueChange = onDate,
+                label = stringResource(R.string.service_field_date),
+                problem = sheet.problems[UpdateField.DATE],
+            )
             FormField(
                 value = sheet.time,
                 onValueChange = onTime,
-                label = "Time",
+                label = stringResource(R.string.service_field_time),
                 problem = sheet.problems[UpdateField.TIME],
-                placeholder = "HH:MM",
+                placeholder = stringResource(R.string.service_time_placeholder),
                 mono = true,
             )
             OutlinedTextField(
@@ -294,7 +301,7 @@ private fun UpdateSheetContent(
             sheet.failure?.let { RefusalLine(it) }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onCancel, enabled = !sheet.saving) { Text("Cancel") }
+                TextButton(onClick = onCancel, enabled = !sheet.saving) { Text(stringResource(R.string.service_cancel)) }
                 Button(onClick = onSave, enabled = sheet.canSave, shape = ControlShape) { Text(SAVE_UPDATE) }
             }
         }

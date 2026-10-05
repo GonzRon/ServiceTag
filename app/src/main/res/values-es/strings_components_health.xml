@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Spanish translation of values/strings_components_health.xml. -->
+<resources>
+    <string name="ui_action_cancel">Cancelar</string>
+    <string name="ui_action_save">Guardar</string>
+    <string name="ui_typed_confirm_label">Escribe %1$s para confirmar</string>
+
+    <string name="ui_instrument_header_reading">Lectura</string>
+    <string name="ui_instrument_header_value">Valor</string>
+    <string name="ui_instrument_header_target">Objetivo</string>
+    <string name="ui_instrument_required">Obligatorio</string>
+    <string name="ui_instrument_not_a_number">No es un número</string>
+    <string name="ui_instrument_check_value">Revisa este valor</string>
+    <string name="ui_instrument_yes">Sí</string>
+    <string name="ui_instrument_no">No</string>
+
+    <string name="ui_ledger_day_month">%1$s %2$s</string>
+
+    <string name="condition_word_operational">OPERATIVO</string>
+    <string name="condition_word_degraded">DEGRADADO</string>
+    <string name="condition_word_down">FUERA DE SERVICIO</string>
+    <string name="condition_not_recorded">Estado no registrado</string>
+    <string name="condition_option_operational">Operativo</string>
+    <string name="condition_helper_operational">Disponible para el uso normal.</string>
+    <string name="condition_option_degraded">Degradado</string>
+    <string name="condition_helper_degraded">Funciona, pero con un problema conocido.</string>
+    <string name="condition_option_down">Fuera de servicio</string>
+    <string name="condition_helper_down">No disponible para el uso previsto.</string>
+    <string name="condition_no_reason_given">Sin motivo indicado</string>
+    <string name="condition_log_incident">Registrar incidente</string>
+    <string name="condition_since">desde el %1$s</string>
+    <string name="condition_component_line">%1$s %2$s — %3$s</string>
+
+    <string name="condition_title">Estado</string>
+    <string name="condition_change">Cambiar estado</string>
+    <string name="condition_what_is_wrong">¿Qué falla? (opcional)</string>
+    <string name="condition_when_did_this_change">¿Cuándo cambió?</string>
+    <string name="condition_save">Guardar estado</string>
+    <string name="condition_date_not_later_than_today">La fecha no puede ser posterior a hoy.</string>
+    <string name="condition_log_incident_details_question">¿Registrar los detalles del incidente?</string>
+    <string name="condition_log_incident_details_body">%1$s está %2$s. ¿Registrar lo que falló en el historial de servicio?</string>
+    <string name="condition_log_incident_details">Registrar detalles del incidente</string>
+    <string name="condition_save_only">Guardar solo el estado</string>
+    <string name="condition_saving_also_records">Al guardar, también se registra %1$s como %2$s.</string>
+
+    <string name="condition_mark_operational">Marcar como operativo</string>
+    <string name="condition_mark_operational_title">¿Marcar como operativo?</string>
+    <string name="condition_mark_operational_body">El registro anterior como %1$s se conserva en el historial.</string>
+    <string name="condition_operational_offer_body">Registraste %1$s. ¿%2$s vuelve a funcionar con normalidad?</string>
+    <string name="condition_not_yet">Todavía no</string>
+    <string name="condition_start_season">Iniciar temporada</string>
+    <string name="condition_end_season">Terminar temporada</string>
+    <string name="condition_start_season_question">¿Iniciar la temporada ahora?</string>
+    <string name="condition_end_season_question">¿Terminar la temporada ahora?</string>
+    <string name="condition_you_logged">Registraste %1$s.</string>
+    <string name="condition_did_this_affect_use">¿Afectó esto a si el equipo se puede usar?</string>
+    <string name="condition_mark_down">Marcar como fuera de servicio</string>
+    <string name="condition_mark_degraded">Marcar como degradado</string>
+    <string name="condition_no_change">Sin cambios</string>
+
+    <string name="health_band_nominal">NORMAL</string>
+    <string name="health_band_warning">AVISO</string>
+    <string name="health_band_critical">CRÍTICO</string>
+    <string name="health_not_tracked">SIN SEGUIMIENTO</string>
+    <string name="health_badge_label">%1$s %2$d</string>
+    <string name="health_replaced">Última sustitución: %1$s, hace %2$s</string>
+    <string name="health_no_replacement_recorded">Aún no hay ninguna sustitución registrada</string>
+    <string name="health_replacement_action_removed">Se eliminó la acción rápida de sustitución.</string>
+    <string name="health_up_to_date">%1$s está al día</string>
+    <string name="health_postponed">%1$s se reprogramó para el %2$s</string>
+    <string name="health_not_tracked_out_of_season">Sin seguimiento fuera de temporada</string>
+    <string name="health_not_tracked_paused">Sin seguimiento mientras el plan está en pausa</string>
+    <string name="health_not_tracked_link">Sin seguimiento: el plan vinculado no tiene regla de fechas o pertenece a otro equipo.</string>
+    <string name="health_subject_score">%1$s %2$d</string>
+    <string name="health_aggregate_line">%1$d — %2$s</string>
+    <string name="health_critical_line">Crítico: %1$s %2$d</string>
+    <string name="health_dashboard_row">%1$s %2$s</string>
+
+    <string name="health_name">Nombre</string>
+    <string name="health_what_is_it">¿Qué es?</string>
+    <string name="health_kind_whole_asset">Todo el equipo</string>
+    <string name="health_kind_part">Una pieza</string>
+    <string name="health_kind_medium">Algo que se mantiene, como el agua</string>
+    <string name="health_what_wears_it_down">¿Qué lo desgasta?</string>
+    <string name="health_driver_age">Antigüedad desde la sustitución</string>
+    <string name="health_driver_overdue">Mantenimiento vencido</string>
+    <string name="health_replacement_quick_action">Acción rápida de sustitución</string>
+    <string name="health_any_replacement">Cualquier sustitución</string>
+    <string name="health_maintenance_schedule">Plan de mantenimiento</string>
+    <string name="health_age_threshold_nominal">Como nuevo durante (días)</string>
+    <string name="health_age_threshold_warning">Aviso a partir de (días)</string>
+    <string name="health_age_threshold_critical">Crítico a partir de (días)</string>
+    <string name="health_overdue_threshold_grace">Período de gracia (días de retraso)</string>
+    <string name="health_overdue_threshold_warning">Aviso a los (días de retraso)</string>
+    <string name="health_overdue_threshold_critical">Crítico a los (días de retraso)</string>
+    <string name="health_thresholds_must_rise">Cada número debe ser mayor que el anterior.</string>
+    <string name="health_enter_all_three_numbers">Introduce los tres números o usa un punto de partida.</string>
+    <string name="health_use_a_starting_point">Usar un punto de partida</string>
+    <string name="health_starting_point_engine_service">Servicio del motor: %1$d / %2$d / %3$d días de retraso</string>
+    <string name="health_starting_point_water_care">Cuidado del agua: %1$d / %2$d / %3$d días de retraso</string>
+    <string name="health_starting_points_not_safety_limits">Son puntos de partida, no límites de seguridad. Revísalos para este equipo antes de guardar.</string>
+    <string name="health_use_these_numbers">Usar estos números</string>
+    <string name="health_weight">Peso</string>
+    <string name="health_schedule_already_drives_another">Ese plan ya determina otro indicador.</string>
+    <string name="health_archive_subject">Archivar indicador</string>
+    <string name="health_restore_subject">Restaurar indicador</string>
+
+    <string name="dashboard_all_categories">Todas las categorías</string>
+    <string name="dashboard_all_statuses">Todos los estados</string>
+    <string name="dashboard_category_label">Categoría</string>
+    <string name="dashboard_status_label">Estado del mantenimiento</string>
+    <string name="dashboard_chip_not_recorded">Sin registrar</string>
+    <string name="dashboard_settings">Ajustes</string>
+    <string name="dashboard_child_assets_listed_on_parent">Los equipos incluidos aparecen en el equipo al que pertenecen.</string>
+    <string name="dashboard_nothing_matches">No hay coincidencias.</string>
+    <string name="dashboard_backup_eyebrow">COPIA DE SEGURIDAD</string>
+    <string name="dashboard_no_backup_yet">Aún no hay copia de seguridad</string>
+    <string name="dashboard_backup_why">Las etiquetas solo sobreviven a un cambio de teléfono si tienes una.</string>
+    <string name="dashboard_export_now">Exportar ahora</string>
+    <string name="dashboard_nothing_here_yet">Aún no hay nada aquí</string>
+    <string name="dashboard_add_first_asset">Añade tu primer equipo</string>
+    <string name="dashboard_scan_a_tag">Escanear una etiqueta</string>
+    <string name="dashboard_no_schedule_yet">Aún no hay ningún plan</string>
+</resources>

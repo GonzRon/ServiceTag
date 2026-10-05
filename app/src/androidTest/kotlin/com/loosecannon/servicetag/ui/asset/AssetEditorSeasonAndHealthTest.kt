@@ -28,6 +28,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.l10n.monthDayFieldText
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
@@ -134,9 +135,9 @@ class AssetEditorSeasonAndHealthTest {
         saveAsset().assertIsNotEnabled()
         rule.onNodeWithText("Save").assertIsNotEnabled()
 
-        field("$SEASON_STARTS *").performTextInput("11-01")
+        field("$SEASON_STARTS *").performTextInput(monthDayFieldText("11-01"))
         saveAsset().assertIsNotEnabled()
-        field("$SEASON_ENDS *").performScrollTo().performTextInput("13-31")
+        field("$SEASON_ENDS *").performScrollTo().performTextInput(monthDayFieldText("13-31"))
         rule.onNodeWithText("Not a real month and day").assertExists()
         // The outline is drawn from the state's flag (review M4): on the bad value only.
         field("$SEASON_ENDS *").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Error))
@@ -202,8 +203,8 @@ class AssetEditorSeasonAndHealthTest {
         rule.onNodeWithText(BREAK_HELPER).performScrollTo().assertIsDisplayed()
         saveAsset().assertIsNotEnabled()
 
-        field("$BREAK_STARTS *").performScrollTo().performTextInput("12-01")
-        field("$BREAK_ENDS *").performScrollTo().performTextInput("02-28")
+        field("$BREAK_STARTS *").performScrollTo().performTextInput(monthDayFieldText("12-01"))
+        field("$BREAK_ENDS *").performScrollTo().performTextInput(monthDayFieldText("02-28"))
         field(BREAK_STARTS).assertExists()
         saveAsset().assertIsEnabled().performClick()
 

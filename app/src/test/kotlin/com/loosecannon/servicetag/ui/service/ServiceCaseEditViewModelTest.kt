@@ -179,7 +179,7 @@ class ServiceCaseEditViewModelTest {
         model.onCost("12.34")
         model.onOpenedOn("15-07-2028")
         model.save()
-        assertEquals(mapOf(CaseField.OPENED_ON to "Enter a date as YYYY-MM-DD"), settle(model).problems)
+        assertEquals(mapOf(CaseField.OPENED_ON to "Enter a date as MM/DD/YYYY"), settle(model).problems)
         assertEquals("every refusal wrote nothing", 0, graph.serviceCases.all().size)
     }
 

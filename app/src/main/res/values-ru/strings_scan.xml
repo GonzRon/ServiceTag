@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_scan.xml. -->
+<resources>
+    <string name="nav_dashboard">Обзор</string>
+    <string name="nav_assets">Объекты</string>
+    <string name="nav_maintenance">Обслуживание</string>
+    <string name="nav_link_points_nowhere">Эта ссылка здесь ни на что не указывает.</string>
+
+    <string name="scan_title">Чтение и проверка метки</string>
+    <string name="scan_back">Назад</string>
+    <string name="scan_ready">ГОТОВО К СКАНИРОВАНИЮ</string>
+    <string name="scan_reading">ЧТЕНИЕ МЕТКИ</string>
+    <string name="scan_hold_hint">Поднесите верхнюю часть телефона к метке на оборудовании.</string>
+    <string name="scan_needs_window">Для сканирования нужно собственное окно приложения.</string>
+    <string name="scan_read_failed">Не удалось прочитать метку. Держите её неподвижно и повторите попытку.</string>
+    <string name="scan_reason_no_ndef">эта метка не поддерживает NDEF</string>
+
+    <string name="nfc_no_hardware">В этом телефоне нет модуля NFC.</string>
+    <string name="nfc_turned_off">NFC выключен. Включите его в настройках системы и вернитесь.</string>
+    <string name="nfc_nothing_to_resolve">Нечего распознать.</string>
+    <string name="nfc_could_not_resolve">не удалось распознать эту метку: %1$s</string>
+
+    <string name="tag_eyebrow_reading">Чтение метки</string>
+    <string name="tag_looking_up">Поиск метки…</string>
+    <string name="tag_eyebrow_servicetag">Метка ServiceTag</string>
+    <string name="tag_open_asset">Открыть объект</string>
+    <string name="tag_cancel">Отмена</string>
+    <string name="tag_eyebrow_detected">Метка обнаружена</string>
+    <string name="tag_opening_asset">Открытие объекта…</string>
+    <string name="tag_pre_split_link">Эта метка указывает на ссылку на заметку, созданную до разделения продуктов. ServiceTag больше не открывает ссылки — это делает NoteTag.</string>
+    <string name="tag_eyebrow_unregistered">Незарегистрированная метка</string>
+    <string name="tag_not_assigned">Эта метка пока ни к чему не привязана.</string>
+    <string name="tag_bind_to_asset">Привязать к объекту</string>
+    <string name="tag_eyebrow_marked_lost">Метка отмечена как потерянная</string>
+    <string name="tag_eyebrow_retired">Метка списана</string>
+    <string name="tag_revoked_sentence">Эта метка выведена из использования. Если привязать её снова, она снова заработает.</string>
+    <string name="tag_not_in_records">Этой метки ServiceTag нет в записях этого телефона.</string>
+    <string name="tag_write_over_it">Записать новую метку поверх</string>
+    <string name="tag_eyebrow_not_ours">Не метка ServiceTag</string>
+    <string name="tag_holds_something_else">На этой метке записано что-то другое.</string>
+    <string name="tag_placement">Расположение метки</string>
+    <string name="tag_picker_title">ПРИВЯЗАТЬ МЕТКУ К</string>
+    <string name="tag_picker_new_asset">Новый объект…</string>
+    <string name="tag_picker_new_asset_detail">Создайте его, затем снова отсканируйте эту метку</string>
+    <string name="tag_picker_empty">Пока не к чему привязать</string>
+    <string name="tag_picker_asset">Объект</string>
+    <string name="tag_bind_failed">Не удалось привязать эту метку: %1$s</string>
+
+    <string name="tag_reason_empty">пустая метка</string>
+    <string name="tag_reason_foreign">не метка ServiceTag: %1$s</string>
+    <string name="tag_reason_unreadable">нечитаемая запись ServiceTag: %1$s</string>
+    <string name="tag_reason_not_ours">не метка ServiceTag</string>
+    <string name="tag_reason_newer_app">записана более новой версией ServiceTag (формат данных %1$d)</string>
+    <string name="tag_reason_unresolved">эту метку не удалось распознать</string>
+
+    <string name="tag_write_title">Запись метки</string>
+    <string name="tag_write_close">Закрыть</string>
+    <string name="tag_write_target">ЦЕЛЬ</string>
+    <string name="tag_target_spare">пока ничего — запасная метка, привязывается при первом сканировании</string>
+    <string name="tag_target_unnamed">эта цель</string>
+    <string name="tag_write_eyebrow_idle">Запись NFC-метки</string>
+    <string name="tag_write_eyebrow_confirm">Перезаписать эту метку?</string>
+    <string name="tag_write_answer_here">Ответьте здесь, затем снова поднесите ту же метку к телефону.</string>
+    <string name="tag_write_eyebrow_written">Метка записана</string>
+    <string name="tag_written_locked">%1$s · заблокирована</string>
+    <string name="tag_written_rewritable">%1$s · перезаписываемая</string>
+    <string name="tag_write_done">Готово</string>
+    <string name="tag_write_eyebrow_error">Не записано</string>
+    <string name="tag_write_verified">Считано обратно байт в байт</string>
+    <string name="tag_write_needs_window">Для записи нужно собственное окно приложения.</string>
+    <string name="tag_lock_switch">Заблокировать навсегда</string>
+    <string name="tag_lock_switch_hint">Заблокированную метку нельзя будет перезаписать.</string>
+    <string name="tag_lock_warning_title">Заблокировать навсегда?</string>
+    <string name="tag_lock_warning_text">Заблокированную метку уже никогда нельзя будет перезаписать или использовать повторно. Блокируйте только метки, установленные насовсем.</string>
+    <string name="tag_lock_warning_confirm">Заблокировать после записи</string>
+    <string name="tag_lock_warning_dismiss">Не блокировать</string>
+
+    <string name="tag_write_hold_blank">Поднесите пустую или многоразовую метку к задней части телефона.</string>
+    <string name="tag_write_read_failed">Не удалось прочитать метку. Держите её неподвижно и повторите попытку.</string>
+    <string name="tag_write_no_ndef_hint">Эта метка не поддерживает NDEF. Используйте NTAG213/215/216 или похожую.</string>
+    <string name="tag_write_no_ndef">Эта метка не поддерживает NDEF.</string>
+    <string name="tag_write_read_only">Эта метка доступна только для чтения (заблокирована). Ничего не записано.</string>
+    <string name="tag_write_too_small">Метка слишком мала: её ёмкость — %1$d Б, а сообщению нужно %2$d Б.</string>
+    <string name="tag_write_formatted">Отформатировано. Уберите метку и поднесите её снова, чтобы записать.</string>
+    <string name="tag_write_format_failed">Не удалось отформатировать метку. Держите её неподвижно и повторите попытку.</string>
+    <string name="tag_write_format_unexpected">Неожиданный результат при форматировании. Держите метку неподвижно и повторите попытку.</string>
+    <string name="tag_write_unexpected">Неожиданный результат при записи. Держите метку неподвижно и повторите попытку.</string>
+    <string name="tag_write_verify_mismatch">Считанные данные отличаются от записанных. Ничего не сохранено — повторите попытку.</string>
+    <string name="tag_write_not_written">Ничего не записано (%1$s). Держите метку неподвижно и повторите попытку.</string>
+    <string name="tag_write_may_not_have_finished">Запись могла не завершиться (%1$s). Уберите метку и снова поднесите её к телефону.</string>
+    <string name="tag_write_overwrite_confirmed">Перезапись подтверждена. Снова поднесите ту же метку к телефону, чтобы записать.</string>
+    <string name="tag_write_kept">Не записано. Метка осталась без изменений.</string>
+
+    <string name="tag_overwrite_title">ПЕРЕЗАПИСАТЬ ЭТУ МЕТКУ?</string>
+    <string name="tag_overwrite_explanation">После перезаписи метка будет обозначать: %1$s. Прежнее содержимое будет потеряно. После подтверждения снова поднесите ту же метку к телефону, чтобы записать.</string>
+    <string name="tag_overwrite_confirm">Перезаписать</string>
+    <string name="tag_overwrite_keep">Оставить</string>
+    <string name="tag_overwrite_identifies">Сейчас эта метка обозначает объект «%1$s».</string>
+    <string name="tag_overwrite_not_assigned">Эта метка есть в записях этого телефона, но пока ни к чему не привязана.</string>
+    <string name="tag_overwrite_marked_lost">Эта метка была отмечена как потерянная и выведена из использования.</string>
+    <string name="tag_overwrite_retired">Эта метка была списана и выведена из использования.</string>
+    <string name="tag_overwrite_could_not_check">Это метка ServiceTag, но её запись сейчас не удалось проверить.</string>
+    <string name="tag_overwrite_holds_newer">На метке уже есть данные ServiceTag, записанные более новой версией приложения (формат %1$s).</string>
+    <string name="tag_overwrite_holds_foreign">На метке уже есть чужие данные NDEF (%1$s).</string>
+    <string name="tag_overwrite_holds_unreadable">На метке уже есть нечитаемые данные NDEF (%1$s).</string>
+</resources>

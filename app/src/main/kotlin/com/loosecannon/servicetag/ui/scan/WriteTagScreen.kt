@@ -28,12 +28,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.TagTarget
-import com.loosecannon.servicetag.core.usecase.OverwriteSubject
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -81,9 +82,11 @@ fun WriteTagScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Write a tag") },
+                title = { Text(stringResource(R.string.tag_write_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onDone) { Icon(Icons.Outlined.Close, contentDescription = "Close") }
+                    IconButton(onClick = onDone) {
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.tag_write_close))
+                    }
                 },
             )
         },
@@ -132,7 +135,7 @@ private fun TargetLine(targetName: String) {
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = "TARGET",
+                text = stringResource(R.string.tag_write_target),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -157,7 +160,7 @@ private fun PlacementField(value: String, onValueChange: (String) -> Unit, enabl
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text("Tag placement") },
+        label = { Text(stringResource(R.string.tag_placement)) },
         singleLine = true,
         enabled = enabled,
         shape = ControlShape,
@@ -170,33 +173,36 @@ private fun PlacementField(value: String, onValueChange: (String) -> Unit, enabl
 internal fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Unit) {
     when (state) {
         is WriteState.Idle -> NfcSheet(
-            eyebrow = "Write nfc tag",
+            eyebrow = stringResource(R.string.tag_write_eyebrow_idle),
             glyph = ServiceTagIcons.NfcTag,
             sentence = state.message,
         )
 
         is WriteState.Confirm -> NfcSheet(
-            eyebrow = "Overwrite this tag?",
+            eyebrow = stringResource(R.string.tag_write_eyebrow_confirm),
             accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
             border = ServiceTagTheme.semanticColors.dueSoon.foreground,
             glyph = ServiceTagIcons.NfcTag,
-            sentence = "Answer here, then hold the same tag to the phone again.",
+            sentence = stringResource(R.string.tag_write_answer_here),
         )
 
         is WriteState.Written -> NfcSheet(
-            eyebrow = "Tag written",
+            eyebrow = stringResource(R.string.tag_write_eyebrow_written),
             accent = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
             glyph = ServiceTagIcons.NfcTag,
             sentence = targetName,
-            identifier = "${state.tagId.take(8)} · v1 · ${if (state.locked) "locked" else "rewritable"}",
-            actions = { FilledAction("Done", onDone) },
+            identifier = stringResource(
+                if (state.locked) R.string.tag_written_locked else R.string.tag_written_rewritable,
+                "${state.tagId.take(8)} · v1",
+            ),
+            actions = { FilledAction(stringResource(R.string.tag_write_done), onDone) },
         ) {
             // The verification gets its own OK-container line: it is the claim the screen makes.
             VerifiedLine()
         }
 
         is WriteState.Error -> NfcSheet(
-            eyebrow = "Not written",
+            eyebrow = stringResource(R.string.tag_write_eyebrow_error),
             accent = ServiceTagTheme.semanticColors.destructiveAction.foreground,
             border = ServiceTagTheme.semanticColors.destructiveAction.foreground,
             glyph = ServiceTagIcons.NfcTag,
@@ -215,7 +221,7 @@ private fun VerifiedLine() {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
-            text = "Read back byte-identical",
+            text = stringResource(R.string.tag_write_verified),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(12.dp),
         )
@@ -233,7 +239,7 @@ private fun VerifiedLine() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun OverwriteSheet(
-    subject: OverwriteSubject,
+    subject: OverwriteWords,
     target: String,
     onOverwrite: () -> Unit,
     onKeepIt: () -> Unit,
@@ -244,7 +250,7 @@ internal fun OverwriteSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "OVERWRITE THIS TAG?",
+                text = stringResource(R.string.tag_overwrite_title),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -260,13 +266,12 @@ internal fun OverwriteSheet(
                 }
             }
             Text(
-                text = "Replacing it will make the tag identify $target. The old content is lost. " +
-                    "After you confirm, hold the same tag to the phone again to write.",
+                text = stringResource(R.string.tag_overwrite_explanation, target),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledAction("Overwrite", onOverwrite)
-                OutlinedAction("Keep it", onKeepIt)
+                FilledAction(stringResource(R.string.tag_overwrite_confirm), onOverwrite)
+                OutlinedAction(stringResource(R.string.tag_overwrite_keep), onKeepIt)
             }
         }
     }
@@ -277,12 +282,10 @@ internal fun OverwriteSheet(
 private fun LockWarning(onLock: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Lock permanently?") },
-        text = {
-            Text("A locked tag can never be rewritten or reused. Only lock tags that are installed for good.")
-        },
-        confirmButton = { TextButton(onClick = onLock) { Text("Lock after writing") } },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Don't lock") } },
+        title = { Text(stringResource(R.string.tag_lock_warning_title)) },
+        text = { Text(stringResource(R.string.tag_lock_warning_text)) },
+        confirmButton = { TextButton(onClick = onLock) { Text(stringResource(R.string.tag_lock_warning_confirm)) } },
+        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.tag_lock_warning_dismiss)) } },
         shape = ControlShape,
     )
 }
@@ -291,8 +294,8 @@ private fun LockWarning(onLock: () -> Unit, onCancel: () -> Unit) {
 private fun LockSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = "Lock permanently", style = MaterialTheme.typography.titleSmall)
-            QuietLine("A locked tag can never be rewritten.")
+            Text(text = stringResource(R.string.tag_lock_switch), style = MaterialTheme.typography.titleSmall)
+            QuietLine(stringResource(R.string.tag_lock_switch_hint))
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
@@ -301,12 +304,12 @@ private fun LockSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
 @Composable
 private fun NfcAvailabilityLine(readerMode: ReaderMode) {
     val line = when {
-        !readerMode.present -> "Writing needs the app's own window."
-        !readerMode.available -> "This phone has no NFC hardware."
-        !readerMode.enabled -> "NFC is turned off. Enable it in system settings, then come back."
+        !readerMode.present -> R.string.tag_write_needs_window
+        !readerMode.available -> R.string.nfc_no_hardware
+        !readerMode.enabled -> R.string.nfc_turned_off
         else -> null
     }
-    line?.let { QuietLine(it) }
+    line?.let { QuietLine(stringResource(it)) }
 }
 
 /** The route carries ids, never objects; this is the one place they become a [TagTarget] again. */

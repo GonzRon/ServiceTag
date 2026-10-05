@@ -27,9 +27,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.usecase.TransferImportOutcome
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.share.IntakeStrings
 import com.loosecannon.servicetag.ui.asset.FieldLabel
@@ -49,7 +52,7 @@ fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit, onIm
     val model: TransferImportViewModel = viewModel(key = "transfer-import-$copy") {
         TransferImportViewModel(
             graph.importTransferPack, graph.transferPackInbox, graph.transferPackInbox.find(copy),
-            NoAttachmentFolder().message.orEmpty(), graph.reminderReconcile,
+            NoAttachmentFolder().message, graph.reminderReconcile,
         )
     }
     val state by model.state.collectAsStateWithLifecycle()
@@ -66,7 +69,7 @@ fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit, onIm
                 title = { Text(TransferImportStrings.TITLE) },
                 navigationIcon = {
                     IconButton(onClick = model::cancel, enabled = !state.importing) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.transfer_back))
                     }
                 },
             )
@@ -132,7 +135,8 @@ private fun Preview(state: TransferImportState, onImport: () -> Unit, onCancel: 
     state.comingBack.forEach { QuietLine(it) }
     state.duplicates.forEach { QuietLine(it) }
     state.outcome.forEach { line ->
-        if (line == TransferImportStrings.ALREADY_HERE) {
+        // By what the outcome is, never by its words (#102): "already here" informs, the rest refuse.
+        if (state.outcomeKind == TransferImportOutcome.ALREADY_HERE) {
             Text(text = line, style = MaterialTheme.typography.bodyMedium)
         } else {
             ErrorLine(line)

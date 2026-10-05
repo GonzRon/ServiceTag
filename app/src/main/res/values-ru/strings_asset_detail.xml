@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_asset_detail.xml. -->
+<resources>
+    <string name="common_cancel">Отмена</string>
+    <string name="common_back">Назад</string>
+    <string name="common_more">Ещё</string>
+    <string name="common_ok">ОК</string>
+    <string name="common_save">Сохранить</string>
+    <string name="common_loading">Загрузка…</string>
+
+    <string name="asset_detail_asset_word">Объект</string>
+
+    <string name="asset_detail_retired_on">Дата списания</string>
+    <string name="asset_detail_readings_and_actions">Показания и действия</string>
+    <string name="asset_detail_tags_section">Метки</string>
+
+    <string name="asset_detail_backup">Резервная копия</string>
+    <string name="asset_detail_write_tag">Записать метку</string>
+    <string name="asset_detail_edit">Изменить</string>
+    <string name="asset_detail_set_up_from_template">Настроить по шаблону</string>
+
+    <string name="asset_detail_current_readings">Текущие показания</string>
+    <string name="asset_detail_derived">Расчётное</string>
+
+    <string name="asset_detail_service_record">Журнал обслуживания</string>
+    <string name="asset_detail_no_service_recorded">Обслуживание ещё не записано</string>
+
+    <string name="asset_detail_archive">В архив</string>
+    <string name="asset_detail_unarchive">Из архива</string>
+    <string name="asset_detail_retire">Списать</string>
+    <string name="asset_detail_unretire">Отменить списание</string>
+    <string name="asset_detail_delete">Удалить</string>
+
+    <string name="asset_detail_delete_title">Удалить «%1$s»?</string>
+    <string name="asset_detail_delete_body">Введите название объекта, чтобы удалить его. Вместе с ним удалятся его метки, показания и журнал. Автоматического снимка данных пока нет.</string>
+    <string name="asset_detail_child_assets_first">Сначала дочерние объекты</string>
+    <string name="asset_detail_child_assets_first_body">У объекта «%1$s» ещё есть дочерние объекты: %2$s. Сначала перенесите или удалите их, чтобы ничего не исчезло вместе с ним.</string>
+
+    <string name="asset_detail_retire_title">Списать этот объект?</string>
+    <string name="asset_detail_retire_body">Его журнал сохранится, а метки по-прежнему будут его открывать.</string>
+
+    <string name="asset_detail_log_what_happened">Записать, что произошло?</string>
+    <string name="asset_detail_retired_either_way">Объект списан в любом случае.</string>
+    <string name="asset_detail_log_replacement">Записать замену</string>
+    <string name="asset_detail_log_note">Записать заметку</string>
+    <string name="asset_detail_not_now">Не сейчас</string>
+
+    <string name="asset_detail_plate_model">Модель</string>
+    <string name="asset_detail_plate_serial">Серийный №</string>
+    <string name="asset_detail_plate_location">Место</string>
+    <string name="asset_detail_plate_purchased">Куплено</string>
+    <string name="asset_detail_plate_in_service">В работе с</string>
+    <string name="asset_detail_plate_nfc_tag">NFC-метка</string>
+
+    <string name="asset_detail_details">Сведения</string>
+    <string name="asset_detail_purchase_date">Дата покупки</string>
+    <string name="asset_detail_purchase_document">Документ о покупке</string>
+    <string name="asset_detail_price">Цена</string>
+    <string name="asset_detail_vendor">Продавец</string>
+
+    <string name="asset_detail_child_assets">Дочерние объекты</string>
+    <string name="asset_detail_no_child_assets">Нет дочерних объектов</string>
+    <string name="asset_detail_add_child_asset">+ Добавить дочерний объект</string>
+    <string name="asset_detail_no_readings_out_of_range">Нет показаний вне нормы</string>
+    <plurals name="asset_detail_readings_out_of_range">
+        <item quantity="one">%1$d показание вне нормы</item>
+        <item quantity="few">%1$d показания вне нормы</item>
+        <item quantity="many">%1$d показаний вне нормы</item>
+        <item quantity="other">%1$d показания вне нормы</item>
+    </plurals>
+    <string name="asset_detail_category_and_readings">%1$s · %2$s</string>
+
+    <string name="asset_detail_no_tag_yet">Метки пока нет · Нажмите «Записать метку», чтобы добавить</string>
+    <string name="asset_detail_tag_written">Метка записана</string>
+    <string name="asset_detail_tag_bound">Метка привязана</string>
+    <string name="asset_detail_tag_status_active">Активна</string>
+    <string name="asset_detail_tag_status_unbound">Не привязана</string>
+    <string name="asset_detail_tag_status_lost">Потеряна</string>
+    <string name="asset_detail_tag_status_retired">Списана</string>
+    <string name="asset_detail_tag_placement">Расположение метки</string>
+
+    <string name="asset_detail_notes">Заметки</string>
+    <string name="asset_detail_no_notes">Нет заметок</string>
+
+    <string name="asset_detail_no_schedule_yet">Графика пока нет</string>
+
+    <string name="warranty_section">Гарантия</string>
+    <string name="warranty_notes">Заметки о гарантии</string>
+    <string name="warranty_in_warranty">НА ГАРАНТИИ</string>
+    <string name="warranty_out_of_warranty">ГАРАНТИЯ ИСТЕКЛА</string>
+    <string name="warranty_not_recorded">Гарантия не указана</string>
+    <string name="warranty_expires">Истекает %1$s</string>
+    <string name="warranty_expired">Истекла %1$s</string>
+    <plurals name="warranty_reminder_days_before">
+        <item quantity="one">Напоминание: за %1$d день</item>
+        <item quantity="few">Напоминание: за %1$d дня</item>
+        <item quantity="many">Напоминание: за %1$d дней</item>
+        <item quantity="other">Напоминание: за %1$d дня</item>
+    </plurals>
+    <string name="warranty_leave_blank_for_no_reminder">Оставьте пустым, если напоминание не нужно.</string>
+    <string name="warranty_add_date_first">Сначала укажите дату окончания гарантии.</string>
+
+    <string name="assets_title">Объекты</string>
+    <string name="assets_add_asset">Добавить объект</string>
+    <string name="assets_no_assets_yet">Объектов пока нет</string>
+    <plurals name="assets_no_active_assets">
+        <item quantity="one">Нет активных объектов · %1$d в архиве</item>
+        <item quantity="few">Нет активных объектов · %1$d в архиве</item>
+        <item quantity="many">Нет активных объектов · %1$d в архиве</item>
+        <item quantity="other">Нет активных объектов · %1$d в архиве</item>
+    </plurals>
+    <string name="assets_nothing_matches">Ничего не найдено.</string>
+    <string name="assets_show_archived">Показать архивные</string>
+    <string name="assets_part_of">Входит в: %1$s</string>
+    <string name="assets_nfc_tag_written">NFC-метка записана</string>
+    <string name="assets_badge_retired">Списан</string>
+    <string name="assets_badge_out_of_season">Вне сезона</string>
+
+    <string name="assets_filter_type">Тип</string>
+    <string name="assets_filter_all">Все</string>
+    <string name="assets_filter_child_assets">Дочерние объекты</string>
+    <string name="assets_filter_archived">В архиве</string>
+    <string name="assets_archived_hidden">Подходящие объекты находятся в архиве. Включите «В архиве», чтобы их увидеть.</string>
+    <string name="assets_child_assets_hidden">Подходящие объекты — дочерние. Включите «Дочерние объекты», чтобы их увидеть.</string>
+    <string name="assets_both_hidden">Подходящие объекты скрыты. Включите «Дочерние объекты» и «В архиве», чтобы их увидеть.</string>
+    <string name="assets_only_child_assets">Здесь только дочерние объекты. Включите «Дочерние объекты», чтобы их увидеть.</string>
+    <string name="assets_type_hidden">Подходящие объекты другого типа. Выберите «Все» в фильтре «Тип».</string>
+
+    <string name="assets_search_hint">Поиск объектов</string>
+    <string name="assets_clear_search">Очистить поиск</string>
+</resources>

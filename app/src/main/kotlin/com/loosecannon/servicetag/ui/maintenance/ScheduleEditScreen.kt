@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -50,7 +51,9 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -62,116 +65,107 @@ import com.loosecannon.servicetag.ui.theme.Eyebrow
 // written: a placeholder in a label — "Every N", "Every <n> <unit> of use" — is the label of the
 // control that supplies it, because paraphrasing a ratified string to read more smoothly is the one
 // thing no brief may do.
-const val THIS_APPLIES_TO = "This applies to"
-const val ONE_ASSET = "One asset"
-const val A_MAINTENANCE_GROUP = "A maintenance group"
-const val EVERY_N = "Every N"
-const val REPEATS_FROM = "Repeats from"
-const val THE_SCHEDULED_DATE = "the scheduled date"
-const val WHEN_I_COMPLETE_IT = "when I complete it"
-const val REMIND_ME_N_DAYS_EARLY = "Remind me N days early"
-const val ALSO_DUE_BY_USE = "Also due by use"
-const val EVERY_N_UNIT_OF_USE = "Every <n> <unit> of use"
-const val LAST_DONE_AT = "Last done at"
-const val REMIND_ME_N_UNIT_EARLY = "Remind me <n> <unit> early"
-const val COMPLETING_THIS_TAKES = "Completing this takes"
-const val ONE_TAP = "One tap"
-const val THE_FULL_FORM = "The full form"
-const val USE_THIS_FORM = "Use this form"
+val THIS_APPLIES_TO: String get() = localized(R.string.maintenance_this_applies_to)
+val ONE_ASSET: String get() = localized(R.string.maintenance_one_asset)
+val A_MAINTENANCE_GROUP: String get() = localized(R.string.maintenance_a_maintenance_group)
+val EVERY_N: String get() = localized(R.string.maintenance_every_n)
+val REPEATS_FROM: String get() = localized(R.string.maintenance_repeats_from)
+val THE_SCHEDULED_DATE: String get() = localized(R.string.maintenance_the_scheduled_date)
+val WHEN_I_COMPLETE_IT: String get() = localized(R.string.maintenance_when_i_complete_it)
+val REMIND_ME_N_DAYS_EARLY: String get() = localized(R.string.maintenance_remind_me_n_days_early)
+val ALSO_DUE_BY_USE: String get() = localized(R.string.maintenance_also_due_by_use)
+val EVERY_N_UNIT_OF_USE: String get() = localized(R.string.maintenance_every_n_unit_of_use)
+val LAST_DONE_AT: String get() = localized(R.string.maintenance_last_done_at)
+val REMIND_ME_N_UNIT_EARLY: String get() = localized(R.string.maintenance_remind_me_n_unit_early)
+val COMPLETING_THIS_TAKES: String get() = localized(R.string.maintenance_completing_this_takes)
+val ONE_TAP: String get() = localized(R.string.maintenance_one_tap)
+val THE_FULL_FORM: String get() = localized(R.string.maintenance_the_full_form)
+val USE_THIS_FORM: String get() = localized(R.string.maintenance_use_this_form)
 
 /** P141-3, ratified 2026-09-25: the profile picker's label under One tap (#81). */
-const val QUICK_ACTION = "Quick action"
+val QUICK_ACTION: String get() = localized(R.string.maintenance_quick_action)
 
 /** P141-4, ratified 2026-09-25: the picker's first row, clearing a chosen profile (#81). */
-const val NONE = "None"
-const val REMIND_ME_THROUGH = "Remind me through"
+val NONE: String get() = localized(R.string.maintenance_none)
+val REMIND_ME_THROUGH: String get() = localized(R.string.maintenance_remind_me_through)
 
 /** D-11's non-blocking line, RATIFIED (§17). Shown, dismissible by fixing the title, never a gate. */
-const val SIMILAR_THROUGH_A_GROUP = "This asset already has a similar schedule through another group."
+val SIMILAR_THROUGH_A_GROUP: String get() = localized(R.string.maintenance_similar_through_a_group)
 
 // The service-policy question, RATIFIED (spec §10.7, S65–S84), verbatim and by number. It replaces
 // 1.2's two-option season choice, whose words are retired with it (master plan §1).
 
 /** S65, the schedule question. */
-const val WHEN_SHOULD_THIS_BE_DONE = "When should this maintenance be done?"
+val WHEN_SHOULD_THIS_BE_DONE: String get() = localized(R.string.maintenance_when_should_this_be_done)
 
 /** S66, option. */
-const val BEFORE_THE_SEASON_STARTS = "Before the season starts"
+val BEFORE_THE_SEASON_STARTS: String get() = localized(R.string.maintenance_before_the_season_starts)
 
 /** S67, option. */
-const val WHEN_THE_SEASON_STARTS = "When the season starts"
+val WHEN_THE_SEASON_STARTS: String get() = localized(R.string.maintenance_when_the_season_starts)
 
 /** S68, option. */
-const val WHENEVER_IT_IS_DUE = "Whenever it is due"
+val WHENEVER_IT_IS_DUE: String get() = localized(R.string.maintenance_whenever_it_is_due)
 
 /** S69, option. */
-const val BEFORE_THE_MAINTENANCE_BREAK = "Before the maintenance break"
+val BEFORE_THE_MAINTENANCE_BREAK: String get() = localized(R.string.maintenance_before_the_maintenance_break)
 
 /** S70, option. */
-const val AFTER_THE_MAINTENANCE_BREAK = "After the maintenance break"
+val AFTER_THE_MAINTENANCE_BREAK: String get() = localized(R.string.maintenance_after_the_maintenance_break)
 
 /** S71, field. */
-const val DAYS_BEFORE_IT_STARTS = "Days before it starts"
+val DAYS_BEFORE_IT_STARTS: String get() = localized(R.string.maintenance_days_before_it_starts)
 
 /** S72, field. */
-const val DAYS_AFTER_IT_STARTS = "Days after it starts"
+val DAYS_AFTER_IT_STARTS: String get() = localized(R.string.maintenance_days_after_it_starts)
 
 /** S73, field. */
-const val START_COUNTING_FROM = "Start counting from"
+val START_COUNTING_FROM: String get() = localized(R.string.maintenance_start_counting_from)
 
 /** S74, option. */
-const val THE_SEASONS_START = "The season's start"
+val THE_SEASONS_START: String get() = localized(R.string.maintenance_the_seasons_start)
 
 /** S75, option. */
-const val ITS_OWN_DATE_NOT_BEFORE_THE_SEASON = "Its own date, but not before the season starts"
+val ITS_OWN_DATE_NOT_BEFORE_THE_SEASON: String get() = localized(R.string.maintenance_its_own_date_not_before_the_season)
 
 /** S76, warning. */
-const val FIRST_DUE_OUTSIDE_THE_SEASON =
-    "The first due date is outside this asset's season, so it will wait for the season to start."
+val FIRST_DUE_OUTSIDE_THE_SEASON: String get() = localized(R.string.maintenance_first_due_outside_the_season)
 
 /** S77, warning. */
-const val NOTHING_TO_BE_READY_BEFORE =
-    "This asset has no season or maintenance break to be ready before, so this is due whenever its date comes."
+val NOTHING_TO_BE_READY_BEFORE: String get() = localized(R.string.maintenance_nothing_to_be_ready_before)
 
 /** S78, helper under S66. */
-const val HELPER_BEFORE_THE_SEASON =
-    "A date in the season or the maintenance break becomes due on an allowed day before the season starts."
+val HELPER_BEFORE_THE_SEASON: String get() = localized(R.string.maintenance_helper_before_the_season)
 
 /** S79, helper under S69. */
-const val HELPER_BEFORE_THE_BREAK = "A date in the maintenance break becomes due before the break starts."
+val HELPER_BEFORE_THE_BREAK: String get() = localized(R.string.maintenance_helper_before_the_break)
 
 /** S80, helper under S67. */
-const val HELPER_WHEN_THE_SEASON_STARTS =
-    "This maintenance waits while the season is off and becomes active again when it starts."
+val HELPER_WHEN_THE_SEASON_STARTS: String get() = localized(R.string.maintenance_helper_when_the_season_starts)
 
 /** S81, helper under S70. */
-const val HELPER_AFTER_THE_BREAK = "A date in the maintenance break moves to the first day after it."
+val HELPER_AFTER_THE_BREAK: String get() = localized(R.string.maintenance_helper_after_the_break)
 
 /** S82, helper under S68. */
-const val HELPER_WHENEVER_IT_IS_DUE = "The season and the maintenance break never change when this is due."
+val HELPER_WHENEVER_IT_IS_DUE: String get() = localized(R.string.maintenance_helper_whenever_it_is_due)
 
 /** S83, under an empty S71. */
-const val ENTER_THE_NUMBER_OF_DAYS = "Enter the number of days."
+val ENTER_THE_NUMBER_OF_DAYS: String get() = localized(R.string.maintenance_enter_the_number_of_days)
 
 /** S84, warning under S72. */
-const val AFTER_THE_SEASON_ENDS = "That is after the season ends, so this would never become due."
+val AFTER_THE_SEASON_ENDS: String get() = localized(R.string.maintenance_after_the_season_ends)
 
 // The health link guard (spec §6.1, D-30), RATIFIED. S137 is defined here because this dialog lands
 // first; B10's subject editor uses the same constant (master dec. 42).
 
 /** S137, refusal: archiving the subject its asset's health follows. */
-const val THE_SUBJECT_HEALTH_FOLLOWS =
-    "This is the subject asset health follows. Choose another way to combine health first."
-
-/** S140, the link-guard dialog; `<name>` is the subject's name — see [scheduleDrivesSubject]. */
-const val SCHEDULE_DRIVES_SUBJECT =
-    "This schedule drives the health subject <name>. Archive that subject as well?"
+val THE_SUBJECT_HEALTH_FOLLOWS: String get() = localized(R.string.maintenance_the_subject_health_follows)
 
 /** S141, the link-guard confirm. */
-const val ARCHIVE_BOTH = "Archive both"
+val ARCHIVE_BOTH: String get() = localized(R.string.maintenance_archive_both)
 
-/** S140 with its one substitution. */
-fun scheduleDrivesSubject(name: String): String = SCHEDULE_DRIVES_SUBJECT.replace("<name>", name)
+/** S140, the link-guard dialog, naming the subject: "This schedule drives the health subject <name>. …". */
+fun scheduleDrivesSubject(name: String): String = localized(R.string.maintenance_schedule_drives_subject, name)
 
 /** Each option's ratified word. */
 internal fun policyOptionLabel(option: PolicyOption): String = when (option) {
@@ -249,19 +243,21 @@ fun ScheduleEditScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Cancel")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.maintenance_cancel))
                     }
                 },
                 actions = {
                     // Held while the question is unanswered or S71 is empty or 0 (master dec. 46), so
                     // no policy refusal is reachable and none needs a sentence.
-                    TextButton(onClick = model::save, enabled = state.canSave) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.canSave) {
+                        Text(stringResource(R.string.maintenance_save))
+                    }
                 },
             )
         },
     ) { padding ->
         if (!state.loaded) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.maintenance_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
 
@@ -271,8 +267,12 @@ fun ScheduleEditScreen(
             AlertDialog(
                 onDismissRequest = model::dismissNotifications,
                 text = { Text(NOTIFICATION_PERMISSION_RATIONALE) },
-                confirmButton = { TextButton(onClick = model::requestNotifications) { Text("OK") } },
-                dismissButton = { TextButton(onClick = model::dismissNotifications) { Text("Not now") } },
+                confirmButton = {
+                    TextButton(onClick = model::requestNotifications) { Text(stringResource(R.string.maintenance_ok)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = model::dismissNotifications) { Text(stringResource(R.string.maintenance_not_now)) }
+                },
             )
         }
         state.linkGuard?.let { prompt ->
@@ -302,7 +302,7 @@ fun ScheduleEditScreen(
             MaintenanceField(
                 value = state.title,
                 onValueChange = model::onTitle,
-                label = "Name",
+                label = stringResource(R.string.maintenance_name),
                 problem = ScheduleField.TITLE in state.marks,
                 imeAction = ImeAction.Next,
             )
@@ -313,7 +313,7 @@ fun ScheduleEditScreen(
             MaintenanceField(
                 value = state.description,
                 onValueChange = model::onDescription,
-                label = "Description",
+                label = stringResource(R.string.maintenance_description),
                 minLines = 2,
             )
 
@@ -349,7 +349,7 @@ fun ScheduleEditScreen(
             DateField(
                 value = state.anchorOn,
                 onValueChange = model::onAnchor,
-                label = "Date",
+                label = stringResource(R.string.maintenance_date),
                 problem = if (ScheduleField.ANCHOR in state.marks) "" else null,
             )
             MaintenanceField(
@@ -552,12 +552,12 @@ internal fun LinkGuardDialog(prompt: LinkGuardPrompt, onArchiveBoth: () -> Unit,
             onDismissRequest = onCancel,
             text = { Text(scheduleDrivesSubject(prompt.subjectName)) },
             confirmButton = { TextButton(onClick = onArchiveBoth) { Text(ARCHIVE_BOTH) } },
-            dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.maintenance_cancel)) } },
         )
         LinkGuardPrompt.Primary -> AlertDialog(
             onDismissRequest = onCancel,
             text = { Text(THE_SUBJECT_HEALTH_FOLLOWS) },
-            confirmButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+            confirmButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.maintenance_cancel)) } },
         )
     }
 }
@@ -616,7 +616,18 @@ internal fun MaintenanceField(
     )
 }
 
-/** The four `RecurrenceUnit` names, which are the wire and column values and need no translation. */
+/**
+ * The interval unit's word in the picker. The `RecurrenceUnit` names are the wire and column values and are never
+ * shown through here as data; the English words read the same as the names, and a language pack gives its own.
+ */
+internal fun recurrenceUnitLabel(unit: RecurrenceUnit): String = when (unit) {
+    RecurrenceUnit.DAY -> localized(R.string.maintenance_unit_day)
+    RecurrenceUnit.WEEK -> localized(R.string.maintenance_unit_week)
+    RecurrenceUnit.MONTH -> localized(R.string.maintenance_unit_month)
+    RecurrenceUnit.YEAR -> localized(R.string.maintenance_unit_year)
+}
+
+/** The four `RecurrenceUnit`s, each by its [recurrenceUnitLabel]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun UnitPicker(
@@ -628,7 +639,7 @@ private fun UnitPicker(
     var open by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = modifier) {
         OutlinedTextField(
-            value = selected.name,
+            value = recurrenceUnitLabel(selected),
             onValueChange = {},
             readOnly = true,
             isError = problem,
@@ -641,7 +652,7 @@ private fun UnitPicker(
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             RecurrenceUnit.entries.forEach { unit ->
                 DropdownMenuItem(
-                    text = { Text(unit.name) },
+                    text = { Text(recurrenceUnitLabel(unit)) },
                     onClick = { open = false; onSelect(unit) },
                 )
             }
@@ -676,7 +687,7 @@ private fun MeterPicker(
             // Clearing the choice is how the meter rule is switched off, and it reuses the shipped
             // "No target" wording for "no counter chosen" rather than drafting a line for it.
             DropdownMenuItem(
-                text = { Text("No target") },
+                text = { Text(stringResource(R.string.maintenance_no_target)) },
                 onClick = { open = false; onSelect(null) },
             )
             meters.forEach { (id, label) ->

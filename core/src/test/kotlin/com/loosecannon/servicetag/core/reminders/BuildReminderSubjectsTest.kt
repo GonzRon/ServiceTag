@@ -528,6 +528,14 @@ class BuildReminderSubjectsTest {
         assertEquals(1, subjects.size, "a group is one subject, never one per member")
         assertEquals("OVERDUE · 3 of 5 complete", subjects.single().body)
         assertEquals(LocalDate.parse("2026-04-06"), subjects.single().dueOn)
+        // #102: the status word and the progress are canonical hash input, never localized, so a group
+        // subject's hash is pinned to the value the shipped English line gives — computed outside this
+        // codebase over "Quarterly inspection", "OVERDUE · 3 of 5 complete", 2026-04-06, 14, ACTIVE and
+        // FIXED|1|WEEK|false|false joined by the unit separator. A change of language moves no hash.
+        assertEquals(
+            "8e27cbb7c58b45d4ab4f9c489056cfbc2280800e3fa675b3c5babc9e6195cd6d",
+            subjects.single().contentHash,
+        )
     }
 
     // ------------------------------------------------------------------------------------------

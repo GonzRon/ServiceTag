@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: supplies, installed components, reminders and notifications — English source. Comments carry the
+  ratification ids (P15-n: #15 Supplies; P47-n: #47 Installed components; P69-n: #69 a component's documents;
+  P72-n: #72 loans; P79-n: #79 warranties; master plan §17 for the maintenance reminders) and what each placeholder is.
+
+  Vocabulary: a "supply item" (SupplyItem) is a consumable or part in the owner's Supplies catalog (a filter, an oil, a
+  battery); an asset "takes" it in a "role" the owner types. An "installed component" is a part fitted in an asset,
+  possibly inside another one; it is "removed" (taken out on a date) or "replaced" (removed and a new one installed).
+  Names, roles, part numbers, serials, units and quantities are the owner's own text and arrive as placeholders,
+  unchanged. Dates arrive already formatted.
+
+  Notifications: "maintenance due" and "overdue" reminders, a warranty warning and a loan's due-back reminder. The
+  status words (DUE, OVERDUE, EXPIRES SOON, DUE BACK, NOT RETURNED) are the notification's sub-text, in capitals.
+  Channel names and descriptions appear in the system's notification settings for the app.
+-->
+<resources>
+    <!-- ============================================================ Supplies (#15) -->
+
+    <!-- P15-1: the Maintenance screen's row, the Supplies list's title, and the asset detail's section header. -->
+    <string name="supplies_section">Supplies</string>
+    <!-- P15-2: the Supplies list's add button and the supply item editor's title. -->
+    <string name="supplies_supply_item">Supply item</string>
+    <!-- P15-3: the Supplies list, empty. -->
+    <string name="supplies_no_supplies_yet">No supplies yet.</string>
+    <!-- P15-4: a supply item's field (editor) and fact (detail): the maker's part number. -->
+    <string name="supplies_part_number_field">Part number</string>
+    <!-- P15-5: a supply item's field and fact: the unit it is usually counted in (L, pcs, m…). -->
+    <string name="supplies_preferred_unit_field">Preferred unit</string>
+    <!-- P15-6: the detail's and the editor's section header over the item's specifications (label, value, unit). -->
+    <string name="supplies_specifications_section">Specifications</string>
+    <!-- P15-7: the editor's button adding a specification row. -->
+    <string name="supplies_add_specification">Add specification</string>
+    <!-- P15-8: accessibility label of a specification row's close (×) button. -->
+    <string name="supplies_remove_specification">Remove specification</string>
+    <!-- P15-9: the detail, when the item has no specification. -->
+    <string name="supplies_no_specifications">No specifications</string>
+    <!-- P15-10: the detail's section header listing the assets that take this item. -->
+    <string name="supplies_used_by_section">Used by</string>
+    <!-- P15-11: the detail, when no asset takes this item. -->
+    <string name="supplies_not_used_by_any_asset">Not used by any asset</string>
+    <!-- P15-12: the editor, under the specification rows, after a save refused a row missing its label or value. -->
+    <string name="supplies_specification_needs_label_and_value">Each specification needs a label and a value.</string>
+    <!-- P15-13: the asset's Supplies section add button (accessibility), the add sheet's title, and a component's "add a supply to its composition" button. -->
+    <string name="supplies_add_supply">Add supply</string>
+    <!-- P15-14: the asset's Supplies section, empty. -->
+    <string name="supplies_no_supplies">No supplies</string>
+    <!-- P15-15: the supply item picker's title. -->
+    <string name="supplies_choose_a_supply">Choose a supply</string>
+    <!-- P15-16: the picker, when the catalog has no item; it points to the Supplies catalog under Maintenance. -->
+    <string name="supplies_no_supply_items_yet">No supply items yet. Add one under Maintenance › Supplies.</string>
+    <!-- P15-17: an asset's supply row menu item, and the sheet's title when changing the row's role. -->
+    <string name="supplies_edit_role">Edit role</string>
+    <!-- P15-18: the role sheet, when the asset already takes the same supply item in the same role. -->
+    <string name="supplies_role_taken">This asset already has that supply in that role.</string>
+    <!-- P15-20: a row whose supply item is no longer there (deleted by an import, or archived meanwhile). -->
+    <string name="supplies_item_gone">That supply item is no longer available.</string>
+    <!-- P15-21: an unlinked material row's button linking it to a supply item. -->
+    <string name="supplies_link_supply">Link supply</string>
+    <!-- P15-22: a material row or a component linked to a supply item. %1$s: the supply item's name. -->
+    <string name="supplies_linked_to">Linked to %1$s</string>
+    <!-- P15-23: a linked row's button clearing its link (and nothing else). -->
+    <string name="supplies_remove_link">Remove link</string>
+
+    <!-- The badge on a supply item the owner archived (it stays on its assets and lines). -->
+    <string name="supplies_item_archived_badge">Archived</string>
+    <!-- Accessibility: an asset's supply row overflow (three dots) menu. -->
+    <string name="supplies_more">More</string>
+    <!-- An asset's supply row menu item: the asset no longer takes this supply item. -->
+    <string name="supplies_remove_row">Remove</string>
+    <!-- Accessibility: a screen's back arrow. -->
+    <string name="supplies_back">Back</string>
+    <!-- A sheet's dismiss button, and the editor's close icon (accessibility). -->
+    <string name="supplies_cancel">Cancel</string>
+    <!-- A sheet's or the editor's Save button. -->
+    <string name="supplies_save">Save</string>
+    <!-- Accessibility: the supply item detail's edit icon. -->
+    <string name="supplies_edit">Edit</string>
+    <!-- The supply item detail's action: archive the item (it keeps its uses and can be brought back). -->
+    <string name="supplies_archive">Archive</string>
+    <!-- The supply item detail's action on an archived item: bring it back. -->
+    <string name="supplies_unarchive">Unarchive</string>
+    <!-- The supply item editor's name field. -->
+    <string name="supplies_name_field">Name</string>
+    <!-- A specification row's label field (what is specified, e.g. "Thread"). -->
+    <string name="supplies_specification_label_field">Label</string>
+    <!-- A specification row's value field (e.g. "M20"). -->
+    <string name="supplies_specification_value_field">Value</string>
+    <!-- A specification row's unit field (e.g. "mm"). -->
+    <string name="supplies_specification_unit_field">Unit</string>
+
+    <!-- ============================================================ Installed components (#47, #69) -->
+
+    <!-- P47-1: the asset detail's section header. -->
+    <string name="installed_components_section">Installed components</string>
+    <!-- P47-2: the section, empty. -->
+    <string name="installed_no_installed_components">No installed components</string>
+    <!-- P47-3: the section's add button (accessibility) and the install sheet's title. -->
+    <string name="installed_install_component">Install component</string>
+    <!-- P47-4: a component's action: install another component inside this one. -->
+    <string name="installed_install_inside">Install inside</string>
+    <!-- P47-5: under the install sheet's title, a nested row's line, and its accessibility label. %1$s: the parent component's name. -->
+    <string name="installed_inside_of">Inside %1$s</string>
+    <!-- P47-6: a component's field and fact: its serial number or batch/lot number. -->
+    <string name="installed_serial_or_lot">Serial or lot</string>
+    <!-- P47-7: the date field and fact: the day it was installed (on replace, the replacement day). -->
+    <string name="installed_installed_on">Installed on</string>
+    <!-- P47-8: the remove sheet's date field and the fact: the day it was taken out. -->
+    <string name="installed_removed_on">Removed on</string>
+    <!-- P47-9: a component's action and the replace sheet's confirm button (verb). -->
+    <string name="installed_replace">Replace</string>
+    <!-- P47-10: the replace sheet's title. %1$s: the component's name. -->
+    <string name="installed_replace_title">Replace %1$s</string>
+    <!-- P47-11: the remove sheet's title. %1$s: the component's name. -->
+    <string name="installed_remove_title">Remove %1$s</string>
+    <!-- P47-12: the remove and replace sheets, when other components are installed inside this one. -->
+    <string name="installed_subtree_removed_too">Everything installed inside it is removed on the same date.</string>
+    <!-- P47-13: the edit sheet's title. -->
+    <string name="installed_edit_component">Edit component</string>
+    <!-- P47-14: the component sheet's section listing the position's earlier and current components. -->
+    <string name="installed_history">History</string>
+    <!-- P47-15: a component's quiet line and history. %1$s: the install date, already formatted. -->
+    <string name="installed_installed_on_day">Installed %1$s</string>
+    <!-- P47-16: the fact and history when the install date is not recorded. -->
+    <string name="installed_install_date_not_recorded">Install date not recorded</string>
+    <!-- P47-17: a removed component's line and history. %1$s: the removal date, already formatted. -->
+    <string name="installed_removed_on_day">Removed %1$s</string>
+    <!-- P47-18: the toggle showing the removed components under the tree. %1$d: how many there are. -->
+    <string name="installed_removed_count">Removed (%1$d)</string>
+    <!-- P47-19: any component sheet, when the component (or its parent) was removed or changed meanwhile. -->
+    <string name="installed_component_changed">This component was removed or changed. Nothing was saved.</string>
+    <!-- P47-20: under the date field, when a removal date is before the install date. -->
+    <string name="installed_removal_before_install">The removal date cannot be before the install date.</string>
+    <!-- P47-21: one entry of a component's composition. %1$s: the quantity with its unit ("4", "2 L"); %2$s: the supply item's name. -->
+    <string name="installed_composition_line">%1$s × %2$s</string>
+    <!-- P47-22: a component's quiet line, after the first two composition entries. %1$d: how many more there are. -->
+    <string name="installed_more_entries">+%1$d more</string>
+    <!-- P47-23: the section listing what the component is made of (supply items and quantities). -->
+    <string name="installed_composition_section">Composition</string>
+    <!-- P47-24: accessibility label of a composition entry's close (×) button. -->
+    <string name="installed_remove_from_composition">Remove from composition</string>
+    <!-- P47-25: under the composition rows, after a save refused an entry with no quantity or zero. -->
+    <string name="installed_composition_quantity_required">Each supply needs a quantity above zero.</string>
+    <!-- P69-1: the component sheet's action opening the component's own documents and links. -->
+    <string name="installed_documents_and_references">Documents and references</string>
+    <!-- P69-2: the heading over the component's own documents and links. -->
+    <string name="installed_this_installed_component">This installed component</string>
+    <!-- P69-3: the heading of documents and links inherited from a supply item; a tap opens it. %1$s: the supply item's name. -->
+    <string name="installed_from_supply">From %1$s</string>
+    <!-- P69-4: the quiet line under an inherited group: they are changed on the supply item, not here. -->
+    <string name="installed_open_the_supply_to_change">Open the supply to add or change these.</string>
+
+    <!-- Accessibility: the component screen's back arrow. -->
+    <string name="installed_back">Back</string>
+    <!-- A component's action: take it out of the asset (on a date). Also the remove sheet's confirm button. -->
+    <string name="installed_remove">Remove</string>
+    <!-- A component's action: edit its details. -->
+    <string name="installed_edit">Edit</string>
+    <!-- A sheet's Save button. -->
+    <string name="installed_save">Save</string>
+    <!-- A sheet's dismiss button. -->
+    <string name="installed_cancel">Cancel</string>
+    <!-- A composition entry's quantity field (short: it sits beside the unit field). -->
+    <string name="installed_quantity_field">Qty</string>
+    <!-- A composition entry's unit field. -->
+    <string name="installed_unit_field">Unit</string>
+
+    <!-- ============================================================ Notification permission rationales -->
+
+    <!-- Master plan §17: shown before asking for the notification permission, on first schedule creation. -->
+    <string name="reminders_permission_rationale_maintenance">ServiceTag needs notification permission to remind you when maintenance is due.</string>
+    <!-- P79-12: the same, in the asset editor when a warranty reminder is set. -->
+    <string name="reminders_permission_rationale_warranty">ServiceTag needs notification permission to remind you before a warranty expires.</string>
+    <!-- P72-33: the same, in the lend form when a due-back reminder is set. -->
+    <string name="reminders_permission_rationale_loan">ServiceTag needs notification permission to remind you when a loan is due back.</string>
+
+    <!-- ============================================================ Reminder health findings (master plan §17.1a) -->
+
+    <!-- NOTIFICATIONS_BLOCKED: the permission, the app's notifications or a reminder channel is switched off. -->
+    <string name="reminders_health_notifications_blocked">Notifications are turned off, so maintenance reminders will not arrive.</string>
+    <!-- REMINDERS_GLOBALLY_OFF: the owner switched reminders off in the app's settings. -->
+    <string name="reminders_health_reminders_globally_off">Reminders are turned off in ServiceTag.</string>
+    <!-- DIGEST_ALARM_MISSING: the daily check that posts reminders is not scheduled. -->
+    <string name="reminders_health_digest_alarm_missing">The daily reminder check is not scheduled, so today\'s maintenance may go unannounced.</string>
+    <!-- BACKSTOP_WORK_MISSING: the periodic background check that catches a missed reminder is not running. -->
+    <string name="reminders_health_backstop_work_missing">The background safety check is not running, so a missed reminder would not be caught.</string>
+    <!-- APP_RESTRICTED: the phone's battery or background restrictions hold the app back. -->
+    <string name="reminders_health_app_restricted">This phone is holding ServiceTag back in the background, so reminders may arrive late or not at all.</string>
+    <!-- P141-1a / P141-1b (SCHEDULE_NO_PROVIDER): schedules with reminders on but no delivery set up. %1$d: how many. -->
+    <plurals name="reminders_health_schedule_no_provider">
+        <item quantity="one">%1$d schedule has reminders turned on, but reminder delivery isn\'t configured.</item>
+        <item quantity="other">%1$d schedules have reminders turned on, but reminder delivery isn\'t configured.</item>
+    </plurals>
+    <!--
+      SCHEDULE_PROVIDER_DISABLED: schedules with reminders on whose every delivery is switched off. %1$d: how many.
+      The ratified English is count-shaped and reads "schedules have" for every count, 1 included; a translation
+      gives each form its own grammar.
+    -->
+    <plurals name="reminders_health_schedule_provider_disabled">
+        <item quantity="one">%1$d schedules have reminders switched on but no way to deliver them.</item>
+        <item quantity="other">%1$d schedules have reminders switched on but no way to deliver them.</item>
+    </plurals>
+    <!--
+      NO_DATA: meter-based schedules with no starting reading yet. %1$d: how many. The ratified English is
+      count-shaped and reads "schedules need" for every count, 1 included; a translation gives each form its own grammar.
+    -->
+    <plurals name="reminders_health_no_baseline">
+        <item quantity="one">%1$d schedules need a meter reading before they can come due.</item>
+        <item quantity="other">%1$d schedules need a meter reading before they can come due.</item>
+    </plurals>
+
+    <!-- ============================================================ Notification channels (system settings) -->
+
+    <!-- Master plan §17.1d: the channel for maintenance that is due (and the daily summary). -->
+    <string name="notification_channel_due_name">Maintenance due</string>
+    <string name="notification_channel_due_description">Reminders for maintenance that is due.</string>
+    <!-- Master plan §17.1d: the channel for overdue maintenance. -->
+    <string name="notification_channel_overdue_name">Maintenance overdue</string>
+    <string name="notification_channel_overdue_description">Reminders for maintenance that is past due.</string>
+    <!-- P79-13, P79-14: the warranty warning's channel. -->
+    <string name="notification_channel_warranty_name">Warranty reminders</string>
+    <string name="notification_channel_warranty_description">Reminders before a warranty expires.</string>
+    <!-- P72-38, P72-39: the loan reminder's channel. -->
+    <string name="notification_channel_loans_name">Loan reminders</string>
+    <string name="notification_channel_loans_description">Reminders when a lent item is due back.</string>
+
+    <!-- ============================================================ Notifications (master plan §17.1e) -->
+
+    <!-- The daily summary's title. %1$d: how many items. The ratified English reads "items need" for every count. -->
+    <plurals name="notification_summary_title">
+        <item quantity="one">%1$d maintenance items need attention</item>
+        <item quantity="other">%1$d maintenance items need attention</item>
+    </plurals>
+    <!-- One clause of the summary's body. %1$d: how many items are overdue. -->
+    <plurals name="notification_summary_overdue">
+        <item quantity="one">%1$d overdue</item>
+        <item quantity="other">%1$d overdue</item>
+    </plurals>
+    <!-- One clause of the summary's body. %1$d: how many items are due today. -->
+    <plurals name="notification_summary_due">
+        <item quantity="one">%1$d due</item>
+        <item quantity="other">%1$d due</item>
+    </plurals>
+    <!-- One clause of the summary's body. %1$d: how many items are due soon. -->
+    <plurals name="notification_summary_due_soon">
+        <item quantity="one">%1$d due soon</item>
+        <item quantity="other">%1$d due soon</item>
+    </plurals>
+    <!-- The summary's body: "2 overdue, 1 due, 1 due soon." %1$s: the clauses with a zero count left out, joined as a list. -->
+    <string name="notification_summary_body">%1$s.</string>
+
+    <!-- A maintenance reminder's title. %1$s: the asset's (or group's) name; %2$s: the schedule's title. -->
+    <string name="notification_item_title">%1$s — %2$s</string>
+    <!-- A maintenance reminder's body. %1$s: the due date. -->
+    <string name="notification_item_due_on">Due %1$s.</string>
+    <!-- An overdue maintenance reminder's body. %1$s: the date it came due. -->
+    <string name="notification_item_overdue_since">Overdue since %1$s.</string>
+    <!-- A meter reminder's body. %1$s: the reading it was due at; %2$s: the meter's unit (hours, km…); %3$s: the current reading. -->
+    <string name="notification_item_meter_due">Due at %1$s %2$s, now %3$s.</string>
+    <!-- A meter reminder's body for a meter with no unit (a pH, say). %1$s: the reading it was due at; %2$s: the current reading. -->
+    <string name="notification_item_meter_due_no_unit">Due at %1$s, now %2$s.</string>
+
+    <!-- Master plan §17: a maintenance reminder's status word (sub-text), due today. -->
+    <string name="notification_status_due">DUE</string>
+    <!-- Master plan §17: a maintenance reminder's status word, past due. -->
+    <string name="notification_status_overdue">OVERDUE</string>
+    <!-- P79-11: a warranty warning's status word. -->
+    <string name="notification_status_expires_soon">EXPIRES SOON</string>
+    <!-- P72-42: a loan reminder's status word, through its due day. -->
+    <string name="notification_status_due_back">DUE BACK</string>
+    <!-- P72-43: a loan reminder's status word, after its due day. -->
+    <string name="notification_status_not_returned">NOT RETURNED</string>
+
+    <!-- Master plan §17: a reminder's action button: mark the maintenance done. -->
+    <string name="notification_action_done">Done</string>
+    <!-- Master plan §17: a reminder's action button: remind again tomorrow. -->
+    <string name="notification_action_snooze_one_day">Snooze 1 day</string>
+    <!-- Master plan §17: a reminder's action button: open the schedule (or the asset) in the app. -->
+    <string name="notification_action_open">Open</string>
+
+    <!-- The warranty warning's title (#79, the reused word "Warranty"). %1$s: the asset's name. -->
+    <string name="notification_warranty_title">%1$s — Warranty</string>
+    <!-- P79-10: the warranty warning's body. %1$s: the expiry date. -->
+    <string name="notification_warranty_body">Warranty expires %1$s.</string>
+    <!-- P72-23: a loan reminder's title. %1$s: the lent asset's name. -->
+    <string name="notification_loan_title">%1$s — Due back</string>
+    <!-- P72-40: a loan reminder's body, through its due day. %1$s: the borrower's name; %2$s: the due date. -->
+    <string name="notification_loan_body_through">Lent to %1$s. Due back %2$s.</string>
+    <!-- P72-41: a loan reminder's body, after its due day. %1$s: the borrower's name; %2$s: the due date. -->
+    <string name="notification_loan_body_after">Lent to %1$s. Was due back %2$s.</string>
+</resources>

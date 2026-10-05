@@ -50,19 +50,19 @@ class PickedContactReader(
         val row = try {
             query.row(uri)
         } catch (denied: SecurityException) {
-            log("a picked contact could not be read: the read was refused (${denied.javaClass.simpleName})")
+            log("a picked contact could not be read: the read was refused (${denied.javaClass.simpleName})") // l10n-ok: log line
             return PickedContact.Unreadable
         } catch (failed: RuntimeException) {
-            log("a picked contact could not be read (${failed.javaClass.simpleName})")
+            log("a picked contact could not be read (${failed.javaClass.simpleName})") // l10n-ok: log line
             return PickedContact.Unreadable
         }
         if (row == null) {
-            log("a picked contact could not be read: no row")
+            log("a picked contact could not be read: no row") // l10n-ok: log line
             return PickedContact.Unreadable
         }
         val link = row.lookupKey?.let { ContactLink.lookupUriOf(row.id, it) }
         if (link == null) {
-            log("a picked contact could not be read: its lookup key cannot be stored")
+            log("a picked contact could not be read: its lookup key cannot be stored") // l10n-ok: log line
             return PickedContact.Unreadable
         }
         val name = row.displayName?.trim().orEmpty()

@@ -52,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.DocumentRole
@@ -66,6 +68,11 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.canonicalMonthDay
+import com.loosecannon.servicetag.l10n.datePlaceholder
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedPlural
+import com.loosecannon.servicetag.l10n.monthDayPlaceholder
 import com.loosecannon.servicetag.reminders.WARRANTY_NOTIFICATION_RATIONALE
 import com.loosecannon.servicetag.ui.attachments.NO_APP_CAN_PICK_FILES
 import com.loosecannon.servicetag.ui.attachments.NoAttachmentFolderCard
@@ -73,6 +80,8 @@ import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.attachments.rememberDocumentPicker
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.localizedDateText
+import com.loosecannon.servicetag.ui.components.localizedMonthDayText
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
@@ -84,122 +93,107 @@ import com.loosecannon.servicetag.ui.theme.MonoText
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 // The asset editor's season, break and health words (spec §10.7), RATIFIED, each by its S-number and
 // verbatim. S132 is one ratified set of words, split only at its "·" separators.
+// #102: every word here lives in res/values/strings_asset_edit.xml (`asset_edit_*`) beside its S-, P67- or P78-
+// number, and is read when drawn; S132's four words are four strings there, so a translation cannot lose one.
 
 /** S28, asset editor section. */
-const val OPERATING_SEASON = "Operating season"
+val OPERATING_SEASON: String get() = localized(R.string.asset_edit_operating_season)
 
 /** S29, mode (re). */
-const val YEAR_ROUND = "Year-round"
+val YEAR_ROUND: String get() = localized(R.string.asset_edit_year_round)
 
 /** S30, mode. */
-const val SAME_DATES_EVERY_YEAR = "Same dates every year"
+val SAME_DATES_EVERY_YEAR: String get() = localized(R.string.asset_edit_same_dates_every_year)
 
 /** S31, mode. */
-const val STARTED_AND_ENDED_BY_HAND = "Started and ended by hand"
+val STARTED_AND_ENDED_BY_HAND: String get() = localized(R.string.asset_edit_started_and_ended_by_hand)
 
 /** S32, field (re). */
-const val SEASON_STARTS = "Season starts"
+val SEASON_STARTS: String get() = localized(R.string.asset_edit_season_starts)
 
 /** S33, field (re). */
-const val SEASON_ENDS = "Season ends"
+val SEASON_ENDS: String get() = localized(R.string.asset_edit_season_ends)
 
 /** S34, helper under S32 and S33. */
-const val SEASON_MAY_RUN_ACROSS_THE_NEW_YEAR =
-    "The season may run across the new year, for example from October to April."
+val SEASON_MAY_RUN_ACROSS_THE_NEW_YEAR: String get() = localized(R.string.asset_edit_season_may_run_across_the_new_year)
 
 /** S35, the switch question: asked only on a switch into S31, with no default. */
-const val IS_THIS_ASSET_IN_SEASON = "Is this asset in season right now?"
+val IS_THIS_ASSET_IN_SEASON: String get() = localized(R.string.asset_edit_is_this_asset_in_season)
 
 /** S36, option. */
-const val IN_SEASON_NOW = "In season"
+val IN_SEASON_NOW: String get() = localized(R.string.asset_edit_in_season_now)
 
 /** S37, option (re). */
-const val OUT_OF_SEASON_NOW = "Out of season"
+val OUT_OF_SEASON_NOW: String get() = localized(R.string.asset_edit_out_of_season_now)
 
 /** S38, helper under S31. */
-const val YOU_START_AND_END_THE_SEASON =
-    "You start and end the season yourself. Maintenance set to follow the season waits while it is ended."
-
-/** S55, refusal; `<titles>` is the stranded schedules' titles — see [seasonStrands]. */
-const val SEASON_STRANDS_PRE_SERVICE =
-    "Some maintenance on this asset is set to be ready before its season. Change it first: <titles>."
+val YOU_START_AND_END_THE_SEASON: String get() = localized(R.string.asset_edit_you_start_and_end_the_season)
 
 /** S58, asset editor section. */
-const val MAINTENANCE_BREAK = "Maintenance break"
+val MAINTENANCE_BREAK: String get() = localized(R.string.asset_edit_maintenance_break)
 
 /** S59, toggle: off unless a break is stored. */
-const val NO_ROUTINE_MAINTENANCE_BETWEEN_TWO_DATES = "No routine maintenance between two dates"
+val NO_ROUTINE_MAINTENANCE_BETWEEN_TWO_DATES: String get() = localized(R.string.asset_edit_no_routine_maintenance_between_two_dates)
 
 /** S60, field. */
-const val BREAK_STARTS = "Break starts"
+val BREAK_STARTS: String get() = localized(R.string.asset_edit_break_starts)
 
 /** S61, field. */
-const val BREAK_ENDS = "Break ends"
+val BREAK_ENDS: String get() = localized(R.string.asset_edit_break_ends)
 
 /** S62, helper under S60 and S61. */
-const val BREAK_HELPER =
-    "Maintenance set to follow the season, or to be ready before it, does not become due during the break. " +
-        "Work already overdue stays overdue, without reminders."
+val BREAK_HELPER: String get() = localized(R.string.asset_edit_break_helper)
 
 /** S63, refusal: `BLACKOUT_COVERS_THE_YEAR`. */
-const val BREAK_CANNOT_COVER_THE_YEAR = "The break cannot cover the whole year."
-
-/** S64, refusal; `<titles>` is the stranded schedules' titles — see [breakStrands]. */
-const val BREAK_STRANDS_PRE_SERVICE =
-    "Some maintenance on this asset is set to be ready before the break. Change it first: <titles>."
+val BREAK_CANNOT_COVER_THE_YEAR: String get() = localized(R.string.asset_edit_break_cannot_cover_the_year)
 
 /** S111, section. */
-const val HEALTH_SUBJECTS = "Health subjects"
+val HEALTH_SUBJECTS: String get() = localized(R.string.asset_edit_health_subjects)
 
 /** S112, action: opens the health subject editor for this asset (B14's asset detail uses it too). */
-const val ADD_HEALTH_SUBJECT = "Add health subject"
+val ADD_HEALTH_SUBJECT: String get() = localized(R.string.asset_edit_add_health_subject)
 
 /** S131, field. */
-const val COMBINE_HEALTH_BY = "Combine health by"
+val COMBINE_HEALTH_BY: String get() = localized(R.string.asset_edit_combine_health_by)
 
-/** S132, options, one ratified set: split only at its "·" separators, in its own order. */
-const val COMBINE_HEALTH_OPTIONS = "Worst subject · One subject · Average · Weighted average"
+/**
+ * S132, options, one ratified set: split only at its "·" separators, in its own order. #102: each word is its own
+ * string ([COMBINE_CHOICES]); this is the set as one run, the words joined at the ratified separator.
+ */
+val COMBINE_HEALTH_OPTIONS: String get() = COMBINE_CHOICES.joinToString(" · ") { it.second }
 
 /** S134, field under "One subject". */
-const val WHICH_SUBJECT = "Which subject?"
+val WHICH_SUBJECT: String get() = localized(R.string.asset_edit_which_subject)
 
 // #78's reconciliation prompt (plan §5), RATIFIED 2026-09-25, verbatim. The dialog has no title (R-2).
 
-/** P78-1a, the dialog's body when the count is not 1; `<n>` is the count — see [notTiedToSeason]. */
-const val NOT_TIED_TO_SEASON =
-    "This asset has <n> maintenance schedules that are not tied to its operating season. " +
-        "When active, they can become or remain due while the asset is out of season " +
-        "unless you change when that maintenance should be done."
-
-/** P78-1b, the dialog's body when the count is 1. */
-const val NOT_TIED_TO_SEASON_ONE =
-    "This asset has 1 maintenance schedule that is not tied to its operating season. " +
-        "When active, it can become or remain due while the asset is out of season " +
-        "unless you change when that maintenance should be done."
+/** P78-1b, the dialog's body when the count is 1 — [notTiedToSeason]'s `one` form. */
+val NOT_TIED_TO_SEASON_ONE: String get() = notTiedToSeason(1)
 
 /** P78-2, the dialog's confirm button: the editor closes onto the asset's schedules. */
-const val REVIEW_MAINTENANCE_SCHEDULES = "Review maintenance schedules"
+val REVIEW_MAINTENANCE_SCHEDULES: String get() = localized(R.string.asset_edit_review_maintenance_schedules)
 
 /** P78-3, the dialog's dismiss button: the editor closes and the schedules stay as they are. */
-const val KEEP_SCHEDULES_AS_IS = "Keep schedules as-is"
+val KEEP_SCHEDULES_AS_IS: String get() = localized(R.string.asset_edit_keep_schedules_as_is)
 
-/** P78-1b for one schedule, otherwise P78-1a with its one substitution: the live CONTINUOUS count. */
-fun notTiedToSeason(count: Int): String =
-    if (count == 1) NOT_TIED_TO_SEASON_ONE else NOT_TIED_TO_SEASON.replace("<n>", count.toString())
+/**
+ * P78-1b for one schedule, otherwise P78-1a with its one substitution: the live CONTINUOUS count. #102: the two are
+ * one plural, `asset_edit_not_tied_to_season`, chosen by the rendering language's rules.
+ */
+fun notTiedToSeason(count: Int): String = localizedPlural(R.plurals.asset_edit_not_tied_to_season, count, count)
 
-/** S132's four words, each with the aggregation it names, in the ratified order. */
-internal val COMBINE_CHOICES: List<Pair<HealthAggregation, String>> =
-    listOf(
-        HealthAggregation.WORST,
-        HealthAggregation.TRACK_ONE,
-        HealthAggregation.AVERAGE,
-        HealthAggregation.WEIGHTED,
-    ).zip(ratifiedParts(COMBINE_HEALTH_OPTIONS))
+/** S132's four words, each with the aggregation it names, in the ratified order. Read when drawn (#102). */
+internal val COMBINE_CHOICES: List<Pair<HealthAggregation, String>>
+    get() = listOf(
+        HealthAggregation.WORST to localized(R.string.asset_edit_combine_worst),
+        HealthAggregation.TRACK_ONE to localized(R.string.asset_edit_combine_one),
+        HealthAggregation.AVERAGE to localized(R.string.asset_edit_combine_average),
+        HealthAggregation.WEIGHTED to localized(R.string.asset_edit_combine_weighted),
+    )
 
 /** One ratified set of words, split only at its "·" separators (spec §10.7). */
 internal fun ratifiedParts(words: String): List<String> = words.split(" · ")
@@ -207,48 +201,48 @@ internal fun ratifiedParts(words: String): List<String> = words.split(" · ")
 // #67's document intake (plan §6), RATIFIED verbatim.
 
 /** P67-1, a `SectionHeader` drawn upper-case like DOCUMENTS. */
-const val KEY_DOCUMENTS = "Key documents"
+val KEY_DOCUMENTS: String get() = localized(R.string.asset_edit_key_documents)
 
 /** P67-7, Purchase block. */
-const val ADD_PURCHASE_INVOICE_OR_RECEIPT = "Add purchase invoice or receipt"
+val ADD_PURCHASE_INVOICE_OR_RECEIPT: String get() = localized(R.string.asset_edit_add_purchase_invoice_or_receipt)
 
 /** P67-8, Key documents block. */
-const val ADD_USER_MANUAL = "Add user manual"
+val ADD_USER_MANUAL: String get() = localized(R.string.asset_edit_add_user_manual)
 
 /** P67-9, Key documents block. */
-const val ADD_SERVICE_MANUAL = "Add service manual"
+val ADD_SERVICE_MANUAL: String get() = localized(R.string.asset_edit_add_service_manual)
 
 /** P67-10, a staged file's quiet line; replaced by the problem sentence after a failed copy. */
-const val ATTACHED_WHEN_YOU_SAVE = "Attached when you save"
+val ATTACHED_WHEN_YOU_SAVE: String get() = localized(R.string.asset_edit_attached_when_you_save)
 
 // #86 (plan §6, reused 1–9): the editor's field labels, hoisted byte-identical so Replace asset draws them from here.
 
 /** The Name field's label. */
-const val NAME_FIELD = "Name"
+val NAME_FIELD: String get() = localized(R.string.asset_edit_name_field)
 
 /** The Manufacturer field's label. */
-const val MANUFACTURER_FIELD = "Manufacturer"
+val MANUFACTURER_FIELD: String get() = localized(R.string.asset_edit_manufacturer_field)
 
 /** The Model field's label. */
-const val MODEL_FIELD = "Model"
+val MODEL_FIELD: String get() = localized(R.string.asset_edit_model_field)
 
 /** The Serial number field's label. */
-const val SERIAL_NUMBER_FIELD = "Serial number"
+val SERIAL_NUMBER_FIELD: String get() = localized(R.string.asset_edit_serial_number_field)
 
 /** The Location field's label. */
-const val LOCATION_FIELD = "Location"
+val LOCATION_FIELD: String get() = localized(R.string.asset_edit_location_field)
 
 /** The parent picker's label. */
-const val PART_OF_FIELD = "Part of"
+val PART_OF_FIELD: String get() = localized(R.string.asset_edit_part_of_field)
 
 /** The Purchase date field's label. */
-const val PURCHASE_DATE_FIELD = "Purchase date"
+val PURCHASE_DATE_FIELD: String get() = localized(R.string.asset_edit_purchase_date_field)
 
 /** The In service date field's label. */
-const val IN_SERVICE_DATE_FIELD = "In service date"
+val IN_SERVICE_DATE_FIELD: String get() = localized(R.string.asset_edit_in_service_date_field)
 
 /** The Category field's label. */
-const val CATEGORY_FIELD = "Category"
+val CATEGORY_FIELD: String get() = localized(R.string.asset_edit_category_field)
 
 /**
  * Create ([assetId] null) or edit one asset: the grouped form of spec §9 — IDENTITY, PLACEMENT,
@@ -333,7 +327,9 @@ fun AssetEditScreen(
         AlertDialog(
             onDismissRequest = model::dismissNotifications,
             text = { Text(WARRANTY_NOTIFICATION_RATIONALE) },
-            confirmButton = { TextButton(onClick = model::requestNotifications) { Text("OK") } },
+            confirmButton = {
+                TextButton(onClick = model::requestNotifications) { Text(stringResource(R.string.asset_edit_notifications_ok)) }
+            },
             dismissButton = { TextButton(onClick = model::dismissNotifications) { Text(NOT_NOW) } },
         )
     }
@@ -342,15 +338,19 @@ fun AssetEditScreen(
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
-                title = { Text(if (state.editing) "Edit asset" else ReplaceStrings.NEW_ASSET) },
+                title = {
+                    Text(if (state.editing) stringResource(R.string.asset_edit_title_edit) else ReplaceStrings.NEW_ASSET)
+                },
                 navigationIcon = {
                     // #67, R67-8 (C6): held throughout the copies, same as the back gesture above.
                     IconButton(onClick = onBack, enabled = !state.saving) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Cancel")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.asset_edit_cancel))
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = state.canSave) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.canSave) {
+                        Text(stringResource(R.string.asset_edit_save))
+                    }
                 },
             )
         },
@@ -382,11 +382,11 @@ fun AssetEditScreen(
             WarrantyBlock(state, model)
             KeyDocumentsBlock(state, model, onOpenSettings, onNoFilePicker)
 
-            SectionHeader(title = "Notes")
+            SectionHeader(title = stringResource(R.string.asset_edit_section_notes))
             FormField(
                 value = state.notes,
                 onValueChange = model::onNotes,
-                label = "Notes",
+                label = stringResource(R.string.asset_edit_notes_field),
                 minLines = 3,
             )
 
@@ -401,7 +401,7 @@ fun AssetEditScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Save asset")
+                Text(stringResource(R.string.asset_edit_save_asset))
             }
         }
     }
@@ -410,7 +410,7 @@ fun AssetEditScreen(
 /** What the thing is. Name first, because it is the one field every version of this app required. */
 @Composable
 private fun IdentityBlock(state: AssetEditState, model: AssetEditViewModel) {
-    SectionHeader(title = "Identity")
+    SectionHeader(title = stringResource(R.string.asset_edit_section_identity))
     FormField(
         value = state.name,
         onValueChange = model::onName,
@@ -422,13 +422,17 @@ private fun IdentityBlock(state: AssetEditState, model: AssetEditViewModel) {
     FormField(value = state.manufacturer, onValueChange = model::onManufacturer, label = MANUFACTURER_FIELD)
     FormField(value = state.model, onValueChange = model::onModel, label = MODEL_FIELD)
     FormField(value = state.serialNumber, onValueChange = model::onSerialNumber, label = SERIAL_NUMBER_FIELD)
-    FormField(value = state.description, onValueChange = model::onDescription, label = "Description")
+    FormField(
+        value = state.description,
+        onValueChange = model::onDescription,
+        label = stringResource(R.string.asset_edit_description_field),
+    )
 }
 
 /** Where it is and what it is part of (spec §5). When it is in use is "Operating season", below. */
 @Composable
 private fun PlacementBlock(state: AssetEditState, model: AssetEditViewModel) {
-    SectionHeader(title = "Placement")
+    SectionHeader(title = stringResource(R.string.asset_edit_section_placement))
     FormField(value = state.location, onValueChange = model::onLocation, label = LOCATION_FIELD)
     ChoiceField(
         label = PART_OF_FIELD,
@@ -588,7 +592,7 @@ private fun PurchaseBlock(
     model: AssetEditViewModel,
     onNoFilePicker: () -> Unit,
 ) {
-    SectionHeader(title = "Purchase")
+    SectionHeader(title = stringResource(R.string.asset_edit_section_purchase))
     DateField(
         value = state.purchaseOn,
         onValueChange = model::onPurchaseOn,
@@ -605,7 +609,7 @@ private fun PurchaseBlock(
         FormField(
             value = state.price,
             onValueChange = model::onPrice,
-            label = "Price",
+            label = stringResource(R.string.asset_edit_price_field),
             problem = state.problems[AssetField.PRICE],
             hint = priceHint(state.currency),
             mono = true,
@@ -615,13 +619,13 @@ private fun PurchaseBlock(
         FormField(
             value = state.currency,
             onValueChange = model::onCurrency,
-            label = "Currency",
+            label = stringResource(R.string.asset_edit_currency_field),
             problem = state.problems[AssetField.CURRENCY],
             mono = true,
             modifier = Modifier.width(126.dp),
         )
     }
-    FormField(value = state.vendor, onValueChange = model::onVendor, label = "Vendor")
+    FormField(value = state.vendor, onValueChange = model::onVendor, label = stringResource(R.string.asset_edit_vendor_field))
     DocumentRoleBlock(
         role = DocumentRole.PURCHASE_INVOICE_OR_RECEIPT,
         buttonText = ADD_PURCHASE_INVOICE_OR_RECEIPT,
@@ -638,11 +642,11 @@ private fun PurchaseBlock(
  */
 @Composable
 private fun WarrantyBlock(state: AssetEditState, model: AssetEditViewModel) {
-    SectionHeader(title = "Warranty")
+    SectionHeader(title = stringResource(R.string.asset_edit_section_warranty))
     DateField(
         value = state.warrantyExpiresOn,
         onValueChange = model::onWarrantyExpiresOn,
-        label = "Expires on",
+        label = stringResource(R.string.asset_edit_warranty_expires_on),
         problem = state.problems[AssetField.WARRANTY_EXPIRES_ON],
     )
     FormField(
@@ -656,7 +660,7 @@ private fun WarrantyBlock(state: AssetEditState, model: AssetEditViewModel) {
     FormField(
         value = state.warrantyNotes,
         onValueChange = model::onWarrantyNotes,
-        label = "Warranty notes",
+        label = stringResource(R.string.asset_edit_warranty_notes_field),
         minLines = 2,
     )
 }
@@ -744,9 +748,9 @@ private fun StagedDocumentRow(document: StagedDocument, onRemove: () -> Unit) {
             val problem = document.problem
             if (problem != null) RefusalLine(problem) else QuietLine(ATTACHED_WHEN_YOU_SAVE)
         }
-        val removeLabel = "Remove ${document.file.displayName}"
+        val removeLabel = stringResource(R.string.asset_edit_remove_file, document.file.displayName)
         TextButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = removeLabel }) {
-            Text("Remove")
+            Text(stringResource(R.string.asset_edit_remove))
         }
     }
 }
@@ -949,9 +953,13 @@ internal fun ChoiceField(
 }
 
 /**
- * An ISO date: typed, or picked from a calendar that writes the same `YYYY-MM-DD` text. Internal
- * rather than private because the retirement dialog of spec §7 asks for a date the same way, and
- * "how this app asks for a day" should have one owner.
+ * A calendar date: typed, or picked from a calendar. Internal rather than private because the
+ * retirement dialog of spec §7 asks for a date the same way, and "how this app asks for a day"
+ * should have one owner.
+ *
+ * [value] is the form's ISO text, which is what the form validates and stores; the owner reads and
+ * types the locale's own order (#102, PR #106 review: "01.03.2026" in German), and
+ * [localizedDateText] hands the form ISO back.
  */
 @Composable
 internal fun DateField(
@@ -961,16 +969,17 @@ internal fun DateField(
     problem: String? = null,
 ) {
     var picking by remember { mutableStateOf(false) }
+    val field = localizedDateText(value, onValueChange)
     FormField(
-        value = value,
-        onValueChange = onValueChange,
+        value = field.text,
+        onValueChange = field.onTyped,
         label = label,
         problem = problem,
-        placeholder = "YYYY-MM-DD",
+        placeholder = datePlaceholder(),
         mono = true,
         trailingIcon = {
             IconButton(onClick = { picking = true }) {
-                Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick $label")
+                Icon(ServiceTagIcons.CalendarMonth, contentDescription = stringResource(R.string.asset_edit_pick_date, label))
             }
         },
     )
@@ -985,7 +994,9 @@ internal fun DateField(
 
 /**
  * A `MM-DD` boundary: the same calendar, with the year it hands back thrown away (spec §6). The
- * [input] carries its label with the required mark, its outline and its one shipped line.
+ * [input] carries its label with the required mark, its outline and its one shipped line. Its text
+ * is the form's `MM-DD`; the owner reads and types the locale's day and month ("01.03" in German,
+ * #102), and [localizedMonthDayText] hands the form `MM-DD` back.
  */
 @Composable
 private fun MonthDayField(
@@ -994,18 +1005,22 @@ private fun MonthDayField(
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     var picking by remember { mutableStateOf(false) }
+    val field = localizedMonthDayText(input.text, onValueChange)
     FormField(
-        value = input.text,
-        onValueChange = onValueChange,
+        value = field.text,
+        onValueChange = field.onTyped,
         label = input.drawnLabel,
         problem = input.problem,
         outlined = input.outlined,
-        placeholder = "MM-DD",
+        placeholder = monthDayPlaceholder(),
         mono = true,
         modifier = modifier,
         trailingIcon = {
             IconButton(onClick = { picking = true }) {
-                Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick ${input.label}")
+                Icon(
+                    ServiceTagIcons.CalendarMonth,
+                    contentDescription = stringResource(R.string.asset_edit_pick_date, input.label),
+                )
             }
         },
     )
@@ -1014,7 +1029,7 @@ private fun MonthDayField(
             initial = "",
             onDismiss = { picking = false },
             onPicked = { date ->
-                onValueChange(String.format(Locale.US, "%02d-%02d", date.monthValue, date.dayOfMonth))
+                onValueChange(canonicalMonthDay(date))
                 picking = false
             },
         )
@@ -1045,9 +1060,9 @@ private fun CalendarDialog(initial: String, onDismiss: () -> Unit, onPicked: (Lo
                         onDismiss()
                     }
                 },
-            ) { Text("OK") }
+            ) { Text(stringResource(R.string.asset_edit_calendar_ok)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.asset_edit_calendar_cancel)) } },
     ) {
         DatePicker(state = picker)
     }
@@ -1059,10 +1074,11 @@ private fun CalendarDialog(initial: String, onDismiss: () -> Unit, onPicked: (Lo
  */
 @Composable
 private fun TemplateRow(selected: String?, onSelect: (String?) -> Unit) {
-    val options = listOf<Pair<String?, String>>(NONE to "None · set up later") +
+    // The starter templates' names stay as shipped (#102): a template's words become the owner's own records.
+    val options = listOf<Pair<String?, String>>(NONE to stringResource(R.string.asset_edit_template_none)) +
         SeedTemplates.all.map { it.key to it.name }
     Column {
-        SectionHeader(title = "Template")
+        SectionHeader(title = stringResource(R.string.asset_edit_section_template))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1078,8 +1094,7 @@ private fun TemplateRow(selected: String?, onSelect: (String?) -> Unit) {
             }
         }
         Text(
-            text = "Starts the asset with its readings and quick actions. " +
-                "Choose None to decide on the asset later.",
+            text = stringResource(R.string.asset_edit_template_helper),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),

@@ -40,12 +40,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -118,17 +121,21 @@ fun GroupDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.maintenance_back))
                     }
                 },
                 actions = {
                     // #77 (C19): a group naming a transferred-out asset is read, never changed.
                     if (current != null && current.editable) {
                         IconButton(onClick = { onEdit(groupId) }) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "Edit")
+                            Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.maintenance_edit))
                         }
                         TextButton(onClick = { model.setArchived(!current.archived) }) {
-                            Text(if (current.archived) "Unarchive" else "Archive")
+                            Text(
+                                stringResource(
+                                    if (current.archived) R.string.maintenance_unarchive else R.string.maintenance_archive,
+                                ),
+                            )
                         }
                     }
                 },
@@ -139,7 +146,7 @@ fun GroupDetailScreen(
         // the same way here as on the schedule, the scan sheet and the quick action.
         CompletionFlowHost(model.completion)
         if (current == null) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.maintenance_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
         // The 16dp gutter is each block's own, because the section headings carry theirs already
@@ -164,7 +171,7 @@ fun GroupDetailScreen(
                 )
                 if (current.archived) {
                     StatusBadge(
-                        label = "Archived",
+                        label = stringResource(R.string.maintenance_archived),
                         colors = ServiceTagTheme.semanticColors.seasonInactive,
                     )
                 }
@@ -288,7 +295,7 @@ private fun MemberRow(member: GroupMemberRow, onOpenAsset: () -> Unit) {
 }
 
 /** The RATIFIED name of a member row's action (master plan §17). */
-const val OPEN_ASSET = "Open asset"
+val OPEN_ASSET: String get() = localized(R.string.maintenance_open_asset)
 
 /**
  * The members section's heading: the **shipped** word "Assets", already the second tab's label and
@@ -298,7 +305,7 @@ const val OPEN_ASSET = "Open asset"
  * takes a word the app already says rather than a new one. Reported to the controller: if the owner
  * wants "Members" or another wording here, it needs ratifying.
  */
-const val MEMBERS_SECTION = "Assets"
+val MEMBERS_SECTION: String get() = localized(R.string.maintenance_members_section)
 
 /**
  * One schedule of the group: its title and status word, the RATIFIED progress form, and the round's

@@ -78,6 +78,12 @@ android {
     }
 
     buildTypes {
+        // #102: debug builds carry Android's pseudolocales, so a screen can be checked for text expansion from the
+        // emulator's language settings without a real language pack: "English (XA)" renders every string accented and
+        // about a third longer. Release builds never carry them.
+        debug {
+            isPseudoLocalesEnabled = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -206,4 +212,15 @@ tasks.withType<Test>().configureEach {
         root.dir("docs/design").asFileTree,
         root.dir("docs/api").asFileTree,
     ).withPropertyName("releaseProofPolicyScope").withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// #102: the unit tests render the app's words from src/main/res (EnglishResources), and the localization tests read
+// every language pack and the Kotlin sources they guard. A change to a string's text alone does not change the R
+// class, so without these inputs an edited translation or English string would be answered from the cache.
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        layout.projectDirectory.dir("src/main/res").asFileTree,
+        layout.projectDirectory.dir("src/main/kotlin").asFileTree,
+        rootProject.layout.projectDirectory.file("docs/localization-glossary.md"),
+    ).withPropertyName("localizationScope").withPathSensitivity(PathSensitivity.RELATIVE)
 }

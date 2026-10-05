@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: the languages Android's per-app language setting offers for ServiceTag (Settings → System → Languages →
+  App languages, API 33+). English, the source, then exactly the shipped language packs (res/values-*), no more:
+  LocalizationCoverageTest fails if this list and the packs disagree, so a language is never offered before its pack
+  covers the whole app. On older Android the app follows the device language.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="es" />
+    <locale android:name="pt" />
+    <locale android:name="zh-Hans" />
+    <locale android:name="fr" />
+    <locale android:name="ja" />
+    <locale android:name="ru" />
+    <locale android:name="de" />
+    <locale android:name="it" />
+    <locale android:name="hi" />
+</locale-config>

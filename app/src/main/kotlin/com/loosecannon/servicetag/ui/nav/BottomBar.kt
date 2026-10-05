@@ -11,6 +11,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 
 /**
@@ -50,8 +52,9 @@ private fun iconFor(route: Route): ImageVector = when (route) {
 /** The labels, all three RATIFIED — "Maintenance" is spec §9.1's, quoted verbatim (D-24). */
 private fun labelFor(route: Route): String = when (route) {
     Route.Assets -> ASSETS_LABEL
-    Route.Maintenance -> "Maintenance"
-    else -> "Dashboard"
+    Route.Maintenance -> localized(R.string.nav_maintenance)
+    else -> localized(R.string.nav_dashboard)
 }
 
-internal const val ASSETS_LABEL = "Assets"
+/** The Assets tab's word, shared with the share picker's first list (#69). Read when drawn, never held (#102). */
+internal val ASSETS_LABEL: String get() = localized(R.string.nav_assets)

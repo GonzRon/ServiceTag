@@ -37,12 +37,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.datePlaceholder
 import com.loosecannon.servicetag.core.journal.Reading
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
@@ -54,6 +57,7 @@ import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.localizedDateText
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import com.loosecannon.servicetag.ui.condition.IncidentOfferDialog
@@ -151,11 +155,13 @@ fun EventEntryScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Close")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.journal_close))
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = state.loaded && !state.saving) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.loaded && !state.saving) {
+                        Text(stringResource(R.string.journal_save))
+                    }
                 },
             )
         },
@@ -186,7 +192,7 @@ fun EventEntryScreen(
                 OutlinedTextField(
                     value = state.title,
                     onValueChange = model::onTitle,
-                    label = { Text("Entry") },
+                    label = { Text(stringResource(R.string.journal_field_entry)) },
                     singleLine = true,
                     shape = ControlShape,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -227,7 +233,7 @@ fun EventEntryScreen(
             OutlinedTextField(
                 value = state.notes,
                 onValueChange = model::onNotes,
-                label = { Text("Notes") },
+                label = { Text(stringResource(R.string.journal_notes)) },
                 minLines = 3,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
@@ -238,7 +244,7 @@ fun EventEntryScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
             ) {
-                Text(if (state.editing) "Save entry" else "Record entry")
+                Text(stringResource(if (state.editing) R.string.journal_save_entry else R.string.journal_record_entry))
             }
         }
     }
@@ -258,7 +264,7 @@ private fun DerivedBlock(rows: List<Reading>, underInputs: Boolean) {
     InstrumentList(count = rows.size) { index ->
         val reading = rows[index]
         InstrumentRow(
-            eyebrow = "Derived",
+            eyebrow = stringResource(R.string.journal_derived),
             label = reading.definition.label,
             target = formatTarget(reading.definition),
             value = formatValue(reading),
@@ -268,7 +274,10 @@ private fun DerivedBlock(rows: List<Reading>, underInputs: Boolean) {
     }
 }
 
-/** When it happened, not when it was typed: the date is editable and backdating is expected (§4). */
+/**
+ * When it happened, not when it was typed: the date is editable and backdating is expected (§4).
+ * [occurredOn] is the form's ISO day; the field draws and reads the locale's own order (#102).
+ */
 @Composable
 private fun LoggedBlock(
     occurredOn: String,
@@ -276,14 +285,15 @@ private fun LoggedBlock(
     onDate: (String) -> Unit,
     onTime: (String?) -> Unit,
 ) {
+    val date = localizedDateText(occurredOn, onDate)
     Column {
-        SectionHeader(title = "Logged")
+        SectionHeader(title = stringResource(R.string.journal_logged))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(
-                value = occurredOn,
-                onValueChange = onDate,
-                label = { Text("Date") },
-                placeholder = { Text("YYYY-MM-DD") },
+                value = date.text,
+                onValueChange = date.onTyped,
+                label = { Text(stringResource(R.string.journal_field_date)) },
+                placeholder = { Text(datePlaceholder()) },
                 singleLine = true,
                 textStyle = MonoText,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -293,8 +303,8 @@ private fun LoggedBlock(
             OutlinedTextField(
                 value = occurredTime.orEmpty(),
                 onValueChange = { onTime(it.ifBlank { null }) },
-                label = { Text("Time") },
-                placeholder = { Text("HH:MM") },
+                label = { Text(stringResource(R.string.journal_field_time)) },
+                placeholder = { Text(stringResource(R.string.journal_time_placeholder)) },
                 singleLine = true,
                 textStyle = MonoText,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -324,7 +334,7 @@ private fun MaterialsBlock(
     onUnlink: (Int) -> Unit,
 ) {
     Column {
-        SectionHeader(title = "Materials used")
+        SectionHeader(title = stringResource(R.string.journal_materials_used))
         if (suggestions.isNotEmpty()) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -349,7 +359,7 @@ private fun MaterialsBlock(
                 OutlinedTextField(
                     value = row.name,
                     onValueChange = { onChange(index, it, null, null) },
-                    label = { Text("Material") },
+                    label = { Text(stringResource(R.string.journal_field_material)) },
                     singleLine = true,
                     isError = row.problem,
                     shape = ControlShape,
@@ -358,7 +368,7 @@ private fun MaterialsBlock(
                 OutlinedTextField(
                     value = row.quantity,
                     onValueChange = { onChange(index, null, it, null) },
-                    label = { Text("Qty") },
+                    label = { Text(stringResource(R.string.journal_field_qty)) },
                     singleLine = true,
                     isError = row.problem,
                     textStyle = MonoText,
@@ -369,13 +379,13 @@ private fun MaterialsBlock(
                 OutlinedTextField(
                     value = row.unit,
                     onValueChange = { onChange(index, null, null, it) },
-                    label = { Text("Unit") },
+                    label = { Text(stringResource(R.string.journal_field_unit)) },
                     singleLine = true,
                     shape = ControlShape,
                     modifier = Modifier.width(74.dp),
                 )
                 IconButton(onClick = { onRemove(index) }) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Remove material")
+                    Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.journal_remove_material))
                 }
             }
             SupplyLinkLine(supplyId = row.supplyId, supplies = supplies, onUnlink = { onUnlink(index) })
@@ -387,7 +397,7 @@ private fun MaterialsBlock(
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(6.dp))
-            Text("Add material")
+            Text(stringResource(R.string.journal_add_material))
         }
     }
 }

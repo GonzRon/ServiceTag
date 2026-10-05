@@ -37,10 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.di.AppGraph
@@ -162,16 +164,16 @@ private fun AssetSupplyRow(
             QuietLine(row.role)
         }
         if (row.archived) {
-            StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+            StatusBadge(label = stringResource(R.string.supplies_item_archived_badge), colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
         if (!readOnly) {
             Box {
                 IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+                    Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.supplies_more))
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text(EDIT_ROLE) }, onClick = { menu = false; onEditRole() })
-                    DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onRemove() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.supplies_remove_row)) }, onClick = { menu = false; onRemove() })
                 }
             }
         }
@@ -238,8 +240,8 @@ internal fun AssetSupplyRoleSheet(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-                TextButton(onClick = onSave, enabled = sheet.canSave) { Text("Save") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.supplies_cancel)) }
+                TextButton(onClick = onSave, enabled = sheet.canSave) { Text(stringResource(R.string.supplies_save)) }
             }
             Spacer(Modifier.height(4.dp))
         }

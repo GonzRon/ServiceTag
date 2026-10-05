@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.core.seasonsync.appliedLineOf
 import com.loosecannon.servicetag.core.seasonsync.seasonSyncStateOf
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localizedDateTime
 import com.loosecannon.servicetag.seasonsync.NetworkPlatform
 import com.loosecannon.servicetag.seasonsync.SeasonSyncSchedule
 import com.loosecannon.servicetag.seasonsync.seasonSyncScheduleOf
@@ -40,7 +41,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -307,8 +307,8 @@ internal class SeasonSyncBlockViewModel(
         false
     }
 
-    /** The shipped date-and-time display (the backup screen's last-backup line), in this phone's zone. */
-    private fun dateTime(at: Instant): String = DATE_TIME.format(at.atZone(zone()))
+    /** The language's date-and-time display (the backup screen's last-backup line), in this phone's zone. */
+    private fun dateTime(at: Instant): String = localizedDateTime(at.atZone(zone()).toLocalDateTime())
 
     /** HA's `last_changed`, shown only when it parses as ISO-8601 (P16-33). */
     private fun haTime(text: String): String? = runCatching { dateTime(OffsetDateTime.parse(text).toInstant()) }.getOrNull()
@@ -318,8 +318,6 @@ internal class SeasonSyncBlockViewModel(
         on?.let { runCatching { displayDate(LocalDate.parse(it)) }.getOrDefault(it) }.orEmpty()
 
     private companion object {
-        val DATE_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
-
         /** API 30: background location is granted on the app's settings page, no longer in a dialog (C32). */
         const val SETTINGS_PAGE_API = 30
     }

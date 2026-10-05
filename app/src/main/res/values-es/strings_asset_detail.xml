@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Spanish translation of values/strings_asset_detail.xml. -->
+<resources>
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_back">Atrás</string>
+    <string name="common_more">Más opciones</string>
+    <string name="common_ok">Aceptar</string>
+    <string name="common_save">Guardar</string>
+    <string name="common_loading">Cargando…</string>
+
+    <string name="asset_detail_asset_word">Equipo</string>
+
+    <string name="asset_detail_retired_on">Retirado el</string>
+    <string name="asset_detail_readings_and_actions">Lecturas y acciones</string>
+    <string name="asset_detail_tags_section">Etiquetas</string>
+
+    <string name="asset_detail_backup">Copia de seguridad</string>
+    <string name="asset_detail_write_tag">Escribir etiqueta</string>
+    <string name="asset_detail_edit">Editar</string>
+    <string name="asset_detail_set_up_from_template">Configurar con plantilla</string>
+
+    <string name="asset_detail_current_readings">Lecturas actuales</string>
+    <string name="asset_detail_derived">Calculada</string>
+
+    <string name="asset_detail_service_record">Historial de servicio</string>
+    <string name="asset_detail_no_service_recorded">Aún no hay servicios registrados</string>
+
+    <string name="asset_detail_archive">Archivar</string>
+    <string name="asset_detail_unarchive">Desarchivar</string>
+    <string name="asset_detail_retire">Retirar</string>
+    <string name="asset_detail_unretire">Devolver al servicio</string>
+    <string name="asset_detail_delete">Eliminar</string>
+
+    <string name="asset_detail_delete_title">¿Eliminar %1$s?</string>
+    <string name="asset_detail_delete_body">Escribe el nombre del equipo para eliminarlo. Sus etiquetas, lecturas e historial se eliminan con él. Por ahora no se guarda ninguna copia automática.</string>
+    <string name="asset_detail_child_assets_first">Primero, los equipos incluidos</string>
+    <string name="asset_detail_child_assets_first_body">%1$s todavía incluye %2$s. Muévelos o elimínalos primero, para que nada desaparezca en cascada.</string>
+
+    <string name="asset_detail_retire_title">¿Retirar este equipo?</string>
+    <string name="asset_detail_retire_body">Conserva su historial y sus etiquetas lo siguen identificando.</string>
+
+    <string name="asset_detail_log_what_happened">¿Registrar lo ocurrido?</string>
+    <string name="asset_detail_retired_either_way">El equipo queda retirado de todos modos.</string>
+    <string name="asset_detail_log_replacement">Registrar sustitución</string>
+    <string name="asset_detail_log_note">Registrar nota</string>
+    <string name="asset_detail_not_now">Ahora no</string>
+
+    <string name="asset_detail_plate_model">Modelo</string>
+    <string name="asset_detail_plate_serial">N.º de serie</string>
+    <string name="asset_detail_plate_location">Ubicación</string>
+    <string name="asset_detail_plate_purchased">Comprado</string>
+    <string name="asset_detail_plate_in_service">En servicio</string>
+    <string name="asset_detail_plate_nfc_tag">Etiqueta NFC</string>
+
+    <string name="asset_detail_details">Detalles</string>
+    <string name="asset_detail_purchase_date">Fecha de compra</string>
+    <string name="asset_detail_purchase_document">Documento de compra</string>
+    <string name="asset_detail_price">Precio</string>
+    <string name="asset_detail_vendor">Vendedor</string>
+
+    <string name="asset_detail_child_assets">Equipos incluidos</string>
+    <string name="asset_detail_no_child_assets">Sin equipos incluidos</string>
+    <string name="asset_detail_add_child_asset">+ Añadir equipo incluido</string>
+    <string name="asset_detail_no_readings_out_of_range">Ninguna lectura fuera de rango</string>
+    <plurals name="asset_detail_readings_out_of_range">
+        <item quantity="one">%1$d lectura fuera de rango</item>
+        <item quantity="other">%1$d lecturas fuera de rango</item>
+    </plurals>
+    <string name="asset_detail_category_and_readings">%1$s · %2$s</string>
+
+    <string name="asset_detail_no_tag_yet">Aún sin etiqueta · Usa “Escribir etiqueta” para añadir una</string>
+    <string name="asset_detail_tag_written">Etiqueta escrita</string>
+    <string name="asset_detail_tag_bound">Etiqueta vinculada</string>
+    <string name="asset_detail_tag_status_active">Activa</string>
+    <string name="asset_detail_tag_status_unbound">Sin vincular</string>
+    <string name="asset_detail_tag_status_lost">Perdida</string>
+    <string name="asset_detail_tag_status_retired">Retirada</string>
+    <string name="asset_detail_tag_placement">Ubicación de la etiqueta</string>
+
+    <string name="asset_detail_notes">Notas</string>
+    <string name="asset_detail_no_notes">Sin notas</string>
+
+    <string name="asset_detail_no_schedule_yet">Aún no hay ningún plan</string>
+
+    <string name="warranty_section">Garantía</string>
+    <string name="warranty_notes">Notas de la garantía</string>
+    <string name="warranty_in_warranty">EN GARANTÍA</string>
+    <string name="warranty_out_of_warranty">FUERA DE GARANTÍA</string>
+    <string name="warranty_not_recorded">Garantía no registrada</string>
+    <string name="warranty_expires">Vence el %1$s</string>
+    <string name="warranty_expired">Venció el %1$s</string>
+    <plurals name="warranty_reminder_days_before">
+        <item quantity="one">Recordatorio: %1$d día antes</item>
+        <item quantity="other">Recordatorio: %1$d días antes</item>
+    </plurals>
+    <string name="warranty_leave_blank_for_no_reminder">Déjalo en blanco si no quieres recordatorio.</string>
+    <string name="warranty_add_date_first">Primero añade la fecha en que vence la garantía.</string>
+
+    <string name="assets_title">Equipos</string>
+    <string name="assets_add_asset">Añadir equipo</string>
+    <string name="assets_no_assets_yet">Aún no hay equipos</string>
+    <plurals name="assets_no_active_assets">
+        <item quantity="one">Ningún equipo activo · %1$d archivado</item>
+        <item quantity="other">Ningún equipo activo · %1$d archivados</item>
+    </plurals>
+    <string name="assets_nothing_matches">No hay coincidencias.</string>
+    <string name="assets_show_archived">Mostrar archivados</string>
+    <string name="assets_part_of">Forma parte de %1$s</string>
+    <string name="assets_nfc_tag_written">Etiqueta NFC escrita</string>
+    <string name="assets_badge_retired">Retirado</string>
+    <string name="assets_badge_out_of_season">Fuera de temporada</string>
+
+    <string name="assets_filter_type">Tipo</string>
+    <string name="assets_filter_all">Todos</string>
+    <string name="assets_filter_child_assets">Equipos incluidos</string>
+    <string name="assets_filter_archived">Archivado</string>
+    <string name="assets_archived_hidden">Los equipos que coinciden están archivados. Activa “Archivado” para verlos.</string>
+    <string name="assets_child_assets_hidden">Los equipos que coinciden son equipos incluidos. Activa “Equipos incluidos” para verlos.</string>
+    <string name="assets_both_hidden">Los equipos que coinciden están ocultos. Activa “Equipos incluidos” y “Archivado” para verlos.</string>
+    <string name="assets_only_child_assets">Aquí solo hay equipos incluidos. Activa “Equipos incluidos” para verlos.</string>
+    <string name="assets_type_hidden">Los equipos que coinciden son de otro tipo. Pon “Tipo” en “Todos”.</string>
+
+    <string name="assets_search_hint">Buscar equipos</string>
+    <string name="assets_clear_search">Borrar búsqueda</string>
+</resources>

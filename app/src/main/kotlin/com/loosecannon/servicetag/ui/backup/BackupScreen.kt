@@ -35,14 +35,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.backup.SafBackupIO
 import com.loosecannon.servicetag.backup.SafBackupSetWriter
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDateTime
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -50,9 +54,8 @@ import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.ControlShape
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -124,7 +127,7 @@ fun BackupScreen(
         when {
             uri == null -> Unit
             tree == null ->
-                scope.launch { snackbars.showSnackbar("That folder cannot be written to") }
+                scope.launch { snackbars.showSnackbar(localized(R.string.backup_folder_not_writable)) }
             else -> model.exportSetTo(SafBackupSetWriter(context.applicationContext, resolver, tree))
         }
     }
@@ -195,10 +198,10 @@ fun BackupScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Backup") },
+                title = { Text(stringResource(R.string.backup_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.backup_back))
                     }
                 },
             )
@@ -212,11 +215,8 @@ fun BackupScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            LabelValue(label = "Last backup", value = lastBackupLine(state.lastBackupAt))
-            QuietLine(
-                "A backup set is two files in the folder you pick: the data, and the attachment " +
-                    "files beside it. It is the only copy off this phone.",
-            )
+            LabelValue(label = stringResource(R.string.backup_last_backup), value = lastBackupLine(state.lastBackupAt))
+            QuietLine(stringResource(R.string.backup_set_explained))
 
             Button(
                 onClick = { exportInto.launch(null) },
@@ -224,31 +224,28 @@ fun BackupScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Export backup set")
+                Text(stringResource(R.string.backup_export_set))
             }
 
-            SectionHeader(title = "Restore")
-            QuietLine("Restoring the data deletes everything on this phone first, then loads the file.")
+            SectionHeader(title = stringResource(R.string.backup_restore_section))
+            QuietLine(stringResource(R.string.backup_restore_data_explained))
             OutlinedButton(
                 onClick = { restoreDataFrom.launch(IMPORT_TYPES) },
                 enabled = !state.busy,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Restore data")
+                Text(stringResource(R.string.backup_restore_data))
             }
 
-            QuietLine(
-                "Then restore the files archive of the same set to put the attachment files back. " +
-                    "It adds files and deletes nothing.",
-            )
+            QuietLine(stringResource(R.string.backup_restore_files_explained))
             OutlinedButton(
                 onClick = { restoreFilesFrom.launch(IMPORT_TYPES) },
                 enabled = !state.busy,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Restore files")
+                Text(stringResource(R.string.backup_restore_files))
             }
 
             OutlinedButton(
@@ -274,18 +271,15 @@ fun BackupScreen(
         } else {
             AlertDialog(
                 onDismissRequest = { confirming = null },
-                title = { Text("Replace everything?") },
+                title = { Text(stringResource(R.string.backup_replace_title)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Every asset, tag and link on this phone is deleted and replaced with what " +
-                                "is in the file. This cannot be undone.",
-                        )
+                        Text(stringResource(R.string.backup_replace_body))
                         OutlinedTextField(
                             value = typed,
                             onValueChange = { typed = it },
                             singleLine = true,
-                            label = { Text("Type $REPLACE_WORD to confirm") },
+                            label = { Text(stringResource(R.string.backup_replace_type_word, REPLACE_WORD)) },
                             shape = ControlShape,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -299,11 +293,11 @@ fun BackupScreen(
                         },
                         enabled = typed == REPLACE_WORD,
                     ) {
-                        Text("Replace")
+                        Text(stringResource(R.string.backup_replace_confirm))
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirming = null }) { Text("Cancel") }
+                    TextButton(onClick = { confirming = null }) { Text(stringResource(R.string.backup_cancel)) }
                 },
                 shape = ControlShape,
             )
@@ -322,15 +316,18 @@ fun BackupScreen(
 private fun RestoreEmptyStoreDialog(onDismiss: () -> Unit, onRestore: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Restore this backup?") },
-        text = { Text("This phone has no records yet, so there is nothing to replace.") },
-        confirmButton = { TextButton(onClick = onRestore) { Text("Restore") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text(stringResource(R.string.backup_restore_empty_title)) },
+        text = { Text(stringResource(R.string.backup_restore_empty_body)) },
+        confirmButton = { TextButton(onClick = onRestore) { Text(stringResource(R.string.backup_restore_confirm)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.backup_cancel)) } },
         shape = ControlShape,
     )
 }
 
-/** "Never" is a fact worth stating plainly; anything else is the instant, to the minute. */
+/**
+ * "Never" is a fact worth stating plainly; anything else is the instant, to the minute, in this phone's zone and the
+ * language's own date-and-time display.
+ */
 private fun lastBackupLine(at: Long?): String = at
-    ?.let { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(it)) }
-    ?: "Never"
+    ?.let { localizedDateTime(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime()) }
+    ?: localized(R.string.backup_never)

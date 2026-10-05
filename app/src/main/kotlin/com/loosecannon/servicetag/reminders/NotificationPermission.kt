@@ -13,6 +13,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 import java.util.Collections
 import java.util.UUID
 import java.util.WeakHashMap
@@ -23,17 +25,16 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * creation and nowhere else (spec §5.1). RATIFIED verbatim (master plan §17); this brief carries
  * the constant, B14 draws it.
  */
-const val NOTIFICATION_PERMISSION_RATIONALE =
-    "ServiceTag needs notification permission to remind you when maintenance is due."
+val NOTIFICATION_PERMISSION_RATIONALE: String get() = localized(R.string.reminders_permission_rationale_maintenance)
 
 /** #79, P79-12 (RATIFIED verbatim, R79-16, R79-21): the asset editor's rationale; A3 draws it. */
-const val WARRANTY_NOTIFICATION_RATIONALE = "ServiceTag needs notification permission to remind you before a warranty expires."
+val WARRANTY_NOTIFICATION_RATIONALE: String get() = localized(R.string.reminders_permission_rationale_warranty)
 
 /**
  * #72, P72-33 (RATIFIED verbatim, R72-9, R72-23): the lend form's rationale, the permission's third
  * requester after the schedule editor and the asset editor (SPEC12 §5.1 amended); B3's form draws it.
  */
-const val LOAN_NOTIFICATION_RATIONALE = "ServiceTag needs notification permission to remind you when a loan is due back."
+val LOAN_NOTIFICATION_RATIONALE: String get() = localized(R.string.reminders_permission_rationale_loan)
 
 /**
  * The permission state and the request plumbing (master plan §12, decision 23). `request()` never

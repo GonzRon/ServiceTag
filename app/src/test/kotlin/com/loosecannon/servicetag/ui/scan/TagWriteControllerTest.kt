@@ -20,7 +20,7 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.OverwriteReasons
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.TagRepository
-import com.loosecannon.servicetag.core.usecase.OverwriteSubject
+import com.loosecannon.servicetag.core.usecase.OverwriteLine
 import com.loosecannon.servicetag.core.usecase.OverwriteSubjects
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.Resolution
@@ -306,7 +306,7 @@ class TagWriteControllerTest {
         io.inspection = TagInspection("04a1", TagRead.Unreadable("NDEF on tag could not be parsed", null), maxSize = 137, writable = true, needsFormat = false, canLock = true)
         controller.onTag(handle); advanceUntilIdle()
         assertEquals(
-            WriteState.Confirm(OverwriteSubject("The tag already holds unreadable NDEF content (NDEF on tag could not be parsed).", null)),
+            WriteState.Confirm(OverwriteWords("The tag already holds unreadable NDEF content (NDEF on tag could not be parsed).", null)),
             controller.state.value,
         )
         assertEquals(0, io.writeAttempts)
@@ -444,7 +444,7 @@ class TagWriteControllerTest {
         controller.onTag(handle); advanceUntilIdle()
 
         assertEquals(
-            WriteState.Confirm(OverwriteSubject("This tag currently identifies Pump 3.", "11111111 · v1 · Pump house")),
+            WriteState.Confirm(OverwriteWords("This tag currently identifies Pump 3.", "11111111 · v1 · Pump house")),
             controller.state.value,
         )
     }
@@ -456,7 +456,7 @@ class TagWriteControllerTest {
         controller.onTag(handle); advanceUntilIdle()
 
         assertEquals(
-            WriteState.Confirm(OverwriteSubject("This ServiceTag tag is not in this phone's records.", "11111111 · v1")),
+            WriteState.Confirm(OverwriteWords("This ServiceTag tag is not in this phone's records.", "11111111 · v1")),
             controller.state.value,
         )
         assertEquals(0, io.writeAttempts)
@@ -471,7 +471,7 @@ class TagWriteControllerTest {
         controller.onTag(handle); advanceUntilIdle()
 
         val asked = assertIs<WriteState.Confirm>(controller.state.value)
-        assertEquals(OverwriteSubject("This tag was marked lost and taken out of service.", "11111111 · v1"), asked.subject)
+        assertEquals(OverwriteWords("This tag was marked lost and taken out of service.", "11111111 · v1"), asked.subject)
         assertFalse(ASSET_NAME in asked.subject.line)
     }
 
@@ -482,7 +482,7 @@ class TagWriteControllerTest {
         controller.onTag(handle); advanceUntilIdle()
 
         assertEquals(
-            WriteState.Confirm(OverwriteSubject("The tag already holds a ServiceTag tag written by a newer app (format 2).", null)),
+            WriteState.Confirm(OverwriteWords("The tag already holds a ServiceTag tag written by a newer app (format 2).", null)),
             controller.state.value,
         )
         assertEquals(0, io.writeAttempts)
@@ -498,7 +498,7 @@ class TagWriteControllerTest {
 
         controller.onTag(handle); advanceUntilIdle()
 
-        assertEquals(WriteState.Confirm(OverwriteSubject(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
+        assertEquals(WriteState.Confirm(OverwriteWords(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
         val whileAsking = graph.tags.all()
         controller.keepIt(); advanceUntilIdle()
         assertEquals(WriteState.Idle("Not written. The tag was left as it was."), controller.state.value)
@@ -515,7 +515,7 @@ class TagWriteControllerTest {
         io.inspection = holdingOtherTag
 
         controller.onTag(handle); advanceUntilIdle()
-        assertEquals(WriteState.Confirm(OverwriteSubject(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
+        assertEquals(WriteState.Confirm(OverwriteWords(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
 
         controller.confirmOverwrite(); advanceUntilIdle()
         assertEquals(WriteState.Idle("Overwrite confirmed. Hold the same tag to the phone again to write."), controller.state.value)
@@ -544,7 +544,7 @@ class TagWriteControllerTest {
         lookup.failure = null
         controller.onTag(handle); advanceUntilIdle()
         assertEquals("the next tap is handled", 2, io.inspectCount)
-        assertEquals(WriteState.Confirm(OverwriteSubject("This tag currently identifies Pump 3.", "11111111 · v1")), controller.state.value)
+        assertEquals(WriteState.Confirm(OverwriteWords("This tag currently identifies Pump 3.", "11111111 · v1")), controller.state.value)
         assertEquals(0, io.writeAttempts)
     }
 
@@ -566,7 +566,7 @@ class TagWriteControllerTest {
         assertEquals("the tap in flight still owns busy", 1, io.inspectCount)
 
         gate.complete(Unit); runCurrent()
-        assertEquals(WriteState.Confirm(OverwriteSubject("This tag currently identifies Pump 3.", "11111111 · v1")), controller.state.value)
+        assertEquals(WriteState.Confirm(OverwriteWords("This tag currently identifies Pump 3.", "11111111 · v1")), controller.state.value)
 
         controller.keepIt(); runCurrent()
         assertEquals(WriteState.Idle("Not written. The tag was left as it was."), controller.state.value)
@@ -585,7 +585,7 @@ class TagWriteControllerTest {
         assertEquals("inside the bound the question waits for its words", nothingYet, controller.state.value)
 
         advanceTimeBy(2.milliseconds); runCurrent()
-        assertEquals(WriteState.Confirm(OverwriteSubject(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
+        assertEquals(WriteState.Confirm(OverwriteWords(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
         controller.keepIt(); runCurrent()
         assertEquals(WriteState.Idle("Not written. The tag was left as it was."), controller.state.value)
         assertEquals(0, io.writeAttempts)
@@ -617,9 +617,9 @@ class TagWriteControllerTest {
 
     /** The write flow's words for these states are the inspect sheet's words, not a second copy that drifts. */
     @Test fun theOverwriteWordsMatchTheScanWords() {
-        assertEquals(PRE_SPLIT_LINK_SENTENCE, OverwriteSubjects.PRE_SPLIT_LINK)
+        assertEquals(PRE_SPLIT_LINK_SENTENCE, overwriteSentence(OverwriteLine.PreSplitLink))
         // The inspect sheet's literal, itself pinned on the emulator by NfcIdentityDeviceProofTest.
-        assertEquals("This ServiceTag tag is not in this phone's records.", OverwriteSubjects.NOT_IN_RECORDS)
+        assertEquals("This ServiceTag tag is not in this phone's records.", overwriteSentence(OverwriteLine.NotInRecords))
 
         val unlabelled = TagBinding(TagId(OTHER_TAG), PayloadFormat.V1, OTHER_TAG, TagTarget.None, TagStatus.UNBOUND, createdAt = 1L, updatedAt = 1L)
         val asked = OverwriteReasons.decide(TagPayload.V1(TagId(OTHER_TAG)), TagId(rowId)) as OverwriteDecision.Confirm

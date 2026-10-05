@@ -1,3 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: res/values/ is the English source of every word the app shows, one strings_<area>.xml per feature area; each
+  values-<locale>/ directory is a language pack carrying the same names. docs/localization.md has the rules and
+  docs/localization-glossary.md the terminology. Names are stable ids: the app never keys behaviour on the text.
+-->
 <resources>
-    <string name="app_name">ServiceTag</string>
+    <!-- The product name, in every language. -->
+    <string name="app_name" translatable="false">ServiceTag</string>
+
+    <!--
+      The display date (l10n/Localized.kt, localizedDate): a java.time pattern, not words. English keeps the
+      shipped "1 Mar 2026"; a language pack gives the order, month form and separators its readers expect.
+    -->
+    <string name="format_date_display">d MMM uuuu</string>
+    <!-- localizedMonthDay: the same date without the year ("1 Mar"). -->
+    <string name="format_date_month_day">d MMM</string>
+    <!--
+      localizedDateTime: a moment the owner reads (the last backup, the last Home Assistant check), as a
+      java.time pattern. The language's own date order and its usual clock; never a numeric ISO-style stamp.
+    -->
+    <string name="format_date_time_display">d MMM uuuu, HH:mm</string>
+    <!--
+      Not words: the ISO 639 code of the language this directory is written in ("en" here, "ru" in values-ru). The
+      app picks plural forms by this language's rules (AndroidLocalizedText), so a phone set to a language without
+      its own pack, which shows these English words, still reads "21 days" and never "21 day".
+    -->
+    <string name="format_language">en</string>
+    <!-- localizedList: between names in a run ("A, B, C"). The quotes keep the trailing space. -->
+    <string name="format_list_separator">", "</string>
+    <!-- #102: the letters a date field's placeholder and its "Enter a date as" example are drawn with, in the order
+         day, month, year: exactly three characters ("DMY" draws "MM/DD/YYYY" on a US phone, "DD/MM/YYYY" on a British
+         one). The order and separators come from the phone's region, not from here. -->
+    <string name="format_date_input_letters">DMY</string>
 </resources>

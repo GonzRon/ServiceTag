@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/plurals.xml. -->
+<resources>
+    <plurals name="health_age_days">
+        <item quantity="one">%1$d день</item>
+        <item quantity="few">%1$d дня</item>
+        <item quantity="many">%1$d дней</item>
+        <item quantity="other">%1$d дня</item>
+    </plurals>
+    <plurals name="health_days_overdue">
+        <item quantity="one">%1$s: просрочено на %2$d день</item>
+        <item quantity="few">%1$s: просрочено на %2$d дня</item>
+        <item quantity="many">%1$s: просрочено на %2$d дней</item>
+        <item quantity="other">%1$s: просрочено на %2$d дня</item>
+    </plurals>
+    <plurals name="health_grace_period">
+        <item quantity="one">В пределах льготного периода в %1$d день</item>
+        <item quantity="few">В пределах льготного периода в %1$d дня</item>
+        <item quantity="many">В пределах льготного периода в %1$d дней</item>
+        <item quantity="other">В пределах льготного периода в %1$d дня</item>
+    </plurals>
+</resources>

@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Italian translation of values/strings_asset_edit.xml. -->
+<resources>
+    <string name="asset_edit_operating_season">Stagione di utilizzo</string>
+    <string name="asset_edit_year_round">Tutto l\'anno</string>
+    <string name="asset_edit_same_dates_every_year">Stesse date ogni anno</string>
+    <string name="asset_edit_started_and_ended_by_hand">Avviata e terminata a mano</string>
+    <string name="asset_edit_season_starts">Inizio stagione</string>
+    <string name="asset_edit_season_ends">Fine stagione</string>
+    <string name="asset_edit_season_may_run_across_the_new_year">La stagione può proseguire oltre la fine dell\'anno, ad esempio da ottobre ad aprile.</string>
+    <string name="asset_edit_is_this_asset_in_season">Questa attrezzatura è in stagione adesso?</string>
+    <string name="asset_edit_in_season_now">In stagione</string>
+    <string name="asset_edit_out_of_season_now">Fuori stagione</string>
+    <string name="asset_edit_you_start_and_end_the_season">Sei tu ad avviare e terminare la stagione. La manutenzione impostata per seguire la stagione resta in attesa finché la stagione è terminata.</string>
+    <string name="asset_edit_season_strands">Parte della manutenzione di questa attrezzatura è impostata per essere pronta prima della sua stagione. Modificala prima: %1$s.</string>
+
+    <string name="asset_edit_maintenance_break">Pausa di manutenzione</string>
+    <string name="asset_edit_no_routine_maintenance_between_two_dates">Nessuna manutenzione ordinaria tra due date</string>
+    <string name="asset_edit_break_starts">Inizio pausa</string>
+    <string name="asset_edit_break_ends">Fine pausa</string>
+    <string name="asset_edit_break_helper">La manutenzione impostata per seguire la stagione, o per essere pronta prima di essa, non diventa da fare durante la pausa. Il lavoro già in ritardo resta in ritardo, senza promemoria.</string>
+    <string name="asset_edit_break_cannot_cover_the_year">La pausa non può coprire l\'intero anno.</string>
+    <string name="asset_edit_break_strands">Parte della manutenzione di questa attrezzatura è impostata per essere pronta prima della pausa. Modificala prima: %1$s.</string>
+
+    <string name="asset_edit_health_subjects">Indicatori di salute</string>
+    <string name="asset_edit_add_health_subject">Aggiungi indicatore di salute</string>
+    <string name="asset_edit_combine_health_by">Calcola la salute con</string>
+    <string name="asset_edit_combine_worst">Indicatore peggiore</string>
+    <string name="asset_edit_combine_one">Un solo indicatore</string>
+    <string name="asset_edit_combine_average">Media</string>
+    <string name="asset_edit_combine_weighted">Media ponderata</string>
+    <string name="asset_edit_which_subject">Quale indicatore?</string>
+
+    <plurals name="asset_edit_not_tied_to_season">
+        <item quantity="one">Questa attrezzatura ha %1$d piano di manutenzione non legato alla sua stagione di utilizzo. Se attivo, può diventare o restare da fare mentre l\'attrezzatura è fuori stagione, a meno che tu non cambi quando va eseguita quella manutenzione.</item>
+        <item quantity="other">Questa attrezzatura ha %1$d piani di manutenzione non legati alla sua stagione di utilizzo. Se attivi, possono diventare o restare da fare mentre l\'attrezzatura è fuori stagione, a meno che tu non cambi quando va eseguita quella manutenzione.</item>
+    </plurals>
+    <string name="asset_edit_review_maintenance_schedules">Rivedi i piani di manutenzione</string>
+    <string name="asset_edit_keep_schedules_as_is">Lascia i piani invariati</string>
+
+    <string name="asset_edit_key_documents">Documenti principali</string>
+    <string name="asset_edit_add_purchase_invoice_or_receipt">Aggiungi fattura o ricevuta di acquisto</string>
+    <string name="asset_edit_add_user_manual">Aggiungi manuale utente</string>
+    <string name="asset_edit_add_service_manual">Aggiungi manuale di servizio</string>
+    <string name="asset_edit_attached_when_you_save">Verrà allegato al salvataggio</string>
+    <string name="asset_edit_remove">Rimuovi</string>
+    <string name="asset_edit_remove_file">Rimuovi %1$s</string>
+
+    <string name="asset_edit_name_field">Nome</string>
+    <string name="asset_edit_manufacturer_field">Produttore</string>
+    <string name="asset_edit_model_field">Modello</string>
+    <string name="asset_edit_serial_number_field">Numero di serie</string>
+    <string name="asset_edit_location_field">Posizione</string>
+    <string name="asset_edit_part_of_field">Fa parte di</string>
+    <string name="asset_edit_purchase_date_field">Data di acquisto</string>
+    <string name="asset_edit_in_service_date_field">Data di messa in servizio</string>
+    <string name="asset_edit_category_field">Categoria</string>
+    <string name="asset_edit_description_field">Descrizione</string>
+    <string name="asset_edit_price_field">Prezzo</string>
+    <string name="asset_edit_currency_field">Valuta</string>
+    <string name="asset_edit_vendor_field">Venditore</string>
+    <string name="asset_edit_warranty_expires_on">Data di scadenza</string>
+    <string name="asset_edit_warranty_notes_field">Note sulla garanzia</string>
+    <string name="asset_edit_notes_field">Note</string>
+
+    <string name="asset_edit_section_identity">Identità</string>
+    <string name="asset_edit_section_placement">Collocazione</string>
+    <string name="asset_edit_section_purchase">Acquisto</string>
+    <string name="asset_edit_section_warranty">Garanzia</string>
+    <string name="asset_edit_section_notes">Note</string>
+    <string name="asset_edit_section_template">Modello iniziale</string>
+
+    <string name="asset_edit_title_edit">Modifica attrezzatura</string>
+    <string name="asset_edit_cancel">Annulla</string>
+    <string name="asset_edit_save">Salva</string>
+    <string name="asset_edit_save_asset">Salva attrezzatura</string>
+    <string name="asset_edit_notifications_ok">OK</string>
+
+    <string name="asset_edit_pick_date">Scegli %1$s</string>
+    <string name="asset_edit_calendar_ok">OK</string>
+    <string name="asset_edit_calendar_cancel">Annulla</string>
+
+    <string name="asset_edit_template_none">Nessuno · configura dopo</string>
+    <string name="asset_edit_template_helper">Crea l\'attrezzatura già con le sue letture e azioni rapide. Scegli “Nessuno” per decidere più tardi.</string>
+
+    <string name="asset_model_condition_history">Cronologia della condizione</string>
+    <string name="asset_model_linked_record_removed">La voce collegata è stata rimossa.</string>
+    <string name="asset_model_health_section">Salute</string>
+    <string name="asset_model_health_footer">La salute è una stima basata su date e registrazioni, non una diagnosi. Non modifica mai la condizione.</string>
+    <string name="asset_model_health_fallback_to_worst">L\'indicatore da seguire non esiste più, quindi viene mostrato l\'indicatore peggiore.</string>
+
+    <string name="asset_model_could_not_update">Impossibile aggiornare questa attrezzatura.</string>
+    <string name="asset_model_could_not_retire">Impossibile dismettere questa attrezzatura.</string>
+    <string name="asset_model_could_not_delete">Impossibile eliminare questa attrezzatura.</string>
+    <string name="asset_model_template_not_available">Quel modello non è disponibile.</string>
+    <string name="asset_model_could_not_set_up">Impossibile configurare questa attrezzatura.</string>
+    <string name="asset_model_already_set_up">Questa attrezzatura è già configurata.</string>
+
+    <string name="asset_model_could_not_save">Impossibile salvare questa attrezzatura.</string>
+    <string name="asset_model_parent_cycle">%1$s fa già parte di questa attrezzatura.</string>
+    <string name="asset_model_no_parent">Nessuna</string>
+    <string name="asset_model_parent_archived">%1$s (in archivio)</string>
+
+    <string name="asset_model_not_a_real_month_day">Mese e giorno non validi</string>
+    <string name="asset_model_name_required">Dai un nome all\'attrezzatura</string>
+    <string name="asset_model_bad_date">Inserisci una data nel formato %1$s</string>
+    <string name="asset_model_bad_currency">La valuta è un codice di tre lettere, ad esempio USD</string>
+    <string name="asset_model_currency_required">Un prezzo richiede una valuta</string>
+    <string name="asset_model_price_negative">Il prezzo non può essere negativo</string>
+    <string name="asset_model_parent_gone">Quell\'attrezzatura non esiste più</string>
+    <string name="asset_model_price_example">Inserisci un prezzo come %1$s</string>
+    <string name="asset_model_price_hint_amount">Importo</string>
+    <string name="asset_model_price_hint_whole">Solo numeri interi</string>
+    <plurals name="asset_model_price_hint_decimals">
+        <item quantity="one">Fino a %1$d cifra decimale</item>
+        <item quantity="other">Fino a %1$d cifre decimali</item>
+    </plurals>
+
+    <string name="season_in_season_word">IN STAGIONE</string>
+    <string name="season_start_title">Avviare la stagione?</string>
+    <string name="season_start_body">La manutenzione impostata per seguire la stagione torna attiva dal %1$s.</string>
+    <string name="season_end_title">Terminare la stagione?</string>
+    <string name="season_end_body">La manutenzione impostata per seguire la stagione resta in attesa finché non avvii di nuovo la stagione. Nulla viene segnato come fatto.</string>
+    <string name="season_history_started">Stagione avviata</string>
+    <string name="season_history_ended">Stagione terminata</string>
+    <string name="season_history_section">Cronologia della stagione</string>
+    <string name="season_next_starts">La prossima stagione inizia il %1$s</string>
+    <string name="season_ends_on">La stagione termina il %1$s</string>
+    <string name="season_choose_date_from">Scegli una data dal %1$s a oggi.</string>
+    <string name="season_already_running">La stagione è già in corso.</string>
+    <string name="season_already_ended">La stagione è già terminata.</string>
+
+    <string name="season_sync_link">Collega a Home Assistant</string>
+    <string name="season_sync_follow">Segui Home Assistant</string>
+    <string name="season_sync_force_in">Forza in stagione</string>
+    <string name="season_sync_force_out">Forza fuori stagione</string>
+    <string name="season_sync_now">Sincronizza ora</string>
+    <string name="season_sync_follows">Segue %1$s</string>
+    <string name="season_sync_forced_in">Forzata in stagione. %1$s viene ancora controllato, ma non cambia la stagione finché non scegli “Segui Home Assistant”.</string>
+    <string name="season_sync_forced_out">Forzata fuori stagione. %1$s viene ancora controllato, ma non cambia la stagione finché non scegli “Segui Home Assistant”.</string>
+    <string name="season_sync_last_success">Ultimo controllo riuscito: %1$s</string>
+    <string name="season_sync_no_reading_yet">Ancora nessuna lettura da Home Assistant.</string>
+    <string name="season_sync_not_checked_in_time">Nessun controllo riuscito entro l\'intervallo scelto.</string>
+    <string name="season_sync_changed_in_ha">Modificato in Home Assistant: %1$s</string>
+    <string name="season_sync_started_from_ha">Avviata da Home Assistant il %1$s</string>
+    <string name="season_sync_ended_from_ha">Terminata da Home Assistant il %1$s</string>
+    <string name="season_sync_forced_in_on">Forzata in stagione il %1$s</string>
+    <string name="season_sync_forced_out_on">Forzata fuori stagione il %1$s</string>
+    <string name="season_sync_not_maintained_here">Questa attrezzatura non è più gestita qui, quindi Home Assistant non ne cambia più la stagione.</string>
+    <string name="season_sync_date_before_history">La data di questo telefono è precedente all\'ultima voce della stagione, quindi la stagione resta com\'è finché la data non la raggiunge.</string>
+    <string name="season_sync_not_manual">La stagione di questa attrezzatura non è più avviata e terminata a mano, quindi Home Assistant non può cambiarla. Scegli “Interrompi sincronizzazione”, poi “Riprendi sincronizzazione”.</string>
+    <string name="season_sync_stop">Interrompi sincronizzazione</string>
+    <string name="season_sync_resume">Riprendi sincronizzazione</string>
+    <string name="season_sync_stopped">La sincronizzazione è interrotta. Home Assistant non cambia più la stagione di questa attrezzatura.</string>
+    <string name="season_sync_entity_id">ID entità</string>
+    <string name="season_sync_entity_id_help">Un helper on/off che è acceso mentre questa attrezzatura è in stagione, ad esempio input_boolean.example_heater_in_season. Non l\'interruttore di alimentazione dell\'apparecchio stesso.</string>
+    <string name="season_sync_link_calendar">Collegare questa attrezzatura a Home Assistant sostituisce le sue date di calendario. Da oggi la sua stagione inizia e termina quando lo indica Home Assistant. La manutenzione che conta dall\'inizio della stagione conterà da oggi.</string>
+    <string name="season_sync_link_year_round">Questa attrezzatura ora non ha una stagione di utilizzo. Collegarla a Home Assistant gliene assegna una: in stagione da oggi, poi avviata e terminata quando lo indica Home Assistant. La manutenzione che conta dall\'inizio della stagione conterà da oggi.</string>
+    <string name="season_sync_link_manual">D\'ora in poi Home Assistant avvia e termina la stagione di questa attrezzatura. La sua cronologia della stagione resta com\'è.</string>
+    <string name="season_sync_follows_ha">La stagione di questa attrezzatura segue Home Assistant. Usa “Interrompi sincronizzazione” nella pagina dell\'attrezzatura per modificarla qui.</string>
+    <string name="season_sync_bad_entity_id">Inserisci un ID entità come input_boolean.example_heater_in_season: lettere minuscole, cifre e trattini bassi, con un punto.</string>
+</resources>

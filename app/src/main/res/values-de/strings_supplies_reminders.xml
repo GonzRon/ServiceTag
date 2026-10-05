@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_supplies_reminders.xml. -->
+<resources>
+    <string name="supplies_section">Verbrauchsartikel</string>
+    <string name="supplies_supply_item">Verbrauchsartikel</string>
+    <string name="supplies_no_supplies_yet">Noch keine Verbrauchsartikel.</string>
+    <string name="supplies_part_number_field">Teilenummer</string>
+    <string name="supplies_preferred_unit_field">Bevorzugte Einheit</string>
+    <string name="supplies_specifications_section">Spezifikationen</string>
+    <string name="supplies_add_specification">Spezifikation hinzufügen</string>
+    <string name="supplies_remove_specification">Spezifikation entfernen</string>
+    <string name="supplies_no_specifications">Keine Spezifikationen</string>
+    <string name="supplies_used_by_section">Verwendet von</string>
+    <string name="supplies_not_used_by_any_asset">Von keinem Gerät verwendet</string>
+    <string name="supplies_specification_needs_label_and_value">Jede Spezifikation braucht eine Bezeichnung und einen Wert.</string>
+    <string name="supplies_add_supply">Verbrauchsartikel hinzufügen</string>
+    <string name="supplies_no_supplies">Keine Verbrauchsartikel</string>
+    <string name="supplies_choose_a_supply">Verbrauchsartikel wählen</string>
+    <string name="supplies_no_supply_items_yet">Noch keine Verbrauchsartikel. Füge einen unter „Wartung › Verbrauchsartikel“ hinzu.</string>
+    <string name="supplies_edit_role">Rolle bearbeiten</string>
+    <string name="supplies_role_taken">Dieses Gerät hat diesen Verbrauchsartikel bereits in dieser Rolle.</string>
+    <string name="supplies_item_gone">Dieser Verbrauchsartikel ist nicht mehr verfügbar.</string>
+    <string name="supplies_link_supply">Verbrauchsartikel verknüpfen</string>
+    <string name="supplies_linked_to">Verknüpft mit %1$s</string>
+    <string name="supplies_remove_link">Verknüpfung entfernen</string>
+
+    <string name="supplies_item_archived_badge">Archiviert</string>
+    <string name="supplies_more">Mehr</string>
+    <string name="supplies_remove_row">Entfernen</string>
+    <string name="supplies_back">Zurück</string>
+    <string name="supplies_cancel">Abbrechen</string>
+    <string name="supplies_save">Speichern</string>
+    <string name="supplies_edit">Bearbeiten</string>
+    <string name="supplies_archive">Archivieren</string>
+    <string name="supplies_unarchive">Archivierung aufheben</string>
+    <string name="supplies_name_field">Name</string>
+    <string name="supplies_specification_label_field">Bezeichnung</string>
+    <string name="supplies_specification_value_field">Wert</string>
+    <string name="supplies_specification_unit_field">Einheit</string>
+
+    <string name="installed_components_section">Einbauteile</string>
+    <string name="installed_no_installed_components">Keine Einbauteile</string>
+    <string name="installed_install_component">Teil einbauen</string>
+    <string name="installed_install_inside">Darin einbauen</string>
+    <string name="installed_inside_of">In %1$s</string>
+    <string name="installed_serial_or_lot">Serien- oder Chargennummer</string>
+    <string name="installed_installed_on">Eingebaut am</string>
+    <string name="installed_removed_on">Ausgebaut am</string>
+    <string name="installed_replace">Ersetzen</string>
+    <string name="installed_replace_title">%1$s ersetzen</string>
+    <string name="installed_remove_title">%1$s ausbauen</string>
+    <string name="installed_subtree_removed_too">Alles, was darin eingebaut ist, wird am selben Datum ausgebaut.</string>
+    <string name="installed_edit_component">Teil bearbeiten</string>
+    <string name="installed_history">Verlauf</string>
+    <string name="installed_installed_on_day">Eingebaut am %1$s</string>
+    <string name="installed_install_date_not_recorded">Einbaudatum nicht erfasst</string>
+    <string name="installed_removed_on_day">Ausgebaut am %1$s</string>
+    <string name="installed_removed_count">Ausgebaut (%1$d)</string>
+    <string name="installed_component_changed">Dieses Teil wurde ausgebaut oder geändert. Es wurde nichts gespeichert.</string>
+    <string name="installed_removal_before_install">Das Ausbaudatum darf nicht vor dem Einbaudatum liegen.</string>
+    <string name="installed_composition_line">%1$s × %2$s</string>
+    <string name="installed_more_entries">+%1$d weitere</string>
+    <string name="installed_composition_section">Zusammensetzung</string>
+    <string name="installed_remove_from_composition">Aus der Zusammensetzung entfernen</string>
+    <string name="installed_composition_quantity_required">Jeder Verbrauchsartikel braucht eine Menge über null.</string>
+    <string name="installed_documents_and_references">Dokumente und Verweise</string>
+    <string name="installed_this_installed_component">Dieses Einbauteil</string>
+    <string name="installed_from_supply">Aus %1$s</string>
+    <string name="installed_open_the_supply_to_change">Öffne den Verbrauchsartikel, um diese hinzuzufügen oder zu ändern.</string>
+
+    <string name="installed_back">Zurück</string>
+    <string name="installed_remove">Ausbauen</string>
+    <string name="installed_edit">Bearbeiten</string>
+    <string name="installed_save">Speichern</string>
+    <string name="installed_cancel">Abbrechen</string>
+    <string name="installed_quantity_field">Menge</string>
+    <string name="installed_unit_field">Einheit</string>
+
+    <string name="reminders_permission_rationale_maintenance">ServiceTag braucht die Berechtigung für Benachrichtigungen, um dich an fällige Wartung zu erinnern.</string>
+    <string name="reminders_permission_rationale_warranty">ServiceTag braucht die Berechtigung für Benachrichtigungen, um dich zu erinnern, bevor eine Garantie abläuft.</string>
+    <string name="reminders_permission_rationale_loan">ServiceTag braucht die Berechtigung für Benachrichtigungen, um dich zu erinnern, wenn die Rückgabe eines Verleihs fällig ist.</string>
+
+    <string name="reminders_health_notifications_blocked">Benachrichtigungen sind ausgeschaltet, daher kommen keine Wartungserinnerungen an.</string>
+    <string name="reminders_health_reminders_globally_off">Erinnerungen sind in ServiceTag ausgeschaltet.</string>
+    <string name="reminders_health_digest_alarm_missing">Die tägliche Erinnerungsprüfung ist nicht geplant, daher wird die heutige Wartung möglicherweise nicht angekündigt.</string>
+    <string name="reminders_health_backstop_work_missing">Die Sicherheitsprüfung im Hintergrund läuft nicht, daher würde eine verpasste Erinnerung nicht bemerkt.</string>
+    <string name="reminders_health_app_restricted">Dieses Telefon schränkt ServiceTag im Hintergrund ein, daher kommen Erinnerungen möglicherweise verspätet oder gar nicht an.</string>
+    <plurals name="reminders_health_schedule_no_provider">
+        <item quantity="one">%1$d Plan hat Erinnerungen eingeschaltet, aber die Erinnerungszustellung ist nicht eingerichtet.</item>
+        <item quantity="other">%1$d Pläne haben Erinnerungen eingeschaltet, aber die Erinnerungszustellung ist nicht eingerichtet.</item>
+    </plurals>
+    <plurals name="reminders_health_schedule_provider_disabled">
+        <item quantity="one">%1$d Plan hat Erinnerungen eingeschaltet, aber keinen Weg, sie zuzustellen.</item>
+        <item quantity="other">%1$d Pläne haben Erinnerungen eingeschaltet, aber keinen Weg, sie zuzustellen.</item>
+    </plurals>
+    <plurals name="reminders_health_no_baseline">
+        <item quantity="one">%1$d Plan braucht einen Zählerstand, bevor er fällig werden kann.</item>
+        <item quantity="other">%1$d Pläne brauchen einen Zählerstand, bevor sie fällig werden können.</item>
+    </plurals>
+
+    <string name="notification_channel_due_name">Wartung fällig</string>
+    <string name="notification_channel_due_description">Erinnerungen an fällige Wartung.</string>
+    <string name="notification_channel_overdue_name">Wartung überfällig</string>
+    <string name="notification_channel_overdue_description">Erinnerungen an überfällige Wartung.</string>
+    <string name="notification_channel_warranty_name">Garantie-Erinnerungen</string>
+    <string name="notification_channel_warranty_description">Erinnerungen, bevor eine Garantie abläuft.</string>
+    <string name="notification_channel_loans_name">Verleih-Erinnerungen</string>
+    <string name="notification_channel_loans_description">Erinnerungen, wenn die Rückgabe eines verliehenen Gegenstands fällig ist.</string>
+
+    <plurals name="notification_summary_title">
+        <item quantity="one">%1$d Wartungsaufgabe braucht Aufmerksamkeit</item>
+        <item quantity="other">%1$d Wartungsaufgaben brauchen Aufmerksamkeit</item>
+    </plurals>
+    <plurals name="notification_summary_overdue">
+        <item quantity="one">%1$d überfällig</item>
+        <item quantity="other">%1$d überfällig</item>
+    </plurals>
+    <plurals name="notification_summary_due">
+        <item quantity="one">%1$d fällig</item>
+        <item quantity="other">%1$d fällig</item>
+    </plurals>
+    <plurals name="notification_summary_due_soon">
+        <item quantity="one">%1$d bald fällig</item>
+        <item quantity="other">%1$d bald fällig</item>
+    </plurals>
+    <string name="notification_summary_body">%1$s.</string>
+
+    <string name="notification_item_title">%1$s — %2$s</string>
+    <string name="notification_item_due_on">Fällig am %1$s.</string>
+    <string name="notification_item_overdue_since">Überfällig seit %1$s.</string>
+    <string name="notification_item_meter_due">Fällig bei %1$s %2$s, jetzt %3$s.</string>
+    <string name="notification_item_meter_due_no_unit">Fällig bei %1$s, jetzt %2$s.</string>
+
+    <string name="notification_status_due">FÄLLIG</string>
+    <string name="notification_status_overdue">ÜBERFÄLLIG</string>
+    <string name="notification_status_expires_soon">LÄUFT BALD AB</string>
+    <string name="notification_status_due_back">RÜCKGABE FÄLLIG</string>
+    <string name="notification_status_not_returned">NICHT ZURÜCKGEGEBEN</string>
+
+    <string name="notification_action_done">Erledigt</string>
+    <string name="notification_action_snooze_one_day">1 Tag später erinnern</string>
+    <string name="notification_action_open">Öffnen</string>
+
+    <string name="notification_warranty_title">%1$s — Garantie</string>
+    <string name="notification_warranty_body">Garantie läuft am %1$s ab.</string>
+    <string name="notification_loan_title">%1$s — Rückgabe fällig</string>
+    <string name="notification_loan_body_through">Verliehen an %1$s. Rückgabe bis %2$s.</string>
+    <string name="notification_loan_body_after">Verliehen an %1$s. Rückgabe war bis %2$s fällig.</string>
+</resources>

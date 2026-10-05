@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.DeadlineLocalDelivery
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
@@ -11,8 +12,11 @@ import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.reminders.SubjectState
 import com.loosecannon.servicetag.core.reminders.isCleared
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
+import com.loosecannon.servicetag.l10n.localizedList
+import com.loosecannon.servicetag.l10n.localizedPlural
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 /**
  * The digest policy: given the subjects, what is already showing, the delivery rows and *now*, what
@@ -31,31 +35,31 @@ object DigestPolicy {
     /** D-5: an overdue subject is announced again after three days, and not before. */
     const val RENOTIFY_MILLIS: Long = 3L * 24L * 60L * 60L * 1000L
 
-    /** RATIFIED verbatim (master plan §17.1e). `<n>` is the count of the items the body represents. */
-    internal const val SUMMARY_TITLE_SUFFIX = " maintenance items need attention"
-
-    /** RATIFIED verbatim (master plan §17). B07 attaches them; the constants live where they are built. */
-    const val ACTION_DONE = "Done"
-    const val ACTION_SNOOZE_ONE_DAY = "Snooze 1 day"
-    const val ACTION_OPEN = "Open"
+    /**
+     * RATIFIED verbatim (master plan §17). B07 attaches them; the names live where they are built.
+     *
+     * #102: every word below is read from `strings_supplies_reminders.xml` when a post is built, in the
+     * owner's language. None of them is identity: a notification's tag carries the subject's key and
+     * content hash, and which icon and accent it takes is decided from its channel, never its words.
+     */
+    val ACTION_DONE: String get() = localized(R.string.notification_action_done)
+    val ACTION_SNOOZE_ONE_DAY: String get() = localized(R.string.notification_action_snooze_one_day)
+    val ACTION_OPEN: String get() = localized(R.string.notification_action_open)
 
     /** RATIFIED verbatim (master plan §17): the two status words this provider ever delivers for. */
-    const val WORD_DUE = "DUE"
-    const val WORD_OVERDUE = "OVERDUE"
+    val WORD_DUE: String get() = localized(R.string.notification_status_due)
+    val WORD_OVERDUE: String get() = localized(R.string.notification_status_overdue)
 
     /** #79, P79-11 (RATIFIED verbatim): a warranty warning's status word, its `setSubText` as DUE's. */
-    const val WORD_EXPIRES_SOON = "EXPIRES SOON"
+    val WORD_EXPIRES_SOON: String get() = localized(R.string.notification_status_expires_soon)
 
     /**
      * #72, P72-42 and P72-43 (RATIFIED verbatim, R72-7, R72-23): a loan reminder's status word
      * through its due day, and after it. Neither is the bare `OVERDUE` (AC 13), so a loan never
      * takes that word's icon or accent.
      */
-    const val WORD_DUE_BACK = "DUE BACK"
-    const val WORD_NOT_RETURNED = "NOT RETURNED"
-
-    /** The shipped display-date shape (`AssetDetailScreen.kt:821`, `EventDetailScreen.kt:177`). */
-    private val DISPLAY_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
+    val WORD_DUE_BACK: String get() = localized(R.string.notification_status_due_back)
+    val WORD_NOT_RETURNED: String get() = localized(R.string.notification_status_not_returned)
 
     /**
      * The decision.
@@ -242,7 +246,7 @@ object DigestPolicy {
         } else {
             SummaryPost(
                 tag = summaryTag!!,
-                title = "$total$SUMMARY_TITLE_SUFFIX",
+                title = summaryTitle(total),
                 body = summaryBody(overdue, due, dueSoon),
             )
         }
@@ -270,14 +274,28 @@ object DigestPolicy {
     }
 
     /**
+     * RATIFIED verbatim (master plan §17.1e): **"\<n\> maintenance items need attention"**, `<n>` the
+     * count of the items the body represents.
+     */
+    internal fun summaryTitle(total: Int): String = localizedPlural(R.plurals.notification_summary_title, total, total)
+
+    /**
      * RATIFIED verbatim (master plan §17.1e): **"\<n\> overdue, \<n\> due, \<n\> due soon."**, with
      * **a zero-count clause omitted** — a run with nothing due soon reads "2 overdue, 1 due."
+     *
+     * #102: each clause is its own plural, the clauses are joined as the language joins a list, and
+     * the sentence around them is one string.
      */
-    internal fun summaryBody(overdue: Int, due: Int, dueSoon: Int): String = listOfNotNull(
-        "$overdue overdue".takeIf { overdue > 0 },
-        "$due due".takeIf { due > 0 },
-        "$dueSoon due soon".takeIf { dueSoon > 0 },
-    ).joinToString(", ", postfix = ".")
+    internal fun summaryBody(overdue: Int, due: Int, dueSoon: Int): String = localized(
+        R.string.notification_summary_body,
+        localizedList(
+            listOfNotNull(
+                localizedPlural(R.plurals.notification_summary_overdue, overdue, overdue).takeIf { overdue > 0 },
+                localizedPlural(R.plurals.notification_summary_due, due, due).takeIf { due > 0 },
+                localizedPlural(R.plurals.notification_summary_due_soon, dueSoon, dueSoon).takeIf { dueSoon > 0 },
+            ),
+        ),
+    )
 
     /**
      * One per-item notification, in the ratified forms (master plan §17.1e): the title
@@ -295,14 +313,14 @@ object DigestPolicy {
         val body = when {
             meter != null -> meterBody(meter)
             dueOn == null -> ""
-            overdue -> "Overdue since ${dueOn.display()}."
-            else -> "Due ${dueOn.display()}."
+            overdue -> localized(R.string.notification_item_overdue_since, dueOn.display())
+            else -> localized(R.string.notification_item_due_on, dueOn.display())
         }
         return ItemPost(
             key = subject.key,
             tag = itemTag(subject.key, subject.contentHash),
             channelId = if (overdue) NotificationChannels.OVERDUE else NotificationChannels.DUE,
-            title = "${facts.ownerName} — ${subject.title}",
+            title = localized(R.string.notification_item_title, facts.ownerName, subject.title),
             body = body,
             // The distinction survives with colour removed, because it is carried by this word and
             // by the body's own first word — never by an accent colour and never by an icon alone
@@ -413,7 +431,8 @@ object DigestPolicy {
         key = input.key,
         tag = itemTag(input.key, input.subject.contentHash),
         channelId = NotificationChannels.WARRANTY,
-        title = "${facts.ownerName} — ${input.subject.title}",
+        // #102: the kind's own title in the owner's language; the subject's title is its canonical hash input.
+        title = localized(R.string.notification_warranty_title, facts.ownerName),
         body = warrantyBody(dueOn),
         statusWord = WORD_EXPIRES_SOON,
         meter = false,
@@ -421,7 +440,7 @@ object DigestPolicy {
     )
 
     /** #79, P79-10 (RATIFIED verbatim), in the shipped display-date shape. */
-    private fun warrantyBody(expiresOn: LocalDate): String = "Warranty expires ${expiresOn.display()}."
+    private fun warrantyBody(expiresOn: LocalDate): String = localized(R.string.notification_warranty_body, expiresOn.display())
 
     /**
      * #72 (C11, R72-6 a): a loan's Once — **strictly once per due occurrence**. It opens at the owner's
@@ -572,7 +591,8 @@ object DigestPolicy {
             key = input.key,
             tag = itemTag(input.key, input.subject.contentHash),
             channelId = NotificationChannels.LOANS,
-            title = "${facts.ownerName} — ${input.subject.title}",
+            // #102: the kind's own title in the owner's language; the subject's title is its canonical hash input.
+            title = localized(R.string.notification_loan_title, facts.ownerName),
             body = if (afterDueDay) loanBodyAfter(borrower, dueOn) else loanBodyThrough(borrower, dueOn),
             statusWord = if (afterDueDay) WORD_NOT_RETURNED else WORD_DUE_BACK,
             meter = false,
@@ -581,10 +601,12 @@ object DigestPolicy {
     }
 
     /** #72, P72-40 (RATIFIED verbatim), in the shipped display-date shape. */
-    private fun loanBodyThrough(borrower: String, dueOn: LocalDate): String = "Lent to $borrower. Due back ${dueOn.display()}."
+    private fun loanBodyThrough(borrower: String, dueOn: LocalDate): String =
+        localized(R.string.notification_loan_body_through, borrower, dueOn.display())
 
     /** #72, P72-41 (RATIFIED verbatim, R72-7), in the shipped display-date shape. */
-    private fun loanBodyAfter(borrower: String, dueOn: LocalDate): String = "Lent to $borrower. Was due back ${dueOn.display()}."
+    private fun loanBodyAfter(borrower: String, dueOn: LocalDate): String =
+        localized(R.string.notification_loan_body_after, borrower, dueOn.display())
 
     /** What the deadline branch decided for one subject; [decide] turns it into posts, stamps and counts. */
     private sealed interface DeadlineStep {
@@ -619,12 +641,14 @@ object DigestPolicy {
     }
 
     /** A meter with no unit at all (a pH definition) leaves the `<unit>` slot empty rather than doubling a space. */
-    private fun meterBody(meter: MeterReading): String {
-        val at = if (meter.unit.isBlank()) meter.dueAt else "${meter.dueAt} ${meter.unit}"
-        return "Due at $at, now ${meter.now}."
+    private fun meterBody(meter: MeterReading): String = if (meter.unit.isBlank()) {
+        localized(R.string.notification_item_meter_due_no_unit, meter.dueAt, meter.now)
+    } else {
+        localized(R.string.notification_item_meter_due, meter.dueAt, meter.unit, meter.now)
     }
 
-    private fun LocalDate.display(): String = format(DISPLAY_DATE)
+    /** The shipped display-date shape (`d MMM uuuu` in English), in the owner's language (#102). */
+    private fun LocalDate.display(): String = localizedDate(this)
 
     private fun blankRow(key: SubjectKey.Schedule, nowMillis: Long) = ScheduleLocalDelivery(
         scheduleId = key.scheduleId,
@@ -731,7 +755,7 @@ data class DeliveryInput(
 ) : DigestInput {
     /** The subject's key, which a schedule input's is by construction. */
     val key: SubjectKey.Schedule = requireNotNull(subject.key as? SubjectKey.Schedule) {
-        "a schedule input carries a schedule subject"
+        "a schedule input carries a schedule subject" // l10n-ok: exception message
     }
 }
 
@@ -746,7 +770,7 @@ data class DeadlineInput(
 ) : DigestInput {
     /** The subject's key, which a deadline input's is by construction. */
     val key: SubjectKey.Deadline = requireNotNull(subject.key as? SubjectKey.Deadline) {
-        "a deadline input carries a deadline subject"
+        "a deadline input carries a deadline subject" // l10n-ok: exception message
     }
 }
 

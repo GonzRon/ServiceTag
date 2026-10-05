@@ -1,9 +1,11 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.l10n.localized
 import java.time.LocalDate
 
 /*
@@ -13,28 +15,28 @@ import java.time.LocalDate
  */
 
 /** S86: a PRE_SERVICE row pulled ahead of the season's start. */
-internal const val WHY_BEFORE_SEASON = "Made due before the season starts"
+internal val WHY_BEFORE_SEASON: String get() = localized(R.string.maintenance_why_before_season)
 
 /** S87: a PRE_SERVICE row pulled ahead of the maintenance break. */
-internal const val WHY_BEFORE_BREAK = "Made due before the maintenance break"
+internal val WHY_BEFORE_BREAK: String get() = localized(R.string.maintenance_why_before_break)
 
 /** S90: a dormant row on a MANUAL asset, whose next start is never predicted (plan decision 37). */
-internal const val WHY_UNTIL_YOU_START = "Out of season until you start it"
+internal val WHY_UNTIL_YOU_START: String get() = localized(R.string.maintenance_why_until_you_start)
 
 /** S91: the break withholds delivery; the row keeps its place (quiet changes delivery only). */
-internal const val WHY_REMINDERS_WAIT = "Reminders wait for the maintenance break to end"
+internal val WHY_REMINDERS_WAIT: String get() = localized(R.string.maintenance_why_reminders_wait)
 
 /** S85, "Held until <date> because of the maintenance break". */
 internal fun heldUntilLine(date: LocalDate, format: (LocalDate) -> String): String =
-    "Held until ${format(date)} because of the maintenance break"
+    localized(R.string.maintenance_why_held_until, format(date))
 
 /** S88, "Moved from <date> because the season was not running". */
 internal fun movedFromLine(date: LocalDate, format: (LocalDate) -> String): String =
-    "Moved from ${format(date)} because the season was not running"
+    localized(R.string.maintenance_why_moved_from, format(date))
 
 /** S89, "Out of season until <date>". */
 internal fun outOfSeasonUntilLine(date: LocalDate, format: (LocalDate) -> String): String =
-    "Out of season until ${format(date)}"
+    localized(R.string.maintenance_why_out_of_season_until, format(date))
 
 /**
  * The one line under a schedule row that says why its date is what it is (spec §10.5; master plan

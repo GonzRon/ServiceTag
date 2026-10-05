@@ -33,10 +33,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.di.AppGraph
@@ -97,16 +99,16 @@ fun SupplyDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.supplies_back))
                     }
                 },
                 actions = {
                     if (current != null) {
                         IconButton(onClick = { onEdit(supplyId) }) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "Edit")
+                            Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.supplies_edit))
                         }
                         TextButton(onClick = { model.setArchived(!current.archived) }) {
-                            Text(if (current.archived) "Unarchive" else "Archive")
+                            Text(stringResource(if (current.archived) R.string.supplies_unarchive else R.string.supplies_archive))
                         }
                     }
                 },

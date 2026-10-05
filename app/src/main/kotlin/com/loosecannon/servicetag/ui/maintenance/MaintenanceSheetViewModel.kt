@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.ui.maintenance
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.AssetId
@@ -20,6 +21,8 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.condition.OfferBatch
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.ComponentCondition
@@ -38,7 +41,7 @@ import kotlinx.coroutines.launch
  * RATIFIED, verbatim (master plan §17): the sheet's title. The same word as the Maintenance
  * destination's, because it is the same subject — §17 lists the two together as one string.
  */
-const val MAINTENANCE_SHEET_TITLE = "Maintenance"
+val MAINTENANCE_SHEET_TITLE: String get() = localized(R.string.maintenance_title)
 
 /**
  * RATIFIED (§17): the way out to the ordinary asset detail, which the sheet always offers.
@@ -50,19 +53,19 @@ const val MAINTENANCE_SHEET_TITLE = "Maintenance"
  * cleaner shape and is the controller's call, not this brief's: it would couple the sheet's strings
  * block to a constant whose KDoc frames it as a group member row's.
  */
-const val SHEET_OPEN_ASSET = "Open asset"
+val SHEET_OPEN_ASSET: String get() = localized(R.string.maintenance_sheet_open_asset)
 
 /** RATIFIED (§17): leave, having written nothing at all. */
-const val NOT_NOW = "Not now"
+val NOT_NOW: String get() = localized(R.string.maintenance_not_now)
 
 /** RATIFIED (§17): the schedule detail, which is a look and never a completion. */
-const val REVIEW_MAINTENANCE = "Review maintenance"
+val REVIEW_MAINTENANCE: String get() = localized(R.string.maintenance_review_maintenance)
 
 /** RATIFIED (§17, #49 AC 3): the caption over the scanned tag's placement label. */
-const val TAG_PLACEMENT = "Tag placement"
+val TAG_PLACEMENT: String get() = localized(R.string.maintenance_tag_placement)
 
 /** S139: the maintenance block when the sheet opened for condition and nothing is due. */
-const val NOTHING_DUE = "Nothing due"
+val NOTHING_DUE: String get() = localized(R.string.maintenance_nothing_due)
 
 /**
  * One of the scan sheet's **seven blocks**, top to bottom (spec §10.1; master plan §13.3). The order
@@ -523,7 +526,7 @@ class MaintenanceSheetViewModel(
             meter = meterLine(row),
             whyNow = whyNow(row),
             completionTakes = if (row.completionMode == CompletionMode.FORM) THE_FULL_FORM else ONE_TAP,
-            lastCompletedOn = row.lastCompletedOn?.toString(),
+            lastCompletedOn = row.lastCompletedOn?.let { localizedDate(it) },
             lastReadings = eventId?.let { readings.forEvent(it) }.orEmpty().map(::readingLine),
             progress = progressLine(row),
             // A meter-only schedule has no occurrence date to move and `PostponeSchedule` refuses
@@ -708,13 +711,14 @@ class MaintenanceSheetViewModel(
          *
          * The date is the **actionable** one (1.4), the date the status word is measured against,
          * so a row the policy pulled before its season says "Overdue since" the day it became late
-         * and never the later canonical date it would otherwise name.
+         * and never the later canonical date it would otherwise name. #102: drawn as the language's
+         * display date, never the ISO day.
          */
         fun whyNow(row: DueItem): String? {
             val due = row.actionableDueOn ?: return null
             return when (row.status) {
-                DueStatus.OVERDUE -> "Overdue since $due."
-                DueStatus.DUE, DueStatus.DUE_SOON -> "Due $due."
+                DueStatus.OVERDUE -> localized(R.string.maintenance_why_now_overdue_since, localizedDate(due))
+                DueStatus.DUE, DueStatus.DUE_SOON -> localized(R.string.maintenance_why_now_due, localizedDate(due))
                 else -> null
             }
         }
@@ -727,7 +731,7 @@ class MaintenanceSheetViewModel(
          */
         fun readingLine(measurement: Measurement): String {
             val value = measurement.valueNum?.let(::formatNumber) ?: measurement.valueText.orEmpty()
-            return if (measurement.unit.isBlank()) value else "$value ${measurement.unit}"
+            return if (measurement.unit.isBlank()) value else localized(R.string.maintenance_reading_with_unit, value, measurement.unit)
         }
     }
 }

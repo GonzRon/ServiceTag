@@ -38,7 +38,6 @@ import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
-import com.loosecannon.servicetag.ui.asset.ratifiedParts
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.maintenance.THE_SUBJECT_HEALTH_FOLLOWS
@@ -95,7 +94,7 @@ class HealthSubjectEditorTest {
 
     private fun holds(text: String) = SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(text))
 
-    private val overdueLabels = ratifiedParts(OVERDUE_THRESHOLD_LABELS)
+    private val overdueLabels = OVERDUE_THRESHOLD_LABELS
 
     /** A generator with one timed schedule; [aggregation] is how it combines its subjects. */
     private fun generator(
@@ -207,7 +206,7 @@ class HealthSubjectEditorTest {
         rule.onAllNodesWithText(USE_A_STARTING_POINT).assertCountEquals(0)
 
         answerUpToTheThresholds()
-        val names = ratifiedParts(STARTING_POINT_NAMES)
+        val names = STARTING_POINT_NAMES
         rule.onNodeWithText(USE_A_STARTING_POINT).performScrollTo().performClick()
         names.forEach { rule.onNodeWithText(it).assertIsDisplayed() }
 

@@ -21,9 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.condition.conditionOption
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.statusLabel
@@ -31,13 +33,13 @@ import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /** The reset option of each control, and the two control labels. All four are RATIFIED (F2). */
-internal const val ALL_CATEGORIES = "All categories"
-internal const val ALL_STATUSES = "All statuses"
-internal const val CATEGORY_LABEL = "Category"
-internal const val STATUS_LABEL = "Maintenance status"
+internal val ALL_CATEGORIES: String get() = localized(R.string.dashboard_all_categories)
+internal val ALL_STATUSES: String get() = localized(R.string.dashboard_all_statuses)
+internal val CATEGORY_LABEL: String get() = localized(R.string.dashboard_category_label)
+internal val STATUS_LABEL: String get() = localized(R.string.dashboard_status_label)
 
 /** S26: the condition chip for an asset with no condition row. B13 owns it (master plan §19). */
-internal const val CHIP_NOT_RECORDED = "Not recorded"
+internal val CHIP_NOT_RECORDED: String get() = localized(R.string.dashboard_chip_not_recorded)
 
 /**
  * The four condition chips (master plan §13.2: S8, S10, S12, S26), drawn in spec §10.2's order —
@@ -160,20 +162,22 @@ fun DashboardFilterRow(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // #102: each picker hands back the value picked — null for "All" — and never its words, so an owner's
+        // category named like the "All" choice, or a language change while the menu is open, cannot be misread.
         FilterPicker(
             label = CATEGORY_LABEL,
-            value = filters.category ?: ALL_CATEGORIES,
-            options = listOf(ALL_CATEGORIES) + filters.categories,
-            onPick = { picked -> onCategory(picked.takeIf { it != ALL_CATEGORIES }) },
+            value = filters.category,
+            options = listOf<String?>(null) + filters.categories,
+            labelOf = { it ?: ALL_CATEGORIES },
+            onPick = onCategory,
             modifier = Modifier.weight(1f),
         )
         FilterPicker(
             label = STATUS_LABEL,
-            value = filters.status?.let(::statusLabel) ?: ALL_STATUSES,
-            options = listOf(ALL_STATUSES) + FILTERABLE_STATUSES.map(::statusLabel),
-            onPick = { picked ->
-                onStatus(FILTERABLE_STATUSES.firstOrNull { statusLabel(it) == picked })
-            },
+            value = filters.status,
+            options = listOf<DueStatus?>(null) + FILTERABLE_STATUSES,
+            labelOf = { it?.let(::statusLabel) ?: ALL_STATUSES },
+            onPick = onStatus,
             modifier = Modifier.weight(1f),
         )
     }
@@ -206,17 +210,18 @@ fun ConditionChipRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterPicker(
+private fun <T> FilterPicker(
     label: String,
-    value: String,
-    options: List<String>,
-    onPick: (String) -> Unit,
+    value: T,
+    options: List<T>,
+    labelOf: (T) -> String,
+    onPick: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = modifier) {
         OutlinedTextField(
-            value = value,
+            value = labelOf(value),
             onValueChange = {},
             readOnly = true,
             singleLine = true,
@@ -233,7 +238,7 @@ private fun FilterPicker(
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
+                    text = { Text(labelOf(option)) },
                     onClick = {
                         open = false
                         onPick(option)

@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: asset setup — the Readings & actions screen (ui/setup/AssetSetupScreen), the reading editor
+  (DefinitionEditScreen) and the action editor (ProfileEditScreen), with their view models. English source.
+  Comments carry where each string appears and what each placeholder is.
+
+  Vocabulary: a "reading" is a measurement definition (what an asset measures); an "action" is a quick action
+  (an event profile: one tap logs an entry). Reading labels, action names, units and material names are the
+  owner's own text (or a template's) and arrive as placeholders, unchanged.
+-->
+<resources>
+    <!-- ============================================================ Shared across the three screens -->
+
+    <!-- Placeholder line while a screen's data loads. -->
+    <string name="setup_loading">Loading…</string>
+    <!-- Accessibility: the Readings & actions screen's back arrow. -->
+    <string name="setup_back">Back</string>
+    <!-- The editors' close icon (accessibility), and the dismiss button of a confirm or picker dialog. -->
+    <string name="setup_cancel">Cancel</string>
+    <!-- The editors' Save button in the app bar. -->
+    <string name="setup_save">Save</string>
+    <!-- Accessibility: a row's or an editor's overflow (three dots) menu. -->
+    <string name="setup_more">More</string>
+    <!-- Overflow menu item: open the row in its editor. -->
+    <string name="setup_edit">Edit</string>
+    <!-- Overflow menu item: move the row one place up the list (the reorder gesture). -->
+    <string name="setup_move_up">Move up</string>
+    <!-- Overflow menu item: move the row one place down the list. -->
+    <string name="setup_move_down">Move down</string>
+    <!-- Overflow menu item: archive the reading or action (takes it off forms, keeps its history). -->
+    <string name="setup_archive">Archive</string>
+    <!-- Overflow menu item: bring an archived reading or action back. -->
+    <string name="setup_unarchive">Unarchive</string>
+    <!-- Overflow menu item, and the confirm button of a destructive delete dialog. -->
+    <string name="setup_delete">Delete</string>
+    <!-- Overflow menu item on a field of an action: take the field off the action. -->
+    <string name="setup_remove">Remove</string>
+    <!-- Badge on an archived reading, action or field. -->
+    <string name="setup_archived_badge">Archived</string>
+    <!-- The only button of the "cannot delete this reading" dialog. -->
+    <string name="setup_ok">OK</string>
+
+    <!-- ============================================================ Readings & actions screen -->
+
+    <!-- App bar title while the asset's name has not loaded yet. -->
+    <string name="setup_title_fallback">Readings &amp; actions</string>
+    <!-- All-caps eyebrow over the two lists. -->
+    <string name="setup_eyebrow">READINGS &amp; ACTIONS</string>
+    <!-- Section header: the asset's readings. -->
+    <string name="setup_readings_header">Readings</string>
+    <!-- Empty state of the readings list. -->
+    <string name="setup_readings_empty">No readings yet · add one to start measuring this asset</string>
+    <!-- Outlined button under the readings list. -->
+    <string name="setup_add_reading">Add reading</string>
+    <!-- Section header: the asset's quick actions. -->
+    <string name="setup_actions_header">Actions</string>
+    <!-- Empty state of the actions list. -->
+    <string name="setup_actions_empty">No actions yet · add one to log this asset in a tap</string>
+    <!-- Outlined button under the actions list. -->
+    <string name="setup_add_action">Add action</string>
+    <!-- Confirm dialog title before deleting a reading. -->
+    <string name="setup_delete_reading_title">Delete this reading?</string>
+    <!-- Confirm dialog body before deleting a reading. -->
+    <string name="setup_delete_reading_body">This cannot be undone.</string>
+    <!-- Confirm dialog title before deleting an action. -->
+    <string name="setup_delete_action_title">Delete this action?</string>
+    <!-- Confirm dialog body before deleting an action: entries already logged with it are not touched. -->
+    <string name="setup_delete_action_body">Past entries keep their readings.</string>
+    <!-- On a reading's row: the meter flag, after its unit and target ("°F · 36–40 · Meter"). -->
+    <string name="setup_meter_tag">Meter</string>
+    <!--
+      Under an action's name: the kind of entry it logs and how many fields its form asks for.
+      %1$s: the event kind (e.g. "Maintenance"); %2$d: the number of fields.
+    -->
+    <plurals name="setup_profile_row_meta">
+        <item quantity="one">%1$s · %2$d field</item>
+        <item quantity="other">%1$s · %2$d fields</item>
+    </plurals>
+    <!--
+      A derived reading's formula under its label, written out with its two sources:
+      "= (Pre-filter TDS − Post-membrane TDS) / Pre-filter TDS × 100".
+      %1$s: source A's label (or "?" when gone); %2$s: source B's label (or "?").
+    -->
+    <string name="setup_formula_percent_drop_line">= (%1$s − %2$s) / %1$s × 100</string>
+
+    <!-- Dialog shown when a reading cannot be deleted because something still points at it. Title. -->
+    <string name="setup_refusal_title">Cannot delete this reading</string>
+    <!-- Refusal dialog line: entries already record this reading. %1$d: how many. -->
+    <plurals name="setup_refusal_readings_logged">
+        <item quantity="one">%1$d reading logged</item>
+        <item quantity="other">%1$d readings logged</item>
+    </plurals>
+    <!-- Refusal dialog line: derived readings computed from this one. %1$s: their labels, as a list. -->
+    <string name="setup_refusal_used_by">Used by %1$s</string>
+    <!-- Refusal dialog line: actions that offer this reading as a field. %1$s: their names, as a list. -->
+    <string name="setup_refusal_offered_by">Offered by %1$s</string>
+    <!-- Refusal dialog's closing line: what to do instead. -->
+    <string name="setup_refusal_archive_hint">Archive it instead to take it off the forms and keep its history.</string>
+
+    <!-- Snackbar: moving a reading up or down failed. -->
+    <string name="setup_failed_reorder_readings">Could not reorder the readings.</string>
+    <!-- Snackbar: moving an action up or down failed. -->
+    <string name="setup_failed_reorder_actions">Could not reorder the actions.</string>
+    <!-- Snackbar: archiving or unarchiving a reading failed. -->
+    <string name="setup_failed_change_reading">Could not change that reading.</string>
+    <!-- Snackbar: archiving or unarchiving an action failed. -->
+    <string name="setup_failed_change_action">Could not change that action.</string>
+    <!-- Snackbar on the Readings & actions screen: deleting a reading failed. -->
+    <string name="setup_failed_delete_that_reading">Could not delete that reading.</string>
+    <!-- Snackbar on the Readings & actions screen: deleting an action failed. -->
+    <string name="setup_failed_delete_that_action">Could not delete that action.</string>
+
+    <!-- ============================================================ Event kinds (what an action logs) -->
+
+    <!-- The kind of entry an action logs: on its row and in the action editor's Kind menu. -->
+    <string name="setup_event_kind_maintenance">Maintenance</string>
+    <string name="setup_event_kind_inspection">Inspection</string>
+    <string name="setup_event_kind_measurement">Measurement</string>
+    <string name="setup_event_kind_treatment">Treatment</string>
+    <string name="setup_event_kind_incident">Incident</string>
+    <string name="setup_event_kind_replacement">Replacement</string>
+    <string name="setup_event_kind_season_start">Season start</string>
+    <string name="setup_event_kind_season_end">Season end</string>
+    <string name="setup_event_kind_note">Note</string>
+    <string name="setup_event_kind_custom">Custom</string>
+
+    <!-- ============================================================ Reading editor -->
+
+    <!-- App bar title when editing an existing reading. -->
+    <string name="setup_definition_title_edit">Edit reading</string>
+    <!-- App bar title when creating a reading. -->
+    <string name="setup_definition_title_new">New reading</string>
+    <!-- Text field: the reading's name as people see it. -->
+    <string name="setup_definition_label">Label</string>
+    <!-- Text field: the reading's technical key (lowercase letters, digits and _). -->
+    <string name="setup_definition_key">Key</string>
+    <!-- Group label (shown in capitals) over the Entered / Derived choice. -->
+    <string name="setup_definition_kind">Kind</string>
+    <!-- Kind choice: a reading someone types in. -->
+    <string name="setup_definition_kind_entered">Entered</string>
+    <!-- Kind choice, and the accessibility label of the equals icon on a derived reading's row: computed from two others. -->
+    <string name="setup_definition_kind_derived">Derived</string>
+    <!-- Group label (shown in capitals) over the value type choice. -->
+    <string name="setup_definition_type">Type</string>
+    <!-- Value type: a number. -->
+    <string name="setup_value_type_number">Number</string>
+    <!-- Value type: free text (also on a reading's row in the setup list). -->
+    <string name="setup_value_type_text">Text</string>
+    <!-- Value type: a yes-or-no answer (also on a reading's row in the setup list). -->
+    <string name="setup_value_type_boolean">Yes / no</string>
+    <!-- Group label (shown in capitals) over a derived reading's formula. -->
+    <string name="setup_definition_formula">Formula</string>
+    <!-- The one formula there is, named and written out; A and B are the two source pickers below it. -->
+    <string name="setup_formula_percent_drop">Percent drop: (A − B) / A × 100</string>
+    <!-- Picker: a derived reading's first source. -->
+    <string name="setup_definition_source_a">Source A</string>
+    <!-- Picker: a derived reading's second source. -->
+    <string name="setup_definition_source_b">Source B</string>
+    <!-- Placeholder inside a source picker before one is chosen. -->
+    <string name="setup_definition_choose_source">Choose a reading</string>
+    <!-- Hint when the asset has fewer than two number readings to derive from. -->
+    <string name="setup_definition_sources_needed">A derived reading needs two number readings to work from. Add them first.</string>
+    <!-- Text field: the reading's unit (°F, ppm…). -->
+    <string name="setup_definition_unit">Unit</string>
+    <!-- Text field: how many decimal places the reading shows. -->
+    <string name="setup_definition_decimals">Decimals</string>
+    <!-- Group label (shown in capitals) over the target range's two fields. -->
+    <string name="setup_definition_target">Target</string>
+    <!-- Text field: the target range's lower bound. -->
+    <string name="setup_definition_target_low">Low</string>
+    <!-- Text field: the target range's upper bound. -->
+    <string name="setup_definition_target_high">High</string>
+    <!-- Switch label: the reading is a meter, a number that only counts up (engine hours, odometer). -->
+    <string name="setup_definition_meter">Meter (counts up)</string>
+    <!-- Full-width button at the bottom of the reading editor. -->
+    <string name="setup_definition_save">Save reading</string>
+    <!--
+      Note under the Key, Kind and Type controls when they are locked because entries already record this
+      reading. %1$d: how many entries.
+    -->
+    <plurals name="setup_definition_frozen">
+        <item quantity="one">Used by %1$d reading</item>
+        <item quantity="other">Used by %1$d readings</item>
+    </plurals>
+
+    <!--
+      Snackbar: a save tried to change the key, kind or type of a reading entries already record.
+      %1$d: how many entries. (The English "one" form reads "entries" as the shipped text always has.)
+    -->
+    <plurals name="setup_definition_in_use">
+        <item quantity="one">%1$d entries already use this reading, so its key, kind and type are fixed.</item>
+        <item quantity="other">%1$d entries already use this reading, so its key, kind and type are fixed.</item>
+    </plurals>
+    <!--
+      Snackbar: the save would break a derived reading built on this one.
+      %1$s: the derived readings' labels ("Rejection", or "Rejection and Recovery").
+    -->
+    <string name="setup_definition_breaks_derived">Used as a source by %1$s — change that derived reading first.</string>
+    <!--
+      Snackbar: the save would break an action that offers this reading as a field.
+      %1$s: the actions' names ("TDS test", or "TDS test and Filter swap").
+    -->
+    <string name="setup_definition_breaks_profiles">Offered as a field by %1$s — take it off that action first.</string>
+    <!--
+      Stands in, inside the two snackbars above, for a reading or an action the refusal names but this screen no
+      longer knows (the shipped English says "another reading" in both).
+    -->
+    <string name="setup_another_reading">another reading</string>
+    <!--
+      Joins the last name of a run onto the others: "Rejection and Recovery", "A, B and C".
+      %1$s: every name but the last, already joined as a list; %2$s: the last name.
+    -->
+    <string name="setup_names_last_and">%1$s and %2$s</string>
+    <!-- Snackbar in the reading editor: the save failed. -->
+    <string name="setup_failed_save_reading">Could not save this reading.</string>
+    <!-- Snackbar in the reading editor: the delete failed. -->
+    <string name="setup_failed_delete_this_reading">Could not delete this reading.</string>
+
+    <!-- Under a Low or High target field: what was typed does not parse as a number. -->
+    <string name="setup_problem_not_a_number">Not a number</string>
+    <!-- Under the Decimals field: the legal range is 0 to 4 decimal places. -->
+    <string name="setup_problem_decimals_range">Decimals must be 0–4</string>
+    <!-- Under the Label field: it is empty. -->
+    <string name="setup_problem_label_required">Give the reading a label</string>
+    <!-- Under the Key field: it has characters a key cannot have. -->
+    <string name="setup_problem_bad_key">Key: lowercase letters, digits and _ only</string>
+    <!-- Under the Key field: another reading of the asset has it. -->
+    <string name="setup_problem_key_taken">Another reading already uses this key</string>
+    <!-- Under the target: the low bound is above the high bound. -->
+    <string name="setup_problem_range_order">Low must not exceed high</string>
+    <!-- Under the target: a text or yes/no reading cannot have one. -->
+    <string name="setup_problem_range_on_non_number">Only a number reading has a target</string>
+    <!-- Under the Meter switch: a text or yes/no reading cannot be a meter. -->
+    <string name="setup_problem_meter_on_non_number">Only a number reading can be a meter</string>
+    <!-- Under the source pickers: both sources are the same, or one is missing. -->
+    <string name="setup_problem_two_sources">Choose two different number readings</string>
+    <!-- Under the source pickers: a chosen source has been deleted. -->
+    <string name="setup_problem_unknown_source">That reading is no longer there</string>
+    <!-- Under the source pickers: a source belongs to another asset. -->
+    <string name="setup_problem_source_other_asset">A source must belong to this asset</string>
+    <!-- Under the source pickers: a source is itself derived. -->
+    <string name="setup_problem_source_not_entered">A source must be a reading someone enters</string>
+    <!-- Under the source pickers: a source is not a number. -->
+    <string name="setup_problem_source_not_number">A source must be a number reading</string>
+    <!-- Under the source pickers: a source is a meter. -->
+    <string name="setup_problem_source_is_meter">A meter cannot be a source</string>
+    <!-- Under the Type control: a derived reading must be a number. -->
+    <string name="setup_problem_derived_not_number">A derived reading is a number</string>
+    <!-- Under the Meter switch: a derived reading cannot be a meter. -->
+    <string name="setup_problem_derived_is_meter">A derived reading is not a meter</string>
+    <!-- Under the Kind control: an entered reading was sent with a formula. -->
+    <string name="setup_problem_spec_on_entered">An entered reading has no formula</string>
+
+    <!-- ============================================================ Action editor -->
+
+    <!-- App bar eyebrow (capitals) when editing an action whose asset has no name to show. -->
+    <string name="setup_profile_eyebrow_edit">EDIT ACTION</string>
+    <!-- App bar eyebrow (capitals) when creating an action whose asset has no name to show. -->
+    <string name="setup_profile_eyebrow_new">NEW ACTION</string>
+    <!-- App bar eyebrow (capitals) when editing an action. %1$s: the asset's name, in capitals. -->
+    <string name="setup_profile_eyebrow_edit_asset">EDIT ACTION · %1$s</string>
+    <!-- App bar eyebrow (capitals) when creating an action. %1$s: the asset's name, in capitals. -->
+    <string name="setup_profile_eyebrow_new_asset">NEW ACTION · %1$s</string>
+    <!-- Text field: the action's name. -->
+    <string name="setup_profile_name">Name</string>
+    <!-- Dropdown: the kind of entry the action logs. -->
+    <string name="setup_profile_kind">Kind</string>
+    <!-- Text field: the title an entry logged with this action gets (follows the name until typed in). -->
+    <string name="setup_profile_default_title">Default title</string>
+    <!-- Section header: the readings the action's form asks for. -->
+    <string name="setup_profile_fields_header">Fields</string>
+    <!-- Empty state of the fields list. -->
+    <string name="setup_profile_fields_empty">No fields yet · this action just logs an entry</string>
+    <!-- Outlined button under the fields list. -->
+    <string name="setup_profile_add_field">Add field</string>
+    <!-- Hint when every reading that could be a field already is one. -->
+    <string name="setup_profile_all_fields_used">Every entered reading of this asset is already on this action.</string>
+    <!-- On a field's row, after its unit: the entry form cannot be saved without it. -->
+    <string name="setup_field_required">Required</string>
+    <!-- On a field's row, after its unit: the entry form can be saved without it. -->
+    <string name="setup_field_optional">Optional</string>
+    <!-- Dialog title: pick a reading to add as a field. -->
+    <string name="setup_field_picker_title">Add a field</string>
+    <!-- Section header: the materials the action suggests (filters, chemicals…). -->
+    <string name="setup_profile_materials_header">Materials</string>
+    <!-- Empty state of the materials list. -->
+    <string name="setup_profile_materials_empty">No materials suggested · the entry form still takes any</string>
+    <!-- Outlined button under the materials list. -->
+    <string name="setup_profile_add_material">Add material</string>
+    <!-- Text field on a material row: what it is. -->
+    <string name="setup_material_name">Material</string>
+    <!-- Text field on a material row (narrow): the default quantity. -->
+    <string name="setup_material_quantity">Qty</string>
+    <!-- Text field on a material row (narrow): the quantity's unit. -->
+    <string name="setup_material_unit">Unit</string>
+    <!-- Accessibility: the close icon that removes a material row. -->
+    <string name="setup_material_remove">Remove material</string>
+    <!-- Full-width button at the bottom of the action editor. -->
+    <string name="setup_profile_save">Save action</string>
+
+    <!-- Under the Name field: it is empty. -->
+    <string name="setup_problem_action_name_required">Give the action a name</string>
+    <!-- Under the Name field: another action of the asset has it. -->
+    <string name="setup_problem_action_name_taken">Another action already uses this name</string>
+    <!-- Under a material row: its name is empty or its quantity is negative. -->
+    <string name="setup_problem_bad_material">Needs a name, and a quantity of 0 or more</string>
+    <!-- Under a material row: the quantity typed does not parse as a number. -->
+    <string name="setup_problem_quantity_not_number">Quantity must be a number, or empty</string>
+    <!-- Snackbar in the action editor: the save failed. -->
+    <string name="setup_failed_save_action">Could not save this action.</string>
+    <!-- Snackbar in the action editor: the delete failed. -->
+    <string name="setup_failed_delete_this_action">Could not delete this action.</string>
+
+    <!-- #102: why a field cannot be on an action, shown once under the FIELDS header of the action editor. The English
+         keeps the use case's own wording (lower case, no full stop). -->
+    <string name="setup_problem_field_not_this_asset">not a definition of this asset</string>
+    <string name="setup_problem_field_derived">derived values are computed, not entered</string>
+    <string name="setup_problem_field_archived">archived</string>
+    <string name="setup_problem_field_listed_twice">listed twice</string>
+</resources>

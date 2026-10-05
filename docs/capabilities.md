@@ -46,6 +46,8 @@ Operating season is distinct from maintenance policy. Assets can be year-round, 
 
 Condition records whether an Asset is **operational, degraded, or down**. Health is a separate derived view based on configured subjects such as age and overdue maintenance.
 
+Details: the [1.2 operational maintenance specification](superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md) and the [1.4 seasons, policy, condition and health specification](superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md).
+
 ### Home Assistant season sync
 
 An Asset can optionally follow one Home Assistant on/off helper for its operating season. Home Assistant owns the automation decision; ServiceTag reads the resulting state and applies ordinary Start season / End season operations when the effective season changes.
@@ -93,6 +95,8 @@ An Installed Component can have:
 
 Replace or Remove keeps the old fitted instance as history. Installed Components are distinct from child Assets: they do not receive their own NFC identity, journal, or independent Asset lifecycle merely because they are fitted equipment.
 
+Details: SupplyItems and Installed Components shipped in [ServiceTag 1.7.0](releases/1.7.0.md).
+
 ## Documents, references, and share intake
 
 Files and web references can belong to:
@@ -107,6 +111,8 @@ ServiceTag can store photos, manuals, receipts, service documents, and other att
 Android Share intake can attach a document, image, or URL to the appropriate owner. Asset share intake uses the same searchable Asset-selection behavior as the app.
 
 SupplyItem documents are stored once and can be reached wherever that SupplyItem is used.
+
+Details: the [share intake specification](superpowers/specs/2026-09-23-servicetag-share-intake.md).
 
 ### Save as document
 
@@ -134,6 +140,8 @@ ServiceTag can replace an Asset with a distinct successor. The predecessor is re
 Selected Assets can be exported as a portable Transfer Pack containing their applicable records, documents, and NFC identities. Another ServiceTag installation can import that pack additively. The sender can then explicitly mark the Assets transferred out.
 
 Transfer is a deliberate ownership/maintenance-responsibility handoff, not live multi-user synchronization.
+
+Details: lending, Replace Asset, Transfer Packs and Save as document shipped in [ServiceTag 1.5.0](releases/1.5.0.md).
 
 ## Backup, restore, and merge foundations
 

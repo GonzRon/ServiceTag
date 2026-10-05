@@ -20,6 +20,8 @@ data class OpenLoanBlock(
     val loanId: String,
     val standing: LoanStanding,
     val lines: List<String>,
+    /** Whether the loan has a due-back day; without one the third line is the quiet "no due date" (#102: drawn by this, not by its words). */
+    val hasDueDate: Boolean,
     val reminderLine: String?,
     val notes: String,
     /** The stored link — "Open contact" hands it to the opener; null for a name-only loan. */
@@ -89,6 +91,7 @@ private fun openBlockOf(loan: AssetLoan, standing: LoanStanding): OpenLoanBlock 
         loanId = loan.id.value,
         standing = standing,
         lines = listOf(lentTo(loan.borrowerName), lentOnLine(shown(loan.lentOn)), dueLine),
+        hasDueDate = due != null,
         reminderLine = due?.let { reminderLineOf(loan.reminderMode) },
         notes = loan.notes,
         lookupUri = loan.contactLookupUri,

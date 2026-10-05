@@ -24,12 +24,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -210,7 +212,7 @@ private fun InstalledComponentRow(row: InstalledComponentRowState, onOpen: () ->
             if (row.quiet.isNotEmpty()) QuietLine(row.quiet)
         }
         if (row.archived) {
-            StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+            StatusBadge(label = stringResource(R.string.supplies_item_archived_badge), colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
     }
 }

@@ -5,16 +5,19 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 
 /**
  * What a phone with nothing to handle a URI says, ratified in §10 — and it names **no URI**: spec
  * §4.4 forbids a visible refusal from naming one, and the line this replaced printed the whole URI
  * on a second row of the toast (plan §18.8).
  *
- * `internal const` so a JVM test can hold it against the ratified text without an activity, and so
+ * `internal` so a JVM test can hold it against the ratified text without an activity, and so
  * the References section's snackbar draws the same characters rather than a second copy of them.
+ * #102: read from the string resources each time it is drawn, in the current language.
  */
-internal const val NO_HANDLER_MESSAGE = "No app can open this link"
+internal val NO_HANDLER_MESSAGE: String get() = localized(R.string.links_no_handler)
 
 /** Fires `ACTION_VIEW` for a URI the caller has already checked; never crashes on a missing handler. */
 object LinkLauncher {

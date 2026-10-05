@@ -12,7 +12,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -37,7 +39,7 @@ fun serviceCaseRowsOf(cases: List<ServiceCase>): List<ServiceCaseRow> = cases
         ServiceCaseRow(
             id = case.id.value,
             title = case.title,
-            line = "${caseStatusWord(case.status)} · ${coverageWord(case.coverage)}",
+            line = localized(R.string.service_case_row_line, caseStatusWord(case.status), coverageWord(case.coverage)),
             open = !case.status.isTerminal,
         )
     }

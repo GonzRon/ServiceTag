@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_documents.xml. -->
+<resources>
+    <string name="documents_header">ドキュメント</string>
+    <string name="documents_header_count">ドキュメント · %1$d</string>
+    <string name="documents_empty">ドキュメントはまだありません</string>
+    <string name="documents_add_file">ファイルを追加</string>
+    <string name="documents_take_photo">写真を撮影</string>
+    <string name="documents_storage_headline">添付ファイルの保存先</string>
+    <string name="documents_storage_not_set_up">添付ファイルの保存先が未設定です</string>
+    <string name="documents_storage_detail">「設定」でフォルダを選択してください</string>
+    <string name="documents_open_settings">設定を開く</string>
+    <string name="documents_no_app_can_pick_files">ファイルを選択できるアプリがありません</string>
+    <string name="documents_no_app_can_open_file">このファイルを開けるアプリがありません</string>
+    <string name="documents_no_camera_app">このデバイスにはカメラアプリがありません</string>
+    <string name="documents_not_on_device">このデバイスにはありません</string>
+    <string name="documents_more_for">%1$sのその他の操作</string>
+    <string name="documents_more_for_role">%1$s、%2$sのその他の操作</string>
+
+    <string name="documents_kind_photo">写真</string>
+    <string name="documents_kind_label_photo">ラベルの写真</string>
+    <string name="documents_kind_receipt">領収書</string>
+    <string name="documents_kind_manual">マニュアル</string>
+    <string name="documents_kind_warranty">保証書</string>
+    <string name="documents_kind_document">ドキュメント</string>
+    <string name="documents_kind_other">その他</string>
+
+    <string name="documents_size_bytes">%1$s B</string>
+    <string name="documents_size_kb">%1$s KB</string>
+    <string name="documents_size_mb">%1$s MB</string>
+
+    <string name="attachments_name_label">名前</string>
+    <string name="attachments_kind_header">種類</string>
+    <string name="attachments_notes_label">メモ</string>
+    <string name="attachments_cancel">キャンセル</string>
+    <string name="attachments_save">保存</string>
+    <string name="attachments_captured_on_label">撮影日・作成日</string>
+    <string name="attachments_delete">削除</string>
+    <string name="attachments_delete_title">ファイルを削除しますか？</string>
+    <string name="attachments_delete_body">%1$sを削除しますか？ファイルは添付ファイルフォルダから削除されます。</string>
+
+    <string name="attachments_role_header">役割</string>
+    <string name="attachments_role_purchase_invoice_or_receipt">購入時の請求書または領収書</string>
+    <string name="attachments_role_user_manual">取扱説明書</string>
+    <string name="attachments_role_service_manual">サービスマニュアル</string>
+    <string name="attachments_role_none">役割なし</string>
+    <string name="attachments_adding_progress">%2$d件中%1$d件目を追加中…</string>
+    <string name="attachments_could_not_save">%1$sを保存できませんでした</string>
+    <string name="attachments_could_not_delete">そのファイルを削除できませんでした</string>
+    <string name="attachments_could_not_add">%1$sを追加できませんでした</string>
+    <string name="attachments_blank_name">ファイルに名前を付けてください</string>
+    <string name="attachments_no_store">先に「設定」で添付ファイルフォルダを選択してください</string>
+    <string name="attachments_store_unavailable">添付ファイルフォルダを利用できません</string>
+    <string name="attachments_too_large">そのファイルは256 MBを超えています</string>
+    <string name="attachments_owner_missing">そのファイルはもう存在しません</string>
+    <string name="attachments_scan_failed">添付ファイルフォルダを確認できませんでした</string>
+    <string name="attachments_folder_fallback">フォルダ</string>
+
+    <string name="references_header">参照</string>
+    <string name="references_header_count">参照 · %1$d</string>
+    <string name="references_empty">参照はまだありません</string>
+    <string name="references_add_link">リンクを追加</string>
+    <string name="references_more">その他</string>
+    <string name="references_open">開く</string>
+    <string name="references_edit">編集</string>
+    <string name="references_remove">削除</string>
+    <string name="references_kind_web_link">ウェブリンク</string>
+    <string name="references_kind_note">メモ</string>
+    <string name="references_kind_other">その他</string>
+    <string name="references_blocked_at_open">ServiceTagはその種類のリンクを開きません。</string>
+    <string name="links_no_handler">このリンクを開けるアプリがありません</string>
+
+    <string name="references_edit_title">参照を編集</string>
+    <string name="references_link_label">リンク</string>
+    <string name="references_name_label">名前</string>
+    <string name="references_description_label">説明</string>
+    <string name="references_cancel">キャンセル</string>
+    <string name="references_save">保存</string>
+    <string name="references_remove_title">この参照を削除しますか？</string>
+    <string name="references_removed_from_asset">リンクはこの機器から削除されます。他のアプリの内容は変更されません。</string>
+    <string name="references_removed_from_supply">リンクはこの消耗品から削除されます。他のアプリの内容は変更されません。</string>
+    <string name="references_removed_from_installed_component">リンクはこの取り付け部品から削除されます。他のアプリの内容は変更されません。</string>
+    <string name="references_unknown_scheme_title">このリンクを保存しますか？</string>
+    <string name="references_unknown_scheme_body">ServiceTagは「%1$s」のリンクを認識できません。入力したとおりに保存され、そのリンクに対応するアプリで開かれます。</string>
+
+    <string name="references_blank_name">参照に名前を付けてください</string>
+    <string name="references_not_a_link">リンクではありません。</string>
+    <string name="references_uri_too_long">リンクが長すぎるため保存できません。</string>
+    <string name="references_scheme_blocked">ServiceTagはその種類のリンクを保存しません。</string>
+    <string name="references_duplicate_on_asset">そのリンクはすでにこの機器にあります</string>
+    <string name="references_duplicate_on_supply">そのリンクはすでにこの消耗品にあります</string>
+    <string name="references_duplicate_on_installed_component">そのリンクはすでにこの取り付け部品にあります</string>
+
+    <string name="references_save_as_document">ドキュメントとして保存</string>
+    <string name="references_downloading_from">%1$sからダウンロード中…</string>
+    <string name="references_download_progress">%1$s / %2$s</string>
+    <string name="references_from_host">取得元：%1$s</string>
+    <string name="references_type_line">%1$s · %2$s</string>
+    <string name="references_saved_as_document">ドキュメントとして保存済み</string>
+    <string name="references_saved_to_documents">「ドキュメント」に保存しました</string>
+    <string name="references_downloaded_from">%2$sに%1$sからダウンロード</string>
+    <string name="references_open_source_link">元のリンクを開く</string>
+    <string name="references_network_denied">ServiceTagにはネットワークの使用が許可されていないため、このファイルをダウンロードできません。アプリの設定でネットワークへのアクセスを許可してから、ServiceTagを閉じてもう一度開いてください。</string>
+    <string name="references_unreachable">%1$sに接続できませんでした。接続を確認して、もう一度お試しください。</string>
+    <string name="references_timed_out">ダウンロードに時間がかかりすぎたため、中止しました。</string>
+    <string name="references_not_a_document">そのリンク先は対応しているドキュメントの種類ではありませんでした。リンクのまま残ります。</string>
+    <string name="references_needs_sign_in">そのファイルにはサインインが必要なため、ServiceTagはダウンロードできません。リンクのまま残ります。</string>
+    <string name="references_server_error">サーバーからファイルが送信されませんでした（エラー%1$d）。</string>
+    <string name="references_redirect_refused">そのリンクは、ServiceTagがたどらない場所にリダイレクトされます。リンクのまま残ります。</string>
+    <string name="references_already_have_on_asset">この機器にはすでにこのファイルがあります：%1$s。</string>
+    <string name="references_already_have_on_supply">この消耗品にはすでにこのファイルがあります：%1$s。</string>
+    <string name="references_already_have_on_installed_component">この取り付け部品にはすでにこのファイルがあります：%1$s。</string>
+    <string name="references_interrupted">ダウンロードを完了できませんでした。もう一度お試しください。</string>
+    <string name="references_local_address">そのリンクはローカルネットワークのアドレスに解決されるため、ServiceTagはダウンロードしません。リンクのまま残ります。</string>
+
+    <string name="contacts_no_app_can_open">この連絡先を開けるアプリがありません</string>
+
+    <string name="share_title">ServiceTagに保存</string>
+    <string name="share_received">受け取った内容</string>
+    <string name="share_attach_to">添付先</string>
+    <string name="share_choose_asset">機器を選択</string>
+    <string name="share_name">名前</string>
+    <string name="share_description">説明（任意）</string>
+    <string name="share_type">種類</string>
+    <string name="share_save">保存</string>
+    <string name="share_cancel">キャンセル</string>
+    <string name="share_close">閉じる</string>
+    <string name="share_save_as_note">メモとして保存</string>
+    <string name="share_not_a_link">リンクではありません。</string>
+    <string name="share_no_assets">先にServiceTagで機器を追加してから、もう一度共有してください。</string>
+    <string name="share_no_folder">ServiceTagの「設定」で添付ファイルフォルダを選択してから、もう一度共有してください。</string>
+    <string name="share_stream_refused">共有元のアプリからは、そのファイルを受け取れません。</string>
+    <string name="share_unreadable">共有された内容を読み取れませんでした</string>
+    <string name="share_uri_too_long">リンクが長すぎるため保存できません。</string>
+    <string name="share_scheme_blocked">ServiceTagはその種類のリンクを保存しません。</string>
+    <string name="share_duplicate_uri">そのリンクはすでにこの機器にあります</string>
+    <string name="share_empty_file">そのファイルは空です</string>
+    <string name="share_too_large">そのファイルは256 MBを超えています</string>
+    <string name="share_blank_file_name">ファイルに名前を付けてください</string>
+    <string name="share_blank_reference_name">参照に名前を付けてください</string>
+    <string name="share_confirm_title">このリンクを保存しますか？</string>
+    <string name="share_confirm_body">ServiceTagは「%1$s」のリンクを認識できません。入力したとおりに保存され、そのリンクに対応するアプリで開かれます。</string>
+    <string name="share_change">変更</string>
+    <string name="share_no_active_assets">有効な機器はありません</string>
+    <string name="share_search_installed_components">取り付け部品を検索</string>
+    <string name="share_search_supplies">消耗品を検索</string>
+    <string name="share_path_step">%1$s › %2$s</string>
+    <string name="share_this_asset">この機器</string>
+    <string name="share_supply_shared">消耗品 — 複数の用途で共有</string>
+    <string name="share_show_inside">%1$sの内部を表示</string>
+    <string name="share_on_supply">消耗品「%1$s」に保存され、その消耗品が使われているすべての場所で利用できます。</string>
+    <string name="share_saved_to_supply">消耗品「%1$s」に保存しました。</string>
+    <string name="share_saved_to">%1$sに保存しました</string>
+    <string name="share_back">戻る</string>
+</resources>

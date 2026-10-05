@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.reminders
 import android.content.Context
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 
 /**
  * The two notification channels 1.2 creates, and nothing else (D-20 = B, invariant 53; spec
@@ -35,42 +37,50 @@ object NotificationChannels {
         val description: String,
     )
 
-    /** RATIFIED verbatim (master plan §17.1d); this brief has nothing left to draft. */
-    internal val CHANNELS: List<Spec> = listOf(
-        Spec(
-            id = DUE,
-            importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
-            name = "Maintenance due",
-            description = "Reminders for maintenance that is due.",
-        ),
-        Spec(
-            id = OVERDUE,
-            importance = NotificationManagerCompat.IMPORTANCE_HIGH,
-            name = "Maintenance overdue",
-            description = "Reminders for maintenance that is past due.",
-        ),
-        // #79, P79-13 and P79-14 (RATIFIED verbatim, R79-21).
-        Spec(
-            id = WARRANTY,
-            importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
-            name = "Warranty reminders",
-            description = "Reminders before a warranty expires.",
-        ),
-        // #72, P72-38 and P72-39 (RATIFIED verbatim, R72-23).
-        Spec(
-            id = LOANS,
-            importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
-            name = "Loan reminders",
-            description = "Reminders when a lent item is due back.",
-        ),
-    )
+    /**
+     * RATIFIED verbatim (master plan §17.1d); this brief has nothing left to draft.
+     *
+     * #102: a getter, so the names and descriptions are read in the owner's current language each
+     * time — `ServiceTagApp` re-runs [ensure] on a language change, and the platform renames an
+     * existing channel from what it is handed. The ids and importances are fixed: only the words move.
+     */
+    internal val CHANNELS: List<Spec>
+        get() = listOf(
+            Spec(
+                id = DUE,
+                importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
+                name = localized(R.string.notification_channel_due_name),
+                description = localized(R.string.notification_channel_due_description),
+            ),
+            Spec(
+                id = OVERDUE,
+                importance = NotificationManagerCompat.IMPORTANCE_HIGH,
+                name = localized(R.string.notification_channel_overdue_name),
+                description = localized(R.string.notification_channel_overdue_description),
+            ),
+            // #79, P79-13 and P79-14 (RATIFIED verbatim, R79-21).
+            Spec(
+                id = WARRANTY,
+                importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
+                name = localized(R.string.notification_channel_warranty_name),
+                description = localized(R.string.notification_channel_warranty_description),
+            ),
+            // #72, P72-38 and P72-39 (RATIFIED verbatim, R72-23).
+            Spec(
+                id = LOANS,
+                importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
+                name = localized(R.string.notification_channel_loans_name),
+                description = localized(R.string.notification_channel_loans_description),
+            ),
+        )
 
     /**
      * Creates every channel against the real `NotificationManagerCompat`, called once at process
      * start (`ServiceTagApp.onCreate`) and safe to call on every start: the platform call below is
      * a no-op for an id that already exists and never rewrites an importance the user has changed.
      * That platform guarantee only holds if the importance this brief passes never varies —
-     * [CHANNELS] is fixed, nothing here reads current state first.
+     * [CHANNELS]' ids and importances are fixed, nothing here reads current state first. Only the
+     * name and description follow the owner's language (#102), which the platform updates in place.
      */
     fun ensure(context: Context) = ensure { spec ->
         NotificationManagerCompat.from(context).createNotificationChannel(

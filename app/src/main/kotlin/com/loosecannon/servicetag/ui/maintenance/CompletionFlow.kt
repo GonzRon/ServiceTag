@@ -15,8 +15,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
@@ -33,12 +35,14 @@ import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.condition.EventOffer
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.OfferBatch
 import com.loosecannon.servicetag.ui.condition.tapped
+import com.loosecannon.servicetag.ui.journal.neutralNumber
 import java.time.ZoneId
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -48,11 +52,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** RATIFIED, verbatim (master plan §17): the completion affordance's own question. */
-const val WHEN_WAS_THIS_DONE = "When was this done?"
+val WHEN_WAS_THIS_DONE: String get() = localized(R.string.maintenance_when_was_this_done)
 
 /** RATIFIED (§17): the two group-round completion labels. */
-const val COMPLETE_ALL = "Complete all"
-const val COMPLETE_SELECTED = "Complete selected"
+val COMPLETE_ALL: String get() = localized(R.string.maintenance_complete_all)
+val COMPLETE_SELECTED: String get() = localized(R.string.maintenance_complete_selected)
 
 /**
  * What a completion attempt ended as. Every member is a fact, not a message: no user-visible string
@@ -357,7 +361,8 @@ class CompletionFlow(
     }
 
     private fun CompletionAnswer.command(schedule: MaintenanceSchedule): CompletionCommand {
-        val reading = meterValue?.trim()?.takeIf { it.isNotEmpty() }
+        // Typed in the owner's decimal separator; it goes on as the use case reads a number (#102).
+        val reading = meterValue?.trim()?.takeIf { it.isNotEmpty() }?.let(::neutralNumber)
         val meterId = schedule.meterDefinitionId
         return CompletionCommand(
             occurredOn = occurredOn.trim(),
@@ -397,16 +402,20 @@ fun CompletionFlowHost(flow: CompletionFlow) {
 
     AlertDialog(
         onDismissRequest = flow::cancel,
-        title = { Text(WHEN_WAS_THIS_DONE) },
+        title = { Text(stringResource(R.string.maintenance_when_was_this_done)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(open.scheduleTitle, style = MaterialTheme.typography.bodyMedium)
-                DateField(value = occurredOn, onValueChange = { occurredOn = it }, label = "Date")
+                DateField(
+                    value = occurredOn,
+                    onValueChange = { occurredOn = it },
+                    label = stringResource(R.string.maintenance_date),
+                )
                 MaintenanceField(
                     value = occurredTime,
                     onValueChange = { occurredTime = it },
-                    label = "Time",
-                    placeholder = "HH:MM",
+                    label = stringResource(R.string.maintenance_time),
+                    placeholder = stringResource(R.string.maintenance_time_placeholder),
                     mono = true,
                 )
                 if (open.needsMeterReading) {
@@ -414,7 +423,7 @@ fun CompletionFlowHost(flow: CompletionFlow) {
                         value = reading,
                         onValueChange = { reading = it },
                         // The RATIFIED repair label, which is exactly what this field is for.
-                        label = LOG_METER_READING,
+                        label = stringResource(R.string.maintenance_log_meter_reading),
                         hint = open.meterUnit?.takeIf { it.isNotBlank() },
                         numeric = true,
                     )
@@ -433,9 +442,9 @@ fun CompletionFlowHost(flow: CompletionFlow) {
                         ),
                     )
                 },
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.maintenance_save)) }
         },
-        dismissButton = { TextButton(onClick = flow::cancel) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = flow::cancel) { Text(stringResource(R.string.maintenance_cancel)) } },
     )
 }
 
@@ -480,7 +489,8 @@ fun LogMaintenancePicker(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(MAINTENANCE_TITLE) },
+        // The destination's RATIFIED title (§17), reused as the picker's — it is the same subject.
+        title = { Text(stringResource(R.string.maintenance_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items.forEach { item ->
@@ -514,9 +524,6 @@ fun LogMaintenancePicker(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.maintenance_cancel)) } },
     )
 }
-
-/** The destination's RATIFIED title (§17), reused as the picker's — it is the same subject. */
-private const val MAINTENANCE_TITLE = "Maintenance"

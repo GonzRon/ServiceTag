@@ -24,7 +24,7 @@ import com.loosecannon.servicetag.core.usecase.ReplaceProblem
 import com.loosecannon.servicetag.core.usecase.ReplaceStale
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.AssetField
-import com.loosecannon.servicetag.ui.asset.ENTER_A_DATE_AS_YYYY_MM_DD
+import com.loosecannon.servicetag.ui.asset.ENTER_A_VALID_DATE
 import com.loosecannon.servicetag.ui.asset.GIVE_THE_ASSET_A_NAME
 import com.loosecannon.servicetag.ui.asset.IN_SEASON_NOW
 import com.loosecannon.servicetag.ui.asset.OUT_OF_SEASON_NOW
@@ -457,7 +457,7 @@ class ReplaceAssetViewModel(
         problems.forEach { problem ->
             when (problem) {
                 ReplaceProblem.NameRequired -> put(ReplaceField.NAME, GIVE_THE_ASSET_A_NAME)
-                is ReplaceProblem.BadDate -> fieldOf(problem.field)?.let { put(it, ENTER_A_DATE_AS_YYYY_MM_DD) }
+                is ReplaceProblem.BadDate -> fieldOf(problem.field)?.let { put(it, ENTER_A_VALID_DATE) }
                 ReplaceProblem.ReplacedOnAfterToday -> put(ReplaceField.RETIRED_ON, DATE_NOT_LATER_THAN_TODAY)
                 else -> Unit
             }

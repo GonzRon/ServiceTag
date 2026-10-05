@@ -17,6 +17,7 @@ ServiceTag documentation follows **progressive disclosure**: start with the prod
 ## Developers and automation
 
 - [Building and testing](building-and-testing.md) — clone, build, JVM gates, and emulator tests.
+- [Localization](localization.md) and its [glossary](localization-glossary.md) — where the app's words live, how to add a string or a language, and the terminology every language pack uses.
 - [Developer API v1](api/v1.md) — the loopback HTTP contract exposed while the Developer API screen is open.
 - [ServiceTag MCP tools](../tools/servicetag-mcp/README.md) — workstation-side MCP bridge built on the Developer API.
 - [Versioning and release policy](versioning.md) — ServiceTag's product SemVer rules and supported release history.

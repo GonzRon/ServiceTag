@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.CategoryCatalog
 import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -15,6 +16,8 @@ import com.loosecannon.servicetag.core.usecase.DeleteCategory
 import com.loosecannon.servicetag.core.usecase.NoSuchCategory
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedPlural
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,29 +36,28 @@ private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
 // #74's Categories sentences this model composes (plan §6, RATIFIED 2026-09-26), each by its P74-number
 // and verbatim; `<x>` is a category's display, `<n>` a count. The screen's fixed words are beside it.
+// #102: each is one resource in res/values/strings_home_assistant_settings.xml, the display and the count
+// passed in as arguments and the number agreement a plural, so a language words the whole sentence.
 
 /** P74-6a/b/c, a category's usage line: every asset counted, archived and retired included (C8). */
 internal fun usageLine(count: Int): String = when (count) {
-    0 -> "Not used"
-    1 -> "Used by 1 asset"
-    else -> "Used by $count assets"
+    0 -> localized(R.string.settings_categories_not_used)
+    else -> localizedPlural(R.plurals.settings_categories_used_by, count, count)
 }
 
 /** P74-11, under the rename field: the name is another category's; [existing] is that row's display. */
-internal fun nameTaken(existing: String): String = "A category named $existing already exists."
+internal fun nameTaken(existing: String): String = localized(R.string.settings_categories_name_taken, existing)
 
 /** P74-12, under the rename field: the name is a built-in's; [label] is the built-in's own. */
-internal fun builtInName(label: String): String = "$label is a built-in category."
+internal fun builtInName(label: String): String = localized(R.string.settings_categories_built_in_name, label)
 
 /** P74-16, the delete dialog's body. */
-internal fun notUsedByAnyAsset(display: String): String = "$display is not used by any asset."
+internal fun notUsedByAnyAsset(display: String): String =
+    localized(R.string.settings_categories_not_used_by_any, display)
 
 /** P74-17a/b, the snackbar for a delete of a category [count] assets still use. */
-internal fun stillInUse(display: String, count: Int): String = if (count == 1) {
-    "$display is used by 1 asset. Change its category first."
-} else {
-    "$display is used by $count assets. Change their category first."
-}
+internal fun stillInUse(display: String, count: Int): String =
+    localizedPlural(R.plurals.settings_categories_still_in_use, count, display, count)
 
 /** One of the owner's categories as the screen lists it: [usage] assets use it (C8). */
 data class OwnCategory(val key: String, val display: String, val usage: Int)

@@ -6,7 +6,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.loosecannon.servicetag.core.usecase.OverwriteSubject
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Rule
 import org.junit.Test
@@ -22,7 +21,7 @@ class OverwriteSheetSubjectTest {
 
     @get:Rule val rule = createComposeRule()
 
-    private fun show(subject: OverwriteSubject) {
+    private fun show(subject: OverwriteWords) {
         rule.setContent {
             ServiceTagTheme {
                 OverwriteSheet(subject = subject, target = "Pump 3", onOverwrite = {}, onKeepIt = {})
@@ -32,7 +31,7 @@ class OverwriteSheetSubjectTest {
     }
 
     @Test fun theSheetShowsTheLineAndTheQuietIdentifier() {
-        show(OverwriteSubject("This tag currently identifies Pump 3.", "a0c19962 · v1 · Pump house"))
+        show(OverwriteWords("This tag currently identifies Pump 3.", "a0c19962 · v1 · Pump house"))
 
         rule.onNodeWithText("OVERWRITE THIS TAG?").assertIsDisplayed()
         rule.onNodeWithText("This tag currently identifies Pump 3.").assertIsDisplayed()
@@ -46,7 +45,7 @@ class OverwriteSheetSubjectTest {
     }
 
     @Test fun aSubjectWithoutAnIdentifierShowsOnlyTheLine() {
-        show(OverwriteSubject("The tag already holds foreign NDEF content (tnf=1 type=U).", null))
+        show(OverwriteWords("The tag already holds foreign NDEF content (tnf=1 type=U).", null))
 
         rule.onNodeWithText("The tag already holds foreign NDEF content (tnf=1 type=U).").assertIsDisplayed()
         rule.onAllNodesWithText(" · v1", substring = true).assertCountEquals(0)

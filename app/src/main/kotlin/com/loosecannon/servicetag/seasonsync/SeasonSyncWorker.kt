@@ -65,10 +65,10 @@ class SeasonSyncWorkerBody(
 
     companion object {
         /** G3: a local database failure, the one retried end. */
-        const val RUN_FAILED = "season sync run failed; WorkManager retries it"
+        const val RUN_FAILED = "season sync run failed; WorkManager retries it" // l10n-ok: log line
 
         /** G4: a key store that cannot load: success, so the next period runs the pass again. */
-        const val KEY_STORE_FAILED = "the Home Assistant key store failed; the next run repeats it"
+        const val KEY_STORE_FAILED = "the Home Assistant key store failed; the next run repeats it" // l10n-ok: log line
 
         private const val TAG = "SeasonSyncWorker"
     }

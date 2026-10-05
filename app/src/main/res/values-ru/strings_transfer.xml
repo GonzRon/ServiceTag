@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_transfer.xml. -->
+<resources>
+    <string name="replace_asset">Заменить объект</string>
+    <string name="replace_back">Назад</string>
+    <string name="replace_old_asset">Старый объект</string>
+    <string name="replace_will_be_retired">Объект «%1$s» будет списан, а его история, документы и журнал обслуживания сохранятся без изменений.</string>
+    <string name="replace_was_retired_on">Объект «%1$s» списан %2$s. Его история, документы и журнал обслуживания сохраняются без изменений.</string>
+    <string name="replace_new_asset">Новый объект</string>
+    <string name="replace_separate_asset">Отдельный объект со своей идентификацией. Ничего из истории старого объекта не копируется.</string>
+    <string name="replace_carry_forward">Перенести</string>
+    <string name="replace_only_what_you_tick">Копируется только то, что вы отметите, — как новые записи без истории.</string>
+    <string name="replace_season_and_break">Сезон эксплуатации и перерыв в обслуживании</string>
+    <string name="replace_description_and_notes">Описание и заметки</string>
+    <string name="replace_add_to">Добавить в группу «%1$s»</string>
+    <string name="replace_schedules_start_on">Скопированные графики начинаются с</string>
+    <string name="replace_needs_setup">Нужно также отметить «Показания и действия».</string>
+    <string name="replace_needs_season">Нужно также отметить «Сезон эксплуатации и перерыв в обслуживании».</string>
+    <string name="replace_move_to_new">Перенести на новый объект</string>
+    <string name="replace_leave_with_old">Оставить на старом объекте</string>
+    <string name="replace_moved_tag_not_rewritten">Перенесённая метка не перезаписывается. При сканировании она откроет новый объект.</string>
+    <plurals name="replace_children_stay">
+        <item quantity="one">В составе объекта «%2$s» остаётся %1$s.</item>
+        <item quantity="few">В составе объекта «%2$s» остаются %1$s.</item>
+        <item quantity="many">В составе объекта «%2$s» остаются %1$s.</item>
+        <item quantity="other">В составе объекта «%2$s» остаются %1$s.</item>
+    </plurals>
+    <string name="replace_lent_out">Объект «%1$s» выдан. Выдача остаётся с ним.</string>
+    <string name="replace_retire_on">Списать «%1$s» %2$s</string>
+    <string name="replace_stays_retired_from">Объект «%1$s» остаётся списанным с %2$s</string>
+    <string name="replace_create">Создать «%1$s»</string>
+    <string name="replace_nothing_carried">Ничего не переносится</string>
+    <string name="replace_could_not_replace">Не удалось заменить объект «%1$s». Ничего не изменено.</string>
+    <string name="replace_changed_while_reviewing">Объект или связанные записи изменились, пока вы их проверяли. Ничего не изменено.</string>
+    <string name="replace_replaced_by">Заменён объектом «%1$s» %2$s</string>
+    <string name="replace_replaces">Заменяет объект «%1$s»</string>
+    <string name="replace_was_in_season_on">Был ли новый объект в сезоне %1$s?</string>
+
+    <string name="transfer_assets">Передать объекты</string>
+    <string name="transfer_back">Назад</string>
+    <string name="transfer_select_what_leaves">Выберите, что покидает этот ServiceTag</string>
+    <string name="transfer_components_go_with">Дочерние объекты передаются вместе с объектом, в который входят.</string>
+    <string name="transfer_review">Проверить</string>
+    <string name="transfer_pack">Пакет передачи</string>
+    <string name="transfer_may_contain">Эти записи могут содержать серийные номера, местоположения, сведения о покупке, чеки и историю обслуживания.</string>
+    <string name="transfer_note_label">Примечание для нового владельца (необязательно)</string>
+    <string name="transfer_create">Создать пакет передачи</string>
+    <string name="transfer_mixed_group">Группа «%1$s» охватывает также то, что остаётся здесь: %2$s. Группа передаётся только вместе со всеми объектами, которые она когда-либо охватывала.</string>
+    <string name="transfer_parent_not_selected">«%1$s» — дочерний объект объекта «%2$s». Выберите также «%2$s».</string>
+    <string name="transfer_lent_out">Объект «%1$s» выдан. Сначала отметьте возврат.</string>
+    <string name="transfer_outside_reference">У объекта «%1$s» есть запись, которая ссылается за пределы этой передачи.</string>
+    <string name="transfer_creating">Создание пакета передачи…</string>
+    <string name="transfer_not_created">Пакет передачи не создан: %1$s. Ничего не изменено.</string>
+    <string name="transfer_not_created_entangled">Пакет передачи не создан: записи на этом телефоне всё ещё ссылаются на переданный объект. Ничего не изменено.</string>
+    <string name="transfer_not_created_generic">Пакет передачи не создан: не удалось записать файл. Ничего не изменено.</string>
+    <string name="transfer_ready">Пакет передачи готов</string>
+    <string name="transfer_share">Поделиться</string>
+    <string name="transfer_save_a_copy">Сохранить копию</string>
+    <string name="transfer_size">Размер: %1$s</string>
+    <string name="transfer_share_title">Поделиться пакетом передачи</string>
+    <string name="transfer_saved">Сохранено</string>
+    <string name="transfer_mark_question">Отметить эти объекты на этом телефоне как переданные?</string>
+    <string name="transfer_mark">Отметить как переданные</string>
+    <string name="transfer_mark_consequence">Напоминания по ним прекратятся, и они исчезнут из ваших списков. Открыть их по-прежнему можно через «В архиве».</string>
+    <string name="transfer_transferred">Передан</string>
+    <string name="transfer_transferred_out">Передан другому владельцу</string>
+    <string name="transfer_transferred_on">Передан %1$s</string>
+    <string name="transfer_pack_line">Пакет передачи %1$s</string>
+    <string name="transfer_scan_title">Объект передан</string>
+    <string name="transfer_handed_over">Объект «%1$s» передан %2$s. Этот телефон его больше не обслуживает.</string>
+    <string name="transfer_changed_since">Объект «%1$s» изменился после создания этого пакета передачи. Создайте пакет заново.</string>
+    <string name="transfer_could_not_mark">Не удалось отметить эти объекты. Ничего не изменено.</string>
+    <string name="transfer_could_not_save">Не удалось сохранить копию.</string>
+    <string name="transfer_nothing_to_offer">Нет объектов, которые можно передать.</string>
+    <string name="transfer_already_transferred">Эти объекты уже отмечены как переданные.</string>
+    <string name="transfer_too_large">У этих объектов слишком много записей для одного пакета передачи. Передавайте их по частям.</string>
+    <string name="transfer_pack_gone">Этого пакета передачи больше нет на этом телефоне. Создайте его заново.</string>
+    <string name="transfer_included_with">Передаётся вместе с «%1$s»</string>
+    <string name="transfer_withdraw_record">Отозвать запись о передаче</string>
+    <string name="transfer_withdraw_title">Отозвать запись о пакете передачи %1$s?</string>
+    <string name="transfer_withdraw_body">Используйте это, только если этот пакет передачи так и не был отправлен или если действовать должна запись на другом телефоне. Его объекты останутся в архиве.</string>
+    <string name="transfer_withdraw">Отозвать</string>
+    <string name="transfer_could_not_withdraw">Не удалось отозвать эту запись. Ничего не изменено.</string>
+    <string name="transfer_withdraw_entangled">Не удалось отозвать эту запись: записи на этом телефоне по-прежнему ссылались бы на переданный объект. Ничего не изменено.</string>
+    <string name="transfer_bearer">Любой, у кого есть этот файл, может импортировать эти объекты. Делитесь им только с тем человеком или устройством, которые должны их получить.</string>
+    <string name="transfer_mark_entangled">Не удалось отметить эти объекты: записи на этом телефоне всё ещё ссылаются на переданный объект. Ничего не изменено.</string>
+
+    <string name="transfer_import_asset_transferred_out">Этот объект передан другому владельцу.</string>
+    <string name="transfer_import_title">Импортировать пакет передачи</string>
+    <string name="transfer_import_note">Примечание: %1$s</string>
+    <string name="transfer_import_created">Создан %1$s</string>
+    <string name="transfer_import_contains">Содержит</string>
+    <string name="transfer_import_import">Импортировать</string>
+    <string name="transfer_import_already_here">Этот пакет передачи уже есть на этом телефоне.</string>
+    <string name="transfer_import_conflicts">Этот пакет передачи конфликтует с записями на этом телефоне, поэтому ничего не импортировано.</string>
+    <string name="transfer_import_tag_used_here">NFC-метка из этого пакета уже используется здесь для объекта «%1$s».</string>
+    <string name="transfer_import_duplicate">«%1$s», возможно, уже есть здесь как «%2$s».</string>
+    <string name="transfer_import_not_a_pack">Этот файл не является пакетом передачи.</string>
+    <string name="transfer_import_newer">Для этого пакета передачи нужна более новая версия ServiceTag.</string>
+    <string name="transfer_import_damaged">Этот пакет передачи повреждён и не может быть импортирован.</string>
+    <string name="transfer_import_imported">Пакет передачи импортирован: %1$s</string>
+    <string name="transfer_import_could_not_import">Не удалось импортировать этот пакет передачи. Ничего не изменено.</string>
+    <string name="transfer_import_coming_back">Возвращается: %1$s</string>
+    <string name="transfer_import_not_brought_back">Объект «%1$s» был передан с этого телефона, и этот пакет передачи его не возвращает.</string>
+
+    <plurals name="transfer_count_assets">
+        <item quantity="one">%1$d объект</item>
+        <item quantity="few">%1$d объекта</item>
+        <item quantity="many">%1$d объектов</item>
+        <item quantity="other">%1$d объекта</item>
+    </plurals>
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="one">%1$d NFC-метка</item>
+        <item quantity="few">%1$d NFC-метки</item>
+        <item quantity="many">%1$d NFC-меток</item>
+        <item quantity="other">%1$d NFC-метки</item>
+    </plurals>
+    <plurals name="transfer_count_records">
+        <item quantity="one">%1$d запись</item>
+        <item quantity="few">%1$d записи</item>
+        <item quantity="many">%1$d записей</item>
+        <item quantity="other">%1$d записи</item>
+    </plurals>
+    <plurals name="transfer_count_schedules">
+        <item quantity="one">%1$d график</item>
+        <item quantity="few">%1$d графика</item>
+        <item quantity="many">%1$d графиков</item>
+        <item quantity="other">%1$d графика</item>
+    </plurals>
+    <plurals name="transfer_count_documents">
+        <item quantity="one">%1$d документ или фото</item>
+        <item quantity="few">%1$d документа и фото</item>
+        <item quantity="many">%1$d документов и фото</item>
+        <item quantity="other">%1$d документа и фото</item>
+    </plurals>
+    <plurals name="transfer_count_service_cases">
+        <item quantity="one">%1$d сервисное обращение</item>
+        <item quantity="few">%1$d сервисных обращения</item>
+        <item quantity="many">%1$d сервисных обращений</item>
+        <item quantity="other">%1$d сервисных обращения</item>
+    </plurals>
+
+    <string name="backup_title">Резервная копия</string>
+    <string name="backup_back">Назад</string>
+    <string name="backup_last_backup">Последняя резервная копия</string>
+    <string name="backup_never">Никогда</string>
+    <string name="backup_set_explained">Набор резервной копии — это два файла в выбранной вами папке: данные и рядом с ними файлы вложений. Это единственная копия за пределами этого телефона.</string>
+    <string name="backup_export_set">Экспортировать набор резервной копии</string>
+    <string name="backup_folder_not_writable">В эту папку нельзя записывать</string>
+    <string name="backup_restore_section">Восстановление</string>
+    <string name="backup_restore_data_explained">При восстановлении данных сначала удаляется всё, что есть на этом телефоне, затем загружается файл.</string>
+    <string name="backup_restore_data">Восстановить данные</string>
+    <string name="backup_restore_files_explained">Затем восстановите архив файлов из того же набора, чтобы вернуть файлы вложений. Файлы при этом только добавляются, ничего не удаляется.</string>
+    <string name="backup_restore_files">Восстановить файлы</string>
+    <string name="backup_replace_title">Заменить всё?</string>
+    <string name="backup_replace_body">Все объекты, метки и ссылки на этом телефоне будут удалены и заменены содержимым файла. Отменить это будет нельзя.</string>
+    <string name="backup_replace_type_word">Для подтверждения введите %1$s</string>
+    <string name="backup_replace_confirm">Заменить</string>
+    <string name="backup_cancel">Отмена</string>
+    <string name="backup_restore_empty_title">Восстановить эту резервную копию?</string>
+    <string name="backup_restore_empty_body">На этом телефоне ещё нет записей, поэтому заменять нечего.</string>
+    <string name="backup_restore_confirm">Восстановить</string>
+
+    <string name="backup_no_attachment_folder">Сначала выберите папку вложений в настройках</string>
+    <string name="backup_exported_as">Экспортировано: %1$s</string>
+
+    <string name="backup_export_failed_entangled">Ошибка экспорта: записи на этом телефоне всё ещё ссылаются на переданный объект</string>
+    <string name="backup_export_failed_files_archive">Ошибка экспорта: не удалось записать архив файлов</string>
+    <string name="backup_export_failed">Ошибка экспорта: %1$s</string>
+    <string name="backup_nothing_saved">%1$s. Ничего не сохранено.</string>
+    <string name="backup_not_saved">Резервная копия не сохранена: %1$s</string>
+    <plurals name="backup_left_behind">
+        <item quantity="one">%1$s. Не удалось удалить: %2$s — удалите вручную.</item>
+        <item quantity="few">%1$s. Не удалось удалить: %2$s — удалите вручную.</item>
+        <item quantity="many">%1$s. Не удалось удалить: %2$s — удалите вручную.</item>
+        <item quantity="other">%1$s. Не удалось удалить: %2$s — удалите вручную.</item>
+    </plurals>
+    <plurals name="backup_incomplete_missing">
+        <item quantity="one">%1$d файл вложения отсутствует</item>
+        <item quantity="few">%1$d файла вложений отсутствуют</item>
+        <item quantity="many">%1$d файлов вложений отсутствуют</item>
+        <item quantity="other">%1$d файла вложений отсутствуют</item>
+    </plurals>
+    <plurals name="backup_incomplete_changed">
+        <item quantity="one">%1$d файл вложения изменился после добавления</item>
+        <item quantity="few">%1$d файла вложений изменились после добавления</item>
+        <item quantity="many">%1$d файлов вложений изменились после добавления</item>
+        <item quantity="other">%1$d файла вложений изменились после добавления</item>
+    </plurals>
+    <string name="backup_incomplete_both">%1$s и %2$s</string>
+    <string name="backup_incomplete_not_covered">архив файлов охватил не все вложения</string>
+
+    <string name="backup_restored_data">Импортировано: %1$s, %2$s, %3$s</string>
+    <string name="backup_restored_data_attachments">Импортировано: %1$s, %2$s, %3$s · %4$s</string>
+    <plurals name="backup_restored_assets">
+        <item quantity="one">%1$d объект</item>
+        <item quantity="few">%1$d объекта</item>
+        <item quantity="many">%1$d объектов</item>
+        <item quantity="other">%1$d объекта</item>
+    </plurals>
+    <plurals name="backup_restored_tags">
+        <item quantity="one">%1$d метка</item>
+        <item quantity="few">%1$d метки</item>
+        <item quantity="many">%1$d меток</item>
+        <item quantity="other">%1$d метки</item>
+    </plurals>
+    <plurals name="backup_restored_links">
+        <item quantity="one">%1$d ссылка</item>
+        <item quantity="few">%1$d ссылки</item>
+        <item quantity="many">%1$d ссылок</item>
+        <item quantity="other">%1$d ссылки</item>
+    </plurals>
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="one">%1$d вложение в списке; восстановите архив файлов, чтобы получить содержимое</item>
+        <item quantity="few">%1$d вложения в списке; восстановите архив файлов, чтобы получить содержимое</item>
+        <item quantity="many">%1$d вложений в списке; восстановите архив файлов, чтобы получить содержимое</item>
+        <item quantity="other">%1$d вложения в списке; восстановите архив файлов, чтобы получить содержимое</item>
+    </plurals>
+
+    <plurals name="backup_restored_files">
+        <item quantity="one">Восстановлено файлов: %1$d, пропущено: %2$d</item>
+        <item quantity="few">Восстановлено файлов: %1$d, пропущено: %2$d</item>
+        <item quantity="many">Восстановлено файлов: %1$d, пропущено: %2$d</item>
+        <item quantity="other">Восстановлено файлов: %1$d, пропущено: %2$d</item>
+    </plurals>
+    <string name="backup_report_separator">"; "</string>
+    <plurals name="backup_files_already_present">
+        <item quantity="one">уже на месте: %1$d</item>
+        <item quantity="few">уже на месте: %1$d</item>
+        <item quantity="many">уже на месте: %1$d</item>
+        <item quantity="other">уже на месте: %1$d</item>
+    </plurals>
+    <plurals name="backup_files_missing_entries">
+        <item quantity="one">файлов из списка нет в архиве: %1$d</item>
+        <item quantity="few">файлов из списка нет в архиве: %1$d</item>
+        <item quantity="many">файлов из списка нет в архиве: %1$d</item>
+        <item quantity="other">файлов из списка нет в архиве: %1$d</item>
+    </plurals>
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="one">файлов в архиве нет в списке: %1$d</item>
+        <item quantity="few">файлов в архиве нет в списке: %1$d</item>
+        <item quantity="many">файлов в архиве нет в списке: %1$d</item>
+        <item quantity="other">файлов в архиве нет в списке: %1$d</item>
+    </plurals>
+    <string name="backup_set_mismatch">Эти файлы относятся к набору резервной копии %1$s, а не %2$s</string>
+    <string name="backup_restore_failed">Ошибка восстановления: %1$s</string>
+    <string name="backup_restore_transferred_out_one">Ошибка восстановления: эта резервная копия всё ещё содержит объект «%1$s», который был передан с этого телефона. Ничего не заменено.</string>
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="one">Ошибка восстановления: эта резервная копия всё ещё содержит %1$d объект, переданный с этого телефона. Ничего не заменено.</item>
+        <item quantity="few">Ошибка восстановления: эта резервная копия всё ещё содержит %1$d объекта, переданных с этого телефона. Ничего не заменено.</item>
+        <item quantity="many">Ошибка восстановления: эта резервная копия всё ещё содержит %1$d объектов, переданных с этого телефона. Ничего не заменено.</item>
+        <item quantity="other">Ошибка восстановления: эта резервная копия всё ещё содержит %1$d объекта, переданных с этого телефона. Ничего не заменено.</item>
+    </plurals>
+
+    <string name="backup_cannot_create">не удаётся создать %1$s в выбранной папке</string>
+    <string name="backup_cannot_open_for_writing">не удаётся открыть %1$s для записи</string>
+    <string name="backup_cannot_open_for_reading">не удаётся открыть %1$s для чтения</string>
+</resources>

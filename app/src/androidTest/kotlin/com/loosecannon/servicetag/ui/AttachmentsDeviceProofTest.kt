@@ -35,15 +35,15 @@ import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.EventCommand
+import com.loosecannon.servicetag.l10n.localizedDate
+import com.loosecannon.servicetag.l10n.localizedDateTime
 import com.loosecannon.servicetag.ui.backup.BackupViewModel
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.text.SimpleDateFormat
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Date
-import java.util.Locale
 import java.util.zip.ZipFile
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -152,7 +152,7 @@ class AttachmentsDeviceProofTest {
         openAsset(id).use {
             rule.awaitText("DOCUMENTS · 1")
             rule.onNodeWithText("DOCUMENTS · 1").performScrollTo().assertIsDisplayed()
-            rule.onNode(hasText(MANUAL_NAME) and hasText("Document · 2.0 KB · ${today()}"))
+            rule.onNode(hasText(MANUAL_NAME) and hasText("Document · 2.0 KB · ${localizedDate(today())}"))
                 .performScrollTo()
                 .assertIsDisplayed()
             rule.onNodeWithText("Add file").performScrollTo().assertIsDisplayed()
@@ -200,7 +200,7 @@ class AttachmentsDeviceProofTest {
             rule.onNodeWithText("Save").performScrollTo().performClick()
 
             rule.awaitText(RENAMED)
-            rule.onNode(hasText(RENAMED) and hasText("Manual · 2.0 KB · ${today()}"))
+            rule.onNode(hasText(RENAMED) and hasText("Manual · 2.0 KB · ${localizedDate(today())}"))
                 .performScrollTo()
                 .assertIsDisplayed()
             rule.onAllNodesWithText(MANUAL_NAME).assertCountEquals(0)
@@ -482,7 +482,7 @@ class AttachmentsDeviceProofTest {
 
             rule.openLedgerEntry(ENTRY_TITLE, LocalDate.now())
             rule.awaitText("DOCUMENTS · 1")
-            rule.onNode(hasText(RECEIPT_NAME) and hasText("Document · 2.0 KB · ${today()}"))
+            rule.onNode(hasText(RECEIPT_NAME) and hasText("Document · 2.0 KB · ${localizedDate(today())}"))
                 .performScrollTo()
                 .assertIsDisplayed()
 
@@ -631,9 +631,9 @@ private fun filesUnder(dir: File): List<String> = dir.walkTopDown()
     .sorted()
     .toList()
 
-/** What the Backup screen writes for the export just taken. */
-private fun lastBackupLine(): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-    .format(Date(app.graph.prefs.lastBackupAt!!))
+/** What the Backup screen writes for the export just taken: the language's date and time, in this phone's zone. */
+private fun lastBackupLine(): String =
+    localizedDateTime(Instant.ofEpochMilli(app.graph.prefs.lastBackupAt!!).atZone(ZoneId.systemDefault()).toLocalDateTime())
 
 /**
  * The first line [trigger] causes the ViewModel to say.

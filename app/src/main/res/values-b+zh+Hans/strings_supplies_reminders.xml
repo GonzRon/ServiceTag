@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_supplies_reminders.xml. -->
+<resources>
+    <string name="supplies_section">耗材</string>
+    <string name="supplies_supply_item">耗材</string>
+    <string name="supplies_no_supplies_yet">尚无耗材。</string>
+    <string name="supplies_part_number_field">零件号</string>
+    <string name="supplies_preferred_unit_field">首选单位</string>
+    <string name="supplies_specifications_section">规格</string>
+    <string name="supplies_add_specification">添加规格</string>
+    <string name="supplies_remove_specification">移除规格</string>
+    <string name="supplies_no_specifications">无规格</string>
+    <string name="supplies_used_by_section">使用此耗材的设备</string>
+    <string name="supplies_not_used_by_any_asset">没有设备使用</string>
+    <string name="supplies_specification_needs_label_and_value">每项规格都需要名称和值。</string>
+    <string name="supplies_add_supply">添加耗材</string>
+    <string name="supplies_no_supplies">无耗材</string>
+    <string name="supplies_choose_a_supply">选择耗材</string>
+    <string name="supplies_no_supply_items_yet">尚无耗材。请在“保养 › 耗材”下添加。</string>
+    <string name="supplies_edit_role">编辑用途</string>
+    <string name="supplies_role_taken">此设备已在该用途下使用该耗材。</string>
+    <string name="supplies_item_gone">该耗材已不可用。</string>
+    <string name="supplies_link_supply">关联耗材</string>
+    <string name="supplies_linked_to">已关联到%1$s</string>
+    <string name="supplies_remove_link">移除关联</string>
+
+    <string name="supplies_item_archived_badge">已归档</string>
+    <string name="supplies_more">更多</string>
+    <string name="supplies_remove_row">移除</string>
+    <string name="supplies_back">返回</string>
+    <string name="supplies_cancel">取消</string>
+    <string name="supplies_save">保存</string>
+    <string name="supplies_edit">编辑</string>
+    <string name="supplies_archive">归档</string>
+    <string name="supplies_unarchive">取消归档</string>
+    <string name="supplies_name_field">名称</string>
+    <string name="supplies_specification_label_field">名称</string>
+    <string name="supplies_specification_value_field">值</string>
+    <string name="supplies_specification_unit_field">单位</string>
+
+    <string name="installed_components_section">已安装部件</string>
+    <string name="installed_no_installed_components">无已安装部件</string>
+    <string name="installed_install_component">安装部件</string>
+    <string name="installed_install_inside">在其内部安装</string>
+    <string name="installed_inside_of">位于%1$s内</string>
+    <string name="installed_serial_or_lot">序列号或批号</string>
+    <string name="installed_installed_on">安装日期</string>
+    <string name="installed_removed_on">拆除日期</string>
+    <string name="installed_replace">更换</string>
+    <string name="installed_replace_title">更换%1$s</string>
+    <string name="installed_remove_title">拆除%1$s</string>
+    <string name="installed_subtree_removed_too">安装在其内部的所有部件都会在同一日期拆除。</string>
+    <string name="installed_edit_component">编辑部件</string>
+    <string name="installed_history">历史</string>
+    <string name="installed_installed_on_day">%1$s安装</string>
+    <string name="installed_install_date_not_recorded">未记录安装日期</string>
+    <string name="installed_removed_on_day">%1$s拆除</string>
+    <string name="installed_removed_count">已拆除（%1$d）</string>
+    <string name="installed_component_changed">此部件已被拆除或更改。未保存任何内容。</string>
+    <string name="installed_removal_before_install">拆除日期不能早于安装日期。</string>
+    <string name="installed_composition_line">%1$s × %2$s</string>
+    <string name="installed_more_entries">另有%1$d项</string>
+    <string name="installed_composition_section">组成</string>
+    <string name="installed_remove_from_composition">从组成中移除</string>
+    <string name="installed_composition_quantity_required">每种耗材的数量都必须大于零。</string>
+    <string name="installed_documents_and_references">文档和参考链接</string>
+    <string name="installed_this_installed_component">此已安装部件</string>
+    <string name="installed_from_supply">来自%1$s</string>
+    <string name="installed_open_the_supply_to_change">打开该耗材即可添加或更改这些内容。</string>
+
+    <string name="installed_back">返回</string>
+    <string name="installed_remove">拆除</string>
+    <string name="installed_edit">编辑</string>
+    <string name="installed_save">保存</string>
+    <string name="installed_cancel">取消</string>
+    <string name="installed_quantity_field">数量</string>
+    <string name="installed_unit_field">单位</string>
+
+    <string name="reminders_permission_rationale_maintenance">ServiceTag 需要通知权限，才能在保养到期时提醒您。</string>
+    <string name="reminders_permission_rationale_warranty">ServiceTag 需要通知权限，才能在保修到期前提醒您。</string>
+    <string name="reminders_permission_rationale_loan">ServiceTag 需要通知权限，才能在借出的物品到了应归还日期时提醒您。</string>
+
+    <string name="reminders_health_notifications_blocked">通知已关闭，因此保养提醒将无法送达。</string>
+    <string name="reminders_health_reminders_globally_off">ServiceTag 中的提醒已关闭。</string>
+    <string name="reminders_health_digest_alarm_missing">每日提醒检查未安排，因此今天的保养可能不会收到通知。</string>
+    <string name="reminders_health_backstop_work_missing">后台安全检查未在运行，因此漏发的提醒将无法被发现。</string>
+    <string name="reminders_health_app_restricted">此手机在后台限制了 ServiceTag，因此提醒可能延迟送达，或根本不会送达。</string>
+    <plurals name="reminders_health_schedule_no_provider">
+        <item quantity="other">%1$d个保养计划已开启提醒，但未配置提醒发送方式。</item>
+    </plurals>
+    <plurals name="reminders_health_schedule_provider_disabled">
+        <item quantity="other">%1$d个保养计划已开启提醒，但没有任何可用的发送方式。</item>
+    </plurals>
+    <plurals name="reminders_health_no_baseline">
+        <item quantity="other">%1$d个保养计划需要先有计数器读数才能到期。</item>
+    </plurals>
+
+    <string name="notification_channel_due_name">保养到期</string>
+    <string name="notification_channel_due_description">到期保养的提醒。</string>
+    <string name="notification_channel_overdue_name">保养已逾期</string>
+    <string name="notification_channel_overdue_description">已逾期保养的提醒。</string>
+    <string name="notification_channel_warranty_name">保修提醒</string>
+    <string name="notification_channel_warranty_description">保修到期前的提醒。</string>
+    <string name="notification_channel_loans_name">借出提醒</string>
+    <string name="notification_channel_loans_description">借出的物品到了应归还日期时的提醒。</string>
+
+    <plurals name="notification_summary_title">
+        <item quantity="other">%1$d项保养需要关注</item>
+    </plurals>
+    <plurals name="notification_summary_overdue">
+        <item quantity="other">%1$d项已逾期</item>
+    </plurals>
+    <plurals name="notification_summary_due">
+        <item quantity="other">%1$d项到期</item>
+    </plurals>
+    <plurals name="notification_summary_due_soon">
+        <item quantity="other">%1$d项即将到期</item>
+    </plurals>
+    <string name="notification_summary_body">%1$s。</string>
+
+    <string name="notification_item_title">%1$s — %2$s</string>
+    <string name="notification_item_due_on">%1$s到期。</string>
+    <string name="notification_item_overdue_since">自%1$s起已逾期。</string>
+    <string name="notification_item_meter_due">达到%1$s %2$s时到期，当前为%3$s。</string>
+    <string name="notification_item_meter_due_no_unit">达到%1$s时到期，当前为%2$s。</string>
+
+    <string name="notification_status_due">到期</string>
+    <string name="notification_status_overdue">已逾期</string>
+    <string name="notification_status_expires_soon">即将到期</string>
+    <string name="notification_status_due_back">应归还</string>
+    <string name="notification_status_not_returned">未归还</string>
+
+    <string name="notification_action_done">完成</string>
+    <string name="notification_action_snooze_one_day">稍后提醒（1天）</string>
+    <string name="notification_action_open">打开</string>
+
+    <string name="notification_warranty_title">%1$s — 保修</string>
+    <string name="notification_warranty_body">保修将于%1$s到期。</string>
+    <string name="notification_loan_title">%1$s — 应归还</string>
+    <string name="notification_loan_body_through">已借给%1$s。应于%2$s归还。</string>
+    <string name="notification_loan_body_after">已借给%1$s。原应于%2$s归还。</string>
+</resources>

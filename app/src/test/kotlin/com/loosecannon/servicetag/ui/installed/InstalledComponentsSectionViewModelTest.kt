@@ -16,11 +16,11 @@ import com.loosecannon.servicetag.core.usecase.InstalledComponentResult
 import com.loosecannon.servicetag.core.usecase.ReplaceComponentCommand
 import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
-import com.loosecannon.servicetag.ui.asset.ENTER_A_DATE_AS_YYYY_MM_DD
+import com.loosecannon.servicetag.ui.asset.ENTER_A_VALID_DATE
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
-import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
+import com.loosecannon.servicetag.ui.supplies.linkedTo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
@@ -47,7 +47,7 @@ import org.junit.Test
  * quiet lines, the removed rows behind the toggle, the two SupplyItem sets and the read-only flag — and its sheets: the
  * row sheet's facts and history, the install, edit, replace and remove writes through the four use cases, each refusal
  * as its sentence, and the composition editor's draft (a pick's entry and unit, the replace prefill, removal, marks). All against the Room-backed `FakeGraph`, so the flows and the use cases are the production ones. Every sentence is
- * asserted through its one home (`InstalledComponentStrings.kt`, `LINKED_TO`), so a re-worded string moves this test
+ * asserted through its one home (`InstalledComponentStrings.kt`, `linkedTo`), so a re-worded string moves this test
  * with it. Fixtures are fictional (the Global constraints); every date is on or before the graph's today, 2026-02-10.
  *
  * `viewModelScope` dispatches on `Dispatchers.Main`, an unconfined test dispatcher sharing the scheduler the graph's
@@ -200,7 +200,7 @@ class InstalledComponentsSectionViewModelTest {
 
         assertEquals(
             listOf(
-                LINKED_TO.format("Example Battery Pack"), "EX-PK-4",
+                linkedTo("Example Battery Pack"), "EX-PK-4",
                 compositionLine("4", "Example 12 V Battery"), compositionLine("2 L", "Example Coolant"), moreEntries(2),
                 "SN-EXAMPLE-01", installedOnDay("2025-03-04"),
             ).joinToString(" · "),
@@ -212,7 +212,7 @@ class InstalledComponentsSectionViewModelTest {
             rows.getValue("Example Coolant Loop").quiet,
         )
         assertEquals("", rows.getValue("Example Bare Bracket").quiet)
-        assertEquals(LINKED_TO.format("Example 12 V Battery"), rows.getValue("Example Spare Pack").quiet)
+        assertEquals(linkedTo("Example 12 V Battery"), rows.getValue("Example Spare Pack").quiet)
         assertEquals(listOf("Example Spare Pack"), rows.values.filter { it.archived }.map { it.name })
         clearModels()
     }
@@ -510,7 +510,7 @@ class InstalledComponentsSectionViewModelTest {
         vm.onDate("2026-1-5")
         assertNull(vm.state.first { it.form?.date == "2026-1-5" }.form!!.dateProblem)
         vm.save()
-        assertEquals(ENTER_A_DATE_AS_YYYY_MM_DD, vm.state.first { it.form?.dateProblem != null }.form!!.dateProblem)
+        assertEquals(ENTER_A_VALID_DATE, vm.state.first { it.form?.dateProblem != null }.form!!.dateProblem)
         vm.onDate("")
         vm.startLinkPick()
         vm.pick(vm.state.value.choices.single())

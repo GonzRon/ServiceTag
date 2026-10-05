@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese (Brazilian usage) translation of values/strings_scan.xml. -->
+<resources>
+    <string name="nav_dashboard">Painel</string>
+    <string name="nav_assets">Equipamentos</string>
+    <string name="nav_maintenance">Manutenção</string>
+    <string name="nav_link_points_nowhere">Esse link não aponta para nada aqui.</string>
+
+    <string name="scan_title">Ler / inspecionar etiqueta</string>
+    <string name="scan_back">Voltar</string>
+    <string name="scan_ready">PRONTO PARA ESCANEAR</string>
+    <string name="scan_reading">LENDO ETIQUETA</string>
+    <string name="scan_hold_hint">Aproxime a parte de cima do telefone da etiqueta do equipamento.</string>
+    <string name="scan_needs_window">Para escanear, é preciso a janela do próprio app.</string>
+    <string name="scan_read_failed">Não foi possível ler essa etiqueta. Mantenha-a parada e tente novamente.</string>
+    <string name="scan_reason_no_ndef">esta etiqueta não é compatível com NDEF</string>
+
+    <string name="nfc_no_hardware">Este telefone não tem hardware NFC.</string>
+    <string name="nfc_turned_off">O NFC está desativado. Ative-o nas configurações do sistema e volte aqui.</string>
+    <string name="nfc_nothing_to_resolve">Nada para identificar.</string>
+    <string name="nfc_could_not_resolve">não foi possível identificar esta etiqueta: %1$s</string>
+
+    <string name="tag_eyebrow_reading">Lendo etiqueta</string>
+    <string name="tag_looking_up">Procurando esta etiqueta…</string>
+    <string name="tag_eyebrow_servicetag">Etiqueta ServiceTag</string>
+    <string name="tag_open_asset">Abrir equipamento</string>
+    <string name="tag_cancel">Cancelar</string>
+    <string name="tag_eyebrow_detected">Etiqueta detectada</string>
+    <string name="tag_opening_asset">Abrindo equipamento…</string>
+    <string name="tag_pre_split_link">Esta etiqueta aponta para um link de nota de antes da separação dos produtos. O ServiceTag não abre mais links; o NoteTag abre.</string>
+    <string name="tag_eyebrow_unregistered">Etiqueta não registrada</string>
+    <string name="tag_not_assigned">Esta etiqueta ainda não está atribuída a nada.</string>
+    <string name="tag_bind_to_asset">Vincular a um equipamento</string>
+    <string name="tag_eyebrow_marked_lost">Etiqueta marcada como perdida</string>
+    <string name="tag_eyebrow_retired">Etiqueta desativada</string>
+    <string name="tag_revoked_sentence">Esta etiqueta foi tirada de serviço. Vinculá-la de novo a coloca em uso outra vez.</string>
+    <string name="tag_not_in_records">Esta etiqueta ServiceTag não está nos registros deste telefone.</string>
+    <string name="tag_write_over_it">Gravar uma nova etiqueta por cima</string>
+    <string name="tag_eyebrow_not_ours">Não é uma etiqueta ServiceTag</string>
+    <string name="tag_holds_something_else">Esta etiqueta contém outra coisa.</string>
+    <string name="tag_placement">Posição da etiqueta</string>
+    <string name="tag_picker_title">VINCULAR ESTA ETIQUETA A</string>
+    <string name="tag_picker_new_asset">Novo equipamento…</string>
+    <string name="tag_picker_new_asset_detail">Crie-o e depois escaneie esta etiqueta novamente</string>
+    <string name="tag_picker_empty">Nada para vincular ainda</string>
+    <string name="tag_picker_asset">Equipamento</string>
+    <string name="tag_bind_failed">Não foi possível vincular esta etiqueta: %1$s</string>
+
+    <string name="tag_reason_empty">etiqueta vazia</string>
+    <string name="tag_reason_foreign">não é uma etiqueta ServiceTag: %1$s</string>
+    <string name="tag_reason_unreadable">registro ServiceTag ilegível: %1$s</string>
+    <string name="tag_reason_not_ours">não é uma etiqueta ServiceTag</string>
+    <string name="tag_reason_newer_app">gravada por um ServiceTag mais recente (formato de dados %1$d)</string>
+    <string name="tag_reason_unresolved">não foi possível identificar esta etiqueta</string>
+
+    <string name="tag_write_title">Gravar uma etiqueta</string>
+    <string name="tag_write_close">Fechar</string>
+    <string name="tag_write_target">DESTINO</string>
+    <string name="tag_target_spare">nada ainda — uma etiqueta reserva, vinculada quando for escaneada pela primeira vez</string>
+    <string name="tag_target_unnamed">este destino</string>
+    <string name="tag_write_eyebrow_idle">Gravar etiqueta NFC</string>
+    <string name="tag_write_eyebrow_confirm">Sobrescrever esta etiqueta?</string>
+    <string name="tag_write_answer_here">Responda aqui e depois aproxime a mesma etiqueta do telefone novamente.</string>
+    <string name="tag_write_eyebrow_written">Etiqueta gravada</string>
+    <string name="tag_written_locked">%1$s · bloqueada</string>
+    <string name="tag_written_rewritable">%1$s · regravável</string>
+    <string name="tag_write_done">Concluído</string>
+    <string name="tag_write_eyebrow_error">Não gravada</string>
+    <string name="tag_write_verified">Releitura idêntica byte a byte</string>
+    <string name="tag_write_needs_window">Para gravar, é preciso a janela do próprio app.</string>
+    <string name="tag_lock_switch">Bloquear permanentemente</string>
+    <string name="tag_lock_switch_hint">Uma etiqueta bloqueada nunca pode ser regravada.</string>
+    <string name="tag_lock_warning_title">Bloquear permanentemente?</string>
+    <string name="tag_lock_warning_text">Uma etiqueta bloqueada nunca pode ser regravada nem reutilizada. Só bloqueie etiquetas instaladas de forma definitiva.</string>
+    <string name="tag_lock_warning_confirm">Bloquear após gravar</string>
+    <string name="tag_lock_warning_dismiss">Não bloquear</string>
+
+    <string name="tag_write_hold_blank">Aproxime uma etiqueta vazia ou reutilizável da parte de trás do telefone.</string>
+    <string name="tag_write_read_failed">Não foi possível ler a etiqueta. Mantenha-a parada e tente novamente.</string>
+    <string name="tag_write_no_ndef_hint">Esta etiqueta não é compatível com NDEF. Use uma NTAG213/215/216 ou similar.</string>
+    <string name="tag_write_no_ndef">Esta etiqueta não é compatível com NDEF.</string>
+    <string name="tag_write_read_only">Esta etiqueta é somente leitura (bloqueada). Nada foi gravado.</string>
+    <string name="tag_write_too_small">Etiqueta pequena demais: ela comporta %1$d bytes, e a mensagem precisa de %2$d.</string>
+    <string name="tag_write_formatted">Formatada. Afaste a etiqueta e aproxime-a de novo para gravar.</string>
+    <string name="tag_write_format_failed">Não foi possível formatar a etiqueta. Mantenha-a parada e tente novamente.</string>
+    <string name="tag_write_format_unexpected">Resultado inesperado durante a formatação. Mantenha a etiqueta parada e tente novamente.</string>
+    <string name="tag_write_unexpected">Resultado inesperado durante a gravação. Mantenha a etiqueta parada e tente novamente.</string>
+    <string name="tag_write_verify_mismatch">A releitura é diferente do que foi gravado. Nada foi registrado — tente novamente.</string>
+    <string name="tag_write_not_written">Nada foi gravado (%1$s). Mantenha a etiqueta parada e tente novamente.</string>
+    <string name="tag_write_may_not_have_finished">A gravação pode não ter terminado (%1$s). Afaste a etiqueta e aproxime-a do telefone novamente.</string>
+    <string name="tag_write_overwrite_confirmed">Sobrescrita confirmada. Aproxime a mesma etiqueta do telefone novamente para gravar.</string>
+    <string name="tag_write_kept">Não gravada. A etiqueta ficou como estava.</string>
+
+    <string name="tag_overwrite_title">SOBRESCREVER ESTA ETIQUETA?</string>
+    <string name="tag_overwrite_explanation">Ao substituir o conteúdo, a etiqueta passará a identificar %1$s. O conteúdo antigo será perdido. Depois de confirmar, aproxime a mesma etiqueta do telefone novamente para gravar.</string>
+    <string name="tag_overwrite_confirm">Sobrescrever</string>
+    <string name="tag_overwrite_keep">Manter</string>
+    <string name="tag_overwrite_identifies">Esta etiqueta identifica atualmente %1$s.</string>
+    <string name="tag_overwrite_not_assigned">Esta etiqueta está nos registros deste telefone, mas ainda não está atribuída a nada.</string>
+    <string name="tag_overwrite_marked_lost">Esta etiqueta foi marcada como perdida e tirada de serviço.</string>
+    <string name="tag_overwrite_retired">Esta etiqueta foi desativada e tirada de serviço.</string>
+    <string name="tag_overwrite_could_not_check">Esta é uma etiqueta ServiceTag, mas não foi possível verificar o registro dela agora.</string>
+    <string name="tag_overwrite_holds_newer">A etiqueta já contém um registro ServiceTag gravado por um app mais recente (formato %1$s).</string>
+    <string name="tag_overwrite_holds_foreign">A etiqueta já contém conteúdo NDEF de outro produto (%1$s).</string>
+    <string name="tag_overwrite_holds_unreadable">A etiqueta já contém conteúdo NDEF ilegível (%1$s).</string>
+</resources>

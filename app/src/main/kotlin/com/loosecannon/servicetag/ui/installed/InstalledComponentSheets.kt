@@ -32,9 +32,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.usecase.CompositionInput
@@ -46,10 +48,10 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.supplies.ADD_SUPPLY
-import com.loosecannon.servicetag.ui.supplies.LINKED_TO
 import com.loosecannon.servicetag.ui.supplies.SupplyItemPickerSheet
 import com.loosecannon.servicetag.ui.supplies.SupplyLinkLine
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
+import com.loosecannon.servicetag.ui.supplies.linkedTo
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -118,9 +120,9 @@ internal fun InstalledComponentRowSheet(
                     if (sheet.current) {
                         TextButton(onClick = onInstallInside) { Text(INSTALL_INSIDE) }
                         TextButton(onClick = onReplace) { Text(REPLACE_COMPONENT) }
-                        TextButton(onClick = onRemove) { Text("Remove") }
+                        TextButton(onClick = onRemove) { Text(stringResource(R.string.installed_remove)) }
                     }
-                    TextButton(onClick = onEdit) { Text("Edit") }
+                    TextButton(onClick = onEdit) { Text(stringResource(R.string.installed_edit)) }
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -173,7 +175,7 @@ internal fun ComponentFormSheet(
             if (form.subtreeToo) Text(SUBTREE_REMOVED_TOO, style = MaterialTheme.typography.bodyMedium)
             form.problem?.let { Problem(it) }
             Buttons(
-                confirm = if (form.replacing) REPLACE_COMPONENT else "Save",
+                confirm = if (form.replacing) REPLACE_COMPONENT else stringResource(R.string.installed_save),
                 enabled = form.canSave,
                 onConfirm = onSave,
                 onDismiss = onDismiss,
@@ -266,7 +268,7 @@ internal fun RemoveComponentSheet(
             DateField(value = sheet.removedOn, onValueChange = onRemovedOn, label = REMOVED_ON, problem = sheet.dateProblem)
             if (sheet.subtreeToo) Text(SUBTREE_REMOVED_TOO, style = MaterialTheme.typography.bodyMedium)
             sheet.problem?.let { Problem(it) }
-            Buttons(confirm = "Remove", enabled = sheet.canSave, onConfirm = onRemove, onDismiss = onDismiss)
+            Buttons(confirm = stringResource(R.string.installed_remove), enabled = sheet.canSave, onConfirm = onRemove, onDismiss = onDismiss)
         }
     }
 }
@@ -361,7 +363,7 @@ private fun CompositionEntryEditor(
             OutlinedTextField(
                 value = entry.quantity,
                 onValueChange = onQuantity,
-                label = { Text("Qty") },
+                label = { Text(stringResource(R.string.installed_quantity_field)) },
                 singleLine = true,
                 isError = marked,
                 textStyle = MonoText,
@@ -372,7 +374,7 @@ private fun CompositionEntryEditor(
             OutlinedTextField(
                 value = entry.unit,
                 onValueChange = onUnit,
-                label = { Text("Unit") },
+                label = { Text(stringResource(R.string.installed_unit_field)) },
                 singleLine = true,
                 shape = ControlShape,
                 modifier = Modifier.width(96.dp),
@@ -385,7 +387,7 @@ private fun CompositionEntryEditor(
 /** "Linked to {name}" (P15-22) with the shipped "Archived" badge; the line opens the SupplyItem. */
 @Composable
 private fun LinkedSupply(item: SupplyListRow, onOpen: () -> Unit) {
-    SupplyLine(LINKED_TO.format(item.name), item.archived, onClick = onOpen)
+    SupplyLine(linkedTo(item.name), item.archived, onClick = onOpen)
 }
 
 /** A line naming a SupplyItem — [text], then the shipped "Archived" badge while it is [archived] — that reports a tap. */
@@ -406,7 +408,7 @@ private fun SupplyLine(text: String, archived: Boolean, onClick: () -> Unit, mod
             modifier = Modifier.weight(1f, fill = false),
         )
         if (archived) {
-            StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+            StatusBadge(label = stringResource(R.string.supplies_item_archived_badge), colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
     }
 }
@@ -430,7 +432,7 @@ private fun Problem(line: String) {
 private fun Buttons(confirm: String, enabled: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = onDismiss) { Text("Cancel") }
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.installed_cancel)) }
         TextButton(onClick = onConfirm, enabled = enabled) { Text(confirm) }
     }
     Spacer(Modifier.height(4.dp))

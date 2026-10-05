@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.usecase.TransferImportOutcome
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.ui.backup.NoAttachmentFolder
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
@@ -67,7 +68,7 @@ class TransferImportViewModelTest {
     private fun model(
         copy: File?,
         on: FakeGraph = graph,
-        sentence: String = NoAttachmentFolder().message!!,
+        sentence: String = NoAttachmentFolder().message,
         reconcile: ReminderReconcile = sweep,
     ) = TransferImportViewModel(
         on.importTransferPack, on.transferPackInbox, copy, sentence, reconcile, zone = ZoneOffset.UTC,
@@ -157,6 +158,8 @@ class TransferImportViewModelTest {
         assertEquals(TransferImportPhase.DONE, first.state.value.phase)
         val again = model(copyOf(pack.bytes)).also { advanceUntilIdle() }
         assertEquals(listOf("This Transfer Pack is already on this phone."), again.state.value.outcome)
+        // #102: the screen styles the line by the use case's outcome, never by comparing its words.
+        assertEquals(TransferImportOutcome.ALREADY_HERE, again.state.value.outcomeKind)
         assertFalse(again.state.value.importEnabled)
 
         // P77-44 and P77-45: the heater's tag is bound here to another asset.
@@ -178,6 +181,7 @@ class TransferImportViewModelTest {
             ),
             conflicted.state.value.outcome,
         )
+        assertEquals(TransferImportOutcome.CONFLICTS, conflicted.state.value.outcomeKind)
         other.close()
 
         // P77-67: the heater is held here, and this pack does not bring it back.
@@ -190,6 +194,7 @@ class TransferImportViewModelTest {
             listOf("Example Water Heater was transferred out from this phone, and this Transfer Pack does not bring it back."),
             refused.state.value.outcome,
         )
+        assertEquals(TransferImportOutcome.NOT_BROUGHT_BACK, refused.state.value.outcomeKind)
         assertFalse(refused.state.value.importEnabled)
         holder.close()
     }

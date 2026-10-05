@@ -159,12 +159,12 @@ class SeasonSyncBlockViewModelTest {
         act { block.syncNow() }
         val state = block.now
         assertEquals("Follows input_boolean.example_heater_in_season", state.sourceLine)
-        assertEquals("Last successful check 2026-02-10 09:00", state.lastSuccessLine)
+        assertEquals("Last successful check 10 Feb 2026, 09:00", state.lastSuccessLine)
         assertEquals(
             listOf(Notice("Could not reach Home Assistant. Check that this phone is on the same network.")),
             state.errorLines,
         )
-        assertEquals("Changed in Home Assistant 2026-02-09 18:30", state.haChangedLine)
+        assertEquals("Changed in Home Assistant 9 Feb 2026, 18:30", state.haChangedLine)
         assertEquals("Started from Home Assistant on 10 Feb 2026", state.appliedLine)
         assertNull("checked within the day", state.staleLine)
         assertNull(state.stateLine)
@@ -180,7 +180,7 @@ class SeasonSyncBlockViewModelTest {
         assertEquals("Not checked successfully within the chosen interval.", block.now.staleLine)
         answers(HaSwitchState.OFF)
         act { block.syncNow() }
-        assertEquals("Last successful check 2026-02-10 09:00", block.now.lastSuccessLine)
+        assertEquals("Last successful check 10 Feb 2026, 09:00", block.now.lastSuccessLine)
         assertNull(block.now.staleLine)
         graph.now += 23 * HOUR
         answers(null)
@@ -189,7 +189,7 @@ class SeasonSyncBlockViewModelTest {
         graph.now += HOUR
         act { block.syncNow() }
         assertEquals("a failed attempt does not count", "Not checked successfully within the chosen interval.", block.now.staleLine)
-        assertEquals("Last successful check 2026-02-10 09:00", block.now.lastSuccessLine)
+        assertEquals("Last successful check 10 Feb 2026, 09:00", block.now.lastSuccessLine)
         connect(SyncCadence.WEEKLY)
         act { block.refresh() }
         assertNull("a day of a weekly cadence", block.now.staleLine)
@@ -324,7 +324,7 @@ class SeasonSyncBlockViewModelTest {
         graph.haStateReader.answer = { HaReadOutcome.NoDecision(SyncErrorKind.NOT_ON_LOCAL_NETWORK, "PERMISSION_MISSING") }
         act { block.syncNow() }
         assertEquals(listOf(Notice(unconfirmed), remedies.getValue(UnconfirmedCause.PERMISSION_MISSING)), block.now.errorLines)
-        assertEquals("Last successful check 2026-02-10 09:00", block.now.lastSuccessLine)
+        assertEquals("Last successful check 10 Feb 2026, 09:00", block.now.lastSuccessLine)
     }
 
     @Test fun theProvenanceLineIsC33s() = runTest {

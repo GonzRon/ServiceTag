@@ -4,6 +4,8 @@ import android.content.ContentResolver
 import android.content.Context
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.backup.BackupSetSink
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -33,10 +35,10 @@ class SafBackupSetWriter(
     override suspend fun write(name: String, body: suspend (OutputStream) -> Unit): String =
         withContext(Dispatchers.IO) {
             val document = tree.createFile("application/zip", name)
-                ?: error("cannot create $name in the chosen folder")
+                ?: error(localized(R.string.backup_cannot_create, name))
             try {
                 resolver.openOutputStream(document.uri, "wt")?.use { body(it) }
-                    ?: error("cannot open $name for writing")
+                    ?: error(localized(R.string.backup_cannot_open_for_writing, name))
             } catch (t: Throwable) {
                 runCatching { document.delete() }
                 throw t
@@ -60,7 +62,7 @@ class SafBackupSetWriter(
 /** `ServiceTag-data-<stamp>.zip` and `ServiceTag-artifacts-<stamp>.zip`, stamp = local `yyyyMMdd-HHmmss`. */
 object BackupSetNames {
     fun stamp(at: Long): String =
-        SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(at))
+        SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(at)) // l10n-ok: backup file names stay language-neutral
 
     fun data(stamp: String): String = "ServiceTag-data-$stamp.zip"
 

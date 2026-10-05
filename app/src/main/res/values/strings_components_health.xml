@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: shared UI components, operational condition, derived health and the dashboard — English source.
+  Comments carry the ratification ids (spec §10.7's S-numbers, #82's P82-n) and what each string is for.
+  The condition words (S1–S3) and the health band words (S95–S98) are ratified in upper case and drawn as
+  written; the quantity-bearing health lines are plurals in plurals.xml.
+-->
+<resources>
+    <!-- ============================================================ Shared components (ui/components) -->
+
+    <!-- A dialog's or a form's way out, which writes nothing: the typed-confirm dialog, Change condition, Mark operational, the health subject editor. Also the health subject editor's close icon's accessible name. -->
+    <string name="ui_action_cancel">Cancel</string>
+    <!-- The health subject editor's app-bar action that commits the form. -->
+    <string name="ui_action_save">Save</string>
+    <!-- The typed-confirm dialog's field label, guarding a big delete. %1$s: the exact text the owner must type (shown unchanged, e.g. the asset's name or a code word). -->
+    <string name="ui_typed_confirm_label">Type %1$s to confirm</string>
+
+    <!-- G1 §1.3: the header over the reading-entry rows' three columns; drawn in upper case. The reading's name. -->
+    <string name="ui_instrument_header_reading">Reading</string>
+    <!-- G1 §1.3: the column header over the entered value. -->
+    <string name="ui_instrument_header_value">Value</string>
+    <!-- G1 §1.3: the column header over the reading's target range. -->
+    <string name="ui_instrument_header_target">Target</string>
+    <!-- Under a reading row that must be filled before Save (said quietly until it is), and under a row a refused save left empty. -->
+    <string name="ui_instrument_required">Required</string>
+    <!-- Under a number reading a refused save could not read as a number. -->
+    <string name="ui_instrument_not_a_number">Not a number</string>
+    <!-- Under a reading a refused save found wrong for any other reason. -->
+    <string name="ui_instrument_check_value">Check this value</string>
+    <!-- A yes/no reading's first answer (stored as 1). -->
+    <string name="ui_instrument_yes">Yes</string>
+    <!-- A yes/no reading's second answer (stored as 0). -->
+    <string name="ui_instrument_no">No</string>
+
+    <!-- The service record's date column: %1$s the day of the month ("10"), %2$s the month's short name, upper-cased ("JUN"). -->
+    <string name="ui_ledger_day_month">%1$s %2$s</string>
+
+    <!-- ============================================================ Operational condition (ui/condition) -->
+
+    <!-- S1: the condition word for OPERATIONAL, ratified in upper case; a badge, and inside sentences below. -->
+    <string name="condition_word_operational">OPERATIONAL</string>
+    <!-- S2: the condition word for DEGRADED (works, but with a known problem), ratified in upper case. -->
+    <string name="condition_word_degraded">DEGRADED</string>
+    <!-- S3: the condition word for DOWN (not available for its intended use), ratified in upper case. -->
+    <string name="condition_word_down">DOWN</string>
+    <!-- S4: an asset with no condition recorded at all. Drawn in this case, never upper-cased. -->
+    <string name="condition_not_recorded">Condition not recorded</string>
+    <!-- S8: the Change condition option (and dashboard chip) for OPERATIONAL. -->
+    <string name="condition_option_operational">Operational</string>
+    <!-- S9: the helper under S8. -->
+    <string name="condition_helper_operational">Available for normal use.</string>
+    <!-- S10: the option (and dashboard chip) for DEGRADED. -->
+    <string name="condition_option_degraded">Degraded</string>
+    <!-- S11: the helper under S10. -->
+    <string name="condition_helper_degraded">Works, but with a known problem.</string>
+    <!-- S12: the option (and dashboard chip) for DOWN. -->
+    <string name="condition_option_down">Down</string>
+    <!-- S13: the helper under S12. -->
+    <string name="condition_helper_down">Not available for its intended use.</string>
+    <!-- S23: an empty reason, wherever a reason would appear (the condition block, S27, history). -->
+    <string name="condition_no_reason_given">No reason given</string>
+    <!-- P82-10: the button to a new Incident, on asset detail's Condition section and on the scan sheet. It only navigates. -->
+    <string name="condition_log_incident">Log incident</string>
+    <!-- S22: beside the condition badge. %1$s: the display date the current condition began ("2 Apr 2026"). -->
+    <string name="condition_since">since %1$s</string>
+    <!-- S27: one DOWN or DEGRADED component under its parent. %1$s: the component's name; %2$s: its condition word (S2 or S3); %3$s: its reason, or S23 when empty. -->
+    <string name="condition_component_line">%1$s %2$s — %3$s</string>
+
+    <!-- S5: the Change condition sheet's title, and asset detail's section. -->
+    <string name="condition_title">Condition</string>
+    <!-- S6: the action that opens Change condition (scan sheet, asset detail). -->
+    <string name="condition_change">Change condition</string>
+    <!-- S14: the optional reason field's label. -->
+    <string name="condition_what_is_wrong">What is wrong? (optional)</string>
+    <!-- S15: the date field's label: the day the condition changed. -->
+    <string name="condition_when_did_this_change">When did this change?</string>
+    <!-- S16: the sheet's save button. -->
+    <string name="condition_save">Save condition</string>
+    <!-- S25: the date refusal under S15. -->
+    <string name="condition_date_not_later_than_today">The date cannot be later than today.</string>
+    <!-- P82-1: the question asked over the sheet when DOWN or DEGRADED is saved for an asset in service. -->
+    <string name="condition_log_incident_details_question">Log incident details?</string>
+    <!-- P82-2: P82-1's body. %1$s: the asset's name; %2$s: the condition word being saved (S2 or S3). -->
+    <string name="condition_log_incident_details_body">%1$s is %2$s. Record what went wrong in the service record?</string>
+    <!-- P82-3: P82-1's accept; it opens the Incident entry. -->
+    <string name="condition_log_incident_details">Log incident details</string>
+    <!-- P82-4: P82-1's decline; it saves the condition alone. -->
+    <string name="condition_save_only">Save condition only</string>
+    <!-- P82-5: the Incident entry's line under its eyebrow. %1$s: the asset's name; %2$s: the condition word (S2 or S3). -->
+    <string name="condition_saving_also_records">Saving also records %1$s as %2$s.</string>
+
+    <!-- S7: the scan sheet's action, the Mark operational dialog's confirm, and the operational offer's accept. -->
+    <string name="condition_mark_operational">Mark operational</string>
+    <!-- S17: the Mark operational dialog's title, and the operational offer's. -->
+    <string name="condition_mark_operational_title">Mark operational?</string>
+    <!-- S18: the Mark operational dialog's body. %1$s: the current condition word (S2 or S3). -->
+    <string name="condition_mark_operational_body">The earlier %1$s record stays in the history.</string>
+    <!-- S19: the operational offer's body after an event. %1$s: the event's title as entered; %2$s: the asset's name. -->
+    <string name="condition_operational_offer_body">You logged %1$s. Is %2$s working normally again?</string>
+    <!-- S20: the operational offer's dismiss; it writes nothing. -->
+    <string name="condition_not_yet">Not yet</string>
+    <!-- S40: accepting the season-start offer, and asset detail's action. -->
+    <string name="condition_start_season">Start season</string>
+    <!-- S41: accepting the season-end offer, and asset detail's action. -->
+    <string name="condition_end_season">End season</string>
+    <!-- S51: the season-start offer's title. -->
+    <string name="condition_start_season_question">Start the season now?</string>
+    <!-- S52: the season-end offer's title. -->
+    <string name="condition_end_season_question">End the season now?</string>
+    <!-- S53: the season offer's body, and the impairment offer's (S53 (re)). %1$s: the event's title as entered. -->
+    <string name="condition_you_logged">You logged %1$s.</string>
+    <!-- P82-6: the impairment offer's question after a new Incident. -->
+    <string name="condition_did_this_affect_use">Did this affect whether the asset can be used?</string>
+    <!-- P82-7: its first answer; records DOWN. Sentence case, like S7, not the badge word. -->
+    <string name="condition_mark_down">Mark down</string>
+    <!-- P82-8: its second answer; records DEGRADED. -->
+    <string name="condition_mark_degraded">Mark degraded</string>
+    <!-- P82-9: its third answer; records nothing. -->
+    <string name="condition_no_change">No change</string>
+
+    <!-- ============================================================ Derived health (ui/health) -->
+
+    <!-- S95: the health band word for NOMINAL, ratified in upper case. -->
+    <string name="health_band_nominal">NOMINAL</string>
+    <!-- S96: the band word for WARNING, ratified in upper case. -->
+    <string name="health_band_warning">WARNING</string>
+    <!-- S97: the band word for CRITICAL, ratified in upper case. -->
+    <string name="health_band_critical">CRITICAL</string>
+    <!-- S98: a subject or aggregate with no value; never drawn as a number. Ratified in upper case. -->
+    <string name="health_not_tracked">NOT TRACKED</string>
+    <!-- The health badge: %1$s the band word (S95–S97); %2$d the score, 0–100. -->
+    <string name="health_badge_label">%1$s %2$d</string>
+    <!-- S99: an age-driven subject's line. %1$s: the display date of the replacement; %2$s: its age, from the plural health_age_days ("90 days"). -->
+    <string name="health_replaced">Replaced %1$s, %2$s ago</string>
+    <!-- S100. -->
+    <string name="health_no_replacement_recorded">No replacement recorded yet</string>
+    <!-- S101. -->
+    <string name="health_replacement_action_removed">The replacement quick action was removed.</string>
+    <!-- S103: %1$s: the maintenance schedule's title as entered. -->
+    <string name="health_up_to_date">%1$s is up to date</string>
+    <!-- S143: %1$s: the maintenance schedule's title as entered; %2$s: the display date it was postponed to. -->
+    <string name="health_postponed">%1$s was postponed to %2$s</string>
+    <!-- S105. -->
+    <string name="health_not_tracked_out_of_season">Not tracked while out of season</string>
+    <!-- S106. -->
+    <string name="health_not_tracked_paused">Not tracked while the schedule is paused</string>
+    <!-- S142. -->
+    <string name="health_not_tracked_link">Not tracked: the linked schedule has no date rule or belongs to another asset.</string>
+    <!-- One contributor inside S108: %1$s the health subject's name as entered; %2$d its score. -->
+    <string name="health_subject_score">%1$s %2$d</string>
+    <!-- S108: the aggregate line. %1$d: the asset's aggregate score; %2$s: the contributors (health_subject_score each), joined by the list separator. -->
+    <string name="health_aggregate_line">%1$d — %2$s</string>
+    <!-- S109: one CRITICAL subject. %1$s: the subject's name as entered; %2$d: its score. -->
+    <string name="health_critical_line">Critical: %1$s %2$d</string>
+    <!-- S110: a health row on the dashboard. %1$s: the subject's name as entered; %2$s: its band word (S96 or S97). -->
+    <string name="health_dashboard_row">%1$s %2$s</string>
+
+    <!-- The health subject editor's name field (the shipped field word; an asterisk follows while it is empty). -->
+    <string name="health_name">Name</string>
+    <!-- S113: the field asking what the subject is. -->
+    <string name="health_what_is_it">What is it?</string>
+    <!-- S114: S113's option for the whole asset. -->
+    <string name="health_kind_whole_asset">The whole asset</string>
+    <!-- S115: S113's option for one part. -->
+    <string name="health_kind_part">A part</string>
+    <!-- S116: S113's option for a medium. -->
+    <string name="health_kind_medium">Something maintained, like water</string>
+    <!-- S117: the field asking what drives the subject's health. -->
+    <string name="health_what_wears_it_down">What wears it down?</string>
+    <!-- S118: S117's option: time since the last replacement. -->
+    <string name="health_driver_age">Age since replacement</string>
+    <!-- S119: S117's option: how overdue a maintenance schedule is. -->
+    <string name="health_driver_overdue">Overdue maintenance</string>
+    <!-- S120: the field under S118 naming which replacement counts. -->
+    <string name="health_replacement_quick_action">Replacement quick action</string>
+    <!-- S121: S120's first option: any replacement event is the baseline. -->
+    <string name="health_any_replacement">Any replacement</string>
+    <!-- S122: the field under S119 naming the schedule. -->
+    <string name="health_maintenance_schedule">Maintenance schedule</string>
+    <!-- S123 (1 of 3): an age subject's first threshold field. -->
+    <string name="health_age_threshold_nominal">As new for (days)</string>
+    <!-- S123 (2 of 3). -->
+    <string name="health_age_threshold_warning">Warning after (days)</string>
+    <!-- S123 (3 of 3). -->
+    <string name="health_age_threshold_critical">Critical after (days)</string>
+    <!-- S124 (1 of 3): an overdue subject's first threshold field. -->
+    <string name="health_overdue_threshold_grace">Grace period (days overdue)</string>
+    <!-- S124 (2 of 3). -->
+    <string name="health_overdue_threshold_warning">Warning at (days overdue)</string>
+    <!-- S124 (3 of 3). -->
+    <string name="health_overdue_threshold_critical">Critical at (days overdue)</string>
+    <!-- S125: the thresholds do not rise strictly. -->
+    <string name="health_thresholds_must_rise">Each number must be larger than the one before.</string>
+    <!-- S126: shown while a threshold is empty and Save is held. -->
+    <string name="health_enter_all_three_numbers">Enter all three numbers, or use a starting point.</string>
+    <!-- S127: the action offering the starting points (overdue maintenance only). -->
+    <string name="health_use_a_starting_point">Use a starting point</string>
+    <!-- S128 (1 of 2): a starting point's name. %1$d, %2$d, %3$d: its three thresholds in days, always 14, 45 and 120. -->
+    <string name="health_starting_point_engine_service">Engine service: %1$d / %2$d / %3$d days overdue</string>
+    <!-- S128 (2 of 2). %1$d, %2$d, %3$d: its three thresholds in days, always 2, 7 and 14. -->
+    <string name="health_starting_point_water_care">Water care: %1$d / %2$d / %3$d days overdue</string>
+    <!-- S129: the confirmation body before a starting point fills the fields. -->
+    <string name="health_starting_points_not_safety_limits">These are starting points, not safety limits. Check them for this equipment before saving.</string>
+    <!-- S130: S129's confirm. -->
+    <string name="health_use_these_numbers">Use these numbers</string>
+    <!-- S133: the 1–10 weight stepper's label (Weighted average only). -->
+    <string name="health_weight">Weight</string>
+    <!-- S135: the chosen schedule already drives another health subject. -->
+    <string name="health_schedule_already_drives_another">That schedule already drives another subject.</string>
+    <!-- S136 (1 of 2): the editor's action on a subject in use. -->
+    <string name="health_archive_subject">Archive subject</string>
+    <!-- S136 (2 of 2): the editor's action on an archived subject; the asset editor marks an archived subject with it. -->
+    <string name="health_restore_subject">Restore subject</string>
+
+    <!-- ============================================================ Dashboard (ui/dashboard) -->
+
+    <!-- F2: the category picker's reset option. -->
+    <string name="dashboard_all_categories">All categories</string>
+    <!-- F2: the status picker's reset option. -->
+    <string name="dashboard_all_statuses">All statuses</string>
+    <!-- F2: the category picker's label. -->
+    <string name="dashboard_category_label">Category</string>
+    <!-- F2: the maintenance status picker's label. -->
+    <string name="dashboard_status_label">Maintenance status</string>
+    <!-- S26: the condition chip for assets with no condition recorded. -->
+    <string name="dashboard_chip_not_recorded">Not recorded</string>
+    <!-- The app bar's settings icon's accessible name. -->
+    <string name="dashboard_settings">Settings</string>
+    <!-- Said once while components are hidden from the list. -->
+    <string name="dashboard_child_assets_listed_on_parent">Child assets are listed on the asset they belong to.</string>
+    <!-- An empty list under an active filter. -->
+    <string name="dashboard_nothing_matches">Nothing matches that.</string>
+    <!-- The backup nudge card's eyebrow, upper case as drawn. -->
+    <string name="dashboard_backup_eyebrow">BACKUP</string>
+    <!-- The backup nudge card's title. -->
+    <string name="dashboard_no_backup_yet">No backup yet</string>
+    <!-- The backup nudge card's line: "one" is a backup. -->
+    <string name="dashboard_backup_why">Tags survive a phone change only if you have one.</string>
+    <!-- The backup nudge card's button. -->
+    <string name="dashboard_export_now">Export now</string>
+    <!-- First run, with no assets at all. -->
+    <string name="dashboard_nothing_here_yet">Nothing here yet</string>
+    <!-- First run's main button. -->
+    <string name="dashboard_add_first_asset">Add your first asset</string>
+    <!-- First run's second button: scan an NFC tag. -->
+    <string name="dashboard_scan_a_tag">Scan a tag</string>
+    <!-- An asset in service with nothing scheduled on it. -->
+    <string name="dashboard_no_schedule_yet">No schedule yet</string>
+</resources>

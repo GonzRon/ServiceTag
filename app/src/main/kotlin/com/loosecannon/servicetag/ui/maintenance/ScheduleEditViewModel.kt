@@ -37,6 +37,8 @@ import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localizedDecimal
+import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -822,14 +824,15 @@ class ScheduleEditViewModel(
             // A blank lead is no lead, which is zero, not a refusal.
             leadDays = leadDays.trim().toIntOrNull() ?: 0,
             meterDefinitionId = meter,
-            meterInterval = meterInterval.trim().toDoubleOrNull().takeIf { meter != null },
-            anchorMeter = anchorMeter.trim().toDoubleOrNull().takeIf { meter != null },
+            // The meter numbers read in the owner's decimal separator, as [plainNumber] drew them (#102).
+            meterInterval = parseLocalizedDecimal(meterInterval).takeIf { meter != null },
+            anchorMeter = parseLocalizedDecimal(anchorMeter).takeIf { meter != null },
             // Sent **as typed**, negative or not. Dropping a negative silently saved the schedule
             // with *no* lead while the field still showed the number the owner entered — a value
             // quietly turned into a different one. `NegativeMeterLead` refuses it instead, and the
             // form marks the field (carry-forward (c): non-negative in the editor, now by refusal
             // rather than by erasure).
-            meterLead = meterLead.trim().toDoubleOrNull().takeIf { meter != null },
+            meterLead = parseLocalizedDecimal(meterLead).takeIf { meter != null },
             // The answer to S65, or CONTINUOUS where the question is not drawn — a group target
             // always (inv. 106). `save` never builds a command while the question is unanswered.
             servicePolicy = servicePolicy ?: ServicePolicy.CONTINUOUS,
@@ -848,6 +851,8 @@ class ScheduleEditViewModel(
     }
 }
 
-/** A stored `Double` as the form shows it: "3" rather than "3.0", and "0.5" unchanged. */
-internal fun plainNumber(value: Double): String =
-    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+/**
+ * A stored `Double` as the form shows it: "3" rather than "3.0", and "0.5" unchanged — "0,5" in German, the
+ * owner's own decimal separator (#102).
+ */
+internal fun plainNumber(value: Double): String = localizedDecimal(value)

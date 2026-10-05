@@ -53,8 +53,11 @@ import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.testing.EnglishResources
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.FakeAttachmentStorage
+import com.loosecannon.servicetag.testing.ResourcePack
 import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -749,6 +752,39 @@ class AssetViewModelsTest {
     }
 
     /**
+     * #102 (PR #106 review): the price is typed in the owner's language. Under German "1234,50" is twelve hundred
+     * and thirty-four euros fifty — never 123 450 — stored as the same minor units English stores, and drawn back as
+     * "1234,50"; an ambiguous "1.234" is refused with the German example rather than read as one euro twenty-three.
+     */
+    @Test fun aCommaDecimalLanguageTypesThePriceWithAComma() = runTest {
+        val german = ResourcePack.pack("de")
+        AppText.install(german)
+        try {
+            val vm = editModel()
+            vm.onName("Generator")
+            vm.onCurrency("EUR")
+            vm.onPrice("1.234")
+            vm.save()
+            assertEquals(
+                String.format(german.locale, german.stringNamed("asset_model_price_example"), "123,45"),
+                vm.state.first { !it.saving }.problems[AssetField.PRICE],
+            )
+            assertTrue(graph.assets.all().isEmpty())
+
+            vm.onPrice("1234,50")
+            vm.save()
+            vm.state.first { !it.saving }
+
+            val stored = graph.assets.all().single()
+            assertEquals(123_450L, stored.purchasePriceMinor)
+            assertEquals("EUR", stored.currency)
+            assertEquals("1234,50", editModel(stored.id).state.first { it.name == "Generator" }.price)
+        } finally {
+            AppText.install(EnglishResources())
+        }
+    }
+
+    /**
      * A reparent that would swallow the asset is refused by the use case and said out loud, by
      * name (spec §9). The picker would not offer the move; nothing about that makes the rule the
      * picker's, so the form has to survive being asked anyway.
@@ -789,9 +825,9 @@ class AssetViewModelsTest {
 
         val marked = vm.state.first { !it.saving }.problems
         assertEquals("Give the asset a name", marked[AssetField.NAME])
-        assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.PURCHASE_ON])
-        assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.IN_SERVICE_ON])
-        assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.WARRANTY_EXPIRES_ON])
+        assertEquals("Enter a date as MM/DD/YYYY", marked[AssetField.PURCHASE_ON])
+        assertEquals("Enter a date as MM/DD/YYYY", marked[AssetField.IN_SERVICE_ON])
+        assertEquals("Enter a date as MM/DD/YYYY", marked[AssetField.WARRANTY_EXPIRES_ON])
         assertTrue(graph.assets.all().isEmpty())
 
         vm.onPurchaseOn("2026-04-01")
@@ -2666,7 +2702,7 @@ class AssetViewModelsTest {
             notTiedToSeason(3),
         )
         assertEquals(notTiedToSeason(1), NOT_TIED_TO_SEASON_ONE)
-        assertEquals(NOT_TIED_TO_SEASON.replace("<n>", "2"), notTiedToSeason(2))
+        assertEquals(notTiedToSeason(3).replace("has 3 ", "has 2 "), notTiedToSeason(2))
         assertEquals("Review maintenance schedules", REVIEW_MAINTENANCE_SCHEDULES)
         assertEquals("Keep schedules as-is", KEEP_SCHEDULES_AS_IS)
     }

@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_transfer.xml. -->
+<resources>
+    <string name="replace_asset">替换设备</string>
+    <string name="replace_back">返回</string>
+    <string name="replace_old_asset">旧设备</string>
+    <string name="replace_will_be_retired">%1$s将会退役，其日志、文档和服务记录均按原样保留。</string>
+    <string name="replace_was_retired_on">%1$s已于%2$s退役。其日志、文档和服务记录均按原样保留。</string>
+    <string name="replace_new_asset">新设备</string>
+    <string name="replace_separate_asset">一台独立的设备，拥有自己的身份。不会复制旧设备的任何日志。</string>
+    <string name="replace_carry_forward">沿用</string>
+    <string name="replace_only_what_you_tick">只会复制勾选的内容，复制后为不含历史的新记录。</string>
+    <string name="replace_season_and_break">使用季和保养暂停期</string>
+    <string name="replace_description_and_notes">描述和备注</string>
+    <string name="replace_add_to">加入%1$s</string>
+    <string name="replace_schedules_start_on">复制的计划开始日期</string>
+    <string name="replace_needs_setup">需要“读数与操作”。</string>
+    <string name="replace_needs_season">需要“使用季和保养暂停期”。</string>
+    <string name="replace_move_to_new">移到新设备</string>
+    <string name="replace_leave_with_old">留在旧设备</string>
+    <string name="replace_moved_tag_not_rewritten">移动的标签不会被重写。扫描它会打开新设备。</string>
+    <plurals name="replace_children_stay">
+        <item quantity="other">%1$s仍隶属于%2$s。</item>
+    </plurals>
+    <string name="replace_lent_out">%1$s已借出。借出信息仍留在该设备上。</string>
+    <string name="replace_retire_on">于%2$s让%1$s退役</string>
+    <string name="replace_stays_retired_from">%1$s自%2$s起保持退役</string>
+    <string name="replace_create">创建%1$s</string>
+    <string name="replace_nothing_carried">没有沿用任何内容</string>
+    <string name="replace_could_not_replace">无法替换%1$s。未做任何更改。</string>
+    <string name="replace_changed_while_reviewing">查看期间，该设备或相关记录发生了变化。未做任何更改。</string>
+    <string name="replace_replaced_by">已于%2$s被%1$s替换</string>
+    <string name="replace_replaces">取代%1$s</string>
+    <string name="replace_was_in_season_on">新设备在%1$s时是否处于使用季内？</string>
+
+    <string name="transfer_assets">转移设备</string>
+    <string name="transfer_back">返回</string>
+    <string name="transfer_select_what_leaves">选择要从此 ServiceTag 转出的内容</string>
+    <string name="transfer_components_go_with">子设备会随其所属的设备一起转移。</string>
+    <string name="transfer_review">查看</string>
+    <string name="transfer_pack">转移包</string>
+    <string name="transfer_may_contain">这些记录可能包含序列号、位置、购买信息、收据和服务历史。</string>
+    <string name="transfer_note_label">给新所有者的留言（可选）</string>
+    <string name="transfer_create">创建转移包</string>
+    <string name="transfer_mixed_group">%1$s还涵盖%2$s，这些设备会留在此处。保养组只能与其曾涵盖的所有设备一起转移。</string>
+    <string name="transfer_parent_not_selected">%1$s是%2$s的子设备。请同时选择%2$s。</string>
+    <string name="transfer_lent_out">%1$s已借出。请先将其标记为已归还。</string>
+    <string name="transfer_outside_reference">%1$s有一条记录指向此次转移之外的内容。</string>
+    <string name="transfer_creating">正在创建转移包…</string>
+    <string name="transfer_not_created">未创建转移包：%1$s。未做任何更改。</string>
+    <string name="transfer_not_created_entangled">未创建转移包：此手机上仍有记录指向已转出的设备。未做任何更改。</string>
+    <string name="transfer_not_created_generic">未创建转移包：无法写入文件。未做任何更改。</string>
+    <string name="transfer_ready">转移包已就绪</string>
+    <string name="transfer_share">分享</string>
+    <string name="transfer_save_a_copy">保存副本</string>
+    <string name="transfer_size">大小：%1$s</string>
+    <string name="transfer_share_title">分享转移包</string>
+    <string name="transfer_saved">已保存</string>
+    <string name="transfer_mark_question">要在此手机上将这些设备标记为已转出吗？</string>
+    <string name="transfer_mark">标记为已转出</string>
+    <string name="transfer_mark_consequence">它们的提醒会停止，并会从列表中移除。仍可在“已归档”中打开它们。</string>
+    <string name="transfer_transferred">已转出</string>
+    <string name="transfer_transferred_out">已转出</string>
+    <string name="transfer_transferred_on">于%1$s转出</string>
+    <string name="transfer_pack_line">转移包%1$s</string>
+    <string name="transfer_scan_title">设备已转出</string>
+    <string name="transfer_handed_over">%1$s已于%2$s移交。此手机不再维护它。</string>
+    <string name="transfer_changed_since">此转移包创建后，%1$s发生了变化。请重新创建。</string>
+    <string name="transfer_could_not_mark">无法标记这些设备。未做任何更改。</string>
+    <string name="transfer_could_not_save">无法保存副本。</string>
+    <string name="transfer_nothing_to_offer">没有可转移的设备。</string>
+    <string name="transfer_already_transferred">这些设备已标记为已转出。</string>
+    <string name="transfer_too_large">这些设备的记录太多，无法放入一个转移包。请分批转移。</string>
+    <string name="transfer_pack_gone">此转移包已不在此手机上。请重新创建。</string>
+    <string name="transfer_included_with">随%1$s一起包含</string>
+    <string name="transfer_withdraw_record">撤回转移记录</string>
+    <string name="transfer_withdraw_title">撤回转移包%1$s的记录？</string>
+    <string name="transfer_withdraw_body">仅当此转移包并未发出，或应以另一部手机上的记录为准时，才使用此操作。其中的设备会保持归档状态。</string>
+    <string name="transfer_withdraw">撤回</string>
+    <string name="transfer_could_not_withdraw">无法撤回此记录。未做任何更改。</string>
+    <string name="transfer_withdraw_entangled">无法撤回此记录：此手机上仍会有记录指向已转出的设备。未做任何更改。</string>
+    <string name="transfer_bearer">任何拿到此文件的人都可以导入这些设备。请只将它分享给应接收这些设备的人或手机。</string>
+    <string name="transfer_mark_entangled">无法标记这些设备：此手机上仍有记录指向已转出的设备。未做任何更改。</string>
+
+    <string name="transfer_import_asset_transferred_out">此设备已转出。</string>
+    <string name="transfer_import_title">导入转移包</string>
+    <string name="transfer_import_note">留言：%1$s</string>
+    <string name="transfer_import_created">创建于%1$s</string>
+    <string name="transfer_import_contains">包含</string>
+    <string name="transfer_import_import">导入</string>
+    <string name="transfer_import_already_here">此转移包已在此手机上。</string>
+    <string name="transfer_import_conflicts">此转移包与此手机上的记录冲突，因此未导入任何内容。</string>
+    <string name="transfer_import_tag_used_here">此转移包中的一个 NFC 标签已在此处用于%1$s。</string>
+    <string name="transfer_import_duplicate">%1$s可能已以%2$s的名称存在于此处。</string>
+    <string name="transfer_import_not_a_pack">此文件不是转移包。</string>
+    <string name="transfer_import_newer">此转移包需要更新版本的 ServiceTag。</string>
+    <string name="transfer_import_damaged">此转移包已损坏，无法导入。</string>
+    <string name="transfer_import_imported">已导入转移包：%1$s</string>
+    <string name="transfer_import_could_not_import">无法导入此转移包。未做任何更改。</string>
+    <string name="transfer_import_coming_back">转回：%1$s</string>
+    <string name="transfer_import_not_brought_back">%1$s已从此手机转出，而此转移包不会将它带回。</string>
+
+    <plurals name="transfer_count_assets">
+        <item quantity="other">%1$d台设备</item>
+    </plurals>
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="other">%1$d个 NFC 标签</item>
+    </plurals>
+    <plurals name="transfer_count_records">
+        <item quantity="other">%1$d条记录</item>
+    </plurals>
+    <plurals name="transfer_count_schedules">
+        <item quantity="other">%1$d个保养计划</item>
+    </plurals>
+    <plurals name="transfer_count_documents">
+        <item quantity="other">%1$d个文档和照片</item>
+    </plurals>
+    <plurals name="transfer_count_service_cases">
+        <item quantity="other">%1$d个服务工单</item>
+    </plurals>
+
+    <string name="backup_title">备份</string>
+    <string name="backup_back">返回</string>
+    <string name="backup_last_backup">上次备份</string>
+    <string name="backup_never">从未</string>
+    <string name="backup_set_explained">备份集是所选文件夹中的两个文件：数据文件，以及与其并列的附件文件归档。它是此手机之外仅有的副本。</string>
+    <string name="backup_export_set">导出备份集</string>
+    <string name="backup_folder_not_writable">无法写入该文件夹</string>
+    <string name="backup_restore_section">恢复</string>
+    <string name="backup_restore_data_explained">恢复数据会先删除此手机上的所有内容，然后载入该文件。</string>
+    <string name="backup_restore_data">恢复数据</string>
+    <string name="backup_restore_files_explained">然后恢复同一备份集中的文件归档，以放回附件文件。此操作只添加文件，不会删除任何内容。</string>
+    <string name="backup_restore_files">恢复文件</string>
+    <string name="backup_replace_title">替换所有内容？</string>
+    <string name="backup_replace_body">此手机上的所有设备、标签和链接都将被删除，并替换为文件中的内容。此操作无法撤销。</string>
+    <string name="backup_replace_type_word">输入%1$s以确认</string>
+    <string name="backup_replace_confirm">替换</string>
+    <string name="backup_cancel">取消</string>
+    <string name="backup_restore_empty_title">恢复此备份？</string>
+    <string name="backup_restore_empty_body">此手机上还没有任何记录，因此不会替换任何内容。</string>
+    <string name="backup_restore_confirm">恢复</string>
+
+    <string name="backup_no_attachment_folder">请先在设置中选择附件文件夹</string>
+    <string name="backup_exported_as">已导出为%1$s</string>
+
+    <string name="backup_export_failed_entangled">导出失败：此手机上仍有记录指向已转出的设备</string>
+    <string name="backup_export_failed_files_archive">导出失败：无法写入文件归档</string>
+    <string name="backup_export_failed">导出失败：%1$s</string>
+    <string name="backup_nothing_saved">%1$s。未保存任何内容。</string>
+    <string name="backup_not_saved">未保存备份：%1$s</string>
+    <plurals name="backup_left_behind">
+        <item quantity="other">%1$s。无法移除%2$s — 请自行删除。</item>
+    </plurals>
+    <plurals name="backup_incomplete_missing">
+        <item quantity="other">%1$d个附件文件缺失</item>
+    </plurals>
+    <plurals name="backup_incomplete_changed">
+        <item quantity="other">%1$d个附件文件在添加后已被更改</item>
+    </plurals>
+    <string name="backup_incomplete_both">%1$s，且%2$s</string>
+    <string name="backup_incomplete_not_covered">文件归档未涵盖所有附件</string>
+
+    <string name="backup_restored_data">已导入：%1$s、%2$s、%3$s</string>
+    <string name="backup_restored_data_attachments">已导入：%1$s、%2$s、%3$s · %4$s</string>
+    <plurals name="backup_restored_assets">
+        <item quantity="other">%1$d台设备</item>
+    </plurals>
+    <plurals name="backup_restored_tags">
+        <item quantity="other">%1$d个标签</item>
+    </plurals>
+    <plurals name="backup_restored_links">
+        <item quantity="other">%1$d个链接</item>
+    </plurals>
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="other">已列出%1$d个附件；请恢复文件归档以获取其内容</item>
+    </plurals>
+
+    <plurals name="backup_restored_files">
+        <item quantity="other">已恢复%1$d个文件，跳过%2$d个</item>
+    </plurals>
+    <string name="backup_report_separator">"；"</string>
+    <plurals name="backup_files_already_present">
+        <item quantity="other">%1$d个已存在</item>
+    </plurals>
+    <plurals name="backup_files_missing_entries">
+        <item quantity="other">%1$d个已列出的文件不在归档中</item>
+    </plurals>
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="other">归档中有%1$d个文件未列出</item>
+    </plurals>
+    <string name="backup_set_mismatch">这些文件属于备份集%1$s，而不是%2$s</string>
+    <string name="backup_restore_failed">恢复失败：%1$s</string>
+    <string name="backup_restore_transferred_out_one">恢复失败：此备份仍包含%1$s，而它已从此手机转出。未替换任何内容。</string>
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="other">恢复失败：此备份仍包含%1$d台已从此手机转出的设备。未替换任何内容。</item>
+    </plurals>
+
+    <string name="backup_cannot_create">无法在所选文件夹中创建%1$s</string>
+    <string name="backup_cannot_open_for_writing">无法打开%1$s进行写入</string>
+    <string name="backup_cannot_open_for_reading">无法打开%1$s进行读取</string>
+</resources>

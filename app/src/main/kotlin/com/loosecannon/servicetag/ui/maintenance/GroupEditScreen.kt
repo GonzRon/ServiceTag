@@ -26,9 +26,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
@@ -67,14 +69,16 @@ fun GroupEditScreen(
                 title = { Text(MAINTENANCE_GROUP) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Cancel")
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.maintenance_cancel))
                     }
                 },
                 actions = {
                     // Disabled rather than refused: a blank name is the one state `SaveGroup`
                     // rejects that this form could otherwise ask for, and §17 has no sentence for
                     // the refusal.
-                    TextButton(onClick = model::save, enabled = state.canSave) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.canSave) {
+                        Text(stringResource(R.string.maintenance_save))
+                    }
                 },
             )
         },
@@ -91,7 +95,7 @@ fun GroupEditScreen(
             OutlinedTextField(
                 value = state.name,
                 onValueChange = model::onName,
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.maintenance_name)) },
                 singleLine = true,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -99,7 +103,7 @@ fun GroupEditScreen(
             OutlinedTextField(
                 value = state.description,
                 onValueChange = model::onDescription,
-                label = { Text("Description") },
+                label = { Text(stringResource(R.string.maintenance_description)) },
                 minLines = 2,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese (Brazilian usage) translation of values/plurals.xml. -->
+<resources>
+    <plurals name="health_age_days">
+        <item quantity="one">%1$d dia</item>
+        <item quantity="other">%1$d dias</item>
+    </plurals>
+    <plurals name="health_days_overdue">
+        <item quantity="one">%1$s está com %2$d dia de atraso</item>
+        <item quantity="other">%1$s está com %2$d dias de atraso</item>
+    </plurals>
+    <plurals name="health_grace_period">
+        <item quantity="one">Dentro do período de carência de %1$d dia</item>
+        <item quantity="other">Dentro do período de carência de %1$d dias</item>
+    </plurals>
+</resources>

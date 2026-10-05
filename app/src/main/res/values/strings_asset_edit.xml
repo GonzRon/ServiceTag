@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: the asset editor, the asset view models' own lines and the season card's Home Assistant block — English
+  source. Comments carry the ratification ids (S-numbers from spec §10.7, P16-xx, P67-xx, P78-xx) and what each
+  string is for. Text marked RATIFIED was approved word for word in English; a translation says the same thing.
+-->
+<resources>
+
+    <!-- ================================================================================================ -->
+    <!-- The asset editor (AssetEditScreen.kt): season, break and health words, RATIFIED (spec §10.7).      -->
+    <!-- ================================================================================================ -->
+
+    <!-- S28: the asset editor's section heading over the three season answers, drawn in sentence case. Also the
+         TalkBack name of the Home Assistant mode control. -->
+    <string name="asset_edit_operating_season">Operating season</string>
+    <!-- S29: season answer — the asset is in use all year. -->
+    <string name="asset_edit_year_round">Year-round</string>
+    <!-- S30: season answer — the season runs between the same two month-days every year. -->
+    <string name="asset_edit_same_dates_every_year">Same dates every year</string>
+    <!-- S31: season answer — the owner starts and ends the season with buttons. -->
+    <string name="asset_edit_started_and_ended_by_hand">Started and ended by hand</string>
+    <!-- S32: field label, a month-day (MM-DD) the season starts on. -->
+    <string name="asset_edit_season_starts">Season starts</string>
+    <!-- S33: field label, a month-day (MM-DD) the season ends on. -->
+    <string name="asset_edit_season_ends">Season ends</string>
+    <!-- S34: helper under S32 and S33. -->
+    <string name="asset_edit_season_may_run_across_the_new_year">The season may run across the new year, for example from October to April.</string>
+    <!-- S35: question asked when the owner switches an asset to S31; it has no default answer. -->
+    <string name="asset_edit_is_this_asset_in_season">Is this asset in season right now?</string>
+    <!-- S36: answer to S35. -->
+    <string name="asset_edit_in_season_now">In season</string>
+    <!-- S37: answer to S35. -->
+    <string name="asset_edit_out_of_season_now">Out of season</string>
+    <!-- S38: helper under S31. -->
+    <string name="asset_edit_you_start_and_end_the_season">You start and end the season yourself. Maintenance set to follow the season waits while it is ended.</string>
+    <!-- S55: refusal under the season section. %1$s: the titles of the maintenance schedules in the way, as a list
+         ("Oil change, Filter check"). -->
+    <string name="asset_edit_season_strands">Some maintenance on this asset is set to be ready before its season. Change it first: %1$s.</string>
+
+    <!-- S58: section heading, drawn in sentence case. -->
+    <string name="asset_edit_maintenance_break">Maintenance break</string>
+    <!-- S59: switch label; on, two month-day fields appear. -->
+    <string name="asset_edit_no_routine_maintenance_between_two_dates">No routine maintenance between two dates</string>
+    <!-- S60: field label, a month-day (MM-DD). -->
+    <string name="asset_edit_break_starts">Break starts</string>
+    <!-- S61: field label, a month-day (MM-DD). -->
+    <string name="asset_edit_break_ends">Break ends</string>
+    <!-- S62: helper under S60 and S61. -->
+    <string name="asset_edit_break_helper">Maintenance set to follow the season, or to be ready before it, does not become due during the break. Work already overdue stays overdue, without reminders.</string>
+    <!-- S63: refusal — the break's two dates would cover all twelve months. -->
+    <string name="asset_edit_break_cannot_cover_the_year">The break cannot cover the whole year.</string>
+    <!-- S64: refusal under the break section. %1$s: the titles of the maintenance schedules in the way, as a list. -->
+    <string name="asset_edit_break_strands">Some maintenance on this asset is set to be ready before the break. Change it first: %1$s.</string>
+
+    <!-- S111: section heading, drawn in sentence case. -->
+    <string name="asset_edit_health_subjects">Health subjects</string>
+    <!-- S112: button; opens the health subject editor for this asset (the asset page uses it too). -->
+    <string name="asset_edit_add_health_subject">Add health subject</string>
+    <!-- S131: question label over the four S132 answers. -->
+    <string name="asset_edit_combine_health_by">Combine health by</string>
+    <!-- S132 (1 of 4): answer to S131 — the asset shows its worst subject. -->
+    <string name="asset_edit_combine_worst">Worst subject</string>
+    <!-- S132 (2 of 4): answer to S131 — the asset follows one chosen subject (S134 then asks which). -->
+    <string name="asset_edit_combine_one">One subject</string>
+    <!-- S132 (3 of 4): answer to S131 — the subjects' average. -->
+    <string name="asset_edit_combine_average">Average</string>
+    <!-- S132 (4 of 4): answer to S131 — the subjects' weighted average. -->
+    <string name="asset_edit_combine_weighted">Weighted average</string>
+    <!-- S134: question label under "One subject"; the subjects' names follow as answers. -->
+    <string name="asset_edit_which_subject">Which subject?</string>
+
+    <!-- P78-1a/1b (RATIFIED): the body of the untitled question asked after a save takes an asset out of
+         Year-round while it has schedules that keep coming due. %1$d: how many such schedules. -->
+    <plurals name="asset_edit_not_tied_to_season">
+        <item quantity="one">This asset has %1$d maintenance schedule that is not tied to its operating season. When active, it can become or remain due while the asset is out of season unless you change when that maintenance should be done.</item>
+        <item quantity="other">This asset has %1$d maintenance schedules that are not tied to its operating season. When active, they can become or remain due while the asset is out of season unless you change when that maintenance should be done.</item>
+    </plurals>
+    <!-- P78-2: that question's confirm button; the editor closes onto the asset's schedules. -->
+    <string name="asset_edit_review_maintenance_schedules">Review maintenance schedules</string>
+    <!-- P78-3: that question's dismiss button; the schedules stay as they are. -->
+    <string name="asset_edit_keep_schedules_as_is">Keep schedules as-is</string>
+
+    <!-- P67-1: section heading (drawn upper-case). -->
+    <string name="asset_edit_key_documents">Key documents</string>
+    <!-- P67-7: button in the Purchase section; opens the file picker. -->
+    <string name="asset_edit_add_purchase_invoice_or_receipt">Add purchase invoice or receipt</string>
+    <!-- P67-8: button in the Key documents section; opens the file picker. -->
+    <string name="asset_edit_add_user_manual">Add user manual</string>
+    <!-- P67-9: button in the Key documents section; opens the file picker. -->
+    <string name="asset_edit_add_service_manual">Add service manual</string>
+    <!-- P67-10: quiet line under a picked file that is copied when the asset is saved. -->
+    <string name="asset_edit_attached_when_you_save">Attached when you save</string>
+    <!-- Button beside a picked file: forgets the pick. -->
+    <string name="asset_edit_remove">Remove</string>
+    <!-- P67-12: the screen-reader name of that button. %1$s: the file's name. -->
+    <string name="asset_edit_remove_file">Remove %1$s</string>
+
+    <!-- The editor's field labels (#86: the Replace asset form draws the same ones). -->
+    <string name="asset_edit_name_field">Name</string>
+    <string name="asset_edit_manufacturer_field">Manufacturer</string>
+    <string name="asset_edit_model_field">Model</string>
+    <string name="asset_edit_serial_number_field">Serial number</string>
+    <string name="asset_edit_location_field">Location</string>
+    <!-- The parent picker's label: the asset this one is a component of. -->
+    <string name="asset_edit_part_of_field">Part of</string>
+    <string name="asset_edit_purchase_date_field">Purchase date</string>
+    <string name="asset_edit_in_service_date_field">In service date</string>
+    <string name="asset_edit_category_field">Category</string>
+    <string name="asset_edit_description_field">Description</string>
+    <!-- Purchase price field label. -->
+    <string name="asset_edit_price_field">Price</string>
+    <!-- Currency field label; the field takes a three-letter code such as USD. -->
+    <string name="asset_edit_currency_field">Currency</string>
+    <!-- Vendor field label: where the asset was bought. -->
+    <string name="asset_edit_vendor_field">Vendor</string>
+    <!-- Warranty section: the date field's label. -->
+    <string name="asset_edit_warranty_expires_on">Expires on</string>
+    <string name="asset_edit_warranty_notes_field">Warranty notes</string>
+    <!-- The free-text notes field's label. -->
+    <string name="asset_edit_notes_field">Notes</string>
+
+    <!-- Section headings of the editor (drawn upper-case). -->
+    <string name="asset_edit_section_identity">Identity</string>
+    <string name="asset_edit_section_placement">Placement</string>
+    <string name="asset_edit_section_purchase">Purchase</string>
+    <string name="asset_edit_section_warranty">Warranty</string>
+    <string name="asset_edit_section_notes">Notes</string>
+    <string name="asset_edit_section_template">Template</string>
+
+    <!-- App bar title while editing an existing asset. -->
+    <string name="asset_edit_title_edit">Edit asset</string>
+    <!-- Screen-reader name of the app bar's close button: leaves without saving. -->
+    <string name="asset_edit_cancel">Cancel</string>
+    <!-- App bar action: saves the asset. -->
+    <string name="asset_edit_save">Save</string>
+    <!-- The button at the foot of the form: saves the asset. -->
+    <string name="asset_edit_save_asset">Save asset</string>
+    <!-- P79-12's confirm button: asks Android for the notification permission. -->
+    <string name="asset_edit_notifications_ok">OK</string>
+
+    <!-- Screen-reader name of the calendar button beside a date field. %1$s: the field's label ("Purchase date"). -->
+    <string name="asset_edit_pick_date">Pick %1$s</string>
+    <!-- The calendar dialog's buttons. -->
+    <string name="asset_edit_calendar_ok">OK</string>
+    <string name="asset_edit_calendar_cancel">Cancel</string>
+
+    <!-- New asset only: the chip for starting with no template (the default). The starter templates' own names
+         follow it and are not translated. -->
+    <string name="asset_edit_template_none">None · set up later</string>
+    <!-- Helper under the template chips. "None" is the first chip, asset_edit_template_none. -->
+    <string name="asset_edit_template_helper">Starts the asset with its readings and quick actions. Choose None to decide on the asset later.</string>
+
+    <!-- ================================================================================================ -->
+    <!-- The asset view models (AssetViewModels.kt).                                                       -->
+    <!-- ================================================================================================ -->
+
+    <!-- S21: section heading on the asset page. -->
+    <string name="asset_model_condition_history">Condition history</string>
+    <!-- S24: on a condition row whose linked journal entry has since been deleted. -->
+    <string name="asset_model_linked_record_removed">The linked record was removed.</string>
+    <!-- S94: section heading on the asset page. -->
+    <string name="asset_model_health_section">Health</string>
+    <!-- S107: the Health section's footer. -->
+    <string name="asset_model_health_footer">Health is an estimate from dates and records, not a diagnosis. It never changes the condition.</string>
+    <!-- S138: the subject the asset follows is gone, so the worst subject is shown instead. -->
+    <string name="asset_model_health_fallback_to_worst">The subject to follow is missing, so the worst subject is shown.</string>
+
+    <!-- Snackbars on the asset page when a write fails for no stated reason. -->
+    <string name="asset_model_could_not_update">Could not update this asset.</string>
+    <string name="asset_model_could_not_retire">Could not retire this asset.</string>
+    <string name="asset_model_could_not_delete">Could not delete this asset.</string>
+    <!-- Snackbars of "Set up from template" on the asset page. -->
+    <string name="asset_model_template_not_available">That template is not available.</string>
+    <string name="asset_model_could_not_set_up">Could not set up this asset.</string>
+    <string name="asset_model_already_set_up">This asset is already set up.</string>
+
+    <!-- The editor's snackbar when saving fails for no stated reason. -->
+    <string name="asset_model_could_not_save">Could not save this asset.</string>
+    <!-- The editor's snackbar: the chosen parent is a component of this asset. %1$s: the chosen parent's name. -->
+    <string name="asset_model_parent_cycle">%1$s is already part of this asset.</string>
+    <!-- The "Part of" picker's first row and the label of an asset with no parent. -->
+    <string name="asset_model_no_parent">None</string>
+    <!-- A row of the "Part of" picker for an archived asset. %1$s: the asset's name. -->
+    <string name="asset_model_parent_archived">%1$s (archived)</string>
+
+    <!-- Lines under the editor's fields. -->
+    <!-- Under a month-day field whose text is not a real month and day. -->
+    <string name="asset_model_not_a_real_month_day">Not a real month and day</string>
+    <!-- Under the Name field when it is blank. -->
+    <string name="asset_model_name_required">Give the asset a name</string>
+    <!-- Under a date field whose text is not a date. %1$s: the date field's own format in this phone's order, e.g. "MM/DD/YYYY" or "TT.MM.JJJJ" (format_date_input_letters). -->
+    <string name="asset_model_bad_date">Enter a date as %1$s</string>
+    <!-- Under the Currency field. USD is an ISO 4217 code and stays as it is. -->
+    <string name="asset_model_bad_currency">Currency is a three-letter code like USD</string>
+    <!-- Under the Currency field: a price is typed and the currency is blank. -->
+    <string name="asset_model_currency_required">A price needs a currency</string>
+    <!-- Under the Price field. -->
+    <string name="asset_model_price_negative">Price cannot be negative</string>
+    <!-- Under the "Part of" field: the chosen parent has been deleted meanwhile. -->
+    <string name="asset_model_parent_gone">That asset is no longer there</string>
+    <!-- Under the Price field when it cannot be read. %1$s: an example amount in the currency's shape ("123.45"). -->
+    <string name="asset_model_price_example">Enter a price like %1$s</string>
+    <!-- The Price field's hint while the currency is not known. -->
+    <string name="asset_model_price_hint_amount">Amount</string>
+    <!-- The Price field's hint for a currency with no decimals (JPY). -->
+    <string name="asset_model_price_hint_whole">Whole numbers only</string>
+    <!-- The Price field's hint for a currency with decimals. %1$d: how many decimal places the currency has. -->
+    <plurals name="asset_model_price_hint_decimals">
+        <item quantity="one">Up to %1$d decimal place</item>
+        <item quantity="other">Up to %1$d decimal places</item>
+    </plurals>
+
+    <!-- The asset page's Season section and its Start/End dialog (RATIFIED, spec §10.7). -->
+    <!-- S39: the phase word for an asset in season, drawn upper-case on the badge. -->
+    <string name="season_in_season_word">IN SEASON</string>
+    <!-- S42: dialog title. -->
+    <string name="season_start_title">Start the season?</string>
+    <!-- S43: dialog body. %1$s: the chosen date, already formatted. -->
+    <string name="season_start_body">Maintenance set to follow the season becomes active again from %1$s.</string>
+    <!-- S44: dialog title. -->
+    <string name="season_end_title">End the season?</string>
+    <!-- S45: dialog body. -->
+    <string name="season_end_body">Maintenance set to follow the season waits until you start it again. Nothing is marked done.</string>
+    <!-- S46: a season history row. -->
+    <string name="season_history_started">Season started</string>
+    <!-- S47: a season history row. -->
+    <string name="season_history_ended">Season ended</string>
+    <!-- S48: section heading. -->
+    <string name="season_history_section">Season history</string>
+    <!-- S49: an asset with fixed season dates, out of season. %1$s: the date, already formatted. -->
+    <string name="season_next_starts">Next season starts %1$s</string>
+    <!-- S50: an asset with fixed season dates, in season. %1$s: the date, already formatted. -->
+    <string name="season_ends_on">Season ends %1$s</string>
+    <!-- S54: refusal in the Start/End dialog. %1$s: the latest season entry's date, already formatted. -->
+    <string name="season_choose_date_from">Choose a date from %1$s to today.</string>
+    <!-- S56: refusal — the season was started meanwhile. -->
+    <string name="season_already_running">The season is already running.</string>
+    <!-- S57: refusal — the season was ended meanwhile. -->
+    <string name="season_already_ended">The season has already ended.</string>
+
+    <!-- ================================================================================================ -->
+    <!-- The season card's Home Assistant block (SeasonSyncStrings.kt), RATIFIED #16 copy.                 -->
+    <!-- "Home Assistant" is a product name. An entity ID (input_boolean.example_heater_in_season) is      -->
+    <!-- Home Assistant's own identifier and is never translated.                                          -->
+    <!-- ================================================================================================ -->
+
+    <!-- P16-22: the card's button on an asset with no link while a Home Assistant connection exists. -->
+    <string name="season_sync_link">Link to Home Assistant</string>
+    <!-- P16-23: the mode control's first choice. -->
+    <string name="season_sync_follow">Follow Home Assistant</string>
+    <!-- P16-24: the mode control's second choice. -->
+    <string name="season_sync_force_in">Force in season</string>
+    <!-- P16-25: the mode control's third choice. -->
+    <string name="season_sync_force_out">Force out of season</string>
+    <!-- P16-26: button. -->
+    <string name="season_sync_now">Sync now</string>
+    <!-- P16-27: the source line while following Home Assistant. %1$s: the entity ID. -->
+    <string name="season_sync_follows">Follows %1$s</string>
+    <!-- P16-28: the source line under Force in season. %1$s: the entity ID. "Follow Home Assistant" is P16-23. -->
+    <string name="season_sync_forced_in">Forced in season. %1$s is still checked, but it does not change the season until you choose Follow Home Assistant.</string>
+    <!-- P16-29: the source line under Force out of season. %1$s: the entity ID. "Follow Home Assistant" is P16-23. -->
+    <string name="season_sync_forced_out">Forced out of season. %1$s is still checked, but it does not change the season until you choose Follow Home Assistant.</string>
+    <!-- P16-30: %1$s: the date and time of the last successful check, formatted ("1 Mar 2026, 14:05"). -->
+    <string name="season_sync_last_success">Last successful check %1$s</string>
+    <!-- P16-31: no valid reading yet. -->
+    <string name="season_sync_no_reading_yet">No reading from Home Assistant yet.</string>
+    <!-- P16-32: the stale marker — no successful check within one interval. -->
+    <string name="season_sync_not_checked_in_time">Not checked successfully within the chosen interval.</string>
+    <!-- P16-33: Home Assistant's own change time, for information. %1$s: date and time, formatted ("1 Mar 2026, 14:05"). -->
+    <string name="season_sync_changed_in_ha">Changed in Home Assistant %1$s</string>
+    <!-- P16-34: provenance line. %1$s: the date, already formatted. -->
+    <string name="season_sync_started_from_ha">Started from Home Assistant on %1$s</string>
+    <!-- P16-35: provenance line. %1$s: the date, already formatted. -->
+    <string name="season_sync_ended_from_ha">Ended from Home Assistant on %1$s</string>
+    <!-- P16-83: provenance line. %1$s: the date, already formatted. -->
+    <string name="season_sync_forced_in_on">Forced in season on %1$s</string>
+    <!-- P16-84: provenance line. %1$s: the date, already formatted. -->
+    <string name="season_sync_forced_out_on">Forced out of season on %1$s</string>
+    <!-- P16-36: the asset was retired, archived or transferred, as the link's state and as an error. -->
+    <string name="season_sync_not_maintained_here">This asset is no longer maintained here, so Home Assistant no longer changes its season.</string>
+    <!-- P16-37: the phone's clock is earlier than the asset's latest season entry. -->
+    <string name="season_sync_date_before_history">This phone\'s date is before the latest season entry, so the season stays as it is until the date catches up.</string>
+    <!-- P16-38: the asset's season mode changed away from "Started and ended by hand". "Stop syncing" and "Resume
+         syncing" are P16-39 and P16-40. -->
+    <string name="season_sync_not_manual">This asset\'s season is no longer started and ended by hand, so Home Assistant cannot change it. Choose Stop syncing, then Resume syncing.</string>
+    <!-- P16-39: button. -->
+    <string name="season_sync_stop">Stop syncing</string>
+    <!-- P16-40: button. -->
+    <string name="season_sync_resume">Resume syncing</string>
+    <!-- P16-41: a stopped link's line, on every season mode. -->
+    <string name="season_sync_stopped">Syncing is stopped. Home Assistant no longer changes this asset\'s season.</string>
+    <!-- P16-42: the setup sheet's field label. -->
+    <string name="season_sync_entity_id">Entity ID</string>
+    <!-- P16-43: the field's helper. input_boolean.example_heater_in_season is an example entity ID: keep it as is. -->
+    <string name="season_sync_entity_id_help">An on/off helper that is on while this asset is in season, for example input_boolean.example_heater_in_season. Not the appliance\'s own power switch.</string>
+    <!-- P16-44: the setup sheet on an asset with fixed season dates. -->
+    <string name="season_sync_link_calendar">Linking this asset to Home Assistant replaces its calendar dates. From today, its season starts and ends when Home Assistant says. Maintenance that counts from the start of the season will count from today.</string>
+    <!-- P16-45: the setup sheet on a Year-round asset. -->
+    <string name="season_sync_link_year_round">This asset has no operating season now. Linking it to Home Assistant gives it one: in season from today, then started and ended when Home Assistant says. Maintenance that counts from the start of the season will count from today.</string>
+    <!-- P16-46: the setup sheet on an asset whose season is started and ended by hand. -->
+    <string name="season_sync_link_manual">From now on Home Assistant starts and ends this asset\'s season. Its season history stays as it is.</string>
+    <!-- P16-47: the editor's read-only season section while Home Assistant owns the season, and the refusal of a
+         season change. "Stop syncing" is P16-39. -->
+    <string name="season_sync_follows_ha">This asset\'s season follows Home Assistant. Stop syncing on the asset\'s page to change it here.</string>
+    <!-- P16-49: under the Entity ID field. input_boolean.example_heater_in_season is an example entity ID: keep it. -->
+    <string name="season_sync_bad_entity_id">Enter an entity ID such as input_boolean.example_heater_in_season: lowercase letters, digits and underscores, with one dot.</string>
+</resources>

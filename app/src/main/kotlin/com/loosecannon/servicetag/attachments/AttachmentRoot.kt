@@ -3,7 +3,9 @@ package com.loosecannon.servicetag.attachments
 import android.content.ContentResolver
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.l10n.localized
 
 /**
  * One chosen tree, as [SafAttachmentStorage] needs to see it.
@@ -28,7 +30,7 @@ class DocumentTreeRoot(
     private val tree: DocumentFile,
     private val resolver: ContentResolver,
 ) : AttachmentRoot {
-    override val displayName: String get() = tree.name ?: tree.uri.lastPathSegment ?: "Folder"
+    override val displayName: String get() = tree.name ?: tree.uri.lastPathSegment ?: localized(R.string.attachments_folder_fallback)
     override val authority: String get() = tree.uri.authority ?: ""
     override fun canWrite(): Boolean = tree.canWrite()
     override fun store(): AttachmentStore = SafTreeAttachmentStore(tree, resolver)

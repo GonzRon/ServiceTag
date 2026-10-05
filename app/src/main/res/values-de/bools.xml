@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German keeps a noun's capital, so an action named "Wassertest" reads "Wassertest eintragen". -->
+<resources>
+    <bool name="journal_lowercase_profile_name">false</bool>
+</resources>

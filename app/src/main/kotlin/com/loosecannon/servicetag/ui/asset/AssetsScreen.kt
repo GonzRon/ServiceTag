@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -51,10 +52,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
@@ -105,10 +109,10 @@ fun AssetsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Assets") },
+                title = { Text(stringResource(R.string.assets_title)) },
                 actions = {
                     IconButton(onClick = onNewAsset) {
-                        Icon(Icons.Outlined.Add, contentDescription = "Add asset")
+                        Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.assets_add_asset))
                     }
                     AssetsOverflow(onTransfer = onTransfer)
                 },
@@ -161,7 +165,7 @@ private fun AssetsOverflow(onTransfer: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.common_more))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text(TransferStrings.TRANSFER_ASSETS) }, onClick = { open = false; onTransfer() })
@@ -281,10 +285,10 @@ internal fun EmptyList(
 ) {
     val line = when (reason) {
         EmptyReason.NONE -> return
-        EmptyReason.NO_ASSETS -> "No assets yet"
-        EmptyReason.NO_ACTIVE_ASSETS -> "No active assets · $archivedCount archived"
+        EmptyReason.NO_ASSETS -> stringResource(R.string.assets_no_assets_yet)
+        EmptyReason.NO_ACTIVE_ASSETS -> localizedPlural(R.plurals.assets_no_active_assets, archivedCount, archivedCount)
         EmptyReason.ONLY_COMPONENTS -> ONLY_COMPONENTS_LINE
-        EmptyReason.NOTHING_MATCHES -> "Nothing matches that."
+        EmptyReason.NOTHING_MATCHES -> stringResource(R.string.assets_nothing_matches)
         EmptyReason.TYPE_HIDDEN -> TYPE_HIDDEN_LINE
         EmptyReason.COMPONENTS_HIDDEN -> COMPONENTS_HIDDEN_LINE
         EmptyReason.ARCHIVED_HIDDEN -> ARCHIVED_HIDDEN_LINE
@@ -300,10 +304,12 @@ internal fun EmptyList(
     ) {
         QuietLine(line)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (onNewAsset != null) Button(onClick = onNewAsset, shape = ControlShape) { Text("Add asset") }
+            if (onNewAsset != null) {
+                Button(onClick = onNewAsset, shape = ControlShape) { Text(stringResource(R.string.assets_add_asset)) }
+            }
             if (reason == EmptyReason.NO_ACTIVE_ASSETS) {
                 OutlinedButton(onClick = onShowArchived, shape = ControlShape) {
-                    Text("Show archived")
+                    Text(stringResource(R.string.assets_show_archived))
                 }
             }
         }
@@ -352,7 +358,7 @@ internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier
             }
             row.parentName?.let { parent ->
                 Text(
-                    text = "Part of $parent",
+                    text = stringResource(R.string.assets_part_of, parent),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -433,37 +439,37 @@ internal fun statusLabel(status: AssetStatus): String? = when (status) {
 }
 
 /** P71-4 (ratified 2026-09-26): the NFC disc's accessibility description. */
-private const val NFC_TAG_WRITTEN = "NFC tag written"
+private val NFC_TAG_WRITTEN: String get() = localized(R.string.assets_nfc_tag_written)
 
 /** The two badge words spec §7 and §6 fix, shared by the list row and the identity plate. */
-internal const val RETIRED = "Retired"
-internal const val OUT_OF_SEASON = "Out of season"
+internal val RETIRED: String get() = localized(R.string.assets_badge_retired)
+internal val OUT_OF_SEASON: String get() = localized(R.string.assets_badge_out_of_season)
 
 // #73's words (plan §6, ratified 2026-09-26). Each literal sits on one line of its own.
 
 /** P73-1: the Type chip's label while it is All, and its accessible name always. */
-private const val TYPE = "Type"
+private val TYPE: String get() = localized(R.string.assets_filter_type)
 
 /** P73-2: the Type menu's first row, and the chip's state while it is All. */
-private const val ALL_TYPES = "All"
+private val ALL_TYPES: String get() = localized(R.string.assets_filter_all)
 
 /** P73-3: the Components chip. */
-private const val COMPONENTS = "Child assets"
+private val COMPONENTS: String get() = localized(R.string.assets_filter_child_assets)
 
 /** P73-4: the Archived chip, and the word the list's badge draws (upper-cased) on an archived row. */
-private const val ARCHIVED = "Archived"
+private val ARCHIVED: String get() = localized(R.string.assets_filter_archived)
 
 /** P73-5: every match of the chosen type is hidden by Archived alone (the §18.23 hint, reworded). */
-private const val ARCHIVED_HIDDEN_LINE = "Matching assets are archived. Turn on Archived to see them."
+private val ARCHIVED_HIDDEN_LINE: String get() = localized(R.string.assets_archived_hidden)
 
 /** P73-6: every match of the chosen type is hidden by Components alone. */
-private const val COMPONENTS_HIDDEN_LINE = "Matching assets are child assets. Turn on Child assets to see them."
+private val COMPONENTS_HIDDEN_LINE: String get() = localized(R.string.assets_child_assets_hidden)
 
 /** P73-7: the matches are hidden by both controls, together or one row each. */
-private const val BOTH_HIDDEN_LINE = "Matching assets are hidden. Turn on Child assets and Archived to see them."
+private val BOTH_HIDDEN_LINE: String get() = localized(R.string.assets_both_hidden)
 
 /** P73-9: a blank query, Type All, and every asset Archived admits is a component. */
-private const val ONLY_COMPONENTS_LINE = "Only child assets here. Turn on Child assets to see them."
+private val ONLY_COMPONENTS_LINE: String get() = localized(R.string.assets_only_child_assets)
 
 /** P73-10: the query has matches, all of another type. */
-private const val TYPE_HIDDEN_LINE = "Matching assets have another type. Set Type to All."
+private val TYPE_HIDDEN_LINE: String get() = localized(R.string.assets_type_hidden)

@@ -1,12 +1,16 @@
 package com.loosecannon.servicetag.ui.maintenance
 
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.RepairAction
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.reminders.ReminderHealthCheck
 import com.loosecannon.servicetag.reminders.ReminderHealthRun
@@ -30,22 +34,23 @@ import kotlinx.coroutines.launch
  * #103 (1.7.1; P171-2 and P171-3, RATIFIED 2026-10-04): the Settings › Utilities row and the page's
  * title, one word for both, because the row that opens a page names it.
  */
-const val REMINDER_HEALTH_TITLE = "Reminder health"
+val REMINDER_HEALTH_TITLE: String get() = localized(R.string.maintenance_health_title)
 
 /** #103 (P171-4, RATIFIED): the healthy state's one sentence, drawn only once a run has found nothing. */
-const val NO_PROBLEMS_FOUND = "No problems found."
+val NO_PROBLEMS_FOUND: String get() = localized(R.string.maintenance_health_no_problems)
 
 /** #103 (P171-6, RATIFIED): the heading over the checks that passed. */
-const val CHECKS_THAT_PASSED = "Checks that passed"
+val CHECKS_THAT_PASSED: String get() = localized(R.string.maintenance_health_checks_passed)
 
 /**
  * #103 (P171-5, RATIFIED): `Last checked <date> at <time>` — [checkedAt] being the run's own instant
- * (owner ruling Q4), the date in the app's one display shape and the time in the phone's short form.
+ * (owner ruling Q4), the date in the app's one display shape and the time in [locale]'s short form,
+ * the rendering language's unless a caller names another (#102).
  */
-fun lastCheckedLine(checkedAt: Long, zone: ZoneId, locale: Locale = Locale.getDefault()): String {
+fun lastCheckedLine(checkedAt: Long, zone: ZoneId, locale: Locale = AppText.current.locale): String {
     val at = Instant.ofEpochMilli(checkedAt).atZone(zone)
     val time = at.toLocalTime().format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
-    return "Last checked ${displayDate(at.toLocalDate())} at $time"
+    return localized(R.string.maintenance_health_last_checked, displayDate(at.toLocalDate()), time)
 }
 
 /**
@@ -55,14 +60,18 @@ fun lastCheckedLine(checkedAt: Long, zone: ZoneId, locale: Locale = Locale.getDe
  * residual shape 1.4.1 split from it, because they are one question with two answers. Declared here,
  * beside the labels, so the page's words have one home.
  */
-enum class HealthCheck(val codes: Set<String>, val passedLine: String) {
-    NOTIFICATIONS(setOf("NOTIFICATIONS_BLOCKED"), "Notifications are allowed"),
-    REMINDERS_ON(setOf("REMINDERS_GLOBALLY_OFF"), "Reminders are turned on"),
-    DIGEST_ALARM(setOf("DIGEST_ALARM_MISSING"), "The daily reminder check is scheduled"),
-    BACKSTOP(setOf("BACKSTOP_WORK_MISSING"), "The background safety check is running"),
-    APP_RESTRICTION(setOf("APP_RESTRICTED"), "This phone is not holding ServiceTag back in the background"),
-    DELIVERY(setOf("SCHEDULE_NO_PROVIDER", "SCHEDULE_PROVIDER_DISABLED"), "Every schedule with reminders can deliver them"),
-    METER_BASELINES(setOf("NO_DATA"), "Every meter schedule has a baseline reading"),
+enum class HealthCheck(val codes: Set<String>, @StringRes private val passedLineRes: Int) {
+    NOTIFICATIONS(setOf("NOTIFICATIONS_BLOCKED"), R.string.maintenance_health_passed_notifications),
+    REMINDERS_ON(setOf("REMINDERS_GLOBALLY_OFF"), R.string.maintenance_health_passed_reminders_on),
+    DIGEST_ALARM(setOf("DIGEST_ALARM_MISSING"), R.string.maintenance_health_passed_digest_alarm),
+    BACKSTOP(setOf("BACKSTOP_WORK_MISSING"), R.string.maintenance_health_passed_backstop),
+    APP_RESTRICTION(setOf("APP_RESTRICTED"), R.string.maintenance_health_passed_app_restriction),
+    DELIVERY(setOf("SCHEDULE_NO_PROVIDER", "SCHEDULE_PROVIDER_DISABLED"), R.string.maintenance_health_passed_delivery),
+    METER_BASELINES(setOf("NO_DATA"), R.string.maintenance_health_passed_meter_baselines),
+    ;
+
+    /** The ratified passed line, read when drawn (#102): the check is the value, its words are the language's. */
+    val passedLine: String get() = localized(passedLineRes)
 }
 
 /** The checks [findings] raised nothing for, in display order: derived from the run, never from a second check. */
@@ -79,14 +88,14 @@ fun passedChecks(findings: List<ReminderHealthFinding>): List<HealthCheck> =
  * shown with no button rather than a button saying nothing.
  */
 fun repairLabel(code: String): String? = when (repairActionOf(code)) {
-    ReminderRepair.OPEN_NOTIFICATION_SETTINGS -> "Open notification settings"
-    ReminderRepair.ARM_DIGEST_ALARM -> "Reschedule the check"
-    ReminderRepair.ENQUEUE_BACKSTOP -> "Restart the check"
-    ReminderRepair.OPEN_BATTERY_SETTINGS -> "Open battery settings"
-    ReminderRepair.TURN_REMINDERS_ON -> "Turn reminders on"
-    ReminderRepair.OPEN_SCHEDULE -> "Open the schedule"
-    ReminderRepair.LOG_METER_READING -> "Log meter reading"
-    ReminderRepair.RESTORE_REMINDER_DELIVERY -> "Fix reminder delivery"
+    ReminderRepair.OPEN_NOTIFICATION_SETTINGS -> localized(R.string.maintenance_repair_open_notification_settings)
+    ReminderRepair.ARM_DIGEST_ALARM -> localized(R.string.maintenance_repair_reschedule_check)
+    ReminderRepair.ENQUEUE_BACKSTOP -> localized(R.string.maintenance_repair_restart_check)
+    ReminderRepair.OPEN_BATTERY_SETTINGS -> localized(R.string.maintenance_repair_open_battery_settings)
+    ReminderRepair.TURN_REMINDERS_ON -> localized(R.string.maintenance_repair_turn_reminders_on)
+    ReminderRepair.OPEN_SCHEDULE -> localized(R.string.maintenance_repair_open_schedule)
+    ReminderRepair.LOG_METER_READING -> localized(R.string.maintenance_log_meter_reading)
+    ReminderRepair.RESTORE_REMINDER_DELIVERY -> localized(R.string.maintenance_repair_fix_delivery)
     else -> null
 }
 

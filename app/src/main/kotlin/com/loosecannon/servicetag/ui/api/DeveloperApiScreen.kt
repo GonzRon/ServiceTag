@@ -25,13 +25,16 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.api.DEVELOPER_API_PORT
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.appDetails
@@ -39,7 +42,7 @@ import com.loosecannon.servicetag.ui.components.open
 import com.loosecannon.servicetag.ui.theme.MeasurementHeroText
 
 /** P1A-2, ratified 2026-09-25; #85 §6 reuses it (hoisted byte-identical) beside P85-10. */
-internal const val OPEN_APP_SETTINGS = "Open app settings"
+internal val OPEN_APP_SETTINGS: String get() = localized(R.string.api_screen_open_app_settings)
 
 /**
  * The one screen the automation API has, and the whole of its lifetime (1.1.0, issue #46).
@@ -106,10 +109,13 @@ internal fun DeveloperApiScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Developer API") },
+                title = { Text(stringResource(R.string.api_screen_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(R.string.api_screen_back),
+                        )
                     }
                 },
             )
@@ -122,26 +128,21 @@ internal fun DeveloperApiScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            QuietLine(
-                "While this screen is open, ServiceTag accepts commands on this phone's " +
-                    "loopback address only. Pair with the code below; leave the screen to stop.",
-            )
+            QuietLine(stringResource(R.string.api_screen_intro))
             // Drawn in the error colour rather than as a QuietLine, because the one thing this
             // screen exists to do is not happening.
             when (developerApiNotice(listener)) {
                 DeveloperApiNotice.None -> Unit
                 DeveloperApiNotice.CouldNotStart -> Text(
                     // S6 (1.1.0).
-                    text = "The Developer API could not start. Leave this screen and open it again.",
+                    text = stringResource(R.string.api_screen_could_not_start),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
                 DeveloperApiNotice.NetworkPermissionDenied -> Column {
                     Text(
                         // P1A-1, ratified 2026-09-25.
-                        text = "ServiceTag is not allowed to use the network, so the Developer API " +
-                            "cannot start. Allow network access in the app settings, then close " +
-                            "ServiceTag and open it again.",
+                        text = stringResource(R.string.api_screen_network_denied),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -154,13 +155,21 @@ internal fun DeveloperApiScreen(
                     }
                 }
             }
-            LabelValue(label = "Port", value = DEVELOPER_API_PORT.toString(), mono = true)
             LabelValue(
-                label = "Pairing code",
+                label = stringResource(R.string.api_screen_port),
+                value = DEVELOPER_API_PORT.toString(),
+                mono = true,
+            )
+            LabelValue(
+                label = stringResource(R.string.api_screen_pairing_code),
                 value = model.pairingCode,
                 valueStyle = MeasurementHeroText,
             )
-            LabelValue(label = "Requests this session", value = requests.toString(), mono = true)
+            LabelValue(
+                label = stringResource(R.string.api_screen_requests),
+                value = requests.toString(),
+                mono = true,
+            )
         }
     }
 }

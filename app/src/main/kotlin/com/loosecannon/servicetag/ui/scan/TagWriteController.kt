@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.scan
 
 import android.util.Log
+import com.loosecannon.servicetag.R
 import com.loosecannon.nfc.tagcore.NdefRecordData
 import com.loosecannon.nfc.tagcore.NdefSize
 import com.loosecannon.nfc.tagcore.OverwriteDecision
@@ -19,7 +20,6 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.OverwriteReasons
 import com.loosecannon.servicetag.core.nfc.TagPayload
-import com.loosecannon.servicetag.core.usecase.OverwriteSubject
 import com.loosecannon.servicetag.core.usecase.OverwriteSubjects
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.Resolution
@@ -27,6 +27,7 @@ import com.loosecannon.servicetag.ui.transfer.TransferStrings
 import java.time.ZoneId
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
@@ -46,8 +47,11 @@ sealed interface WriteState {
     /** Nothing has happened yet, the tag was only formatted, or the last tap deliberately left it alone. */
     data class Idle(val message: String) : WriteState
 
-    /** The tag already holds something; [subject] names it, in this product's words (#70). */
-    data class Confirm(val subject: OverwriteSubject) : WriteState
+    /**
+     * The tag already holds something; [subject] names it, in this product's words (#70) — `OverwriteSubjects`
+     * picks the sentence and [words] renders it in the owner's language (#102).
+     */
+    data class Confirm(val subject: OverwriteWords) : WriteState
 
     data class Written(val tagId: String, val locked: Boolean) : WriteState
     data class Error(val message: String) : WriteState
@@ -150,7 +154,7 @@ class TagWriteController(
             } catch (e: Exception) {
                 // The platform's message is not the user's business; the exception is the log's (R4).
                 Log.w(TAG, "tap failed", e)
-                _state.value = WriteState.Error("Could not read the tag. Hold it still and try again.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_read_failed))
             } finally {
                 if (!sheetOwnsBusy) busy.set(false)
             }
@@ -161,14 +165,14 @@ class TagWriteController(
     private suspend fun handle(tag: TagHandle): Boolean {
         val inspection = withContext(ioDispatcher) { io.inspect(tag) }
         if (inspection == null) {
-            _state.value = WriteState.Error("This tag does not support NDEF. Use an NTAG213/215/216 or similar.")
+            _state.value = WriteState.Error(localized(R.string.tag_write_no_ndef_hint))
             return false
         }
         // Route BEFORE planning, and without a message size: a tag that needs formatting has no
         // capacity yet, and a read-only tag is refused before capacity is even a question (F-3).
         val writable = when (val r = inspection.route()) {
             WriteRoute.Format -> { format(tag); return false }
-            WriteRoute.ReadOnly -> { _state.value = WriteState.Error("This tag is read-only (locked). Nothing written."); return false }
+            WriteRoute.ReadOnly -> { _state.value = WriteState.Error(localized(R.string.tag_write_read_only)); return false }
             is WriteRoute.Writable -> r
         }
         val row = pending ?: provisionTag.begin(target, currentLabel).also {
@@ -178,7 +182,7 @@ class TagWriteController(
         val intended = codec.encodeV1(row.id)
         when (val v = writable.fit(NdefSize.serialisedSize(intended))) {
             is CapacityVerdict.TooSmall -> {
-                _state.value = WriteState.Error("Tag too small: it holds ${v.maxSize} bytes, the message needs ${v.needed}.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_too_small, v.maxSize, v.needed))
                 return false
             }
             CapacityVerdict.Write -> Unit
@@ -214,7 +218,7 @@ class TagWriteController(
                     return false
                 }
                 awaitingAnswer = existing
-                _state.value = WriteState.Confirm(OverwriteSubjects.of(d, resolution))
+                _state.value = WriteState.Confirm(OverwriteSubjects.of(d, resolution).words())
                 true
             }
         }
@@ -250,14 +254,14 @@ class TagWriteController(
     /** `format(null)`: the tag is made NDEF-capable, left empty and unlocked, and nothing is planned or written (R1). */
     private suspend fun format(tag: TagHandle) {
         when (val r = withContext(ioDispatcher) { io.format(tag) }) {
-            WriteResult.Formatted -> _state.value = WriteState.Idle("Formatted. Lift the tag off and hold it again to write.")
+            WriteResult.Formatted -> _state.value = WriteState.Idle(localized(R.string.tag_write_formatted))
             is WriteResult.Failed -> {
                 Log.w(TAG, "format failed: ${r.reason}", r.cause)
-                _state.value = WriteState.Error("Could not format the tag. Hold it still and try again.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_format_failed))
             }
-            WriteResult.Unsupported -> _state.value = WriteState.Error("This tag does not support NDEF.")
+            WriteResult.Unsupported -> _state.value = WriteState.Error(localized(R.string.tag_write_no_ndef))
             is WriteResult.Written, is WriteResult.TooSmall, WriteResult.ReadOnly, is WriteResult.VerifyMismatch ->
-                _state.value = WriteState.Error("Unexpected result while formatting. Hold the tag still and try again.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_format_unexpected))
         }
     }
 
@@ -272,7 +276,7 @@ class TagWriteController(
         awaitingAnswer = null
         confirmedOverwrite = asked
         busy.set(false)
-        _state.value = WriteState.Idle("Overwrite confirmed. Hold the same tag to the phone again to write.")
+        _state.value = WriteState.Idle(localized(R.string.tag_write_overwrite_confirmed))
     }
 
     /** "Keep it", and the same thing a dismissed sheet means: the tag is left exactly as it was. */
@@ -281,7 +285,7 @@ class TagWriteController(
         awaitingAnswer = null
         confirmedOverwrite = null
         busy.set(false)
-        _state.value = WriteState.Idle("Not written. The tag was left as it was.")
+        _state.value = WriteState.Idle(localized(R.string.tag_write_kept))
     }
 
     private suspend fun write(tag: TagHandle, intended: List<NdefRecordData>, row: TagBinding) {
@@ -290,21 +294,21 @@ class TagWriteController(
             // A Written is verified by construction; the lock, if asked for, rode on it (invariant 9).
             is WriteResult.Written -> finishWrite(row, tag.uid, r.locked)
             is WriteResult.TooSmall ->
-                _state.value = WriteState.Error("Tag too small: it holds ${r.maxSize} bytes, the message needs ${r.needed}.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_too_small, r.maxSize, r.needed))
             WriteResult.ReadOnly ->
-                _state.value = WriteState.Error("This tag is read-only (locked). Nothing written.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_read_only))
             WriteResult.Unsupported ->
-                _state.value = WriteState.Error("This tag does not support NDEF.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_no_ndef))
             WriteResult.Formatted ->
-                _state.value = WriteState.Error("Unexpected result while writing. Hold the tag still and try again.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_unexpected))
             is WriteResult.VerifyMismatch ->
-                _state.value = WriteState.Error("Read-back differs from what was written. Nothing recorded — try again.")
+                _state.value = WriteState.Error(localized(R.string.tag_write_verify_mismatch))
             is WriteResult.Failed -> {
                 r.cause?.let { Log.w(TAG, "write failed: ${r.reason}", it) }
                 // `attempted` — not the reason text — says whether the radio was reached (I1).
                 _state.value = WriteState.Error(
-                    if (!r.attempted) "Nothing was written (${r.reason}). Hold the tag still and try again."
-                    else "The write may not have finished (${r.reason}). Lift the tag off and hold it to the phone again.",
+                    if (!r.attempted) localized(R.string.tag_write_not_written, r.reason)
+                    else localized(R.string.tag_write_may_not_have_finished, r.reason),
                 )
             }
         }
@@ -328,9 +332,11 @@ class TagWriteController(
 
     private companion object {
         const val TAG = "TagWriteController"
-        val InitialState = WriteState.Idle("Hold a blank or reusable tag to the back of the phone.")
 
         /** R70-6: a Room read never takes this long; the bound keeps "changes only the words" true if one did. */
         val LOOKUP_BOUND = 2.seconds
+
+        /** A getter, not a stored value: the words are read in the language of the screen that asks (#102). */
+        val InitialState: WriteState.Idle get() = WriteState.Idle(localized(R.string.tag_write_hold_blank))
     }
 }

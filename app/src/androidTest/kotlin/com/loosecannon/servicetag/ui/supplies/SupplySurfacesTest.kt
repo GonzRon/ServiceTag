@@ -296,7 +296,7 @@ class SupplySurfacesTest {
         }
         rule.waitForIdle()
 
-        rule.onNodeWithText(LINKED_TO.format("Example Prefilter Cartridge")).assertIsDisplayed()
+        rule.onNodeWithText(linkedTo("Example Prefilter Cartridge")).assertIsDisplayed()
         rule.onAllNodesWithText(REMOVE_LINK).assertCountEquals(1)
         rule.onAllNodesWithText(LINK_SUPPLY).assertCountEquals(0)
         rule.onAllNodesWithText("ARCHIVED").assertCountEquals(0)
@@ -311,7 +311,7 @@ class SupplySurfacesTest {
         }
         rule.waitForIdle()
 
-        rule.onNodeWithText(LINKED_TO.format("Example Carbon Block")).assertIsDisplayed()
+        rule.onNodeWithText(linkedTo("Example Carbon Block")).assertIsDisplayed()
         rule.onNodeWithText("ARCHIVED").assertIsDisplayed()
         rule.onNodeWithText(REMOVE_LINK).assertIsDisplayed()
     }

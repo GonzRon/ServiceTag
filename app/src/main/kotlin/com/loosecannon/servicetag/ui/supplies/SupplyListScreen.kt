@@ -26,9 +26,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
@@ -66,7 +68,7 @@ fun SupplyListScreen(
                 title = { Text(SUPPLIES_SECTION) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.supplies_back))
                     }
                 },
             )
@@ -134,7 +136,7 @@ internal fun SupplyRow(row: SupplyListRow, onClick: () -> Unit, showChevron: Boo
             }
         }
         if (row.archived) {
-            StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
+            StatusBadge(label = stringResource(R.string.supplies_item_archived_badge), colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
         if (showChevron) {
             Icon(

@@ -1,10 +1,12 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.AppliedLine
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefusal
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.SyncMode
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.seasonsync.UnconfirmedCause
 import com.loosecannon.servicetag.ui.homeassistant.HA_ADDRESS_NOT_ALLOWED
 import com.loosecannon.servicetag.ui.homeassistant.HA_ANSWERED_WITH_REDIRECT
@@ -30,14 +32,16 @@ import com.loosecannon.servicetag.ui.homeassistant.remedyFor
 // maps from a code to its sentence. The outcome sentences the Home Assistant screen also draws live in
 // HomeAssistantStrings.kt and are imported, never copied. The setup sheet's and the editor's (P16-42…47, P16-49)
 // close the file.
+// #102: the words live in res/values/strings_asset_edit.xml (`season_sync_*`), each beside its P16 id; every entry
+// here reads them when drawn.
 
 /** P16-22 — the card's action on an asset with no binding while a connection exists. */
-internal const val SEASON_SYNC_LINK = "Link to Home Assistant"
+internal val SEASON_SYNC_LINK: String get() = localized(R.string.season_sync_link)
 
 /** P16-23…25 — the three-way mode control's choices. */
-internal const val SEASON_SYNC_FOLLOW = "Follow Home Assistant"
-internal const val SEASON_SYNC_FORCE_IN = "Force in season"
-internal const val SEASON_SYNC_FORCE_OUT = "Force out of season"
+internal val SEASON_SYNC_FOLLOW: String get() = localized(R.string.season_sync_follow)
+internal val SEASON_SYNC_FORCE_IN: String get() = localized(R.string.season_sync_force_in)
+internal val SEASON_SYNC_FORCE_OUT: String get() = localized(R.string.season_sync_force_out)
 
 /** The mode control's word for [mode], in the order drawn ([SyncMode.entries]). */
 internal fun seasonSyncModeLabel(mode: SyncMode): String = when (mode) {
@@ -47,20 +51,16 @@ internal fun seasonSyncModeLabel(mode: SyncMode): String = when (mode) {
 }
 
 /** P16-26. */
-internal const val SEASON_SYNC_NOW = "Sync now"
+internal val SEASON_SYNC_NOW: String get() = localized(R.string.season_sync_now)
 
 /** P16-27 — the source line in FOLLOW. */
-internal fun seasonSyncFollows(entityId: String): String = "Follows $entityId"
+internal fun seasonSyncFollows(entityId: String): String = localized(R.string.season_sync_follows, entityId)
 
 /** P16-28 — the source line in FORCE_IN. */
-internal fun seasonSyncForcedIn(entityId: String): String =
-    "Forced in season. $entityId is still checked, but it does not change the season until you choose Follow " +
-        "Home Assistant."
+internal fun seasonSyncForcedIn(entityId: String): String = localized(R.string.season_sync_forced_in, entityId)
 
 /** P16-29 — the source line in FORCE_OUT. */
-internal fun seasonSyncForcedOut(entityId: String): String =
-    "Forced out of season. $entityId is still checked, but it does not change the season until you choose " +
-        "Follow Home Assistant."
+internal fun seasonSyncForcedOut(entityId: String): String = localized(R.string.season_sync_forced_out, entityId)
 
 /** The source line for [mode]: Home Assistant's entity decides, or the owner's forced season does. */
 internal fun seasonSyncSourceLine(mode: SyncMode, entityId: String): String = when (mode) {
@@ -70,38 +70,34 @@ internal fun seasonSyncSourceLine(mode: SyncMode, entityId: String): String = wh
 }
 
 /** P16-30 — the last valid observation's fetch time, in the shipped date-and-time display. */
-internal fun seasonSyncLastSuccess(at: String): String = "Last successful check $at"
+internal fun seasonSyncLastSuccess(at: String): String = localized(R.string.season_sync_last_success, at)
 
 /** P16-31 — no valid observation yet. */
-internal const val SEASON_SYNC_NO_READING_YET = "No reading from Home Assistant yet."
+internal val SEASON_SYNC_NO_READING_YET: String get() = localized(R.string.season_sync_no_reading_yet)
 
 /** P16-32 — the stale marker: no success within one cadence. */
-internal const val SEASON_SYNC_NOT_CHECKED_IN_TIME = "Not checked successfully within the chosen interval."
+internal val SEASON_SYNC_NOT_CHECKED_IN_TIME: String get() = localized(R.string.season_sync_not_checked_in_time)
 
 /** P16-33 — Home Assistant's own change time, information only. */
-internal fun seasonSyncChangedInHa(at: String): String = "Changed in Home Assistant $at"
+internal fun seasonSyncChangedInHa(at: String): String = localized(R.string.season_sync_changed_in_ha, at)
 
 /** P16-36 — `NOT_MAINTAINED_HERE`, as the binding's state and as an error. */
-internal const val SEASON_SYNC_NOT_MAINTAINED_HERE =
-    "This asset is no longer maintained here, so Home Assistant no longer changes its season."
+internal val SEASON_SYNC_NOT_MAINTAINED_HERE: String get() = localized(R.string.season_sync_not_maintained_here)
 
 /** P16-37 — `DATE_BEFORE_HISTORY`. */
-internal const val SEASON_SYNC_DATE_BEFORE_HISTORY =
-    "This phone's date is before the latest season entry, so the season stays as it is until the date catches up."
+internal val SEASON_SYNC_DATE_BEFORE_HISTORY: String get() = localized(R.string.season_sync_date_before_history)
 
 /** P16-38 — `NOT_MANUAL`. */
-internal const val SEASON_SYNC_NOT_MANUAL =
-    "This asset's season is no longer started and ended by hand, so Home Assistant cannot change it. Choose Stop " +
-        "syncing, then Resume syncing."
+internal val SEASON_SYNC_NOT_MANUAL: String get() = localized(R.string.season_sync_not_manual)
 
 /** P16-39. */
-internal const val SEASON_SYNC_STOP = "Stop syncing"
+internal val SEASON_SYNC_STOP: String get() = localized(R.string.season_sync_stop)
 
 /** P16-40. */
-internal const val SEASON_SYNC_RESUME = "Resume syncing"
+internal val SEASON_SYNC_RESUME: String get() = localized(R.string.season_sync_resume)
 
 /** P16-41 — a stopped binding's line, on every season mode. */
-internal const val SEASON_SYNC_STOPPED = "Syncing is stopped. Home Assistant no longer changes this asset's season."
+internal val SEASON_SYNC_STOPPED: String get() = localized(R.string.season_sync_stopped)
 
 /**
  * C33(4) — the provenance line for core's [AppliedLine], dated [on]: P16-34/35 from Home Assistant, P16-83/84 forced.
@@ -115,16 +111,16 @@ internal fun appliedLineText(line: AppliedLine, on: String): String = when (line
 }
 
 /** P16-34 — a START applied from Home Assistant (source `HOME_ASSISTANT`). */
-internal fun seasonSyncStartedFromHa(on: String): String = "Started from Home Assistant on $on"
+internal fun seasonSyncStartedFromHa(on: String): String = localized(R.string.season_sync_started_from_ha, on)
 
 /** P16-35 — an END applied from Home Assistant. */
-internal fun seasonSyncEndedFromHa(on: String): String = "Ended from Home Assistant on $on"
+internal fun seasonSyncEndedFromHa(on: String): String = localized(R.string.season_sync_ended_from_ha, on)
 
 /** P16-83 — a START applied under Force in season (source `FORCED_IN`). */
-internal fun seasonSyncForcedInOn(on: String): String = "Forced in season on $on"
+internal fun seasonSyncForcedInOn(on: String): String = localized(R.string.season_sync_forced_in_on, on)
 
 /** P16-84 — an END applied under Force out of season (source `FORCED_OUT`). */
-internal fun seasonSyncForcedOutOn(on: String): String = "Forced out of season on $on"
+internal fun seasonSyncForcedOutOn(on: String): String = localized(R.string.season_sync_forced_out_on, on)
 
 /**
  * C27 — the latest error's line, by its kind: an exhaustive `when`, no `else`. [detail] is the stored one: the status
@@ -170,27 +166,19 @@ internal fun seasonSyncRefusalNotices(reason: SeasonSyncLinkRefusal): List<Notic
 }
 
 /** P16-42 — the setup sheet's field. */
-internal const val SEASON_SYNC_ENTITY_ID = "Entity ID"
+internal val SEASON_SYNC_ENTITY_ID: String get() = localized(R.string.season_sync_entity_id)
 
 /** P16-43 — the field's helper (AC2, H10). */
-internal const val SEASON_SYNC_ENTITY_ID_HELP =
-    "An on/off helper that is on while this asset is in season, for example input_boolean.example_heater_in_season. " +
-        "Not the appliance's own power switch."
+internal val SEASON_SYNC_ENTITY_ID_HELP: String get() = localized(R.string.season_sync_entity_id_help)
 
 /** P16-44 — the setup sheet on a CALENDAR asset (C16; R16-Q-G: the cadence move, disclosed). */
-internal const val SEASON_SYNC_LINK_CALENDAR =
-    "Linking this asset to Home Assistant replaces its calendar dates. From today, its season starts and ends when " +
-        "Home Assistant says. Maintenance that counts from the start of the season will count from today."
+internal val SEASON_SYNC_LINK_CALENDAR: String get() = localized(R.string.season_sync_link_calendar)
 
 /** P16-45 — the setup sheet on a YEAR_ROUND asset. */
-internal const val SEASON_SYNC_LINK_YEAR_ROUND =
-    "This asset has no operating season now. Linking it to Home Assistant gives it one: in season from today, then " +
-        "started and ended when Home Assistant says. Maintenance that counts from the start of the season will count " +
-        "from today."
+internal val SEASON_SYNC_LINK_YEAR_ROUND: String get() = localized(R.string.season_sync_link_year_round)
 
 /** P16-46 — the setup sheet on a MANUAL asset. */
-internal const val SEASON_SYNC_LINK_MANUAL =
-    "From now on Home Assistant starts and ends this asset's season. Its season history stays as it is."
+internal val SEASON_SYNC_LINK_MANUAL: String get() = localized(R.string.season_sync_link_manual)
 
 /** The setup sheet's reconciliation sentence for an asset in [mode], drawn before anything is written (C16, C-4). */
 internal fun seasonSyncLinkSentence(mode: SeasonMode): String = when (mode) {
@@ -200,10 +188,7 @@ internal fun seasonSyncLinkSentence(mode: SeasonMode): String = when (mode) {
 }
 
 /** P16-47 — the editor's read-only season block (R16-16), and the guard's refusal wherever the phone reaches it. */
-internal const val SEASON_SYNC_FOLLOWS_HA =
-    "This asset's season follows Home Assistant. Stop syncing on the asset's page to change it here."
+internal val SEASON_SYNC_FOLLOWS_HA: String get() = localized(R.string.season_sync_follows_ha)
 
 /** P16-49 — C16's `BAD_ENTITY_ID`, under the field. */
-internal const val SEASON_SYNC_BAD_ENTITY_ID =
-    "Enter an entity ID such as input_boolean.example_heater_in_season: lowercase letters, digits and underscores, " +
-        "with one dot."
+internal val SEASON_SYNC_BAD_ENTITY_ID: String get() = localized(R.string.season_sync_bad_entity_id)

@@ -6,7 +6,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.loosecannon.servicetag.core.usecase.OverwriteSubject
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Rule
 import org.junit.Test
@@ -34,7 +33,7 @@ class WriteTagScreenConsentWordingTest {
 
     /** Exactly what `WriteTagScreen` draws for a `Confirm` state, minus the NFC-session chrome. */
     private fun setConfirmContent() {
-        val state = WriteState.Confirm(OverwriteSubject("This ServiceTag tag is not in this phone's records.", "a0c19962 · v1"))
+        val state = WriteState.Confirm(OverwriteWords("This ServiceTag tag is not in this phone's records.", "a0c19962 · v1"))
         rule.setContent {
             ServiceTagTheme {
                 WriteStatus(state, "Pump 3", onDone = {})

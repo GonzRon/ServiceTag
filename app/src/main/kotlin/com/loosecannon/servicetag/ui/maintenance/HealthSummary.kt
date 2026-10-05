@@ -1,6 +1,8 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
+import com.loosecannon.servicetag.l10n.localized
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,7 +69,7 @@ fun ReminderHealthSeverity?.showsBadge(): Boolean = this != null && ordinal >= R
  * a finding for the owner all the same: the badge fires for any finding at or above WARN, including
  * `NO_DATA` and `APP_RESTRICTED`, which this word overstates.
  */
-const val REMINDER_FAILED = "REMINDER FAILED"
+val REMINDER_FAILED: String get() = localized(R.string.maintenance_reminder_failed)
 
 /**
  * No findings at all.

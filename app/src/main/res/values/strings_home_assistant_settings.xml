@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #102: Home Assistant (#16), Settings, Categories (#74) and the Developer API screen — English source. Comments carry
+  the ratification ids and what each string is for. The P16 and P74 sentences are RATIFIED text: permission, security
+  and network wording that must say exactly what the app does, so a translation keeps every fact and every condition.
+-->
+<resources>
+
+    <!--
+      #16 (§5) — the Home Assistant screen's sentences and the check outcomes both the Home Assistant screen and the
+      asset's season card draw (ui/homeassistant/HomeAssistantStrings.kt). P16-1…21 and P16-48…52 RATIFIED 2026-10-02
+      (R16-Q-C); P16-50 and P16-53…82 RATIFIED 2026-10-03 with the owner's amendments to P16-60, P16-66, P16-67,
+      P16-69, P16-75 and P16-80 (P16-64 withdrawn). P16-32 lives with the season card's strings.
+      "Home Assistant" is a product name; "Precise", "Location" and the background option are Android's own words for
+      its settings and should match what Android shows in your language. "Sync now" is the season card's button.
+    -->
+    <!-- P16-1: the Settings → Utilities row and the Home Assistant screen's title (the product's name). -->
+    <string name="ha_title">Home Assistant</string>
+    <!-- The Home Assistant screen's back arrow, read by a screen reader. -->
+    <string name="ha_back">Back</string>
+    <!-- P16-2: the address field's label. -->
+    <string name="ha_server_address">Server address</string>
+    <!-- P16-3: the address field's helper. Keep https:// and http:// as written. -->
+    <string name="ha_server_address_help">Use https:// with the server\'s name or private IPv4 address, or http:// with its private IPv4 address on your home network.</string>
+    <!-- P16-4: the masked token field's label. -->
+    <string name="ha_access_token">Access token</string>
+    <!-- P16-5: the token field's helper. -->
+    <string name="ha_access_token_help">A long-lived access token from a Home Assistant user made for ServiceTag, without administrator rights. ServiceTag uses it only for read requests.</string>
+    <!-- P16-6: the button. -->
+    <string name="ha_test_connection">Test connection</string>
+    <!-- P16-7: Test connection's success line. -->
+    <string name="ha_connection_works">Home Assistant answered. The address and the token work.</string>
+    <!-- P16-8: the button and the confirm dialog's confirm. -->
+    <string name="ha_disconnect">Disconnect</string>
+    <!-- P16-9: the Disconnect confirm dialog's body; the dialog has no title. -->
+    <string name="ha_disconnect_body">Disconnect Home Assistant? Linked assets stop following it and keep their current season and history. The token is deleted from this phone; revoke it in Home Assistant as well.</string>
+    <!-- P16-10: the screen's status line with no connection. -->
+    <string name="ha_not_connected">Not connected. Enter the server address and an access token.</string>
+    <!-- P16-11: NEEDS_TOKEN, on both screens: this phone lost the stored token. -->
+    <string name="ha_enter_token_again">Enter the access token again: this phone no longer has it.</string>
+    <!-- P16-12: ENDPOINT_REFUSED, the address is not one ServiceTag will contact. -->
+    <string name="ha_address_not_allowed">That address is not allowed. Use https:// with a server name or private IPv4 address, or http:// with a private IPv4 address.</string>
+    <!-- P16-13: UNREACHABLE. -->
+    <string name="ha_could_not_reach">Could not reach Home Assistant. Check that this phone is on the same network.</string>
+    <!-- P16-14: TIMED_OUT. -->
+    <string name="ha_took_too_long">Home Assistant took too long to answer.</string>
+    <!-- P16-15: DENIED, shown with the "Open app settings" button (api_screen_open_app_settings). -->
+    <string name="ha_network_not_allowed">ServiceTag is not allowed to use the network. Allow network access in the app settings, then close ServiceTag and open it again.</string>
+    <!-- P16-16: AUTH_REFUSED. -->
+    <string name="ha_token_refused">Home Assistant refused the access token.</string>
+    <!-- P16-17: ENTITY_NOT_FOUND. %1$s: the linked entity id as entered (e.g. input_boolean.pool_season), unchanged. -->
+    <string name="ha_no_such_entity">Home Assistant has no entity %1$s.</string>
+    <!--
+      P16-18: UNSUPPORTED_STATE. %1$s: the state Home Assistant reported, as it sent it (not translated);
+      %2$s: the linked entity id, unchanged. "on" and "off" are the states the app understands.
+    -->
+    <string name="ha_neither_on_nor_off">Home Assistant reports \"%1$s\" for %2$s, which is neither on nor off, so the season is unchanged.</string>
+    <!-- P16-19: MALFORMED. -->
+    <string name="ha_answer_unreadable">Home Assistant sent an answer ServiceTag cannot read.</string>
+    <!-- P16-20: REDIRECTED. -->
+    <string name="ha_answered_with_redirect">Home Assistant answered with a redirect, which ServiceTag does not follow. Enter the address it redirects to.</string>
+    <!-- P16-21: HTTP_ERROR. %1$s: the HTTP status code Home Assistant answered with (e.g. 500). -->
+    <string name="ha_answered_with_error">Home Assistant answered with an error (%1$s).</string>
+    <!-- P16-48: under the token field after a save (the token itself is never shown). -->
+    <string name="ha_token_saved">A token is saved on this phone.</string>
+    <!-- P16-50: NOT_ON_LOCAL_NETWORK on a different Wi-Fi, mobile data or no network. -->
+    <string name="ha_not_on_home_wifi">This phone is not on your home Wi-Fi, so ServiceTag did not contact Home Assistant.</string>
+    <!-- P16-51: NAME_NOT_LOCAL. -->
+    <string name="ha_name_not_private">That server name does not resolve only to private network addresses, so ServiceTag did not contact it.</string>
+    <!-- P16-52: TLS_FAILED. -->
+    <string name="ha_certificate_not_verified">Home Assistant\'s certificate could not be verified.</string>
+    <!-- P16-53: the cadence control's label. -->
+    <string name="ha_how_often">How often to check</string>
+    <!-- P16-54: cadence choice 1 of 4 (in this order; "Once a day" is preselected, R16-Q-D). -->
+    <string name="ha_every_12_hours">Every 12 hours</string>
+    <!-- P16-55: cadence choice 2 of 4, preselected. -->
+    <string name="ha_once_a_day">Once a day</string>
+    <!-- P16-56: cadence choice 3 of 4. -->
+    <string name="ha_once_a_week">Once a week</string>
+    <!-- P16-57: cadence choice 4 of 4. -->
+    <string name="ha_once_a_month">Once a month</string>
+    <!-- P16-58: the network control's label. -->
+    <string name="ha_where_to_check">Where to check</string>
+    <!-- P16-59: network choice (https only). -->
+    <string name="ha_any_network">Any network</string>
+    <!-- P16-60 (amended 2026-10-03): network choice. Quoted by P16-66 and P16-67: keep those quotes the same words. -->
+    <string name="ha_home_wifi_only">Only on this home Wi-Fi</string>
+    <!-- P16-61: under "Any network". -->
+    <string name="ha_any_network_help">Only for an https:// address you have made reachable from outside your home. The token is sent from whatever network this phone is on.</string>
+    <!-- P16-62: the capture button under P16-60. -->
+    <string name="ha_use_this_network">Use the network I\'m on now</string>
+    <!-- P16-63: after a capture. %1$s: the captured Wi-Fi network's name, exactly as the phone reported it. -->
+    <string name="ha_home_wifi">Home Wi-Fi: %1$s</string>
+    <!-- P16-65: before the precise-location request, when P16-60 is chosen. "Precise" is Android's option. -->
+    <string name="ha_precise_location_why">To check that this phone is on your home Wi-Fi before it sends the access token, ServiceTag needs to read the Wi-Fi network\'s name. Android allows that only with precise Location permission, so choose Precise. ServiceTag does not use your location, but Android will list it among apps that used location.</string>
+    <!-- P16-66 (amended 2026-10-03): after a refusal or an approximate-only grant. Quotes P16-60 (ha_home_wifi_only). -->
+    <string name="ha_precise_location_refused">Without precise Location permission, ServiceTag cannot tell which Wi-Fi this is, so ‘Only on this home Wi-Fi’ stays off.</string>
+    <!-- P16-67 (amended 2026-10-03): saving an http address with "Any network". Quotes P16-60 (ha_home_wifi_only). -->
+    <string name="ha_http_needs_home_wifi">An http:// address needs ‘Only on this home Wi-Fi’. Choose it, or use an https:// address.</string>
+    <!-- P16-68: at capture with Location off; after P16-77 when Location is off. -->
+    <string name="ha_turn_on_location">Turn on Location so ServiceTag can read the Wi-Fi network\'s name, then try again.</string>
+    <!-- P16-69 (amended 2026-10-03): under P16-70 while background checks are off or paused. -->
+    <string name="ha_background_off">With background checks off, ServiceTag checks when you open or return to the app after the chosen interval, and when you tap Sync now. It still needs precise Location while the app is in use.</string>
+    <!-- P16-70: under P16-60, the sub-setting's label. -->
+    <string name="ha_background_checks">Background checks on this home network</string>
+    <!-- P16-71: background checks choice, preselected. -->
+    <string name="ha_off">Off</string>
+    <!-- P16-72: background checks choice. -->
+    <string name="ha_on">On</string>
+    <!--
+      P16-73: before the background-location request (API 30+), with "Open app settings" and Cancel.
+      %1$s: Android's own label for the background-location option, already in the phone's language
+      (e.g. "Allow all the time"); keep the quotes around it.
+    -->
+    <string name="ha_background_location_why">To check in the background, ServiceTag must read the Wi-Fi network\'s name while the app is closed. Android allows that only when Location is set to \"%1$s\". ServiceTag reads only the network\'s name, never where you are, and Android will remind you that it has this access.</string>
+    <!-- P16-74: under P16-70 while background checks run. -->
+    <string name="ha_background_running">ServiceTag also checks in the background while this phone is on your home Wi-Fi.</string>
+    <!-- P16-75 (amended 2026-10-03): On, without the background grant. -->
+    <string name="ha_background_paused">Background checks are paused because Android does not let ServiceTag read the Wi-Fi network\'s name in the background. ServiceTag checks when you open or return to the app and when you tap Sync now.</string>
+    <!-- P16-76: the action under P16-75 and P16-78, re-running the matching permission request. -->
+    <string name="ha_allow_again">Allow again</string>
+    <!-- P16-77: the Wi-Fi name could not be read, so nothing was sent. -->
+    <string name="ha_could_not_confirm_wifi">ServiceTag could not confirm that this phone is on your home Wi-Fi, so it did not contact Home Assistant.</string>
+    <!-- P16-78: after P16-77, or on the screen: permission withdrawn, a one-time grant expired, or reset by Android. -->
+    <string name="ha_precise_location_withdrawn">ServiceTag no longer has permission to read the Wi-Fi network\'s name. Allow precise Location again.</string>
+    <!-- P16-79: after P16-77, or on the screen, with "Open app settings". -->
+    <string name="ha_approximate_only">ServiceTag has only approximate Location, which hides the Wi-Fi network\'s name. Change it to Precise in the app settings.</string>
+    <!-- P16-80 (amended 2026-10-03): after P16-77, the read ran outside the foreground. -->
+    <string name="ha_not_read_in_background">ServiceTag could not read the Wi-Fi network\'s name in the background. It checks again when you open or return to the app.</string>
+    <!-- P16-81: at capture on Ethernet; after P16-77 on Ethernet. Quotes P16-59 (ha_any_network). -->
+    <string name="ha_on_ethernet">On Ethernet, ServiceTag cannot tell which network this is. Connect to your home Wi-Fi, or choose \"Any network\" with an https:// address.</string>
+    <!-- P16-82: at capture on mobile data or with no network. -->
+    <string name="ha_connect_to_home_wifi">Connect this phone to your home Wi-Fi, then try again.</string>
+
+    <!-- ===================== Settings (ui/settings/SettingsScreen.kt) ===================== -->
+    <!-- The Settings screen's title. -->
+    <string name="settings_title">Settings</string>
+    <!-- The back arrow on Settings and on Settings → Categories, read by a screen reader. -->
+    <string name="settings_back">Back</string>
+    <!-- Section header: light/dark choice. -->
+    <string name="settings_appearance">Appearance</string>
+    <!-- Appearance choice: follow the phone's light/dark setting. -->
+    <string name="settings_appearance_system">System</string>
+    <!-- Appearance choice: always light. -->
+    <string name="settings_appearance_light">Light</string>
+    <!-- Appearance choice: always dark. -->
+    <string name="settings_appearance_dark">Dark</string>
+    <!-- Section header: the colour theme (informational, no control). -->
+    <string name="settings_theme">Theme</string>
+    <!-- Label beside the palette's name. -->
+    <string name="settings_palette">Palette</string>
+    <!-- The app's colour palette's proper name, the same in every language (like the app's own name). -->
+    <string name="settings_palette_name" translatable="false">Apollo Service Binder</string>
+    <!-- Under the palette: why there is no dynamic-colour choice yet. -->
+    <string name="settings_dynamic_colour_later">Dynamic colour arrives in a later release</string>
+    <!-- Section header: where attachment files are kept. -->
+    <string name="settings_attachment_storage">Attachment storage</string>
+    <!-- Label: the chosen attachments folder (its value is the folder's name). -->
+    <string name="settings_folder">Folder</string>
+    <!-- The Folder value when no folder has been chosen. -->
+    <string name="settings_folder_not_set">Not set</string>
+    <!-- Label: the storage provider (app) holding the folder; its value is a technical provider id. -->
+    <string name="settings_provider">Provider</string>
+    <!-- The Provider value when the stored folder names no provider. -->
+    <string name="settings_provider_unknown">unknown</string>
+    <!-- Under Folder/Provider when the app lost its access to the folder; deliberately lower-case, a status note. -->
+    <string name="settings_folder_access_lost">access lost — choose the folder again</string>
+    <!-- Under the folder rows. "Syncthing" is a product name. -->
+    <string name="settings_folder_help">Files are written as ordinary documents in this folder; a sync tool such as Syncthing owns any off-device copy.</string>
+    <!-- Button: opens Android's folder picker. -->
+    <string name="settings_choose_folder">Choose folder</string>
+    <!-- Under a disabled Choose folder: why the folder cannot be changed yet. -->
+    <string name="settings_moving_attachments_later">Moving attachments to another folder arrives in a later release</string>
+    <!-- Snackbar: repairing lost access, the owner picked a folder other than the stored one. -->
+    <string name="settings_different_folder">That is a different folder. Choose the same one to restore access.</string>
+    <!-- Snackbar: the picked folder's provider would not grant lasting access. -->
+    <string name="settings_could_not_keep_access">Could not keep access to that folder</string>
+    <!-- Section header: the utility screens. -->
+    <string name="settings_utilities">Utilities</string>
+    <!-- Utilities row: the backup and restore screen. -->
+    <string name="settings_backup_and_restore">Backup and restore</string>
+    <!-- Utilities row: the NFC tag reading/inspecting screen. -->
+    <string name="settings_read_inspect_tag">Read / inspect tag</string>
+    <!-- Utilities row: the Developer API screen (its title is api_screen_title). -->
+    <string name="settings_developer_api">Developer API</string>
+    <!-- P74-1: Utilities row: the Categories screen (#74). -->
+    <string name="settings_categories">Categories</string>
+    <!-- Section header: about the app. -->
+    <string name="settings_about">About</string>
+    <!-- Label beside the app's version number. -->
+    <string name="settings_version">Version</string>
+    <!-- Snackbar: the project link could not open because the phone has no browser. -->
+    <string name="settings_no_browser">No browser available for this link</string>
+    <!-- Link button to the project's GitHub page. "GitHub" is a product name. -->
+    <string name="settings_source_on_github">Source and issues on GitHub</string>
+
+    <!--
+      ===================== Settings → Categories (#74; ui/settings/CategoriesScreen.kt, CategoriesViewModel.kt) =====
+      #74's Categories words (plan §6, RATIFIED 2026-09-26), each by its P74-number and verbatim; P74-18 and P74-19 are
+      the follow-ups RATIFIED 2026-09-26. The built-in categories' names are starter content and stay as they are.
+    -->
+    <!-- P74-2: the Categories screen's title. -->
+    <string name="settings_categories_title">Categories</string>
+    <!-- P74-3: section header, the owner's own categories (sentence case, as ratified). -->
+    <string name="settings_categories_yours">Your categories</string>
+    <!-- P74-4: section header, the built-in categories. -->
+    <string name="settings_categories_built_in">Built-in</string>
+    <!-- P74-5: under P74-3 when the owner has no categories of their own. -->
+    <string name="settings_categories_none_yet">No categories of your own yet. Save an asset with a new category to add one.</string>
+    <!-- P74-6a: a category's usage line when no asset uses it. -->
+    <string name="settings_categories_not_used">Not used</string>
+    <!-- P74-6b/c: a category's usage line. %1$d: how many assets use it (archived and retired included). -->
+    <plurals name="settings_categories_used_by">
+        <item quantity="one">Used by %1$d asset</item>
+        <item quantity="other">Used by %1$d assets</item>
+    </plurals>
+    <!-- P74-7: under P74-4. -->
+    <string name="settings_categories_built_ins_fixed">Built-in categories are always offered and cannot be renamed or deleted.</string>
+    <!-- P74-8: the rename dialog's title. -->
+    <string name="settings_categories_rename_title">Rename category</string>
+    <!-- P74-9: the rename dialog's text field label (pre-filled with the category's name). -->
+    <string name="settings_categories_name">Name</string>
+    <!-- P74-10 and P74-13: the rename dialog's confirm and the row's menu item, one word in two places. -->
+    <string name="settings_categories_rename">Rename</string>
+    <!-- P74-14: the row's menu item. -->
+    <string name="settings_categories_delete">Delete</string>
+    <!-- The rename dialog's dismiss button. -->
+    <string name="settings_categories_cancel">Cancel</string>
+    <!-- A category row's overflow menu button, read by a screen reader. -->
+    <string name="settings_categories_more">More</string>
+    <!-- P74-11: under the rename field, the name is another category's. %1$s: that category's name, as the owner wrote it. -->
+    <string name="settings_categories_name_taken">A category named %1$s already exists.</string>
+    <!-- P74-12: under the rename field, the name is a built-in's. %1$s: the built-in category's name. -->
+    <string name="settings_categories_built_in_name">%1$s is a built-in category.</string>
+    <!-- P74-15: the delete dialog's title. -->
+    <string name="settings_categories_delete_title">Delete this category?</string>
+    <!-- P74-16: the delete dialog's body. %1$s: the category's name, as the owner wrote it. -->
+    <string name="settings_categories_not_used_by_any">%1$s is not used by any asset.</string>
+    <!--
+      P74-17a/b: snackbar, a delete of a category assets still use (nothing is deleted).
+      %1$s: the category's name, as the owner wrote it; %2$d: how many assets use it.
+    -->
+    <plurals name="settings_categories_still_in_use">
+        <item quantity="one">%1$s is used by %2$d asset. Change its category first.</item>
+        <item quantity="other">%1$s is used by %2$d assets. Change their category first.</item>
+    </plurals>
+    <!-- P74-18: under the rename field, the dialog staying: a rename failed for a reason none of the refusals names. -->
+    <string name="settings_categories_could_not_rename">Could not rename that category.</string>
+    <!-- P74-19: snackbar, a confirmed delete failed for a reason none of the refusals names; the row stays. -->
+    <string name="settings_categories_could_not_delete">Could not delete that category.</string>
+
+    <!-- ===================== The Developer API screen (ui/api/DeveloperApiScreen.kt; 1.1.0, #46) ===================== -->
+    <!--
+      P1A-2, ratified 2026-09-25: the button opening Android's settings page for ServiceTag. Shared verbatim by the
+      Developer API screen, the Home Assistant screens (#16) and #85 §6 (beside P85-10).
+    -->
+    <string name="api_screen_open_app_settings">Open app settings</string>
+    <!-- The Developer API screen's title. -->
+    <string name="api_screen_title">Developer API</string>
+    <!-- The Developer API screen's back arrow, read by a screen reader. -->
+    <string name="api_screen_back">Back</string>
+    <!-- The screen's first line: while it is open, the phone answers local commands; leaving it stops them. -->
+    <string name="api_screen_intro">While this screen is open, ServiceTag accepts commands on this phone\'s loopback address only. Pair with the code below; leave the screen to stop.</string>
+    <!-- S6 (1.1.0): the listener could not start (port taken, any other failure) or died. -->
+    <string name="api_screen_could_not_start">The Developer API could not start. Leave this screen and open it again.</string>
+    <!-- P1A-1, ratified 2026-09-25: the network permission is denied; shown with "Open app settings". -->
+    <string name="api_screen_network_denied">ServiceTag is not allowed to use the network, so the Developer API cannot start. Allow network access in the app settings, then close ServiceTag and open it again.</string>
+    <!-- Label beside the TCP port number the API listens on. -->
+    <string name="api_screen_port">Port</string>
+    <!-- Label beside the code a workstation pairs with. -->
+    <string name="api_screen_pairing_code">Pairing code</string>
+    <!-- Label beside how many requests were answered during this visit to the screen. -->
+    <string name="api_screen_requests">Requests this session</string>
+</resources>

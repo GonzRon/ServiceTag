@@ -80,7 +80,12 @@ class BuildDeadlineSubjects(
          * The reused word "Warranty" (#79 §6, C5), in its core home: the `<title>` of the warning's
          * `<asset> — <title>` line, and nothing else. The asset screens' "Warranty" section header
          * keeps its shipped UI home (`AssetEditScreen`'s `SectionHeader`).
+         *
+         * #102: the subject's **canonical** title — a [ContentHash] input, so it stays this English in
+         * every language and is never translated (a translated title would move every warning's hash on
+         * a language change). The provider draws the kind's title in the owner's language from
+         * [DeadlineKind.WARRANTY_EXPIRY], never from this field.
          */
-        const val WARRANTY_TITLE = "Warranty"
+        const val WARRANTY_TITLE = "Warranty" // l10n-ok: canonical hash input, never shown (#102)
     }
 }

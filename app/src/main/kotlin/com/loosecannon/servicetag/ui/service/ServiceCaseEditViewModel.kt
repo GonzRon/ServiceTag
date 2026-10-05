@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.service
 
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
+import com.loosecannon.servicetag.R
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,7 +23,10 @@ import com.loosecannon.servicetag.core.usecase.ServiceCaseValidation
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.core.usecase.suggestCoverage
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.datePlaceholder
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.BAD_CURRENCY
+import com.loosecannon.servicetag.ui.asset.parseAmount
 import com.loosecannon.servicetag.ui.asset.priceTextOf
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import kotlin.coroutines.cancellation.CancellationException
@@ -270,14 +274,14 @@ private fun costOf(cost: String, currency: String): Costed {
     if (text.isEmpty()) return Costed.Ok(null)
     if (code.isEmpty()) return Costed.Bad(mapOf(CaseField.CURRENCY to A_COST_NEEDS_A_CURRENCY))
     val digits = Money.fractionDigits(code) ?: return Costed.Bad(mapOf(CaseField.CURRENCY to BAD_CURRENCY))
-    val minor = Money.parse(text, code) ?: return Costed.Bad(mapOf(CaseField.COST to costExample(digits)))
+    val minor = parseAmount(text, code) ?: return Costed.Bad(mapOf(CaseField.COST to costExample(digits)))
     return Costed.Ok(minor)
 }
 
 /** One refusal on its field with its ratified line, or null for one no field of this form can explain. */
 private fun markFor(problem: ServiceCaseProblem): Pair<String, String>? = when (problem) {
     ServiceCaseProblem.TitleRequired -> CaseField.TITLE to GIVE_THE_CASE_A_TITLE
-    is ServiceCaseProblem.BadDate -> CaseField.OPENED_ON to "Enter a date as YYYY-MM-DD"
+    is ServiceCaseProblem.BadDate -> CaseField.OPENED_ON to localized(R.string.service_enter_a_date, datePlaceholder())
     ServiceCaseProblem.OpenedAfterToday -> CaseField.OPENED_ON to DATE_NOT_LATER_THAN_TODAY
     ServiceCaseProblem.BadCurrency -> CaseField.CURRENCY to BAD_CURRENCY
     ServiceCaseProblem.CostWithoutCurrency -> CaseField.CURRENCY to A_COST_NEEDS_A_CURRENCY

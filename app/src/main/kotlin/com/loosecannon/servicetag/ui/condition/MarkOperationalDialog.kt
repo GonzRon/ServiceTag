@@ -8,16 +8,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.usecase.ConditionCommand
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import java.time.ZoneId
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,14 +29,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** S7: the scan sheet's action, this dialog's confirm, and the offer's accept. */
-const val MARK_OPERATIONAL = "Mark operational"
+val MARK_OPERATIONAL: String get() = localized(R.string.condition_mark_operational)
 
 /** S17: this dialog's title, and the offer's. */
-const val MARK_OPERATIONAL_TITLE = "Mark operational?"
+val MARK_OPERATIONAL_TITLE: String get() = localized(R.string.condition_mark_operational_title)
 
 /** S18, "The earlier <DOWN/DEGRADED> record stays in the history.", with the current word substituted. */
 fun markOperationalBody(current: OperationalCondition): String =
-    "The earlier ${conditionWord(current)} record stays in the history."
+    localized(R.string.condition_mark_operational_body, conditionWord(current))
 
 /**
  * The Mark operational confirmation's one write: OPERATIONAL, **dated today** (a null `occurredOn` is
@@ -131,6 +134,6 @@ fun MarkOperationalDialog(graph: AppGraph, assetId: String, current: Operational
         confirmButton = {
             TextButton(enabled = !state.busy, onClick = model::confirm) { Text(MARK_OPERATIONAL) }
         },
-        dismissButton = { TextButton(enabled = !state.busy, onClick = model::cancel) { Text("Cancel") } },
+        dismissButton = { TextButton(enabled = !state.busy, onClick = model::cancel) { Text(stringResource(R.string.ui_action_cancel)) } },
     )
 }

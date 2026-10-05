@@ -244,7 +244,7 @@ class LoanEditViewModelTest {
         model.onDueOn("soon")
         model.save()
         assertEquals(
-            mapOf(LoanField.LENT_ON to "Enter a date as YYYY-MM-DD", LoanField.DUE_ON to "Enter a date as YYYY-MM-DD"),
+            mapOf(LoanField.LENT_ON to "Enter a date as MM/DD/YYYY", LoanField.DUE_ON to "Enter a date as MM/DD/YYYY"),
             model.settled().problems,
         )
         assertEquals("every refusal wrote nothing", emptyList<AssetLoan>(), storedLoans())

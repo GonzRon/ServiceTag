@@ -16,6 +16,9 @@ import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ValueType
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.testing.EnglishResources
+import com.loosecannon.servicetag.testing.ResourcePack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -133,6 +136,18 @@ class JournalFormatTest {
         assertEquals("Log note", quickActionLabel(profile("Note")))
     }
 
+    /** #102: lower-casing is English's rule, not the owner's name: German nouns keep their capital. */
+    @Test fun germanKeepsTheActionNamesCapital() {
+        val german = ResourcePack.pack("de")
+        AppText.install(german)
+        try {
+            assertEquals(String.format(german.locale, german.stringNamed("journal_log_profile"), "Wassertest"), quickActionLabel(profile("Wassertest")))
+        } finally {
+            AppText.install(EnglishResources())
+        }
+        assertEquals("Log water test", quickActionLabel(profile("Water test")))
+    }
+
     @Test fun theDetailLineFallsBackFromReadingsToMaterialsToNotes() {
         val ph = definition("ph", "pH", decimals = 1, low = 7.2, high = 7.8)
         val fc = definition("free_chlorine", "Free chlorine", unit = "ppm", decimals = 1)
@@ -171,6 +186,60 @@ class JournalFormatTest {
         assertEquals("110", formatNumber(110.0))
         assertEquals("-2.25", formatNumber(-2.25))
         assertEquals("0", formatNumber(0.0))
+    }
+
+    /**
+     * #102 (PR #106 review): a stored number is drawn with the rendering language's decimal separator, at the
+     * definition's precision — "7,4" in German, "7.4" in English — and the stored value stays the number itself.
+     */
+    @Test fun numbersTakeTheLanguagesDecimalSeparator() {
+        val ph = definition("ph", "pH", decimals = 1, low = 7.2, high = 7.8)
+        val fc = definition("free_chlorine", "Free chlorine", unit = "ppm", decimals = 2)
+        val defs = listOf(ph, fc).associateBy { it.id }
+        val measured = event(measurements = listOf(number(ph, 7.4, sortOrder = 0), number(fc, 1.5, sortOrder = 1)))
+
+        AppText.install(ResourcePack.pack("de"))
+        try {
+            assertEquals("7,4", formatValue(number(ph, 7.4), ph))
+            assertEquals("1,50", formatValue(number(fc, 1.5), fc))
+            assertEquals("7,2–7,8", formatTarget(ph))
+            assertEquals("0,5", formatNumber(0.5))
+            assertEquals("110", formatNumber(110.0))
+            assertEquals("pH 7,4 · Free chlorine 1,50 ppm", eventDetailLine(measured, defs))
+            assertEquals("the stored number is untouched", 7.4, measured.measurements.first().valueNum!!, 0.0)
+        } finally {
+            AppText.install(EnglishResources())
+        }
+
+        assertEquals("7.4", formatValue(number(ph, 7.4), ph))
+        assertEquals("1.50", formatValue(number(fc, 1.5), fc))
+        assertEquals("7.2–7.8", formatTarget(ph))
+        assertEquals("0.5", formatNumber(0.5))
+        assertEquals("pH 7.4 · Free chlorine 1.50 ppm", eventDetailLine(measured, defs))
+    }
+
+    /**
+     * #102 (PR #106 review): what the use cases read from a typed number. English goes on exactly as typed, as it
+     * always did; German's "0,5" goes on as "0.5"; and text that is not a number in German is something no use case
+     * reads as a finite number — "45.000" (forty-five thousand) must never be stored as 45.
+     */
+    @Test fun typedNumbersReachTheUseCasesInTheirNeutralForm() {
+        fun readByUseCase(text: String) = text.trim().toDoubleOrNull()?.takeIf { it.isFinite() }
+
+        for (typed in listOf("2", " 0.5 ", "7,4", "1e3", "abc")) assertEquals(typed, neutralNumber(typed))
+
+        AppText.install(ResourcePack.pack("de"))
+        try {
+            assertEquals("0.5", neutralNumber("0,5"))
+            assertEquals("0.5", neutralNumber(" 0.5 "))
+            assertEquals("2", neutralNumber("2"))
+            assertEquals("-1.25", neutralNumber("-1,25"))
+            for (refused in listOf("45.000", "1.234,5", "1,2,3", "abc", "")) {
+                assertNull("$refused must not reach a use case as a number", readByUseCase(neutralNumber(refused)))
+            }
+        } finally {
+            AppText.install(EnglishResources())
+        }
     }
 
     /**

@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese (Brazilian usage) translation of values/strings_transfer.xml. -->
+<resources>
+    <string name="replace_asset">Substituir equipamento</string>
+    <string name="replace_back">Voltar</string>
+    <string name="replace_old_asset">Equipamento antigo</string>
+    <string name="replace_will_be_retired">%1$s será desativado, e o histórico, os documentos e o histórico de serviços dele serão mantidos como estão.</string>
+    <string name="replace_was_retired_on">%1$s foi desativado em %2$s. O histórico, os documentos e o histórico de serviços dele são mantidos como estão.</string>
+    <string name="replace_new_asset">Novo equipamento</string>
+    <string name="replace_separate_asset">Um equipamento separado, com identidade própria. Nada do histórico do equipamento antigo é copiado.</string>
+    <string name="replace_carry_forward">Copiar para o novo</string>
+    <string name="replace_only_what_you_tick">Só o que você marcar é copiado, como novos registros sem histórico.</string>
+    <string name="replace_season_and_break">Temporada de uso e pausa de manutenção</string>
+    <string name="replace_description_and_notes">Descrição e notas</string>
+    <string name="replace_add_to">Adicionar a %1$s</string>
+    <string name="replace_schedules_start_on">Os planos copiados começam em</string>
+    <string name="replace_needs_setup">Requer “Leituras e ações”.</string>
+    <string name="replace_needs_season">Requer “Temporada de uso e pausa de manutenção”.</string>
+    <string name="replace_move_to_new">Mover para o novo equipamento</string>
+    <string name="replace_leave_with_old">Deixar no equipamento antigo</string>
+    <string name="replace_moved_tag_not_rewritten">Uma etiqueta movida não é regravada. Ao escaneá-la, o novo equipamento é aberto.</string>
+    <plurals name="replace_children_stay">
+        <item quantity="one">%1$s continua fazendo parte de %2$s.</item>
+        <item quantity="other">%1$s continuam fazendo parte de %2$s.</item>
+    </plurals>
+    <string name="replace_lent_out">%1$s está emprestado. O empréstimo continua com ele.</string>
+    <string name="replace_retire_on">Desativar %1$s em %2$s</string>
+    <string name="replace_stays_retired_from">%1$s continua desativado desde %2$s</string>
+    <string name="replace_create">Criar %1$s</string>
+    <string name="replace_nothing_carried">Nada será copiado</string>
+    <string name="replace_could_not_replace">Não foi possível substituir %1$s. Nada foi alterado.</string>
+    <string name="replace_changed_while_reviewing">O equipamento ou registros relacionados mudaram enquanto você revisava. Nada foi alterado.</string>
+    <string name="replace_replaced_by">Substituído por %1$s em %2$s</string>
+    <string name="replace_replaces">Substitui %1$s</string>
+    <string name="replace_was_in_season_on">O novo equipamento estava em temporada em %1$s?</string>
+
+    <string name="transfer_assets">Transferir equipamentos</string>
+    <string name="transfer_back">Voltar</string>
+    <string name="transfer_select_what_leaves">Selecione o que sai deste ServiceTag</string>
+    <string name="transfer_components_go_with">Os equipamentos incluídos acompanham o equipamento do qual fazem parte.</string>
+    <string name="transfer_review">Revisar</string>
+    <string name="transfer_pack">Pacote de transferência</string>
+    <string name="transfer_may_contain">Estes registros podem conter números de série, locais, informações de compra, recibos e histórico de serviços.</string>
+    <string name="transfer_note_label">Nota para o novo proprietário (opcional)</string>
+    <string name="transfer_create">Criar pacote de transferência</string>
+    <string name="transfer_mixed_group">%1$s também abrange equipamentos que ficam aqui: %2$s. Um grupo só é transferido junto com todos os equipamentos que ele já abrangeu.</string>
+    <string name="transfer_parent_not_selected">%1$s é um equipamento incluído de %2$s. Selecione %2$s também.</string>
+    <string name="transfer_lent_out">%1$s está emprestado. Marque-o como devolvido primeiro.</string>
+    <string name="transfer_outside_reference">%1$s tem um registro que aponta para fora desta transferência.</string>
+    <string name="transfer_creating">Criando pacote de transferência…</string>
+    <string name="transfer_not_created">Pacote de transferência não criado: %1$s. Nada foi alterado.</string>
+    <string name="transfer_not_created_entangled">Pacote de transferência não criado: registros deste telefone ainda apontam para um equipamento transferido. Nada foi alterado.</string>
+    <string name="transfer_not_created_generic">Pacote de transferência não criado: não foi possível gravar o arquivo. Nada foi alterado.</string>
+    <string name="transfer_ready">Pacote de transferência pronto</string>
+    <string name="transfer_share">Compartilhar</string>
+    <string name="transfer_save_a_copy">Salvar uma cópia</string>
+    <string name="transfer_size">Tamanho: %1$s</string>
+    <string name="transfer_share_title">Compartilhar pacote de transferência</string>
+    <string name="transfer_saved">Salvo</string>
+    <string name="transfer_mark_question">Marcar estes equipamentos como transferidos neste telefone?</string>
+    <string name="transfer_mark">Marcar como transferidos</string>
+    <string name="transfer_mark_consequence">Os lembretes deles param, e eles saem das suas listas. Você ainda pode abri-los em “Arquivado”.</string>
+    <string name="transfer_transferred">Transferido</string>
+    <string name="transfer_transferred_out">Transferido</string>
+    <string name="transfer_transferred_on">Transferido em %1$s</string>
+    <string name="transfer_pack_line">Pacote de transferência %1$s</string>
+    <string name="transfer_scan_title">Equipamento transferido</string>
+    <string name="transfer_handed_over">%1$s foi entregue em %2$s. Este telefone não o mantém mais.</string>
+    <string name="transfer_changed_since">%1$s mudou depois que este pacote de transferência foi criado. Crie-o novamente.</string>
+    <string name="transfer_could_not_mark">Não foi possível marcar estes equipamentos. Nada foi alterado.</string>
+    <string name="transfer_could_not_save">Não foi possível salvar uma cópia.</string>
+    <string name="transfer_nothing_to_offer">Nenhum equipamento pode ser transferido.</string>
+    <string name="transfer_already_transferred">Estes equipamentos já estão marcados como transferidos.</string>
+    <string name="transfer_too_large">Estes equipamentos têm registros demais para um só pacote de transferência. Transfira menos de cada vez.</string>
+    <string name="transfer_pack_gone">Este pacote de transferência não está mais neste telefone. Crie-o novamente.</string>
+    <string name="transfer_included_with">Incluído com %1$s</string>
+    <string name="transfer_withdraw_record">Retirar registro de transferência</string>
+    <string name="transfer_withdraw_title">Retirar o registro do pacote de transferência %1$s?</string>
+    <string name="transfer_withdraw_body">Use isto somente se este pacote de transferência não tiver saído, ou se o registro de outro telefone deve prevalecer. Os equipamentos dele continuam arquivados.</string>
+    <string name="transfer_withdraw">Retirar</string>
+    <string name="transfer_could_not_withdraw">Não foi possível retirar este registro. Nada foi alterado.</string>
+    <string name="transfer_withdraw_entangled">Não foi possível retirar este registro: registros deste telefone ainda apontariam para um equipamento transferido. Nada foi alterado.</string>
+    <string name="transfer_bearer">Qualquer pessoa com este arquivo pode importar estes equipamentos. Compartilhe-o apenas com a pessoa ou o dispositivo que deve recebê-los.</string>
+    <string name="transfer_mark_entangled">Não foi possível marcar estes equipamentos: registros deste telefone ainda apontam para um equipamento transferido. Nada foi alterado.</string>
+
+    <string name="transfer_import_asset_transferred_out">Este equipamento foi transferido.</string>
+    <string name="transfer_import_title">Importar pacote de transferência</string>
+    <string name="transfer_import_note">Nota: %1$s</string>
+    <string name="transfer_import_created">Criado em %1$s</string>
+    <string name="transfer_import_contains">Contém</string>
+    <string name="transfer_import_import">Importar</string>
+    <string name="transfer_import_already_here">Este pacote de transferência já está neste telefone.</string>
+    <string name="transfer_import_conflicts">Este pacote de transferência entra em conflito com registros deste telefone, então nada foi importado.</string>
+    <string name="transfer_import_tag_used_here">Uma etiqueta NFC deste pacote já é usada para %1$s aqui.</string>
+    <string name="transfer_import_duplicate">%1$s talvez já esteja aqui como %2$s.</string>
+    <string name="transfer_import_not_a_pack">Este arquivo não é um pacote de transferência.</string>
+    <string name="transfer_import_newer">Este pacote de transferência requer uma versão mais recente do ServiceTag.</string>
+    <string name="transfer_import_damaged">Este pacote de transferência está danificado e não pode ser importado.</string>
+    <string name="transfer_import_imported">Pacote de transferência importado: %1$s</string>
+    <string name="transfer_import_could_not_import">Não foi possível importar este pacote de transferência. Nada foi alterado.</string>
+    <string name="transfer_import_coming_back">Voltando: %1$s</string>
+    <string name="transfer_import_not_brought_back">%1$s foi transferido deste telefone, e este pacote de transferência não o traz de volta.</string>
+
+    <plurals name="transfer_count_assets">
+        <item quantity="one">%1$d equipamento</item>
+        <item quantity="other">%1$d equipamentos</item>
+    </plurals>
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="one">%1$d etiqueta NFC</item>
+        <item quantity="other">%1$d etiquetas NFC</item>
+    </plurals>
+    <plurals name="transfer_count_records">
+        <item quantity="one">%1$d registro</item>
+        <item quantity="other">%1$d registros</item>
+    </plurals>
+    <plurals name="transfer_count_schedules">
+        <item quantity="one">%1$d plano</item>
+        <item quantity="other">%1$d planos</item>
+    </plurals>
+    <plurals name="transfer_count_documents">
+        <item quantity="one">%1$d documento ou foto</item>
+        <item quantity="other">%1$d documentos e fotos</item>
+    </plurals>
+    <plurals name="transfer_count_service_cases">
+        <item quantity="one">%1$d chamado de serviço</item>
+        <item quantity="other">%1$d chamados de serviço</item>
+    </plurals>
+
+    <string name="backup_title">Backup</string>
+    <string name="backup_back">Voltar</string>
+    <string name="backup_last_backup">Último backup</string>
+    <string name="backup_never">Nunca</string>
+    <string name="backup_set_explained">Um conjunto de backup são dois arquivos na pasta que você escolher: os dados e, ao lado, os arquivos de anexo. É a única cópia fora deste telefone.</string>
+    <string name="backup_export_set">Exportar conjunto de backup</string>
+    <string name="backup_folder_not_writable">Não é possível gravar nessa pasta</string>
+    <string name="backup_restore_section">Restaurar</string>
+    <string name="backup_restore_data_explained">Restaurar os dados exclui primeiro tudo o que há neste telefone e depois carrega o arquivo.</string>
+    <string name="backup_restore_data">Restaurar dados</string>
+    <string name="backup_restore_files_explained">Depois, restaure o arquivo compactado de anexos do mesmo conjunto para trazer de volta os arquivos de anexo. Ele adiciona arquivos e não exclui nada.</string>
+    <string name="backup_restore_files">Restaurar arquivos</string>
+    <string name="backup_replace_title">Substituir tudo?</string>
+    <string name="backup_replace_body">Todos os equipamentos, etiquetas e vínculos deste telefone são excluídos e substituídos pelo conteúdo do arquivo. Não é possível desfazer isso.</string>
+    <string name="backup_replace_type_word">Digite %1$s para confirmar</string>
+    <string name="backup_replace_confirm">Substituir</string>
+    <string name="backup_cancel">Cancelar</string>
+    <string name="backup_restore_empty_title">Restaurar este backup?</string>
+    <string name="backup_restore_empty_body">Este telefone ainda não tem registros, então não há nada para substituir.</string>
+    <string name="backup_restore_confirm">Restaurar</string>
+
+    <string name="backup_no_attachment_folder">Primeiro escolha uma pasta de anexos nas Configurações</string>
+    <string name="backup_exported_as">Exportado como %1$s</string>
+
+    <string name="backup_export_failed_entangled">Falha na exportação: registros deste telefone ainda apontam para um equipamento transferido</string>
+    <string name="backup_export_failed_files_archive">Falha na exportação: não foi possível gravar o arquivo compactado de anexos</string>
+    <string name="backup_export_failed">Falha na exportação: %1$s</string>
+    <string name="backup_nothing_saved">%1$s. Nada foi salvo.</string>
+    <string name="backup_not_saved">Backup não salvo: %1$s</string>
+    <plurals name="backup_left_behind">
+        <item quantity="one">%1$s. Não foi possível remover %2$s — exclua-o você mesmo.</item>
+        <item quantity="other">%1$s. Não foi possível remover %2$s — exclua-os você mesmo.</item>
+    </plurals>
+    <plurals name="backup_incomplete_missing">
+        <item quantity="one">%1$d arquivo de anexo está faltando</item>
+        <item quantity="other">%1$d arquivos de anexo estão faltando</item>
+    </plurals>
+    <plurals name="backup_incomplete_changed">
+        <item quantity="one">%1$d arquivo de anexo mudou desde que foi adicionado</item>
+        <item quantity="other">%1$d arquivos de anexo mudaram desde que foram adicionados</item>
+    </plurals>
+    <string name="backup_incomplete_both">%1$s e %2$s</string>
+    <string name="backup_incomplete_not_covered">o arquivo compactado não cobriu todos os anexos</string>
+
+    <string name="backup_restored_data">Importado: %1$s, %2$s, %3$s</string>
+    <string name="backup_restored_data_attachments">Importado: %1$s, %2$s, %3$s · %4$s</string>
+    <plurals name="backup_restored_assets">
+        <item quantity="one">%1$d equipamento</item>
+        <item quantity="other">%1$d equipamentos</item>
+    </plurals>
+    <plurals name="backup_restored_tags">
+        <item quantity="one">%1$d etiqueta</item>
+        <item quantity="other">%1$d etiquetas</item>
+    </plurals>
+    <plurals name="backup_restored_links">
+        <item quantity="one">%1$d vínculo</item>
+        <item quantity="other">%1$d vínculos</item>
+    </plurals>
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="one">%1$d anexo listado; restaure o arquivo compactado de anexos para obter o conteúdo dele</item>
+        <item quantity="other">%1$d anexos listados; restaure o arquivo compactado de anexos para obter o conteúdo deles</item>
+    </plurals>
+
+    <plurals name="backup_restored_files">
+        <item quantity="one">%1$d arquivo restaurado, ignorados: %2$d</item>
+        <item quantity="other">%1$d arquivos restaurados, ignorados: %2$d</item>
+    </plurals>
+    <string name="backup_report_separator">"; "</string>
+    <plurals name="backup_files_already_present">
+        <item quantity="one">%1$d já presente</item>
+        <item quantity="other">%1$d já presentes</item>
+    </plurals>
+    <plurals name="backup_files_missing_entries">
+        <item quantity="one">%1$d arquivo listado não estava no arquivo compactado</item>
+        <item quantity="other">%1$d arquivos listados não estavam no arquivo compactado</item>
+    </plurals>
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="one">%1$d arquivo do arquivo compactado não estava listado</item>
+        <item quantity="other">%1$d arquivos do arquivo compactado não estavam listados</item>
+    </plurals>
+    <string name="backup_set_mismatch">Esses arquivos pertencem ao conjunto de backup %1$s, não ao %2$s</string>
+    <string name="backup_restore_failed">Falha na restauração: %1$s</string>
+    <string name="backup_restore_transferred_out_one">Falha na restauração: este backup ainda contém %1$s, que foi transferido deste telefone. Nada foi substituído.</string>
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="one">Falha na restauração: este backup ainda contém %1$d equipamento que foi transferido deste telefone. Nada foi substituído.</item>
+        <item quantity="other">Falha na restauração: este backup ainda contém %1$d equipamentos que foram transferidos deste telefone. Nada foi substituído.</item>
+    </plurals>
+
+    <string name="backup_cannot_create">não é possível criar %1$s na pasta escolhida</string>
+    <string name="backup_cannot_open_for_writing">não é possível abrir %1$s para gravação</string>
+    <string name="backup_cannot_open_for_reading">não é possível abrir %1$s para leitura</string>
+</resources>

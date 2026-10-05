@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_supplies_reminders.xml. -->
+<resources>
+    <string name="supplies_section">Расходные материалы</string>
+    <string name="supplies_supply_item">Расходный материал</string>
+    <string name="supplies_no_supplies_yet">Расходных материалов пока нет.</string>
+    <string name="supplies_part_number_field">Артикул</string>
+    <string name="supplies_preferred_unit_field">Предпочтительная единица</string>
+    <string name="supplies_specifications_section">Характеристики</string>
+    <string name="supplies_add_specification">Добавить характеристику</string>
+    <string name="supplies_remove_specification">Убрать характеристику</string>
+    <string name="supplies_no_specifications">Нет характеристик</string>
+    <string name="supplies_used_by_section">Используется в</string>
+    <string name="supplies_not_used_by_any_asset">Не используется ни в одном объекте</string>
+    <string name="supplies_specification_needs_label_and_value">У каждой характеристики должны быть подпись и значение.</string>
+    <string name="supplies_add_supply">Добавить расходный материал</string>
+    <string name="supplies_no_supplies">Нет расходных материалов</string>
+    <string name="supplies_choose_a_supply">Выберите расходный материал</string>
+    <string name="supplies_no_supply_items_yet">Расходных материалов пока нет. Добавьте материал в разделе «Обслуживание › Расходные материалы».</string>
+    <string name="supplies_edit_role">Изменить назначение</string>
+    <string name="supplies_role_taken">У этого объекта уже есть этот расходный материал с таким назначением.</string>
+    <string name="supplies_item_gone">Этот расходный материал больше недоступен.</string>
+    <string name="supplies_link_supply">Связать с материалом</string>
+    <string name="supplies_linked_to">Связано с: %1$s</string>
+    <string name="supplies_remove_link">Убрать связь</string>
+
+    <string name="supplies_item_archived_badge">В архиве</string>
+    <string name="supplies_more">Ещё</string>
+    <string name="supplies_remove_row">Убрать</string>
+    <string name="supplies_back">Назад</string>
+    <string name="supplies_cancel">Отмена</string>
+    <string name="supplies_save">Сохранить</string>
+    <string name="supplies_edit">Изменить</string>
+    <string name="supplies_archive">В архив</string>
+    <string name="supplies_unarchive">Из архива</string>
+    <string name="supplies_name_field">Название</string>
+    <string name="supplies_specification_label_field">Подпись</string>
+    <string name="supplies_specification_value_field">Значение</string>
+    <string name="supplies_specification_unit_field">Единица</string>
+
+    <string name="installed_components_section">Установленные компоненты</string>
+    <string name="installed_no_installed_components">Нет установленных компонентов</string>
+    <string name="installed_install_component">Установить компонент</string>
+    <string name="installed_install_inside">Установить внутрь</string>
+    <string name="installed_inside_of">Внутри: %1$s</string>
+    <string name="installed_serial_or_lot">Серийный номер или партия</string>
+    <string name="installed_installed_on">Дата установки</string>
+    <string name="installed_removed_on">Дата снятия</string>
+    <string name="installed_replace">Заменить</string>
+    <string name="installed_replace_title">Заменить «%1$s»</string>
+    <string name="installed_remove_title">Снять «%1$s»</string>
+    <string name="installed_subtree_removed_too">Всё, что установлено внутри, снимается той же датой.</string>
+    <string name="installed_edit_component">Изменить компонент</string>
+    <string name="installed_history">История</string>
+    <string name="installed_installed_on_day">Установлен %1$s</string>
+    <string name="installed_install_date_not_recorded">Дата установки не записана</string>
+    <string name="installed_removed_on_day">Снят %1$s</string>
+    <string name="installed_removed_count">Снятые (%1$d)</string>
+    <string name="installed_component_changed">Этот компонент был снят или изменён. Ничего не сохранено.</string>
+    <string name="installed_removal_before_install">Дата снятия не может быть раньше даты установки.</string>
+    <string name="installed_composition_line">%1$s × %2$s</string>
+    <string name="installed_more_entries">и ещё %1$d</string>
+    <string name="installed_composition_section">Состав</string>
+    <string name="installed_remove_from_composition">Убрать из состава</string>
+    <string name="installed_composition_quantity_required">Для каждого расходного материала нужно количество больше нуля.</string>
+    <string name="installed_documents_and_references">Документы и веб-ссылки</string>
+    <string name="installed_this_installed_component">Этот установленный компонент</string>
+    <string name="installed_from_supply">Из расходного материала «%1$s»</string>
+    <string name="installed_open_the_supply_to_change">Откройте расходный материал, чтобы добавить или изменить их.</string>
+
+    <string name="installed_back">Назад</string>
+    <string name="installed_remove">Снять</string>
+    <string name="installed_edit">Изменить</string>
+    <string name="installed_save">Сохранить</string>
+    <string name="installed_cancel">Отмена</string>
+    <string name="installed_quantity_field">Кол-во</string>
+    <string name="installed_unit_field">Ед.</string>
+
+    <string name="reminders_permission_rationale_maintenance">ServiceTag нужно разрешение на уведомления, чтобы напоминать вам, когда подходит срок обслуживания.</string>
+    <string name="reminders_permission_rationale_warranty">ServiceTag нужно разрешение на уведомления, чтобы напомнить вам до окончания гарантии.</string>
+    <string name="reminders_permission_rationale_loan">ServiceTag нужно разрешение на уведомления, чтобы напомнить вам, когда подходит срок возврата выданного объекта.</string>
+
+    <string name="reminders_health_notifications_blocked">Уведомления выключены, поэтому напоминания об обслуживании не будут приходить.</string>
+    <string name="reminders_health_reminders_globally_off">Напоминания выключены в ServiceTag.</string>
+    <string name="reminders_health_digest_alarm_missing">Ежедневная проверка напоминаний не запланирована, поэтому о сегодняшнем обслуживании может не прийти напоминание.</string>
+    <string name="reminders_health_backstop_work_missing">Фоновая страховочная проверка не работает, поэтому пропущенное напоминание не будет обнаружено.</string>
+    <string name="reminders_health_app_restricted">Этот телефон ограничивает работу ServiceTag в фоновом режиме, поэтому напоминания могут приходить с опозданием или не приходить вовсе.</string>
+    <plurals name="reminders_health_schedule_no_provider">
+        <item quantity="one">У %1$d графика включены напоминания, но доставка напоминаний не настроена.</item>
+        <item quantity="few">У %1$d графиков включены напоминания, но доставка напоминаний не настроена.</item>
+        <item quantity="many">У %1$d графиков включены напоминания, но доставка напоминаний не настроена.</item>
+        <item quantity="other">У %1$d графика включены напоминания, но доставка напоминаний не настроена.</item>
+    </plurals>
+    <plurals name="reminders_health_schedule_provider_disabled">
+        <item quantity="one">У %1$d графика включены напоминания, но доставить их нечем.</item>
+        <item quantity="few">У %1$d графиков включены напоминания, но доставить их нечем.</item>
+        <item quantity="many">У %1$d графиков включены напоминания, но доставить их нечем.</item>
+        <item quantity="other">У %1$d графика включены напоминания, но доставить их нечем.</item>
+    </plurals>
+    <plurals name="reminders_health_no_baseline">
+        <item quantity="one">%1$d графику нужно показание счётчика, чтобы мог наступить срок.</item>
+        <item quantity="few">%1$d графикам нужно показание счётчика, чтобы мог наступить срок.</item>
+        <item quantity="many">%1$d графикам нужно показание счётчика, чтобы мог наступить срок.</item>
+        <item quantity="other">%1$d графикам нужно показание счётчика, чтобы мог наступить срок.</item>
+    </plurals>
+
+    <string name="notification_channel_due_name">Срок обслуживания</string>
+    <string name="notification_channel_due_description">Напоминания об обслуживании, срок которого наступил.</string>
+    <string name="notification_channel_overdue_name">Просроченное обслуживание</string>
+    <string name="notification_channel_overdue_description">Напоминания об обслуживании, срок которого прошёл.</string>
+    <string name="notification_channel_warranty_name">Напоминания о гарантии</string>
+    <string name="notification_channel_warranty_description">Напоминания перед окончанием гарантии.</string>
+    <string name="notification_channel_loans_name">Напоминания о выдаче</string>
+    <string name="notification_channel_loans_description">Напоминания, когда подходит срок возврата выданного объекта.</string>
+
+    <plurals name="notification_summary_title">
+        <item quantity="one">%1$d задача обслуживания требует внимания</item>
+        <item quantity="few">%1$d задачи обслуживания требуют внимания</item>
+        <item quantity="many">%1$d задач обслуживания требуют внимания</item>
+        <item quantity="other">%1$d задачи обслуживания требуют внимания</item>
+    </plurals>
+    <plurals name="notification_summary_overdue">
+        <item quantity="one">%1$d просрочена</item>
+        <item quantity="few">%1$d просрочены</item>
+        <item quantity="many">%1$d просрочено</item>
+        <item quantity="other">%1$d просрочено</item>
+    </plurals>
+    <plurals name="notification_summary_due">
+        <item quantity="one">%1$d на сегодня</item>
+        <item quantity="few">%1$d на сегодня</item>
+        <item quantity="many">%1$d на сегодня</item>
+        <item quantity="other">%1$d на сегодня</item>
+    </plurals>
+    <plurals name="notification_summary_due_soon">
+        <item quantity="one">%1$d скоро</item>
+        <item quantity="few">%1$d скоро</item>
+        <item quantity="many">%1$d скоро</item>
+        <item quantity="other">%1$d скоро</item>
+    </plurals>
+    <string name="notification_summary_body">%1$s.</string>
+
+    <string name="notification_item_title">%1$s — %2$s</string>
+    <string name="notification_item_due_on">Срок: %1$s.</string>
+    <string name="notification_item_overdue_since">Просрочено с %1$s.</string>
+    <string name="notification_item_meter_due">Срок при %1$s %2$s, сейчас %3$s.</string>
+    <string name="notification_item_meter_due_no_unit">Срок при %1$s, сейчас %2$s.</string>
+
+    <string name="notification_status_due">СРОК</string>
+    <string name="notification_status_overdue">ПРОСРОЧЕНО</string>
+    <string name="notification_status_expires_soon">СКОРО ИСТЕКАЕТ</string>
+    <string name="notification_status_due_back">СРОК ВОЗВРАТА</string>
+    <string name="notification_status_not_returned">НЕ ВОЗВРАЩЕНО</string>
+
+    <string name="notification_action_done">Выполнено</string>
+    <string name="notification_action_snooze_one_day">Напомнить завтра</string>
+    <string name="notification_action_open">Открыть</string>
+
+    <string name="notification_warranty_title">%1$s — Гарантия</string>
+    <string name="notification_warranty_body">Гарантия истекает %1$s.</string>
+    <string name="notification_loan_title">%1$s — срок возврата</string>
+    <string name="notification_loan_body_through">Выдано: %1$s. Вернуть до %2$s.</string>
+    <string name="notification_loan_body_after">Выдано: %1$s. Нужно было вернуть до %2$s.</string>
+</resources>

@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
@@ -27,6 +28,7 @@ import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -363,7 +365,7 @@ class ScheduleDetailViewModel(
             ?.progress
             // The RATIFIED progress form. Never "0 of 0 complete": that reads as *done*, and
             // emptiness never means complete (invariant 74).
-            ?.let { (done, total) -> "$done of $total complete" }
+            ?.let { (done, total) -> localized(R.string.maintenance_progress, done, total) }
 
         // `busy` is carried across the rebuild rather than reset by it: `refresh()` is also called
         // from `LifecycleResumeEffect`, so a resume arriving while an operation is in flight would

@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.share
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetSupply
@@ -39,6 +40,7 @@ import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
 import com.loosecannon.servicetag.ui.installed.INSTALLED_COMPONENTS_SECTION
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
@@ -70,45 +72,45 @@ import kotlinx.coroutines.withContext
  * own words (ratified with #73 and #71), never re-spelled here.
  */
 internal object IntakeStrings {
-    const val TITLE = "Save to ServiceTag"
-    const val RECEIVED = "Received"
-    const val ATTACH_TO = "Attach to"
-    const val CHOOSE_ASSET = "Choose asset"
-    const val NAME = "Name"
-    const val DESCRIPTION = "Description (optional)"
-    const val TYPE = "Type"
+    val TITLE: String get() = localized(R.string.share_title)
+    val RECEIVED: String get() = localized(R.string.share_received)
+    val ATTACH_TO: String get() = localized(R.string.share_attach_to)
+    val CHOOSE_ASSET: String get() = localized(R.string.share_choose_asset)
+    val NAME: String get() = localized(R.string.share_name)
+    val DESCRIPTION: String get() = localized(R.string.share_description)
+    val TYPE: String get() = localized(R.string.share_type)
 
     /** #67 (P67-5): the Role header, from its one home beside the role labels — never re-spelled. */
-    const val ROLE = ROLE_HEADER
-    const val SAVE = "Save"
-    const val CANCEL = "Cancel"
-    const val CLOSE = "Close"
-    const val SAVE_AS_NOTE = "Save as a note"
-    const val NOT_A_LINK = "That is not a link."
-    const val NO_ASSETS = "Add an asset in ServiceTag first, then share this again."
-    const val NO_FOLDER = "Choose an attachment folder in ServiceTag Settings, then share this again."
-    const val STREAM_REFUSED = "That file cannot be accepted from the app that shared it."
-    const val UNREADABLE = "Could not read what was shared"
-    const val URI_TOO_LONG = "That link is too long to save."
-    const val SCHEME_BLOCKED = "ServiceTag will not save that kind of link."
-    const val DUPLICATE_URI = "That link is already on this asset"
-    const val EMPTY_FILE = "That file is empty"
-    const val TOO_LARGE = "That file is larger than 256 MB"
-    const val BLANK_FILE_NAME = "Give the file a name"
-    const val BLANK_REFERENCE_NAME = "Give the reference a name"
-    const val CONFIRM_TITLE = "Save this link?"
+    val ROLE: String get() = ROLE_HEADER
+    val SAVE: String get() = localized(R.string.share_save)
+    val CANCEL: String get() = localized(R.string.share_cancel)
+    val CLOSE: String get() = localized(R.string.share_close)
+    val SAVE_AS_NOTE: String get() = localized(R.string.share_save_as_note)
+    val NOT_A_LINK: String get() = localized(R.string.share_not_a_link)
+    val NO_ASSETS: String get() = localized(R.string.share_no_assets)
+    val NO_FOLDER: String get() = localized(R.string.share_no_folder)
+    val STREAM_REFUSED: String get() = localized(R.string.share_stream_refused)
+    val UNREADABLE: String get() = localized(R.string.share_unreadable)
+    val URI_TOO_LONG: String get() = localized(R.string.share_uri_too_long)
+    val SCHEME_BLOCKED: String get() = localized(R.string.share_scheme_blocked)
+    val DUPLICATE_URI: String get() = localized(R.string.share_duplicate_uri)
+    val EMPTY_FILE: String get() = localized(R.string.share_empty_file)
+    val TOO_LARGE: String get() = localized(R.string.share_too_large)
+    val BLANK_FILE_NAME: String get() = localized(R.string.share_blank_file_name)
+    val BLANK_REFERENCE_NAME: String get() = localized(R.string.share_blank_reference_name)
+    val CONFIRM_TITLE: String get() = localized(R.string.share_confirm_title)
 
     /** #93 (R93-5, G1): the form's action back to the picker, trailing the chosen destination's line (#69 C29). */
-    const val CHANGE = "Change"
+    val CHANGE: String get() = localized(R.string.share_change)
 
     /** #69 (C30, C-4; P69-26): the Assets list's line when no asset is maintained here, before any filtering. */
-    const val NO_ACTIVE_ASSETS = "No active assets"
+    val NO_ACTIVE_ASSETS: String get() = localized(R.string.share_no_active_assets)
 
     /** #69 (C30 step 3; P69-24): the search box's hint and accessible name over the installed-component list. */
-    const val SEARCH_INSTALLED_COMPONENTS = "Search installed components"
+    val SEARCH_INSTALLED_COMPONENTS: String get() = localized(R.string.share_search_installed_components)
 
     /** #69 (C30 step 3; P69-25): the same, over the supply list. */
-    const val SEARCH_SUPPLIES = "Search supplies"
+    val SEARCH_SUPPLIES: String get() = localized(R.string.share_search_supplies)
 
     /** #69 (C28, R69-13): the duplicate by the owner's kind — P69-11/-12 from their one home; an asset's stays. */
     fun duplicateUri(owner: ReferenceOwner): String = when (owner) {
@@ -118,29 +120,27 @@ internal object IntakeStrings {
     }
 
     /** #69 (C29; P69-20): a path — the asset's name, then each installed component's — joined a pair at a time. */
-    fun pathOf(names: List<String>): String = names.reduceOrNull { outer, inner -> "$outer › $inner" }.orEmpty()
+    fun pathOf(names: List<String>): String =
+        names.reduceOrNull { outer, inner -> localized(R.string.share_path_step, outer, inner) }.orEmpty()
 
     /** #69 (C30 step 5; P69-17): an asset level's first row, the asset itself as the destination. */
-    const val THIS_ASSET = "This asset"
+    val THIS_ASSET: String get() = localized(R.string.share_this_asset)
 
     /** #69 (C30 step 5; P69-18): the quiet line under each SupplyItem row on a browsing level. */
-    const val SUPPLY_SHARED = "Supply — shared across uses"
+    val SUPPLY_SHARED: String get() = localized(R.string.share_supply_shared)
 
     /** #69 (C30 step 5; P69-19): a component row's click label on a browsing level; the tap opens its level. */
-    fun showInside(componentName: String): String = "Show what is inside $componentName"
+    fun showInside(componentName: String): String = localized(R.string.share_show_inside, componentName)
 
     /** #69 (C29; P69-21): under a supply destination on the save form, which is the confirmation (no dialog). */
-    fun onSupply(supplyName: String): String =
-        "This will be saved on the supply $supplyName and available wherever that supply is used."
+    fun onSupply(supplyName: String): String = localized(R.string.share_on_supply, supplyName)
 
     /** #69 (C29; P69-22): the saved line after a supply save. */
-    fun savedToSupply(supplyName: String): String = "Saved to supply $supplyName."
+    fun savedToSupply(supplyName: String): String = localized(R.string.share_saved_to_supply, supplyName)
 
-    fun confirmBody(scheme: String): String =
-        "ServiceTag does not recognise \"$scheme\" links. It will be saved as written and opened " +
-            "with whatever app claims it."
+    fun confirmBody(scheme: String): String = localized(R.string.share_confirm_body, scheme)
 
-    fun savedTo(assetName: String): String = "Saved to $assetName"
+    fun savedTo(assetName: String): String = localized(R.string.share_saved_to, assetName)
 }
 
 /**
@@ -194,10 +194,18 @@ internal val ShareDestination.savedLine: String get() = when (this) {
  * #69 (C30 step 2): the picker's three lists, Assets the default — a mode, not a filter. Each label is the shipped word
  * for that list, imported from its one home.
  */
-internal enum class ShareTargetType(val label: String) {
-    ASSETS(ASSETS_LABEL),
-    INSTALLED_COMPONENTS(INSTALLED_COMPONENTS_SECTION),
-    SUPPLIES(SUPPLIES_SECTION),
+internal enum class ShareTargetType {
+    ASSETS,
+    INSTALLED_COMPONENTS,
+    SUPPLIES,
+    ;
+
+    /** #102: read when drawn, never held by the enum, so it follows the current language. */
+    val label: String get() = when (this) {
+        ASSETS -> ASSETS_LABEL
+        INSTALLED_COMPONENTS -> INSTALLED_COMPONENTS_SECTION
+        SUPPLIES -> SUPPLIES_SECTION
+    }
 }
 
 /**

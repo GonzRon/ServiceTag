@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.scan
 
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.util.Log
+import com.loosecannon.servicetag.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.nfc.tagcore.android.RealTagIo
@@ -23,6 +24,7 @@ import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.transfer.TransferStrings
@@ -57,8 +59,7 @@ internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
     is Resolution.Unbound -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
     is Resolution.Revoked -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
     is Resolution.UnknownV1 -> Route.TagResult(TagResultWire.wordFor(PayloadFormat.V1), tagId.value)
-    is Resolution.NeedsNewerApp ->
-        Route.TagResult(TagResultWire.FORMAT_NONE, "written by a newer ServiceTag (payload format $version)")
+    is Resolution.NeedsNewerApp -> Route.TagResult(TagResultWire.FORMAT_NONE, newerApp(version))
     is Resolution.NotOurs -> Route.TagResult(TagResultWire.FORMAT_NONE, describe(payload))
     is Resolution.PreSplitLink -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
     // #77 (C20): the pair, like any row we hold; the sheet re-resolves it to P77-36 / P77-37.
@@ -70,16 +71,22 @@ internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
  * job rather than only refusing: an owner holding a tag they wrote in 2025 needs to know where the
  * note went, not merely that this app will not open it.
  */
-internal const val PRE_SPLIT_LINK_SENTENCE: String =
-    "This tag points at a note link from before the product split. " +
-        "ServiceTag no longer opens links; NoteTag does."
+internal val PRE_SPLIT_LINK_SENTENCE: String get() = localized(R.string.tag_pre_split_link)
 
+/**
+ * Why a tag is not ours, as the prose the not-ours sheet shows under its sentence. It is worded when the scan is
+ * answered and rides the (format, key) pair as its key ([TagResultWire.FORMAT_NONE]); the evidence the codec or the
+ * library gave — a record type, a parse failure — is passed in and shown as is (#102).
+ */
 private fun describe(p: TagPayload): String = when (p) {
-    TagPayload.Empty -> "empty tag"
-    is TagPayload.Foreign -> "not a ServiceTag tag: ${p.description}"
-    is TagPayload.Malformed -> "unreadable ServiceTag record: ${p.reason}"
-    else -> "not a ServiceTag tag"
+    TagPayload.Empty -> localized(R.string.tag_reason_empty)
+    is TagPayload.Foreign -> localized(R.string.tag_reason_foreign, p.description)
+    is TagPayload.Malformed -> localized(R.string.tag_reason_unreadable, p.reason)
+    else -> localized(R.string.tag_reason_not_ours)
 }
+
+/** A ServiceTag payload in a format newer than this app reads, said the same way by both scan paths. */
+private fun newerApp(version: Int): String = localized(R.string.tag_reason_newer_app, version)
 
 /** The scanner is either waiting, reading a tag it has just felt, or explaining a read that failed. */
 data class ScanState(val reading: Boolean = false, val problem: String? = null)
@@ -118,13 +125,13 @@ class ScanViewModel(
             _state.update { it.copy(reading = true, problem = null) }
             try {
                 val payload = withContext(ioDispatcher) { io.inspect(tag) }?.let(::classify)
-                    ?: TagPayload.Malformed("this tag does not support NDEF")
+                    ?: TagPayload.Malformed(localized(R.string.scan_reason_no_ndef))
                 _events.tryEmit(ScanEvent.Show(resolveTag.run(payload).asTagResult()))
             } catch (e: Exception) {
                 // The class name and the stack are the log's; the user gets one thing to do (E2).
                 Log.w(TAG, "read failed", e)
                 _state.update {
-                    it.copy(problem = "Couldn't read that tag. Hold it still and try again.")
+                    it.copy(problem = localized(R.string.scan_read_failed))
                 }
             } finally {
                 _state.update { it.copy(reading = false) }
@@ -269,10 +276,9 @@ class TagResultViewModel(
             is Resolution.Unbound -> TagResult.Unregistered(resolution.tag)
             is Resolution.Revoked -> TagResult.Revoked(resolution.tag)
             is Resolution.UnknownV1 -> TagResult.NotInRecords(resolution.tagId.value)
-            is Resolution.NeedsNewerApp ->
-                TagResult.NotOurs("written by a newer ServiceTag (payload format ${resolution.version})")
+            is Resolution.NeedsNewerApp -> TagResult.NotOurs(newerApp(resolution.version))
             is Resolution.NotOurs -> TagResult.NotOurs(describe(resolution.payload))
-            null -> TagResult.NotOurs("this tag could not be resolved")
+            null -> TagResult.NotOurs(localized(R.string.tag_reason_unresolved))
         }
     }
 
@@ -296,7 +302,7 @@ class TagResultViewModel(
                         },
                     )
                 },
-                onFailure = { _events.tryEmit(TagResultEvent.Failed(it.transferredOutOr("Couldn't bind this tag: ${it.message}"))) },
+                onFailure = { _events.tryEmit(TagResultEvent.Failed(it.transferredOutOr(localized(R.string.tag_bind_failed, it.message)))) },
             )
         }
     }
@@ -388,4 +394,4 @@ fun identityLine(key: String): String =
 
 /** The honest name for a target that has none: a spare tag is bound on its first scan. */
 private fun unnamed(target: TagTarget): String =
-    if (target == TagTarget.None) "nothing yet — a spare tag, bound on its first scan" else "this target"
+    if (target == TagTarget.None) localized(R.string.tag_target_spare) else localized(R.string.tag_target_unnamed)

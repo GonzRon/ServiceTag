@@ -32,10 +32,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.Reading
 import com.loosecannon.servicetag.core.journal.classify
 import com.loosecannon.servicetag.core.model.AssetEvent
@@ -45,6 +47,8 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedDate
 import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
 import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
@@ -56,7 +60,6 @@ import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 /**
  * One stored entry, read-only: the same instrument rows the asset screen draws, the materials that
@@ -107,14 +110,14 @@ fun EventDetailScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = current?.assetName ?: "Entry",
+                        text = current?.assetName ?: stringResource(R.string.journal_detail_title_fallback),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.journal_back))
                     }
                 },
                 actions = {
@@ -135,7 +138,7 @@ fun EventDetailScreen(
         },
     ) { padding ->
         if (current == null) {
-            QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
+            QuietLine(stringResource(R.string.journal_loading), Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
         confirm?.let { asked ->
@@ -182,12 +185,10 @@ fun EventDetailScreen(
 
 /** "15 Sep 2026 · 14:42", or just the day when the entry carries no time (§4). */
 private fun loggedLine(event: AssetEvent): String {
-    val day = runCatching { LocalDate.parse(event.occurredOn).format(LOGGED_DATE) }
+    val day = runCatching { localizedDate(LocalDate.parse(event.occurredOn)) }
         .getOrDefault(event.occurredOn)
     return listOfNotNull(day, event.occurredTime).joinToString(" · ")
 }
-
-private val LOGGED_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
 
 /**
  * The readings the entry actually carries, in the order it stored them (§4) — including a value for
@@ -202,12 +203,12 @@ private fun ReadingsSection(
 ) {
     val rows = event.measurements.sortedBy { it.sortOrder }
     if (rows.isEmpty()) return
-    SectionHeader(title = "Readings")
+    SectionHeader(title = stringResource(R.string.journal_readings))
     InstrumentList(count = rows.size + derived.size) { index ->
         if (index >= rows.size) {
             val reading = derived[index - rows.size]
             InstrumentRow(
-                eyebrow = "Derived",
+                eyebrow = stringResource(R.string.journal_derived),
                 label = reading.definition.label,
                 target = formatTarget(reading.definition),
                 value = formatValue(reading),
@@ -219,7 +220,7 @@ private fun ReadingsSection(
         val measurement = rows[index]
         val definition = definitions[measurement.definitionId]
         InstrumentRow(
-            label = definition?.label ?: "Reading",
+            label = definition?.label ?: stringResource(R.string.journal_reading_fallback),
             target = definition?.let(::formatTarget).orEmpty(),
             value = definition?.let { formatValue(measurement, it) },
             // What it was measured in at the time, not what the definition says today (§4).
@@ -238,9 +239,9 @@ private fun ReadingsSection(
 @Composable
 private fun MaterialsSection(event: AssetEvent) {
     val rows = event.consumables.sortedBy { it.sortOrder }
-    SectionHeader(title = "Materials used")
+    SectionHeader(title = stringResource(R.string.journal_materials_used))
     if (rows.isEmpty()) {
-        QuietLine("None recorded")
+        QuietLine(stringResource(R.string.journal_no_materials))
         return
     }
     Column {
@@ -274,9 +275,9 @@ private fun MaterialsSection(event: AssetEvent) {
 
 @Composable
 private fun NotesSection(notes: String) {
-    SectionHeader(title = "Notes")
+    SectionHeader(title = stringResource(R.string.journal_notes))
     if (notes.isBlank()) {
-        QuietLine("No notes")
+        QuietLine(stringResource(R.string.journal_no_notes))
     } else {
         Text(text = notes, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
@@ -287,14 +288,14 @@ private fun NotesSection(notes: String) {
 private fun EntryOverflow(onEdit: () -> Unit, onDelete: () -> Unit, onStartServiceCase: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.journal_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        DropdownMenuItem(text = { Text("Edit") }, onClick = { open = false; onEdit() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.journal_edit)) }, onClick = { open = false; onEdit() })
         onStartServiceCase?.let { start ->
             DropdownMenuItem(text = { Text(START_SERVICE_CASE) }, onClick = { open = false; start() })
         }
-        DropdownMenuItem(text = { Text("Delete") }, onClick = { open = false; onDelete() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.journal_delete)) }, onClick = { open = false; onDelete() })
     }
 }
 
@@ -304,14 +305,17 @@ private fun EntryOverflow(onEdit: () -> Unit, onDelete: () -> Unit, onStartServi
  * documents go with it.
  */
 internal fun deleteConfirmLines(linkedByCase: Boolean): List<String> =
-    listOfNotNull("Its readings go with it.", A_SERVICE_CASE_LINKS_THIS_ENTRY.takeIf { linkedByCase })
+    listOfNotNull(
+        localized(R.string.journal_delete_readings_go),
+        A_SERVICE_CASE_LINKS_THIS_ENTRY.takeIf { linkedByCase },
+    )
 
 /** The dialog says what goes with the entry before anything happens. */
 @Composable
 private fun DeleteDialog(linkedByCase: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete this entry?") },
+        title = { Text(stringResource(R.string.journal_delete_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 deleteConfirmLines(linkedByCase).forEach { Text(it) }
@@ -319,9 +323,12 @@ private fun DeleteDialog(linkedByCase: Boolean, onDismiss: () -> Unit, onConfirm
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
+                Text(
+                    stringResource(R.string.journal_delete),
+                    color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
+                )
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.journal_cancel)) } },
     )
 }

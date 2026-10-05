@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_transfer.xml. -->
+<resources>
+    <string name="replace_asset">उपकरण बदलें</string>
+    <string name="replace_back">वापस जाएँ</string>
+    <string name="replace_old_asset">पुराना उपकरण</string>
+    <string name="replace_will_be_retired">%1$s को सेवा से हटा दिया जाएगा, और उसका लॉग, दस्तावेज़ और सेवा रिकॉर्ड जैसे हैं वैसे ही रखे जाएँगे।</string>
+    <string name="replace_was_retired_on">%1$s को %2$s से सेवा से हटाया गया था। उसका लॉग, दस्तावेज़ और सेवा रिकॉर्ड जैसे हैं वैसे ही रखे गए हैं।</string>
+    <string name="replace_new_asset">नया उपकरण</string>
+    <string name="replace_separate_asset">अपनी अलग पहचान वाला एक अलग उपकरण। पुराने उपकरण का कोई भी लॉग कॉपी नहीं किया जाता।</string>
+    <string name="replace_carry_forward">आगे ले जाएँ</string>
+    <string name="replace_only_what_you_tick">सिर्फ़ वही कॉपी होता है जिस पर आप सही का निशान लगाते हैं, और वह बिना किसी इतिहास के नए रिकॉर्ड के रूप में।</string>
+    <string name="replace_season_and_break">संचालन मौसम और रखरखाव विराम</string>
+    <string name="replace_description_and_notes">ब्यौरा और नोट</string>
+    <string name="replace_add_to">%1$s में जोड़ें</string>
+    <string name="replace_schedules_start_on">कॉपी किए गए शेड्यूल इस तारीख से शुरू होंगे</string>
+    <string name="replace_needs_setup">इसके लिए “रीडिंग और कार्य” भी ज़रूरी है।</string>
+    <string name="replace_needs_season">इसके लिए “संचालन मौसम और रखरखाव विराम” भी ज़रूरी है।</string>
+    <string name="replace_move_to_new">नए उपकरण पर ले जाएँ</string>
+    <string name="replace_leave_with_old">पुराने उपकरण के साथ छोड़ें</string>
+    <string name="replace_moved_tag_not_rewritten">ले जाया गया टैग दोबारा नहीं लिखा जाता। उसे स्कैन करने पर नया उपकरण खुलता है।</string>
+    <plurals name="replace_children_stay">
+        <item quantity="one">%1$s, %2$s का हिस्सा बना रहता है।</item>
+        <item quantity="other">%1$s, %2$s का हिस्सा बने रहते हैं।</item>
+    </plurals>
+    <string name="replace_lent_out">%1$s उधार दिया गया है। उधार उसी के साथ रहता है।</string>
+    <string name="replace_retire_on">%1$s को %2$s से सेवा से हटाएँ</string>
+    <string name="replace_stays_retired_from">%1$s, %2$s से सेवा से हटा हुआ रहेगा</string>
+    <string name="replace_create">%1$s बनाएँ</string>
+    <string name="replace_nothing_carried">कुछ भी आगे नहीं ले जाया जाएगा</string>
+    <string name="replace_could_not_replace">%1$s को बदला नहीं जा सका। कुछ भी नहीं बदला गया।</string>
+    <string name="replace_changed_while_reviewing">आपके समीक्षा करते समय उपकरण या उससे जुड़े रिकॉर्ड बदल गए। कुछ भी नहीं बदला गया।</string>
+    <string name="replace_replaced_by">%2$s को %1$s से बदला गया</string>
+    <string name="replace_replaces">%1$s की जगह लेता है</string>
+    <string name="replace_was_in_season_on">क्या नया उपकरण %1$s को मौसम में था?</string>
+
+    <string name="transfer_assets">उपकरण ट्रांसफ़र करें</string>
+    <string name="transfer_back">वापस जाएँ</string>
+    <string name="transfer_select_what_leaves">चुनें कि इस ServiceTag से क्या जा रहा है</string>
+    <string name="transfer_components_go_with">उप-उपकरण उसी उपकरण के साथ जाते हैं, जिसका वे हिस्सा हैं।</string>
+    <string name="transfer_review">समीक्षा करें</string>
+    <string name="transfer_pack">ट्रांसफ़र पैक</string>
+    <string name="transfer_may_contain">इन रिकॉर्ड में सीरियल नंबर, जगहें, खरीद की जानकारी, रसीदें और सेवा का इतिहास हो सकता है।</string>
+    <string name="transfer_note_label">नए मालिक के लिए नोट (वैकल्पिक)</string>
+    <string name="transfer_create">ट्रांसफ़र पैक बनाएँ</string>
+    <string name="transfer_mixed_group">%1$s में %2$s भी शामिल हैं, जो यहीं रहेंगे। कोई समूह सिर्फ़ तभी ट्रांसफ़र होता है, जब उसके साथ वे सभी उपकरण भी जाएँ जो कभी उसमें शामिल रहे हैं।</string>
+    <string name="transfer_parent_not_selected">%1$s, %2$s का उप-उपकरण है। %2$s को भी चुनें।</string>
+    <string name="transfer_lent_out">%1$s उधार दिया गया है। पहले उसकी वापसी दर्ज करें।</string>
+    <string name="transfer_outside_reference">%1$s का एक रिकॉर्ड इस ट्रांसफ़र के बाहर की किसी चीज़ की ओर इशारा करता है।</string>
+    <string name="transfer_creating">ट्रांसफ़र पैक बनाया जा रहा है…</string>
+    <string name="transfer_not_created">ट्रांसफ़र पैक नहीं बना: %1$s। कुछ भी नहीं बदला गया।</string>
+    <string name="transfer_not_created_entangled">ट्रांसफ़र पैक नहीं बना: इस फ़ोन के रिकॉर्ड अब भी ट्रांसफ़र किए गए किसी उपकरण की ओर इशारा करते हैं। कुछ भी नहीं बदला गया।</string>
+    <string name="transfer_not_created_generic">ट्रांसफ़र पैक नहीं बना: फ़ाइल लिखी नहीं जा सकी। कुछ भी नहीं बदला गया।</string>
+    <string name="transfer_ready">ट्रांसफ़र पैक तैयार है</string>
+    <string name="transfer_share">शेयर करें</string>
+    <string name="transfer_save_a_copy">कॉपी सहेजें</string>
+    <string name="transfer_size">साइज़: %1$s</string>
+    <string name="transfer_share_title">ट्रांसफ़र पैक शेयर करें</string>
+    <string name="transfer_saved">सहेजा गया</string>
+    <string name="transfer_mark_question">क्या इस फ़ोन पर इन उपकरणों को ट्रांसफ़र किया गया मार्क करें?</string>
+    <string name="transfer_mark">ट्रांसफ़र किया गया मार्क करें</string>
+    <string name="transfer_mark_consequence">इनके रिमाइंडर बंद हो जाएँगे और ये आपकी सूचियों से हट जाएँगे। आप इन्हें अब भी “संग्रहित” में खोल सकते हैं।</string>
+    <string name="transfer_transferred">ट्रांसफ़र किया गया</string>
+    <string name="transfer_transferred_out">ट्रांसफ़र किया गया</string>
+    <string name="transfer_transferred_on">%1$s को ट्रांसफ़र किया गया</string>
+    <string name="transfer_pack_line">ट्रांसफ़र पैक %1$s</string>
+    <string name="transfer_scan_title">उपकरण ट्रांसफ़र किया गया</string>
+    <string name="transfer_handed_over">%1$s, %2$s को सौंप दिया गया था। यह फ़ोन अब इसका रखरखाव नहीं करता।</string>
+    <string name="transfer_changed_since">यह ट्रांसफ़र पैक बनने के बाद %1$s बदल गया। पैक को फिर से बनाएँ।</string>
+    <string name="transfer_could_not_mark">इन उपकरणों को मार्क नहीं किया जा सका। कुछ भी नहीं बदला गया।</string>
+    <string name="transfer_could_not_save">कॉपी सहेजी नहीं जा सकी।</string>
+    <string name="transfer_nothing_to_offer">कोई भी उपकरण ट्रांसफ़र नहीं किया जा सकता।</string>
+    <string name="transfer_already_transferred">ये उपकरण पहले से ट्रांसफ़र किए गए के रूप में मार्क हैं।</string>
+    <string name="transfer_too_large">एक ट्रांसफ़र पैक के लिए इन उपकरणों में बहुत ज़्यादा रिकॉर्ड हैं। एक बार में कम उपकरण ट्रांसफ़र करें।</string>
+    <string name="transfer_pack_gone">यह ट्रांसफ़र पैक अब इस फ़ोन पर नहीं है। इसे फिर से बनाएँ।</string>
+    <string name="transfer_included_with">%1$s के साथ शामिल</string>
+    <string name="transfer_withdraw_record">ट्रांसफ़र रिकॉर्ड वापस लें</string>
+    <string name="transfer_withdraw_title">ट्रांसफ़र पैक %1$s का रिकॉर्ड वापस लें?</string>
+    <string name="transfer_withdraw_body">इसका इस्तेमाल सिर्फ़ तब करें, जब यह ट्रांसफ़र पैक भेजा न गया हो, या किसी दूसरे फ़ोन का रिकॉर्ड ही मान्य रहना चाहिए। इसके उपकरण संग्रहित ही रहेंगे।</string>
+    <string name="transfer_withdraw">वापस लें</string>
+    <string name="transfer_could_not_withdraw">यह रिकॉर्ड वापस नहीं लिया जा सका। कुछ भी नहीं बदला गया।</string>
+    <string name="transfer_withdraw_entangled">यह रिकॉर्ड वापस नहीं लिया जा सका: इस फ़ोन के रिकॉर्ड तब भी ट्रांसफ़र किए गए किसी उपकरण की ओर इशारा करते रहेंगे। कुछ भी नहीं बदला गया।</string>
+    <string name="transfer_bearer">जिसके पास भी यह फ़ाइल होगी, वह इन उपकरणों को इंपोर्ट कर सकता है। इसे सिर्फ़ उसी व्यक्ति या डिवाइस के साथ शेयर करें, जिसे ये मिलने चाहिए।</string>
+    <string name="transfer_mark_entangled">इन उपकरणों को मार्क नहीं किया जा सका: इस फ़ोन के रिकॉर्ड अब भी ट्रांसफ़र किए गए किसी उपकरण की ओर इशारा करते हैं। कुछ भी नहीं बदला गया।</string>
+
+    <string name="transfer_import_asset_transferred_out">यह उपकरण ट्रांसफ़र किया जा चुका है।</string>
+    <string name="transfer_import_title">ट्रांसफ़र पैक इंपोर्ट करें</string>
+    <string name="transfer_import_note">नोट: %1$s</string>
+    <string name="transfer_import_created">%1$s को बनाया गया</string>
+    <string name="transfer_import_contains">इसमें शामिल</string>
+    <string name="transfer_import_import">इंपोर्ट करें</string>
+    <string name="transfer_import_already_here">यह ट्रांसफ़र पैक पहले से इस फ़ोन पर है।</string>
+    <string name="transfer_import_conflicts">यह ट्रांसफ़र पैक इस फ़ोन के रिकॉर्ड से टकराता है, इसलिए कुछ भी इंपोर्ट नहीं किया गया।</string>
+    <string name="transfer_import_tag_used_here">इस पैक का एक NFC टैग यहाँ पहले से %1$s के लिए इस्तेमाल हो रहा है।</string>
+    <string name="transfer_import_duplicate">हो सकता है कि %1$s यहाँ पहले से %2$s के रूप में मौजूद हो।</string>
+    <string name="transfer_import_not_a_pack">यह फ़ाइल ट्रांसफ़र पैक नहीं है।</string>
+    <string name="transfer_import_newer">इस ट्रांसफ़र पैक के लिए ServiceTag का नया वर्शन चाहिए।</string>
+    <string name="transfer_import_damaged">यह ट्रांसफ़र पैक खराब हो गया है और इसे इंपोर्ट नहीं किया जा सकता।</string>
+    <string name="transfer_import_imported">ट्रांसफ़र पैक इंपोर्ट हुआ: %1$s</string>
+    <string name="transfer_import_could_not_import">यह ट्रांसफ़र पैक इंपोर्ट नहीं किया जा सका। कुछ भी नहीं बदला गया।</string>
+    <string name="transfer_import_coming_back">वापस आ रहा है: %1$s</string>
+    <string name="transfer_import_not_brought_back">%1$s को इस फ़ोन से ट्रांसफ़र किया गया था, और यह ट्रांसफ़र पैक उसे वापस नहीं लाता।</string>
+
+    <plurals name="transfer_count_assets">
+        <item quantity="one">%1$d उपकरण</item>
+        <item quantity="other">%1$d उपकरण</item>
+    </plurals>
+    <plurals name="transfer_count_nfc_tags">
+        <item quantity="one">%1$d NFC टैग</item>
+        <item quantity="other">%1$d NFC टैग</item>
+    </plurals>
+    <plurals name="transfer_count_records">
+        <item quantity="one">%1$d रिकॉर्ड</item>
+        <item quantity="other">%1$d रिकॉर्ड</item>
+    </plurals>
+    <plurals name="transfer_count_schedules">
+        <item quantity="one">%1$d शेड्यूल</item>
+        <item quantity="other">%1$d शेड्यूल</item>
+    </plurals>
+    <plurals name="transfer_count_documents">
+        <item quantity="one">%1$d दस्तावेज़ या फ़ोटो</item>
+        <item quantity="other">%1$d दस्तावेज़ और फ़ोटो</item>
+    </plurals>
+    <plurals name="transfer_count_service_cases">
+        <item quantity="one">%1$d सेवा मामला</item>
+        <item quantity="other">%1$d सेवा मामले</item>
+    </plurals>
+
+    <string name="backup_title">बैकअप</string>
+    <string name="backup_back">वापस जाएँ</string>
+    <string name="backup_last_backup">पिछला बैकअप</string>
+    <string name="backup_never">कभी नहीं</string>
+    <string name="backup_set_explained">बैकअप सेट, आपके चुने हुए फ़ोल्डर में दो फ़ाइलें होती हैं: डेटा, और उसके साथ अनुलग्नक फ़ाइलें। इस फ़ोन के बाहर यही इकलौती कॉपी है।</string>
+    <string name="backup_export_set">बैकअप सेट एक्सपोर्ट करें</string>
+    <string name="backup_folder_not_writable">उस फ़ोल्डर में लिखा नहीं जा सकता</string>
+    <string name="backup_restore_section">पुनर्स्थापित करें</string>
+    <string name="backup_restore_data_explained">डेटा पुनर्स्थापित करने पर पहले इस फ़ोन का सब कुछ मिटा दिया जाता है, फिर फ़ाइल लोड की जाती है।</string>
+    <string name="backup_restore_data">डेटा पुनर्स्थापित करें</string>
+    <string name="backup_restore_files_explained">फिर अनुलग्नक फ़ाइलें वापस लाने के लिए उसी सेट का फ़ाइल आर्काइव पुनर्स्थापित करें। इससे फ़ाइलें जुड़ती हैं, कुछ भी मिटता नहीं।</string>
+    <string name="backup_restore_files">फ़ाइलें पुनर्स्थापित करें</string>
+    <string name="backup_replace_title">सब कुछ बदलें?</string>
+    <string name="backup_replace_body">इस फ़ोन का हर उपकरण, टैग और लिंक मिटा दिया जाएगा और उसकी जगह फ़ाइल में मौजूद डेटा आ जाएगा। इसे पहले जैसा नहीं किया जा सकता।</string>
+    <string name="backup_replace_type_word">पुष्टि करने के लिए %1$s टाइप करें</string>
+    <string name="backup_replace_confirm">बदलें</string>
+    <string name="backup_cancel">रद्द करें</string>
+    <string name="backup_restore_empty_title">यह बैकअप पुनर्स्थापित करें?</string>
+    <string name="backup_restore_empty_body">इस फ़ोन पर अभी कोई रिकॉर्ड नहीं है, इसलिए बदलने के लिए कुछ भी नहीं है।</string>
+    <string name="backup_restore_confirm">पुनर्स्थापित करें</string>
+
+    <string name="backup_no_attachment_folder">पहले सेटिंग में एक अनुलग्नक फ़ोल्डर चुनें</string>
+    <string name="backup_exported_as">%1$s के रूप में एक्सपोर्ट किया गया</string>
+
+    <string name="backup_export_failed_entangled">एक्सपोर्ट नहीं हो सका: इस फ़ोन के रिकॉर्ड अब भी ट्रांसफ़र किए गए किसी उपकरण की ओर इशारा करते हैं</string>
+    <string name="backup_export_failed_files_archive">एक्सपोर्ट नहीं हो सका: फ़ाइल आर्काइव लिखा नहीं जा सका</string>
+    <string name="backup_export_failed">एक्सपोर्ट नहीं हो सका: %1$s</string>
+    <string name="backup_nothing_saved">%1$s। कुछ भी सहेजा नहीं गया।</string>
+    <string name="backup_not_saved">बैकअप सहेजा नहीं गया: %1$s</string>
+    <plurals name="backup_left_behind">
+        <item quantity="one">%1$s। %2$s को हटाया नहीं जा सका — इसे खुद मिटाएँ।</item>
+        <item quantity="other">%1$s। %2$s को हटाया नहीं जा सका — इन्हें खुद मिटाएँ।</item>
+    </plurals>
+    <plurals name="backup_incomplete_missing">
+        <item quantity="one">%1$d अनुलग्नक फ़ाइल मौजूद नहीं है</item>
+        <item quantity="other">%1$d अनुलग्नक फ़ाइलें मौजूद नहीं हैं</item>
+    </plurals>
+    <plurals name="backup_incomplete_changed">
+        <item quantity="one">%1$d अनुलग्नक फ़ाइल जोड़े जाने के बाद बदल गई है</item>
+        <item quantity="other">%1$d अनुलग्नक फ़ाइलें जोड़े जाने के बाद बदल गई हैं</item>
+    </plurals>
+    <string name="backup_incomplete_both">%1$s और %2$s</string>
+    <string name="backup_incomplete_not_covered">फ़ाइल आर्काइव में सभी अनुलग्नक शामिल नहीं थे</string>
+
+    <string name="backup_restored_data">इंपोर्ट किया गया: %1$s, %2$s, %3$s</string>
+    <string name="backup_restored_data_attachments">इंपोर्ट किया गया: %1$s, %2$s, %3$s · %4$s</string>
+    <plurals name="backup_restored_assets">
+        <item quantity="one">%1$d उपकरण</item>
+        <item quantity="other">%1$d उपकरण</item>
+    </plurals>
+    <plurals name="backup_restored_tags">
+        <item quantity="one">%1$d टैग</item>
+        <item quantity="other">%1$d टैग</item>
+    </plurals>
+    <plurals name="backup_restored_links">
+        <item quantity="one">%1$d लिंक</item>
+        <item quantity="other">%1$d लिंक</item>
+    </plurals>
+    <plurals name="backup_restored_attachments_listed">
+        <item quantity="one">%1$d अनुलग्नक सूची में है; उसकी फ़ाइल पाने के लिए फ़ाइल आर्काइव पुनर्स्थापित करें</item>
+        <item quantity="other">%1$d अनुलग्नक सूची में हैं; उनकी फ़ाइलें पाने के लिए फ़ाइल आर्काइव पुनर्स्थापित करें</item>
+    </plurals>
+
+    <plurals name="backup_restored_files">
+        <item quantity="one">%1$d फ़ाइल पुनर्स्थापित की गई, %2$d छोड़ी गईं</item>
+        <item quantity="other">%1$d फ़ाइलें पुनर्स्थापित की गईं, %2$d छोड़ी गईं</item>
+    </plurals>
+    <string name="backup_report_separator">"; "</string>
+    <plurals name="backup_files_already_present">
+        <item quantity="one">%1$d पहले से मौजूद</item>
+        <item quantity="other">%1$d पहले से मौजूद</item>
+    </plurals>
+    <plurals name="backup_files_missing_entries">
+        <item quantity="one">सूची की %1$d फ़ाइल आर्काइव में नहीं थी</item>
+        <item quantity="other">सूची की %1$d फ़ाइलें आर्काइव में नहीं थीं</item>
+    </plurals>
+    <plurals name="backup_files_unexpected_entries">
+        <item quantity="one">आर्काइव की %1$d फ़ाइल सूची में नहीं थी</item>
+        <item quantity="other">आर्काइव की %1$d फ़ाइलें सूची में नहीं थीं</item>
+    </plurals>
+    <string name="backup_set_mismatch">ये फ़ाइलें बैकअप सेट %1$s की हैं, %2$s की नहीं</string>
+    <string name="backup_restore_failed">पुनर्स्थापना नहीं हो सकी: %1$s</string>
+    <string name="backup_restore_transferred_out_one">पुनर्स्थापना नहीं हो सकी: इस बैकअप में अब भी %1$s है, जिसे इस फ़ोन से ट्रांसफ़र किया गया था। कुछ भी नहीं बदला गया।</string>
+    <plurals name="backup_restore_transferred_out_many">
+        <item quantity="one">पुनर्स्थापना नहीं हो सकी: इस बैकअप में अब भी %1$d ऐसे उपकरण हैं, जिन्हें इस फ़ोन से ट्रांसफ़र किया गया था। कुछ भी नहीं बदला गया।</item>
+        <item quantity="other">पुनर्स्थापना नहीं हो सकी: इस बैकअप में अब भी %1$d ऐसे उपकरण हैं, जिन्हें इस फ़ोन से ट्रांसफ़र किया गया था। कुछ भी नहीं बदला गया।</item>
+    </plurals>
+
+    <string name="backup_cannot_create">चुने गए फ़ोल्डर में %1$s नहीं बनाई जा सकी</string>
+    <string name="backup_cannot_open_for_writing">%1$s को लिखने के लिए खोला नहीं जा सका</string>
+    <string name="backup_cannot_open_for_reading">%1$s को पढ़ने के लिए खोला नहीं जा सका</string>
+</resources>

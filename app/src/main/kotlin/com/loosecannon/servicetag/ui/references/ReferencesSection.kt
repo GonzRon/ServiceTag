@@ -30,15 +30,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.asAttachmentOwner
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.links.NO_HANDLER_MESSAGE
 import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -49,7 +52,7 @@ import kotlinx.coroutines.launch
  * The open-time refusal, ratified 2026-09-23 (§10, plan §18.14). **Not** the save-time sentence:
  * nothing is being saved here, the row is already stored, and the two moments got two lines.
  */
-internal const val BLOCKED_AT_OPEN = "ServiceTag will not open that kind of link."
+internal val BLOCKED_AT_OPEN: String get() = localized(R.string.references_blocked_at_open)
 
 /**
  * The open decision, shared by a reference's Open and a saved file's P85-9 button (#85 C25). The
@@ -181,10 +184,14 @@ internal fun ReferencesList(
 ) {
     val scope = rememberCoroutineScope()
     SectionHeader(
-        title = if (state.rows.isEmpty()) "References" else "References · ${state.rows.size}",
+        title = if (state.rows.isEmpty()) {
+            stringResource(R.string.references_header)
+        } else {
+            stringResource(R.string.references_header_count, state.rows.size)
+        },
     )
     if (state.rows.isEmpty()) {
-        QuietLine("No references yet")
+        QuietLine(stringResource(R.string.references_empty))
     } else {
         Column {
             state.rows.forEach { row ->
@@ -207,7 +214,7 @@ internal fun ReferencesList(
     TextButton(onClick = onAddLink) {
         Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
-        Text("Add link")
+        Text(stringResource(R.string.references_add_link))
     }
 }
 
@@ -252,10 +259,10 @@ private fun ReferenceRow(
         }
         Box {
             IconButton(onClick = { menu = true }) {
-                Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+                Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.references_more))
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Open") }, onClick = { menu = false; onOpen() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.references_open)) }, onClick = { menu = false; onOpen() })
                 if (!readOnly) {
                     // #85 C24 (R85-12, ratified order): Open, then P85-1, then Edit and Remove.
                     if (row.materializable) {
@@ -264,8 +271,8 @@ private fun ReferenceRow(
                             onClick = { menu = false; onSaveAsDocument() },
                         )
                     }
-                    DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() })
-                    DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onRemove() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.references_edit)) }, onClick = { menu = false; onEdit() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.references_remove)) }, onClick = { menu = false; onRemove() })
                 }
             }
         }
@@ -274,7 +281,7 @@ private fun ReferenceRow(
 
 /** The three ratified kind words (§10). The enum is never rendered raw. */
 private fun ReferenceKind.label(): String = when (this) {
-    ReferenceKind.WEB_URL -> "Web link"
-    ReferenceKind.NOTE_LINK -> "Note"
-    ReferenceKind.OTHER -> "Other"
+    ReferenceKind.WEB_URL -> localized(R.string.references_kind_web_link)
+    ReferenceKind.NOTE_LINK -> localized(R.string.references_kind_note)
+    ReferenceKind.OTHER -> localized(R.string.references_kind_other)
 }

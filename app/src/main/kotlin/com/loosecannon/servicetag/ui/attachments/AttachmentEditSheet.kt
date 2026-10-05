@@ -26,9 +26,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
@@ -36,11 +39,11 @@ import com.loosecannon.servicetag.ui.references.MaterializeStrings
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /** #85 §6 (reused, hoisted byte-identical): this sheet's words, which the Save-as-document review reuses. */
-internal const val NAME_LABEL = "Name"
-internal const val KIND_HEADER = "Kind"
-internal const val NOTES_LABEL = "Notes"
-internal const val CANCEL_LABEL = "Cancel"
-internal const val SAVE_LABEL = "Save"
+internal val NAME_LABEL: String get() = localized(R.string.attachments_name_label)
+internal val KIND_HEADER: String get() = localized(R.string.attachments_kind_header)
+internal val NOTES_LABEL: String get() = localized(R.string.attachments_notes_label)
+internal val CANCEL_LABEL: String get() = localized(R.string.attachments_cancel)
+internal val SAVE_LABEL: String get() = localized(R.string.attachments_save)
 
 /**
  * Rename, re-kind, re-role (#67, an asset's files only), captured-on, notes, and Delete, in a
@@ -121,7 +124,7 @@ fun AttachmentEditSheet(
             DateField(
                 value = capturedOn,
                 onValueChange = { capturedOn = it },
-                label = "Captured on",
+                label = stringResource(R.string.attachments_captured_on_label),
             )
             OutlinedTextField(
                 value = notes,
@@ -144,7 +147,7 @@ fun AttachmentEditSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { confirming = true }) {
                     Text(
-                        text = "Delete",
+                        text = stringResource(R.string.attachments_delete),
                         color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
                     )
                 }
@@ -173,17 +176,17 @@ fun AttachmentEditSheet(
     if (confirming) {
         AlertDialog(
             onDismissRequest = { confirming = false },
-            title = { Text("Delete file?") },
+            title = { Text(stringResource(R.string.attachments_delete_title)) },
             text = {
                 Text(
-                    "Delete ${row.displayName}? The file is removed from your attachment folder.",
+                    stringResource(R.string.attachments_delete_body, row.displayName),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
                 TextButton(onClick = { confirming = false; onDelete() }) {
                     Text(
-                        text = "Delete",
+                        text = stringResource(R.string.attachments_delete),
                         color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
                     )
                 }

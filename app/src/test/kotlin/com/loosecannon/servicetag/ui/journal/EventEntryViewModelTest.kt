@@ -17,7 +17,12 @@ import com.loosecannon.servicetag.core.usecase.FieldProblem
 import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.ProfileConsumableInput
 import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.l10n.AppText
+import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.testing.EnglishResources
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.ResourcePack
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
@@ -218,6 +223,81 @@ class EventEntryViewModelTest {
         assertEquals("oz", used.unit)
 
         assertEquals(stored.id, saved.await())
+    }
+
+    /**
+     * #102 (PR #106 review): a German owner types decimals with a comma. "7,4" is pH 7.4 — the badge reads it while
+     * it is typed — and "0,5" half an ounce; what is stored is the number. Editing the entry draws them back the same
+     * way ("7,4", "0,5"), so a save that changes nothing re-reads the same numbers.
+     */
+    @Test fun aCommaDecimalLanguageTypesReadingsAndQuantitiesWithAComma() = runTest {
+        val spa = spa()
+        AppText.install(ResourcePack.pack("de"))
+        try {
+            val vm = entryModel(spa.id, spa.profile.id, null)
+            val loaded = vm.state.first { it.loaded }
+
+            vm.onValue(spa.def("ph").id, "7,9")
+            assertEquals(RangeState.HIGH, vm.state.value.fields.first().liveState)
+            vm.onValue(spa.def("ph").id, "7,4")
+            vm.onValue(spa.def("free_chlorine").id, "2,5")
+            vm.addSuggested(loaded.suggestions.first())
+            vm.onConsumable(0, quantity = "0,5")
+            vm.save()
+            vm.state.first { !it.saving }
+
+            val stored = graph.events.forAsset(spa.id).single()
+            assertEquals(7.4, stored.measurements.single { it.definitionId == spa.def("ph").id }.valueNum!!, 0.0)
+            assertEquals(2.5, stored.measurements.single { it.definitionId == spa.def("free_chlorine").id }.valueNum!!, 0.0)
+            assertEquals(0.5, stored.consumables.single().quantity, 0.0)
+
+            val editing = entryModel(spa.id, null, stored.id).state.first { it.loaded }
+            assertEquals("7,4", editing.fields.first { it.definition.key == "ph" }.text)
+            assertEquals("2,5", editing.fields.first { it.definition.key == "free_chlorine" }.text)
+            assertEquals("0,5", editing.consumables.single().quantity)
+        } finally {
+            AppText.install(EnglishResources())
+        }
+    }
+
+    /**
+     * German reads "45.000" as forty-five thousand, which no reading here can be: it is refused against its field,
+     * never stored as 45.
+     */
+    @Test fun aCommaDecimalLanguageRefusesAThousandsShapedReading() = runTest {
+        val spa = spa()
+        AppText.install(ResourcePack.pack("de"))
+        try {
+            val vm = entryModel(spa.id, spa.profile.id, null)
+            vm.state.first { it.loaded }
+
+            vm.onValue(spa.def("ph").id, "7,4")
+            vm.onValue(spa.def("free_chlorine").id, "45.000")
+            assertNull(vm.state.value.fields.first { it.definition.key == "free_chlorine" }.liveState)
+            vm.save()
+            val refused = vm.state.first { !it.saving }
+
+            assertEquals(localized(R.string.journal_field_not_a_number, "Free chlorine"), refused.firstProblem)
+            assertEquals(0, graph.events.forAsset(spa.id).size)
+        } finally {
+            AppText.install(EnglishResources())
+        }
+    }
+
+    /** English never read a comma as a decimal point: "7,4" is still not a number there, and nothing is written. */
+    @Test fun englishStillRefusesACommaDecimal() = runTest {
+        val spa = spa()
+        val vm = entryModel(spa.id, spa.profile.id, null)
+        vm.state.first { it.loaded }
+
+        vm.onValue(spa.def("ph").id, "7,4")
+        assertNull(vm.state.value.fields.first().liveState)
+        vm.onValue(spa.def("free_chlorine").id, "2.0")
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals("pH is not a number", refused.firstProblem)
+        assertEquals(0, graph.events.forAsset(spa.id).size)
     }
 
     @Test fun saveIsGuardedWhileSaving() = runTest {
