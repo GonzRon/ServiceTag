@@ -1,0 +1,20 @@
+name: hygiene
+# Its own workflow, on pull requests only, so a pull request's head carries exactly one check run
+# named "hygiene": the ruleset "master: hygiene required" waits on that name, and a job skipped by
+# an `if:` inside the push-triggered ci workflow would also count as passed.
+on:
+  pull_request:
+jobs:
+  hygiene:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}   # the pull request's own tip, not the merge ref
+          fetch-depth: 0                        # the whole range, and origin/<base branch>
+          persist-credentials: false            # this job needs no git credentials after the checkout
+      - name: the pull request's own commits follow CLAUDE.md
+        env:
+          BASE: origin/${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash tools/check-commit-hygiene.sh "$BASE" "$HEAD_SHA"
