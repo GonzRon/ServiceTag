@@ -112,11 +112,12 @@ class HomeAssistantStateClient(
      * #105 (B2; owner ruling Q2): the setup sheet's one foreground `GET <base>/api/states`, under exactly the rules
      * above — the same gate, headers, timeouts and failure map — with its own body cap, [LIST_MAX_BODY_BYTES], because
      * a whole installation's states run to megabytes where one entity's run to bytes. The poll's cap is untouched.
-     * Called only when the owner taps Choose entity or Refresh; never by the runner or the worker.
+     * Called only when the owner taps Choose entity or Refresh; never by the runner or the worker. The answer is mapped
+     * on [io] too: up to 8 MiB of JSON is not parsed on the caller's thread, which is the sheet's, the main one.
      */
     suspend fun listStates(connection: HaConnection, token: Secret): HaListOutcome =
         when (val exchange = exchange(connection, STATES_LIST_PATH, token, LIST_MAX_BODY_BYTES)) {
-            is Exchange.Answered -> mapHaStatesAnswer(exchange.answer)
+            is Exchange.Answered -> withContext(io) { mapHaStatesAnswer(exchange.answer) }
             is Exchange.Failed -> HaListOutcome.Failed(exchange.outcome.kind, exchange.outcome.detail)
         }
 

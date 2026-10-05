@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.ui.homeassistant.HA_ENTER_TOKEN_AGAIN
 import com.loosecannon.servicetag.ui.homeassistant.HA_NOT_CONNECTED
 import com.loosecannon.servicetag.ui.homeassistant.Notice
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -145,21 +146,44 @@ internal class LinkSeasonSyncViewModel(
     }
 
     /** The pick: the exact candidate, the typed text cleared, the browser closed, the form back. */
-    fun pick(candidate: HaEntityCandidate) = _state.update {
-        it.copy(chosen = candidate, entityId = "", manualEntry = false, browse = null, entityLine = null, refusal = null)
+    fun pick(candidate: HaEntityCandidate) {
+        stopReading()
+        _state.update {
+            it.copy(
+                chosen = candidate, entityId = "", manualEntry = false, browse = null, entityLine = null, refusal = null,
+            )
+        }
     }
 
     /** Back from the browser without a pick: whatever was chosen or typed before stays. */
-    fun closeBrowse() = _state.update { it.copy(browse = null) }
+    fun closeBrowse() {
+        stopReading()
+        _state.update { it.copy(browse = null) }
+    }
 
     /** Enter entity ID manually: the field, prefilled with a pick's id if there was one, which it then replaces. */
-    fun enterManually() = _state.update {
-        it.copy(manualEntry = true, entityId = it.chosen?.entityId ?: it.entityId, chosen = null, browse = null)
+    fun enterManually() {
+        stopReading()
+        _state.update {
+            it.copy(manualEntry = true, entityId = it.chosen?.entityId ?: it.entityId, chosen = null, browse = null)
+        }
+    }
+
+    /**
+     * The read in flight, if any. A new read, a pick, manual entry and a close each cancel it, which disconnects the
+     * request (C19), so an answer that is no longer wanted never lands in a browser opened after it.
+     */
+    private var listing: Job? = null
+
+    private fun stopReading() {
+        listing?.cancel()
+        listing = null
     }
 
     private fun readEntities() {
+        stopReading()
         _state.update { state -> state.browse?.let { state.copy(browse = it.copy(loading = true)) } ?: state }
-        viewModelScope.launch {
+        listing = viewModelScope.launch {
             val outcome: HaListOutcome? = try {
                 listEntities()
             } catch (e: CancellationException) {
@@ -171,7 +195,7 @@ internal class LinkSeasonSyncViewModel(
                 return@launch
             }
             _state.update { state ->
-                // The browser was closed while the read ran: its answer is dropped, nothing else changes.
+                // The browser is gone (its close also cancelled this read): nothing changes.
                 val browse = state.browse ?: return@update state
                 state.copy(
                     browse = when (outcome) {
@@ -181,7 +205,15 @@ internal class LinkSeasonSyncViewModel(
                             failure = seasonSyncErrorNotices(outcome.kind, outcome.detail, entityId = ""),
                         )
                         is HaListOutcome.Listed -> withRows(
-                            browse.copy(loading = false, all = outcome.entities, loadedOnce = true, failure = emptyList()),
+                            browse.copy(
+                                loading = false,
+                                all = outcome.entities,
+                                loadedOnce = true,
+                                failure = emptyList(),
+                                // Once per list, not per keystroke: P105-8 rather than P105-9.
+                                scopeEmpty = pickerRows(outcome.entities, EntityScope.INPUT_BOOLEANS, "")
+                                    .rows.isEmpty(),
+                            ),
                         )
                     },
                 )
@@ -189,15 +221,10 @@ internal class LinkSeasonSyncViewModel(
         }
     }
 
-    /** The rows for the browser's query over its last good list, and whether the scope is empty outright. */
+    /** The rows for the browser's query over its last good list. */
     private fun withRows(browse: EntityBrowseState): EntityBrowseState {
         val shown = pickerRows(browse.all, EntityScope.INPUT_BOOLEANS, browse.query)
-        val whole = pickerRows(browse.all, EntityScope.INPUT_BOOLEANS, "")
-        return browse.copy(
-            rows = shown.rows,
-            truncatedList = shown.truncatedList,
-            scopeEmpty = browse.loadedOnce && whole.rows.isEmpty(),
-        )
+        return browse.copy(rows = shown.rows, truncatedList = shown.truncatedList)
     }
 
     fun save() {

@@ -29,7 +29,9 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.ui.condition.SeasonOfferPrompt
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.createTempDirectory
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -462,6 +464,39 @@ class LinkSeasonSyncViewModelTest {
         assertFalse(sheet.now.browse!!.scopeEmpty)
         sheet.onQuery("")
         assertEquals(listOf(heaterHelper, stove), sheet.now.browse!!.rows)
+    }
+
+    /**
+     * Row 14: a read still running when the browser closes is cancelled — the request is disconnected, not merely
+     * ignored — so its late answer cannot land in a browser opened after it.
+     */
+    @Test fun aReadStillRunningIsCancelledByCloseAndNeverLandsInTheNextBrowser() = runTest {
+        connect()
+        handAsset()
+        val slow = CompletableDeferred<HaListOutcome?>()
+        var cancelled = false
+        entityList = {
+            try {
+                slow.await()
+            } catch (e: CancellationException) {
+                cancelled = true
+                throw e
+            }
+        }
+        val sheet = open("hand", SeasonSyncSheetPurpose.LINK)
+        act { sheet.chooseEntity() }
+        assertTrue(sheet.now.browse!!.loading)
+
+        act { sheet.closeBrowse() }
+        assertTrue("closing the browser cancels its read", cancelled)
+
+        entityList = { HaListOutcome.Listed(listOf(stove)) }
+        act { sheet.chooseEntity() }
+        slow.complete(HaListOutcome.Listed(listOf(heaterHelper)))
+        advanceUntilIdle()
+
+        assertEquals("the second read's list, never the first's", listOf(stove), sheet.now.browse!!.rows)
+        assertFalse(sheet.now.browse!!.loading)
     }
 
     /** Rows 14, 17: no connection and no token draw their sentences; no state value carries the token. */

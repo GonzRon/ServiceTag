@@ -418,7 +418,7 @@ class SeasonSyncScreensTest {
      * #105 row 19 (B3): Choose entity opens the browser in the sheet's place — its title, its scope line, Refresh and
      * the manual path — and Cancel returns to the form with nothing chosen and nothing written. The rows, the
      * sentences and the pick need a Home Assistant to answer, which the emulator has none of: those are the JVM's
-     * (`LinkSeasonSyncViewModelTest`); the read this tap starts is dropped when the browser closes.
+     * (`LinkSeasonSyncViewModelTest`); the read this tap starts is cancelled when the browser closes.
      */
     @Test fun chooseEntityOpensTheBrowserAndCancelReturnsToTheForm() {
         connect()

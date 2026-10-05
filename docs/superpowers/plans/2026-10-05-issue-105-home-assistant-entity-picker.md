@@ -255,7 +255,16 @@ nothing → 14; names are presentation only → 12 and §4; JVM/Android/fake-HA 
 - **Gates run here:** `:core:test` (the two B1 classes, 8 cases, and the whole core suite green). **Not run here:**
   `:app:testDebugUnitTest` (no Android SDK in the planning environment; CI on the branch is the proof of record for
   the client rows, the view-model rows, `LocalizationCoverageTest` and `UiLiteralGuardTest`) and the connected class
-  (R2 on `emulator-5554`, the controller's step).
+  (R2 on `emulator-5554`, the controller's step). CI's command was green on `471ba25`.
+- **Task review (one, B1–B4 together; policy).** Three findings, fixed in one batch: (1) the list's JSON — up to
+  8 MiB — was mapped on the caller's thread, the sheet's main one; `listStates` now maps it on the client's `io`;
+  (2) a read still running when the browser closed, or when Choose entity started another, was only ignored, so its
+  late answer could land in the next browser over a newer list; the view model now holds the read's job and a new
+  read, a pick, manual entry and a close each cancel it (the client disconnects on cancel), pinned by a new row-14
+  case that fails without it; (3) P105-8's "scope empty" was re-sorted on every keystroke; it is computed once per
+  list. Noted, not changed: the system back gesture while the browser is open closes the whole sheet (no pick, nothing
+  written), as the shipped sheet's back does; a key-store or database failure before the read draws no sentence, as
+  Save's does (none is ratified for it).
 
 ## 10. Proofs at the tip (controller)
 
