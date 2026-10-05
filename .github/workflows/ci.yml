@@ -74,3 +74,17 @@ jobs:
       - name: the Stage-B schedules loader's tests
         run: uv run --frozen pytest
         working-directory: tools/servicetag-schedules
+  hygiene:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}   # the pull request's own tip, not the merge ref
+          fetch-depth: 0                        # the whole range, and origin/<base branch>
+          persist-credentials: false            # this job needs no git credentials after the checkout
+      - name: the pull request's own commits follow CLAUDE.md
+        env:
+          BASE: origin/${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash tools/check-commit-hygiene.sh "$BASE" "$HEAD_SHA"
