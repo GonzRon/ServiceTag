@@ -81,7 +81,7 @@ prints the three activities sorted and `other 0 []`; a fourth exported component
 
 Each prints nothing, or the count stated. The author, attribution and empty-body lines, and the
 three content greps, are now also enforced on every pull request, over its own commits, by
-`tools/check-commit-hygiene.sh` (CI's `hygiene` job); the controller still runs them all here.
+`tools/check-commit-hygiene.sh` (the `hygiene` workflow, required on master); the controller still runs them all here.
 
 - no e-mail in added lines: `git diff <base>..HEAD | grep -nE '^\+.*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'` (fixture URLs carry none)
 - no home path: `git diff <base>..HEAD | grep -nE '^\+.*/hom[e]/[a-z]'`

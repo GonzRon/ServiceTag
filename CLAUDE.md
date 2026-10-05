@@ -25,7 +25,8 @@ commit or pull request attribution. Product design lives in `docs/`, not here.
 - Name the branch for the work, `fix-…` or `issue-123-…`. Never start it with a tool's name.
 - Merge with a merge commit whose subject carries no tool-named branch. Never squash or rebase
   away the owner's history.
-- CI's `hygiene` job runs `tools/check-commit-hygiene.sh` over the pull request's own commits. Run
+- The `hygiene` workflow runs `tools/check-commit-hygiene.sh` over the pull request's own commits and
+  master requires it green (ruleset "master: hygiene required"; repository admins can bypass). Run
   it before pushing: `bash tools/check-commit-hygiene.sh origin/master HEAD`.
 
 ## The gates CI cannot run
