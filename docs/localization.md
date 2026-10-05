@@ -126,7 +126,7 @@ English string without every pack, compares rendered words or draws a date or nu
 
 - **Copy is ratified as resources.** A plan that ratifies new words (a `P<n>-<m>` id) lands them in
   `values/strings_<area>.xml` with the id in the comment, and in every pack in the same change.
-- **A branch cut before the resource layer** (1.7.1 was) brings its words in on merge: each new constant becomes a
+- **A branch cut before the resource layer** (the 1.7.1 train was) brings its words in on merge: each new constant becomes a
   resource and a getter, with nine translations, before the merge is pushed.
 - **Translations are not natively reviewed.** A change that adds words translates them with the glossary, and
   `LocalizationCoverageTest` checks them mechanically.

@@ -459,7 +459,8 @@ class VersionAgreementTest {
         }
         assertTrue(
             "the row must name the schema and the format, unchanged",
-            Regex("""schema \*\*21\*\*.*format \*\*20\*\*""").containsMatchIn(row) && row.contains("unchanged"),
+            Regex("""schema \*\*21\*\*.*format \*\*20\*\*""").containsMatchIn(row) &&
+                row.contains("format **20** unchanged"),
         )
         assertTrue(
             "the row must give the new-capability reason it is a MINOR",

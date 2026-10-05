@@ -1,6 +1,6 @@
 # Current ServiceTag capabilities
 
-The current released baseline is **ServiceTag 1.7.0**. See the [1.7.0 release notes](releases/1.7.0.md) for the exact release delta.
+The current released baseline is **ServiceTag 1.8.0**. See the [1.8.0 release notes](releases/1.8.0.md) for the exact release delta.
 
 ServiceTag is an NFC-first, local-first equipment maintenance application. The NFC tag is the doorway; the Asset record and its long-lived service history are the product.
 
@@ -164,6 +164,18 @@ The API can work with Assets, maintenance, documents/references, SupplyItems, In
 
 See [Developer API v1](api/v1.md).
 
+## Languages
+
+ServiceTag's interface is available in English and nine more languages: Spanish, Portuguese, Simplified Chinese, French, Japanese, Russian, German, Italian, and Hindi. The app follows the phone's language; on Android 13 and later, Android's per-app language setting can give ServiceTag a language of its own.
+
+Dates, dates with times, and decimal numbers are drawn and read in the language's own form, and date fields follow the date format of the language and region.
+
+Localization is presentation only. Stored records, backups, Transfer Packs, the Developer API, MCP, and NFC tags keep language-neutral values, and text the owner typed is shown as entered.
+
+The translations are drafted with the [localization glossary](localization-glossary.md) and checked mechanically; they are not natively reviewed.
+
+Details: [Localization](localization.md) and the [1.8.0 release notes](releases/1.8.0.md).
+
 ## What ServiceTag deliberately is not
 
 The released app is not:
@@ -181,5 +193,6 @@ Those boundaries keep the core product focused on durable equipment identity and
 - [Local-first design, privacy, and permissions](local-first-and-permissions.md)
 - [Home Assistant season sync](home-assistant-season-sync.md)
 - [Developer API v1](api/v1.md)
+- [1.8.0 release notes](releases/1.8.0.md)
 - [1.7.0 release notes](releases/1.7.0.md)
 - [Current roadmap — #104](https://github.com/GonzRon/ServiceTag/issues/104)

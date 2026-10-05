@@ -199,7 +199,7 @@ it came from. Neither shows the address, the home Wi-Fi's name or the token, and
   (Doze) have not been observed, and a background check's read of the Wi-Fi name is proven only on an emulator.
 - **The entity list is `input_boolean` helpers only**, read through the REST states list; a switch or a sensor is
   entered by hand. Devices are not shown: Home Assistant's device and display registries are not read in this
-  release. Lists past the first 2,000 helpers are cut, and the sheet asks you to search; a list over 8 MB is refused
+  release. Lists past the first 2,000 helpers are cut, and the sheet asks you to search; a list over 8 MiB is refused
   as unreadable, and manual entry remains.
 - **Some cases are silent.** If the phone's key store or database fails during Sync now or a card action, nothing
   is shown and the last status stays; try again. A capture that reads a blank Wi-Fi name, or a name Android hides
