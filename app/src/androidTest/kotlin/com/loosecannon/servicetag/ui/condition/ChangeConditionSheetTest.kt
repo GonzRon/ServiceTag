@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.dateFieldText
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -88,7 +89,7 @@ class ChangeConditionSheetTest {
         rule.onAllNodes(isSelected()).assertCountEquals(0)
         rule.onNodeWithText("Save condition").assertIsNotEnabled()
         field("What is wrong? (optional)").assertIsDisplayed()
-        field("When did this change?").assert(hasText(LocalDate.now().toString()))
+        field("When did this change?").assert(hasText(dateFieldText(LocalDate.now().toString())))
 
         rule.onNodeWithText("Down").performClick()
         field("What is wrong? (optional)").performTextInput("Will not start")
