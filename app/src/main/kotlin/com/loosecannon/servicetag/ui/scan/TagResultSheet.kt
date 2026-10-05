@@ -37,7 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,7 +56,6 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.transfer.TransferStrings
 import com.loosecannon.servicetag.ui.theme.SheetShape
 import com.loosecannon.servicetag.ui.theme.SheetSentence
-import java.util.Locale
 
 /**
  * What a scanned (format, key) pair turned out to be — including "not ours"
@@ -337,7 +336,7 @@ internal fun NfcSheet(
                 }
                 Text(
                     // The eyebrow's capitals follow the rules of the language it is written in (#102).
-                    text = eyebrow.uppercase(LocalConfiguration.current.locales[0] ?: Locale.getDefault()), // l10n-ok: casing follows the configuration's locale
+                    text = eyebrow.uppercase(LocalLocale.current.platformLocale), // l10n-ok: casing follows the composition's locale
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = accent,
                 )
