@@ -1,4 +1,14 @@
-# #113 + #114 — Home Assistant publishing: equipment status and the Season Start service: master plan (rev 2, 2026-10-22)
+# #113 + #114 — Home Assistant publishing: equipment status and the Season Start service: master plan (rev 2.1, 2026-10-22)
+
+> **Rev 2.1 (2026-10-22)** folds the scoped re-review (`plan-review-rev2-scoped.md`), nothing else: **R-1** a
+> tombstone only when the stored binding was enabled; Disable of a disabled binding is a no-op; invariant I19 (no
+> PENDING tombstone on a pair an enabled binding claims) (C25, C31, C34, the delivery and tombstone tables, rows 96–97).
+> **R-2** `drain()` skips a NEEDS_OWNER error at the current pair, and the midnight tick and the worker skip a WAIT one;
+> reconcile mode (start, resume, Publish now) and any pair move retry both (C17, C30, C31, row 42a). **R-3** the
+> delivery table's Disable row is Disable only; Change target goes to PENDING. **N-1** the resume limit counts from the
+> last completed read-back (C31). **N-2** Revalidate on the same helper keeps a true "Published" line; a new enabled
+> claim supersedes a PENDING or UNDELIVERABLE tombstone on its pair (C25, the tables). Also C34: a tombstone record
+> deletes by its id, never by the pair.
 
 > **Rev 2 (2026-10-22)** folds the independent plan review (`plan-review-rev1.md`, APPROVE WITH CORRECTIONS, F-1…F-28)
 > under the controller's rulings, nothing else:
@@ -486,7 +496,12 @@ fun seasonReadiness(
     `(revision, desiredRevision)` (initial publication, re-enable, target change and reconcile compare first, #113);
     `Post(value)` when the read differs; **`Done` ⇔ `lastVerifiedValue == desiredValue` and the verified pair equals
     the current pair** (F-1), and the caller is not a reconcile. `drain()` selects every enabled binding whose verified
-    pair differs from its current pair.
+    pair differs from its current pair, **except (R-2)** one whose recorded `errorKind` at its current
+    `(rev, dRev)` has class NEEDS_OWNER (`AUTH_REFUSED`, `WRITE_FORBIDDEN`, `SERVICE_REFUSED`, `REMOTE_DIFFERS`, the
+    validation kinds); the midnight tick and the worker, which are not eligibility changes, also skip one whose error
+    at the current pair is WAIT. Reconcile mode (start, resume, Publish now) retries both — the plan's choice, so an
+    owner who fixed HA's side sees it repaired at the next open — and so does any move of the pair (a command, a new
+    desired value, a re-authorisation).
   - **Steps:** `ReadFirst` → read; equal → record **verified** (`lastVerifiedAt`, `remoteValue`; not published) and
     stop; different → `Post`; `Post` → 200 → read back → equal → record **published + verified**; read back differs →
     `REMOTE_DIFFERS` (NEEDS_OWNER for this revision); POST non-200 → that kind; POST outcome unknown → set
@@ -609,23 +624,31 @@ sealed interface CallOutcome {
     TARGET_IN_USE, INBOUND_SOURCE, STALE_READ}` (P113-29, P113-16/P114-34, P113-15, P114-32, P16-10 reused, P113-32,
     P113-22, P113-23, P113-31); creates or updates the asset's binding of that
     kind, `enabled = true`, revision +1, `validatedRevision = revision`, `activatedInstallationId = installationId`; a
-    PENDING tombstone for the same `(connection, entity)` is deleted in the same write (the new owner will write its own
-        value). **F-1:** Enable, Change target and Revalidate clear `lastPublished*`, `lastVerified*`, the verified and
-    published pairs, `remote*`, `error*` and `outcomeUnknownSince` in the same write, so a re-enable after a
-    decommission, or a new target, reads and publishes again and never shows an inherited "Published" line. **F-9:**
+    PENDING **or UNDELIVERABLE** tombstone for the same `(connection, entity)` is deleted in the same write —
+    superseded: the new owner writes its own value, and its block now draws that helper's state, so no separate dismiss
+    or line is owed for the old obligation (N-2). **F-1:** Enable and Change target clear `lastPublished*`, `lastVerified*`, the verified and published pairs,
+    `remote*`, `error*` and `outcomeUnknownSince` in the same write, so a re-enable after a decommission, or a new
+    target, reads and publishes again and never shows an inherited "Published" line. **N-2:** Revalidate on the **same**
+    helper clears only `error*` and `outcomeUnknownSince`: its pair move already forces a read-back, and its
+    "Published" line is a true fact about our own push to that helper, kept. **F-9:**
     the claim is per enabled binding: another asset's **disabled** binding on the same pair does not block Enable (its
     `claim_entity_id` is null); re-enabling that disabled binding is then `TARGET_IN_USE`, naming the holder. Then the
     projector computes the first desired value (C31): **initial publication requires a known source** (status:
     `WAITING_FOR_SOURCE` sends nothing).
   - `ChangePublishTarget(assetId, kind, newEntityId, fresh, installationId)`: as Enable for the new id; for the date
-    kind a tombstone for the **old** `(connection, entity)` in the same write (C34); for the status kind the old
+    kind a tombstone for the **old** `(connection, entity)` in the same write **only when the stored binding was
+    enabled** (it held the claim; R-1) (C34); for the status kind the old
     helper is let go silently (#113: preserve the last reported value).
     - `DisablePublishing(assetId, kind)`: `enabled = false`, revision +1; for the date kind a tombstone in the same write;
+    **disabling a disabled binding is a no-op** — no revision bump, no tombstone (R-1);
     the status kind writes **no** tombstone (#113: the remote value is preserved, F-10). A tombstone always carries the
     binding's `activatedInstallationId`, never the running one, so a copied installation draws it but never drains it
     (F-25).
-  - `RevalidatePublishing(assetId, kind, fresh)`: "Check helper" — sets `validatedRevision` (revision +1) when the
-    fresh read validates, else records the validation kind.
+    - `RevalidatePublishing(assetId, kind, fresh)`: "Check helper" — sets `validatedRevision` (revision +1) when the
+    fresh read validates, else records the validation kind (N-2: the "Published" line is kept).
+  - **Invariant I19 (R-1):** no PENDING tombstone coexists with an enabled binding whose claim names the same
+    `(connection, entity)`. Every tombstone insert-or-merge (Disable, Change target, the projector's orphan retirement,
+    Forget) first checks the claim in the same write and is **skipped** when an enabled binding holds the pair.
   - `DismissDecommission(id)`: deletes one tombstone at the owner's word ("I cleared it in Home Assistant", P114-38).
   - `RequestPublishNow(assetId?)` is not a command: the runner's entry (C30).
   - **Status kind on a not-maintained asset:** Enable is refused (`NOT_MAINTAINED_HERE`); an enabled binding whose asset
@@ -690,7 +713,7 @@ sealed interface CallOutcome {
   "one serialized sender per destination" one lock). Entry points: `publishNow(assetId: AssetId? = null)` (waits for
   the lock; Publish now, and reconcile mode: always reads the helper, so an HA reset or restart is repaired, #113);
   `drain()` (the worker's and the projector's: every enabled binding whose verified pair is not its current
-  `(revision, desiredRevision)` (F-1), plus PENDING tombstones; returns whether any TRANSIENT kind remains); `drainBeforeForget(): List<TombstoneOutcome>` (C34). Each
+  `(revision, desiredRevision)` (F-1), less C17's R-2 skips, plus PENDING tombstones; returns whether any TRANSIENT kind remains); `drainBeforeForget(): List<TombstoneOutcome>` (C34). Each
   binding: snapshot in one `uow.read` (binding, delivery, connection, `SecretStore.get(connection.id)` — the #16 key —
   installation id), C17's plan, at most one GET + one POST + one GET, then C17's CAS record in one `uow.write`; a
   dropped record loops at most twice per call (a third newer desired value waits for the next trigger). Never holds a
@@ -706,8 +729,8 @@ sealed interface CallOutcome {
     assets, `transferRecords` held ids, conditions, schedules, groups, events and activations of the bound assets; C15
     per binding; then one `uow.write` that, per binding whose desired value **differs** from the stored one, writes it
     with `desiredRevision + 1` and `desiredAt` (CAS on the binding revision); a binding whose asset row is missing is
-    retired as C34 says; so is a **disabled** binding whose asset is missing (F-9: its row is deleted; a date binding's
-    tombstone was written at Disable). Answers whether anything changed. **Idempotent:** a second call over the same database writes
+    retired as C34 says; so is a **disabled** binding whose asset is missing (F-9: its row is deleted, and no tombstone is written for it —
+    R-1: it holds no claim; any obligation was written at Disable). Answers whether anything changed. **Idempotent:** a second call over the same database writes
     nothing (row 61). Duplicate, rolled-back and backdated-non-current writes change no projection and so write nothing.
   - **Observation (prompt, not correctness):** on `appScope`, a `combine` of `bindings.observeAll()`,
     `conditions.observeAll()` (`C/ports/Repositories.kt:449`), `assets.observeAll()` (`:61`), `schedules.observeAll()`
@@ -723,7 +746,8 @@ sealed interface CallOutcome {
     next local midnight, re-armed; no receiver, no alarm); the worker's start; Publish now. **F-3:** start and resume run
     `reconcileDesired(today)` then **reconcile mode** (`publishNow(null)`: every enabled binding read back, so an HA
     restart or reset is repaired at the next open even under FOREGROUND_ONLY); resume is rate-limited to once per
-    60 minutes of process time since the last full read-back (start always runs it); the midnight tick and the worker
+    60 minutes of process time since the last **completed** read-back — a pass refused by the gate (WAIT,
+    NEEDS_TOKEN, COPIED_INSTALLATION) does not start the window (N-1); start always runs it; the midnight tick and the worker
     run `reconcileDesired` then `drain()`; Publish now is reconcile mode.
 - **C32, the work.** `PublishWorker : CoroutineWorker` reached through `HaPublishDispatch` (assigned synchronously in
   `ServiceTagApp.onCreate` beside `SeasonSyncDispatch.runner` at `:55`). Two unique works:
@@ -775,7 +799,8 @@ sealed interface CallOutcome {
 | Disable, Change target (C25), date kind | a PENDING tombstone for the old helper, carrying the binding's installation id (F-25); the status kind writes none (F-10) | drained like a binding |
 | Forget connection (C28) | first `drainBeforeForget()` (one attempt per date binding and tombstone, bounded by C22's timeouts), then the command, which turns every undelivered one into UNDELIVERABLE | shown until dismissed |
 
-  A tombstone drain is C17 with `desired = 1970-01-01`: readback equal → the row is deleted; a NEEDS_OWNER kind or a
+  A tombstone drain is C17 with `desired = 1970-01-01`: readback equal → the row is deleted **by its id**, never by the
+  `(connection, entity)` pair (so an Enable landing mid-drain, which deleted that row, is never touched); a NEEDS_OWNER kind or a
   missing connection or token → `UNDELIVERABLE`; TRANSIENT/WAIT → stays PENDING with its error. A PENDING tombstone
   is drawn on the asset's date block (or, when the asset is gone, on the HA screen) with P114-36; an UNDELIVERABLE one
   with P114-37 and "I cleared it in Home Assistant" (P114-38, `DismissDecommission`). **The same rule for an enabled
@@ -842,9 +867,13 @@ a compare-and-set on both.
 | from (derived `PublishState`) | event | guard | action | to |
 |---|---|---|---|---|
 | any | projector: desired value changes | binding enabled | `desiredValue := v`, `dRev += 1`, `attemptsAtRevision := 0` (one write) | `PENDING` |
-| any | Disable / Change target | — | `rev += 1` (+ tombstone for the date kind) | `NOT_ENABLED` / `NEEDS_VALIDATION` |
+| enabled | Disable | — | `rev += 1`; a tombstone for the date kind (R-1: only because the stored binding was enabled) | `NOT_ENABLED` |
+| `NOT_ENABLED` | Disable | — | nothing (no-op, R-1) | `NOT_ENABLED` |
 | any | `SaveHaConnection` re-authorises (token, network) | — | `rev += 1`; `validatedRevision += 1` when it equalled the old `rev` (F-2) | unchanged (still validated; pending `1970-01-01` keeps going); in-flight results dropped; the verified pair is no longer current, so the next drain reads back |
-| any | Enable, Change target, Revalidate | fresh read validates | `rev += 1`; delivery's published, verified, remote, error and `outcomeUnknownSince` cleared (F-1) | `PENDING` (reads first, then publishes) |
+| any | Enable, Change target | fresh read validates | `rev += 1`; delivery's published, verified, remote, error and `outcomeUnknownSince` cleared (F-1); Change target of an enabled date binding tombstones the old pair (R-1) | `PENDING` (reads first, then publishes) |
+| any | Revalidate (same helper) | fresh read validates | `rev += 1`; `error*`, `outcomeUnknownSince` cleared; the published line kept (N-2) | `PENDING` (reads back) |
+| `ERROR` (NEEDS_OWNER at the current pair) | `drain()` (projector, midnight, worker) | — | skipped (R-2) | unchanged until reconcile mode or a pair move |
+| `ERROR` (WAIT at the current pair) | midnight tick, worker | — | skipped (R-2) | unchanged until reconcile mode, a projector change or a pair move |
 | `PENDING` | drain | gate passes (C17) | snapshot `(rev, dRev)`; `ReadFirst` or `Post` | (I/O) |
 | (I/O) | read equals desired, no POST made | CAS holds | `lastVerified* := v, now`, verified pair `:= (rev, dRev)`; error cleared | `MATCHES` |
 | (I/O) | POST 200, readback equals desired | CAS holds | `lastPublished* := v, now`, published pair `:= (rev, dRev)`; `lastVerified* := v, now`, verified pair `:= (rev, dRev)`; error cleared | `PUBLISHED` |
@@ -863,12 +892,12 @@ a compare-and-set on both.
 
 | from | event | action | to |
 |---|---|---|---|
-| — | Disable or Change target (**date kind only**), a date binding whose asset row is missing (projector) | insert-or-merge `PENDING` with the binding's `activatedInstallationId` (merged: `revision += 1`, `requestedAt` kept) | `PENDING` |
-| `PENDING` | drain: read equals `1970-01-01` (with or without our POST) | delete the row | (gone) |
+| — | Disable or Change target of an **enabled** date binding (R-1), an enabled date binding whose asset row is missing (projector) | insert-or-merge `PENDING` with the binding's `activatedInstallationId` (merged: `revision += 1`, `requestedAt` kept) — **skipped** when an enabled binding claims the pair (I19) | `PENDING` |
+| `PENDING` | drain: read equals `1970-01-01` (with or without our POST) | delete the row **by id** | (gone) |
 | `PENDING` | drain: TRANSIENT or WAIT kind | `errorKind`, `errorAt` | `PENDING` (drawn with P114-36) |
 | `PENDING` | drain: NEEDS_OWNER kind (auth, forbidden, entity gone, wrong domain, not date-only) | `state := UNDELIVERABLE` | `UNDELIVERABLE` (P114-37) |
 | `PENDING` | Forget connection (after its drain) | `state := UNDELIVERABLE` | `UNDELIVERABLE` |
-| `PENDING` | a new binding enables on the same `(connection, entity)` | delete the row (the new owner writes) | (gone) |
+| `PENDING` or `UNDELIVERABLE` | a new binding enables on the same `(connection, entity)` | delete the row in the same write — superseded (N-2) | (gone) |
 | `UNDELIVERABLE` | the owner taps P114-38 | delete the row | (gone) |
 | any | installation id differs | none (fenced) | unchanged, drawn as P113-21 |
 
@@ -894,6 +923,7 @@ a compare-and-set on both.
 | I16 | a full-replace schedule save, an API PATCH and the MCP update keep the stored role | 21, 81, 84 |
 | I17 | #16's GET client and its tests are unchanged | 50, R6 |
 | I18 | the projector is idempotent and is re-run at start, resume, midnight, the worker and Publish now | 61, 66, 68 |
+| I19 | no PENDING tombstone coexists with an enabled binding claiming the same pair (R-1) | 96, 97 |
 
 ### Interfaces between briefs (consumes → produces)
 
@@ -988,6 +1018,7 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 42 | JVM | same · `eachKindHasItsRetryClass` (exhaustive table); `aTransportFailureIsNeverDown` (the desired value and the source untouched) | K1, "never relabelled DOWN" | `UNREACHABLE` classed `NEEDS_OWNER` |
 | 43 | JVM | `PublishModelTest` · `noModelTypeHasASecretField` (reflection over `C/hapublish`); `everyKindMapsFromSyncErrorKindExhaustively` | G4, C14 | a `token` field on `PublishBinding` |
 | 44 | JVM | same · `theAllowlistHasExactlyTwoActions` (`HaServiceAction.entries` names, domains, services) | G2 | a third member added |
+| 42a | JVM | `DeliveryStepsTest` · `aNeedsOwnerErrorIsNotRetriedByDrainUntilThePairMovesOrPublishNow` (also: a WAIT error skipped by the tick and the worker, retried at resume) | R-2, the retry class | `drain()` without the skip (a `WRITE_FORBIDDEN` helper re-POSTed on every projector change) |
 | 45 | JVM | same · `invalidDateIsDeclaredOnce` (the constant equals `"1970-01-01"`) | C1 | none: pin |
 | 45a | JVM | `DeliveryStepsTest` · `aVerifiedValueAtAnOlderBindingRevisionIsNotDone`; `drainSelectsByThePairNotTheValue` | F-1 | `Done` answered from `lastVerifiedValue` alone |
 
@@ -1012,7 +1043,7 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 55 | JVM | same · `tlsFailureIsTlsFailed`; `a200BodyIsCappedAndDiscarded` | C22 caps | the cap removed (a 65 KiB body read whole) |
 | 56 | JVM | same · `noLogNoMessageNoToStringCarriesUrlEntityBodyOrToken` (a captured log seam; every exception message) | G4 | an exception message with the URL |
 
-### B3 — commands (rows 60, 63, 64, 69, 86, 87, 93–95; `CT/hapublish/PublishCommandsTest`, `CT/seasonsync/CrossCheckTest`, new)
+### B3 — commands (rows 60, 63, 64, 69, 86, 87, 93–97; `CT/hapublish/PublishCommandsTest`, `CT/seasonsync/CrossCheckTest`, new)
 
 | # | layer | class · cases | proves | fails without |
 |---|---|---|---|---|
@@ -1023,6 +1054,8 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 93 | JVM | `PublishCommandsTest` · `reEnableAfterDecommissionSendsAgain` (disable → tombstone drained to `1970-01-01` → re-enable → the date is POSTed and read back) | F-1, AC114-6 | `Done` answered from `lastVerifiedValue` alone (HA keeps `1970-01-01`, the block reads MATCHES) |
 | 94 | JVM | same · `aTargetChangePublishesToTheNewHelper`; `aNewTargetShowsNoInheritedPublishedLine` | F-1, #113 "never attributed" | the delivery fields not cleared by Change target |
 | 95 | JVM | `CT/hapublish/DefaultedCollaboratorTest` · `theFourCommandsCompileWithTheirShippedPositionalArguments`; `theDefaultRefusesNothing` | F-6, G3 | none: pin (R6's `OutboundTargets.NONE` grep is the guard) |
+| 96 | JVM | `PublishCommandsTest` · `aDisabledBindingsTargetChangeNeverTombstonesAPairAnotherAssetClaims` (A disabled on H, B enabled on H, A changes target to H2: no tombstone for H, B's date stands) | R-1, I19 | the tombstone inserted unconditionally (HA receives `1970-01-01` over B's date) |
+| 97 | JVM | same · `disablingADisabledBindingWritesNothing` (no revision bump, no tombstone) | R-1 | the tombstone inserted unconditionally |
 | 86 | JVM | `CrossCheckTest` · `linkAndEditRefuseAnOutboundTarget`; `enableAndChangeTargetRefuseAnInboundSource`; `aPendingTombstonesEntityIsOutboundToo` | C26, G9, K6 | the inbound refusal checks enabled bindings only |
 | 87 | JVM | `ConnectionHooksTest` · `anAddressChangeIsRefusedWhileADateBindingOrPendingTombstoneExists` (O-12); `aTokenChangeBumpsEveryPublishRevision`; `forgetTurnsUndeliveredDateObligationsIntoUndeliverableTombstones` (O-11); `aTokenChangeKeepsBindingsValidatedAndDeliversPendingInvalidations` (F-2) | C28, K9 | the reauthorised branch bumps only season bindings; **and** `validatedRevision` left behind (pending invalidations park in NEEDS_VALIDATION) — two counted |
 
