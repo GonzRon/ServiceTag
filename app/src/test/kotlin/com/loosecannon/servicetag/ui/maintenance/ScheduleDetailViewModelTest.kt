@@ -857,4 +857,34 @@ class ScheduleDetailViewModelTest {
         assertEquals("the held refusal is no ending", 0, endedHeld.size)
         assertTrue("nothing written", graph.events.all().isEmpty())
     }
+
+    /**
+     * #117 SD1 (§3.3): the held refusal's race shape — the model reads no hold, so the arrival asks, and the guarded
+     * write refuses the answer (`Refused(AssetTransferredOut)`). That run is no ending either: P77-35 said once, and
+     * nothing written.
+     */
+    @Test fun aHeldRefusalFromTheGuardedWriteEndsNoArrival() = runTest {
+        val (mower, id) = anAssetSchedule()
+        // Built without `transfers`, so the model's own check passes and the question opens.
+        val raced = viewModel(id)
+        raced.state.first { it.loaded }
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-mower", assetId = mower, kind = TransferKind.OUT, packId = "0f1e2d3c-4b5a-4968-8776-655443322110",
+                lineage = emptyList(), at = dayMillis("2026-04-01"), packSha256 = "ab".repeat(32), nameSnapshot = "Mower",
+                note = "",
+            ),
+        )
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { raced.messages.collect { said += it } }
+        val ended = endings(raced)
+        raced.arrive()
+        answer("2026-04-15")
+        raced.state.first { !it.busy }
+        advanceUntilIdle()
+        assertNull(graph.completionFlow.prompt.value)
+        assertEquals(listOf("This asset was transferred out."), said)
+        assertEquals("the held refusal is no ending", 0, ended.size)
+        assertTrue("nothing written", graph.events.all().isEmpty())
+    }
 }

@@ -730,16 +730,6 @@ private fun NavKey.isWriteFlow(): Boolean =
         this is Route.ReplaceAsset || this is Route.TransferAssets
 
 /**
- * #87 (C6). A top-level route replaces the stack, as its tab does — unless a write flow is anywhere
- * on the stack: then the link is ignored and the stack is untouched (the activity has simply come
- * forward). Ignoring is the whole behaviour: no snackbar, no queue, no later replay. Every other
- * link is pushed, as shipped.
- *
- * Those four screens block back while a write runs, because a pop clears the entry's view-model
- * store and cancels the write; a reset would pop them just the same, so it never happens over one.
- * A cold start's `[Dashboard]` stays `[Dashboard]` rather than gaining a second, identical key.
- */
-/**
  * #117 (F1, §3.3). A notification's arrival on a schedule asks once: this turns that arrival's entry
  * into the same schedule's plain detail **in place**, and touches no other entry. The key is the
  * entry's content key, so the replacement disposes the entry and its view model — which is why it
@@ -752,6 +742,16 @@ internal fun MutableList<NavKey>.clearArrival(key: Route.ScheduleDetail) {
     if (at >= 0) set(at, key.copy(complete = false))
 }
 
+/**
+ * #87 (C6). A top-level route replaces the stack, as its tab does — unless a write flow is anywhere
+ * on the stack: then the link is ignored and the stack is untouched (the activity has simply come
+ * forward). Ignoring is the whole behaviour: no snackbar, no queue, no later replay. Every other
+ * link is pushed, as shipped.
+ *
+ * Those four screens block back while a write runs, because a pop clears the entry's view-model
+ * store and cancels the write; a reset would pop them just the same, so it never happens over one.
+ * A cold start's `[Dashboard]` stays `[Dashboard]` rather than gaining a second, identical key.
+ */
 internal fun MutableList<NavKey>.openDeepLink(route: Route) {
     when {
         route !in TopLevelRoutes -> add(route)
