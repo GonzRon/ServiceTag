@@ -102,10 +102,16 @@ fun EventEntryScreen(
      * hands over to the case editor on it, after any Workflow B answer.
      */
     onSaved: ((String) -> Unit)? = null,
+    /**
+     * #117: the FORM schedule this new entry completes — its Save writes the completion. The key names it only when
+     * set, as it does [pending], so an ordinary entry's key is unchanged and two schedules' forms never share a model.
+     */
+    scheduleId: String? = null,
 ) {
-    val modelKey = eventId ?: "new-$assetId-$profileId-$kind" + pending?.let { "-pending-${it.id}" }.orEmpty()
+    val modelKey = eventId ?: "new-$assetId-$profileId-$kind" + pending?.let { "-pending-${it.id}" }.orEmpty() +
+        scheduleId?.let { "-schedule-$it" }.orEmpty()
     val model: EventEntryViewModel = viewModel(key = modelKey) {
-        EventEntryViewModel(graph, assetId, profileId, eventId, kind, pending)
+        EventEntryViewModel(graph, assetId, profileId, eventId, kind, pending, scheduleId)
     }
     val state by model.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }

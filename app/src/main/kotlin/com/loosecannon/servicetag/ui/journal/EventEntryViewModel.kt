@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -30,7 +31,10 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
+import com.loosecannon.servicetag.core.usecase.CompleteSchedule
+import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.ConditionCommand
 import com.loosecannon.servicetag.core.usecase.ConditionProblem
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
@@ -38,10 +42,13 @@ import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.EventOwnership
 import com.loosecannon.servicetag.core.usecase.EventValidation
 import com.loosecannon.servicetag.core.usecase.FieldProblem
+import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.IncidentConditionRefused
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchEvent
+import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
+import com.loosecannon.servicetag.core.usecase.ScheduleArchived
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.datePlaceholder
@@ -56,6 +63,7 @@ import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.tapped
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.supplies.listRowsOf
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -215,11 +223,28 @@ class EventEntryViewModel(
      * without one no link line is drawn and every link is still kept and sent.
      */
     private val supplyItems: SupplyItemRepository? = null,
+    /**
+     * #117 (D1): the FORM schedule this new entry completes, when a schedule's form opened it. Its save then goes
+     * through [completeSchedule] — the event linked to the schedule's open occurrence, in one write — and never
+     * through [logEvent]: a refusal writes nothing rather than an unlinked entry (D5). Null: an ordinary entry.
+     */
+    private val scheduleId: ScheduleId? = null,
+    private val completeSchedule: CompleteSchedule? = null,
+    /** #117 (D3): read once, for the title a profile-less schedule form opens with. */
+    private val schedules: ScheduleRepository? = null,
+    /** #117 (D8): the reminder sweep run once after a schedule-opened write, before any offer. */
+    private val reconcile: ReminderReconcile? = null,
 ) : ViewModel() {
 
     init {
         require(pending == null || (recordWithIncident != null && eventId == null)) {
             "a pending condition needs the combined write, and only a new entry carries one" // l10n-ok: exception message
+        }
+        require(
+            scheduleId == null ||
+                (completeSchedule != null && schedules != null && reconcile != null && eventId == null && pending == null),
+        ) {
+            "a schedule's form needs the completion, and only a new, plain entry completes one" // l10n-ok: exception message
         }
     }
 
@@ -230,6 +255,8 @@ class EventEntryViewModel(
         eventId: String?,
         kind: String? = null,
         pending: PendingCondition? = null,
+        /** #117: the FORM schedule this entry completes (`Route.EventEntry.scheduleId`); null for every other entry. */
+        scheduleId: String? = null,
     ) : this(
         graph.assets, graph.definitions, graph.profiles, graph.events,
         graph.logEvent, graph.updateEvent, graph.clock,
@@ -239,6 +266,10 @@ class EventEntryViewModel(
         pending,
         graph.recordConditionWithIncident,
         graph.supplyItems,
+        scheduleId?.let(::ScheduleId),
+        graph.completeSchedule,
+        graph.schedules,
+        graph.reminderReconcile,
     )
 
     /** The zone the entry is being made in; stored on the event as `tzId` for the audit trail. */
@@ -283,6 +314,8 @@ class EventEntryViewModel(
             commandProfileId = profile?.id
             kind = if (pending != null) EventKind.INCIDENT else existing?.kind ?: profile?.eventKind ?: presetKind ?: EventKind.NOTE
             val draft = pending?.let { incidentDraft(it.reason) }
+            // #117 (D3): a profile-less form opened from a schedule opens its Entry field with the schedule's title.
+            val scheduleTitle = scheduleId?.takeIf { profile == null }?.let { checkNotNull(schedules).get(it)?.title }
             val all = definitions.forAsset(assetId)
             sources = all.associateBy(MeasurementDefinition::id)
             derivedDefinitions = all
@@ -296,6 +329,7 @@ class EventEntryViewModel(
                     title = existing?.title
                         ?: profile?.defaultTitle
                         ?: draft?.let { it.first ?: presetTitle(EventKind.INCIDENT) }
+                        ?: scheduleTitle
                         ?: presetKind?.let(::presetTitle).orEmpty(),
                     occurredOn = existing?.occurredOn ?: pending?.occurredOn ?: current.occurredOn,
                     occurredTime = when {
@@ -535,7 +569,15 @@ class EventEntryViewModel(
             // Caught by name, not by runCatching: a cancelled `viewModelScope` must stay cancelled
             // rather than be reported to the user as a refused save.
             try {
-                val event = if (eventId == null) logEvent.run(cmd) else updateEvent.run(eventId, cmd)
+                val event = if (eventId != null) {
+                    updateEvent.run(eventId, cmd)
+                } else if (scheduleId != null) {
+                    // #117 (D1, D8): the schedule's form completes it — linked, in one write — then sweeps once,
+                    // before any offer is read.
+                    checkNotNull(completeSchedule).run(scheduleId, cmd.toCompletion()).also { reconcileAfterWrite() }
+                } else {
+                    logEvent.run(cmd)
+                }
                 val asked = if (eventId == null) offers.offersAfter(event) else emptyList()
                 if (asked.isEmpty()) {
                     _state.update { it.copy(saving = false) }
@@ -552,9 +594,46 @@ class EventEntryViewModel(
                 refuse(e)
             } catch (e: NoSuchEvent) {
                 refuse(e)
+            } catch (e: NoSuchSchedule) {
+                refuse(e)
+            } catch (e: ScheduleArchived) {
+                refuse(e)
+            } catch (e: GroupCompletionNotSupported) {
+                refuse(e)
             } catch (e: AssetTransferredOut) {
                 refuse(e)
             }
+        }
+    }
+
+    /**
+     * #117 (D3): what the form collected, as the completion of the schedule's open occurrence. The title is the
+     * schedule's (null) unless the form drew its own Entry field — a profile-less form — and the details are never
+     * owed: the form collected them, so the profile's required fields apply ([CompletionCommand.viaForm]).
+     */
+    private fun EventCommand.toCompletion(): CompletionCommand = CompletionCommand(
+        occurredOn = this.occurredOn,
+        occurredTime = this.occurredTime,
+        tzId = this.tzId,
+        notes = this.notes,
+        values = this.values,
+        consumables = this.consumables,
+        assetId = this.assetId,
+        title = if (this.profileId != null) null else this.title,
+        viaForm = true,
+    )
+
+    /**
+     * #117 (D8): the reminder sweep after a schedule-opened write, so the standing notification clears from every way
+     * in. The write has committed; a sweep that fails is the backstop's to repeat, never the save's failure.
+     */
+    private suspend fun reconcileAfterWrite() {
+        try {
+            checkNotNull(reconcile).run()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failed: Exception) {
+            Log.w(TAG, "the reminder sweep after a form completion failed", failed)
         }
     }
 
@@ -690,8 +769,9 @@ class EventEntryViewModel(
     }
 
     /**
-     * The two failures no amount of retyping fixes: the event moved, or the profile or definition
-     * the form names is not this asset's any more. Say so once and leave the form as it was typed.
+     * The failures no amount of retyping fixes: the event moved, or the profile or definition
+     * the form names is not this asset's any more — or (#117) the schedule this form completes is
+     * gone, archived or now a group's. Say so once and leave the form as it was typed.
      */
     private fun refuse(cause: Throwable) {
         val line = if (cause is NoSuchEvent) localized(R.string.journal_entry_gone) else cause.transferredOutOr(CANNOT_SAVE)
