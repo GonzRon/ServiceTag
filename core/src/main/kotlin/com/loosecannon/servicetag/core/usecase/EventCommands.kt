@@ -177,6 +177,12 @@ private fun parsedValue(definition: MeasurementDefinition, raw: String): Pair<Do
  * (R15-6); one that does not is [FieldProblem.UnknownSupplyItem], collected beside [FieldProblem.BadConsumable]. A
  * line's name and unit are never read from its SupplyItem. A minimal schedule completion sends no line, so nothing
  * here records a SupplyItem usage for it.
+ *
+ * #119: [alsoRequired] names definitions owed a value in addition to [profile]'s required fields; only
+ * [CompleteSchedule] passes any (a form completion's meter reading), and every other caller leaves it empty. A
+ * profile field in it is required; one the profile does not carry is considered among the extras, in its `sortOrder`
+ * place, so it is measured once and never moves a stored measurement. The usual rules still hold: an archived
+ * definition is never demanded, and one that does not resolve is reported [FieldProblem.Required].
  */
 internal suspend fun buildEvent(
     cmd: EventCommand,
@@ -187,6 +193,7 @@ internal suspend fun buildEvent(
     ids: IdGenerator,
     now: Long,
     source: EventSource = EventSource.MANUAL,
+    alsoRequired: Set<DefinitionId> = emptySet(),
 ): AssetEvent {
     val problems = mutableListOf<FieldProblem>()
 
@@ -237,11 +244,17 @@ internal suspend fun buildEvent(
         measurements += measurement
     }
 
-    profile?.fields?.sortedBy { it.sortOrder }?.forEach { field -> consider(field.definitionId, field.required) }
-    val extraIds = cmd.values.keys - handled
+    profile?.fields?.sortedBy { it.sortOrder }?.forEach { field ->
+        consider(field.definitionId, field.required || field.definitionId in alsoRequired)
+    }
+    // #119 (F-11): a demanded id the profile did not carry joins the extras, so it is considered once and lands where
+    // any extra measurement does: a profile-less form keeps its stored order by definition `sortOrder`.
+    val extraIds = (cmd.values.keys - handled) + (alsoRequired - handled)
     val extraDefs = extraIds.mapNotNull { defId -> definitions.get(defId)?.let { defId to it.sortOrder } }
         .sortedBy { it.second }
-    extraDefs.forEach { (defId, _) -> consider(defId, required = false) }
+    extraDefs.forEach { (defId, _) -> consider(defId, required = defId in alsoRequired) }
+    // A demanded id that does not resolve is still owed, as a required profile field's is.
+    (alsoRequired - handled).forEach { defId -> consider(defId, required = true) }
 
     val orderedMeasurements = measurements.mapIndexed { i, m -> m.copy(sortOrder = i) }
 

@@ -760,6 +760,219 @@ class ScheduleOperationsTest {
         assertEquals("Quarterly inspection", unnamed.title)
     }
 
+    // #119 (C4–C12): a FORM schedule whose rule also counts a meter. The fixtures are one Asset, its meter "m", an
+    // ordinary reading "e", and a schedule on both sides of the rule (quarterly, and every 25 h from 100).
+
+    private suspend fun seedReading(assetId: AssetId, id: String, sortOrder: Int, isMeter: Boolean = false): DefinitionId {
+        val definition = MeasurementDefinition(
+            id = DefinitionId(id), assetId = assetId, key = id, label = id, unit = if (isMeter) "h" else "",
+            valueType = ValueType.NUMBER, decimals = 1, rangeLow = null, rangeHigh = null,
+            isMeter = isMeter, sortOrder = sortOrder, archivedAt = null, createdAt = 1L, updatedAt = 1L,
+        )
+        defs.upsert(definition)
+        return definition.id
+    }
+
+    private suspend fun seedProfileWith(assetId: AssetId, vararg fields: Pair<DefinitionId, Boolean>): ProfileId {
+        val profileId = seedProfile(assetId)
+        profiles.upsert(
+            profiles.get(profileId)!!.copy(
+                fields = fields.mapIndexed { i, (defId, required) -> ProfileField("f${i + 1}", defId, required, i) },
+            ),
+        )
+        return profileId
+    }
+
+    private suspend fun meteredSchedule(
+        assetId: AssetId,
+        meterId: DefinitionId,
+        profileId: ProfileId?,
+        mode: CompletionMode = CompletionMode.FORM,
+    ): MaintenanceSchedule = save.run(
+        null,
+        quarterlyCommand(assetId).copy(
+            completionMode = mode, profileId = profileId,
+            meterDefinitionId = meterId, meterInterval = 25.0, anchorMeter = 100.0,
+        ),
+    )
+
+    private fun viaForm(occurredOn: String, values: Map<DefinitionId, String>) =
+        completion(occurredOn, values).copy(viaForm = true)
+
+    /** #119 C4: through the form the schedule's meter reading is owed even when the profile does not carry it. */
+    @Test
+    fun aFormCompletionOwesTheMeterReadingItsProfileDoesNotCarry() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val edgeId = seedReading(assetId, "e", sortOrder = 1)
+        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, edgeId to true))
+
+        today = LocalDate.parse("2026-03-20")
+        val stateBefore = states.get(schedule.id)
+        val refused = assertFailsWith<EventValidation> {
+            complete.run(schedule.id, viaForm("2026-03-20", mapOf(edgeId to "3")))
+        }
+        assertEquals(listOf<FieldProblem>(FieldProblem.Required(meterId)), refused.problems)
+        assertEquals(emptyList(), events.all())
+        assertEquals(stateBefore, states.get(schedule.id))
+    }
+
+    /** #119 C5: the reading typed is stored once, after the profile's fields, on the linked completion. */
+    @Test
+    fun aFormCompletionStoresTheMeterReadingOnce() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val edgeId = seedReading(assetId, "e", sortOrder = 1)
+        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, edgeId to true))
+
+        today = LocalDate.parse("2026-03-20")
+        val event = complete.run(schedule.id, viaForm("2026-03-20", mapOf(edgeId to "3", meterId to "120")))
+
+        assertEquals(listOf(event), events.all())
+        assertEquals(schedule.id, event.scheduleId)
+        assertEquals(listOf(edgeId, meterId), event.measurements.map { it.definitionId })
+        assertEquals(120.0, event.measurements.single { it.definitionId == meterId }.valueNum)
+        assertEquals(120.0, states.get(schedule.id)!!.lastCompletedMeter)
+        assertEquals(145.0, states.get(schedule.id)!!.computedDueMeter)
+    }
+
+    /** #119 C6: a profile that carries the meter as optional does not excuse it on a form completion. */
+    @Test
+    fun aFormCompletionOwesTheMeterItsProfileMarksOptional() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, meterId to false))
+
+        today = LocalDate.parse("2026-03-20")
+        val refused = assertFailsWith<EventValidation> {
+            complete.run(schedule.id, viaForm("2026-03-20", mapOf(meterId to "  ")))
+        }
+        assertEquals(listOf<FieldProblem>(FieldProblem.Required(meterId)), refused.problems)
+        assertEquals(emptyList(), events.all())
+    }
+
+    /** #119 C7: a profile that already requires the meter gets one measurement for it, never two. */
+    @Test
+    fun aMeterTheProfileRequiresIsMeasuredOnce() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, meterId to true))
+
+        today = LocalDate.parse("2026-03-20")
+        val event = complete.run(schedule.id, viaForm("2026-03-20", mapOf(meterId to "120")))
+
+        assertEquals(listOf(meterId), event.measurements.map { it.definitionId })
+        assertEquals(120.0, event.measurements.single().valueNum)
+    }
+
+    /**
+     * #119 C8 (pin): only the form owes the reading. The one-tap action and a bodyless `/v1` call stay minimal and owe
+     * their details, an API completion with the profile's fields and no reading is written, and so is a QUICK one.
+     */
+    @Test
+    fun onlyAFormCompletionOwesTheMeterReading() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val edgeId = seedReading(assetId, "e", sortOrder = 1)
+        val form = meteredSchedule(assetId, meterId, seedProfileWith(assetId, edgeId to true))
+        val quick = meteredSchedule(assetId, meterId, profileId = null, mode = CompletionMode.QUICK)
+
+        today = LocalDate.parse("2026-03-20")
+        val minimal = complete.run(form.id, completion("2026-03-20"))
+        assertTrue(minimal.detailsPending)
+        assertEquals(emptyList(), minimal.measurements)
+
+        val api = complete.run(form.id, completion("2026-07-02", mapOf(edgeId to "3")))
+        assertEquals(false, api.detailsPending)
+        assertEquals(listOf(edgeId), api.measurements.map { it.definitionId })
+
+        val tapped = complete.run(quick.id, completion("2026-03-20"))
+        assertEquals(EventSource.SCHEDULE_QUICK_COMPLETE, tapped.source)
+        assertEquals(emptyList(), tapped.measurements)
+        assertEquals(3, events.all().size)
+    }
+
+    /** #119 C9: a meter rule whose definition has gone demands nothing, as the quick prompt decides. */
+    @Test
+    fun aMeterWhoseDefinitionHasGoneIsNotDemanded() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val edgeId = seedReading(assetId, "e", sortOrder = 1)
+        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, edgeId to true))
+        defs.delete(meterId)
+
+        today = LocalDate.parse("2026-03-20")
+        val event = complete.run(schedule.id, viaForm("2026-03-20", mapOf(edgeId to "3")))
+
+        assertEquals(listOf(event), events.all())
+        assertEquals(listOf(edgeId), event.measurements.map { it.definitionId })
+    }
+
+    /** #119 C10 (pin): an archived meter is off every form, so nothing is demanded; a value sent for it still saves. */
+    @Test
+    fun anArchivedMeterIsNotDemandedButAReadingForItStillSaves() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val edgeId = seedReading(assetId, "e", sortOrder = 1)
+        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, edgeId to true))
+        defs.upsert(defs.get(meterId)!!.copy(archivedAt = 5L))
+
+        today = LocalDate.parse("2026-03-20")
+        val blank = complete.run(schedule.id, viaForm("2026-03-20", mapOf(edgeId to "3")))
+        assertEquals(listOf(edgeId), blank.measurements.map { it.definitionId })
+
+        val carried = complete.run(schedule.id, viaForm("2026-07-02", mapOf(edgeId to "3", meterId to "130")))
+        assertEquals(listOf(edgeId, meterId), carried.measurements.map { it.definitionId })
+        assertEquals(130.0, carried.measurements.single { it.definitionId == meterId }.valueNum)
+    }
+
+    /** #119 C11 (pin): an ordinary entry never owes the meter; a value outside its profile stays an optional extra. */
+    @Test
+    fun anOrdinaryEntryNeverOwesTheMeterReading() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
+        val edgeId = seedReading(assetId, "e", sortOrder = 1)
+        val outsideId = seedReading(assetId, "x", sortOrder = 2)
+        val profileId = seedProfileWith(assetId, edgeId to true)
+        meteredSchedule(assetId, meterId, profileId)
+
+        fun entry(values: Map<DefinitionId, String>) = EventCommand(
+            assetId = assetId, profileId = profileId, kind = EventKind.INSPECTION, title = "Inspected",
+            occurredOn = "2026-03-20", occurredTime = null, tzId = "UTC", notes = "",
+            values = values, consumables = emptyList(),
+        )
+        val logged = logEvent.run(entry(mapOf(edgeId to "3", outsideId to "7")))
+        assertEquals(listOf(edgeId, outsideId), logged.measurements.map { it.definitionId })
+
+        val updated = updateEvent.run(logged.id, entry(mapOf(edgeId to "4", outsideId to " ")))
+        assertEquals(listOf(edgeId), updated.measurements.map { it.definitionId })
+        assertEquals(listOf(updated), events.all())
+    }
+
+    /**
+     * #119 C12 (F-11): a profile-less form's measurements keep their stored order by definition `sortOrder` (1.8.1's),
+     * because the demanded meter is considered inside the extras pass, never ahead of it; and the meter is still owed.
+     */
+    @Test
+    fun aProfileLessFormKeepsItsStoredOrderAndStillOwesTheMeter() = runTest {
+        val assetId = seedAsset()
+        val aId = seedReading(assetId, "a", sortOrder = 1)
+        val meterId = seedReading(assetId, "m", sortOrder = 2, isMeter = true)
+        val bId = seedReading(assetId, "b", sortOrder = 3)
+        val schedule = meteredSchedule(assetId, meterId, profileId = null)
+
+        today = LocalDate.parse("2026-03-20")
+        val refused = assertFailsWith<EventValidation> {
+            complete.run(schedule.id, viaForm("2026-03-20", mapOf(bId to "3", aId to "1")))
+        }
+        assertEquals(listOf<FieldProblem>(FieldProblem.Required(meterId)), refused.problems)
+        assertEquals(emptyList(), events.all())
+
+        val event = complete.run(schedule.id, viaForm("2026-03-20", mapOf(bId to "3", meterId to "120", aId to "1")))
+        assertEquals(listOf(aId, meterId, bId), event.measurements.map { it.definitionId })
+        assertEquals(listOf(0, 1, 2), event.measurements.map { it.sortOrder })
+    }
+
     /**
      * **Every** event write rebuilds, not only a completion: an ordinary "log hours" entry moves
      * the meter side, editing it moves it again, and deleting it takes the reading away. Without
