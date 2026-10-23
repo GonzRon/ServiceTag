@@ -142,6 +142,8 @@ Cut as 1.7.0 (code 20): the phones ran 1.6.0 (schema 17) and 1.5.0 (schema 16), 
 
 Cut as 1.8.0 (code 21): no schema or format change; the phones ran 1.7.0, so the proof is 1.7.0 → 1.8.0 in place, and it repeats the token-survival check.
 
+Cut as 1.8.1 (code 22): no schema or format change; the phones ran 1.8.0, so the emulator proof is 1.8.0 → 1.8.1 in place, and it repeats the token-survival check.
+
 ## Environment notes that cost a day
 
 - **Pin the emulator.** A physical phone may be attached. `ANDROID_SERIAL=emulator-5554` must be
