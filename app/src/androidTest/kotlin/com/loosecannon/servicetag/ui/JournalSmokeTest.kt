@@ -96,8 +96,8 @@ class JournalSmokeTest {
     /**
      * #82's Workflow A through the real back stack: Change condition with DOWN asks P82-1 and writes
      * nothing; "Log incident details" opens the prefilled Incident entry with P82-5; closing the entry
-     * brings the question back; the entry's Save records the Incident and the held row, linked, once,
-     * and the sheet closes on the way back without another write.
+     * brings the question back; the entry's Record entry writes the Incident and the held row,
+     * linked, once, and the sheet closes on the way back without another write.
      */
     @Test fun logIncidentDetailsRecordsTheIncidentAndTheConditionTogether() {
         val graph = app.graph
@@ -125,7 +125,7 @@ class JournalSmokeTest {
             rule.awaitText("Log incident details?")
             assertEquals(0, runBlocking { graph.events.all().size + graph.conditions.all().size })
 
-            // Asked again, answered again: the entry's Save records both, and the sheet closes.
+            // Asked again, answered again: Record entry writes both, and the sheet closes.
             rule.onNodeWithText("Log incident details").performClick()
             rule.awaitText("Saving also records Pump as DOWN.")
             rule.onNodeWithText("Record entry").performScrollTo().performClick()

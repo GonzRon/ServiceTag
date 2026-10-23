@@ -61,7 +61,11 @@ class EventEntryActionsTest {
         val today = app.graph.today.localDate().toString()
         val event = runBlocking {
             app.graph.logEvent.run(
-                EventCommand(asset, null, EventKind.NOTE, "Filter rinsed", today, null, "UTC", "", emptyMap(), emptyList()),
+                EventCommand(
+                    assetId = asset, profileId = null, kind = EventKind.NOTE, title = "Filter rinsed",
+                    occurredOn = today, occurredTime = null, tzId = "UTC", notes = "",
+                    values = emptyMap(), consumables = emptyList(),
+                ),
             )
         }
         entry(asset, eventId = event.id.value)
@@ -79,8 +83,8 @@ class EventEntryActionsTest {
         rule.onNode(hasSetTextAction() and hasText(NOTES)).performScrollTo().performTextInput("Rinsed the prefilter")
         rule.onNodeWithText(RECORD_ENTRY).performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
 
-        rule.waitUntil(TIMEOUT_MS) { left.isNotEmpty() }
-        assertEquals(listOf("done"), left)
+        rule.waitUntil(TIMEOUT_MS) { rule.runOnIdle { left.isNotEmpty() } }
+        assertEquals(listOf("done"), rule.runOnIdle { left.toList() })
         val stored = runBlocking { app.graph.events.forAsset(asset) }
         assertEquals(1, stored.size)
         assertEquals("Rinsed the prefilter", stored.single().notes)

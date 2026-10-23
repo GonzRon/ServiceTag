@@ -94,8 +94,8 @@ fun EventEntryScreen(
     kind: String? = null,
     /**
      * #82 (C7): Change condition's held DOWN or DEGRADED, when "Log incident details" opened this
-     * entry — its Save records the Incident and that row together. The key names its id, so a
-     * second combined entry on the same asset is never handed this one's model.
+     * entry — its Record entry writes the Incident and that row together. The key names its id, so
+     * a second combined entry on the same asset is never handed this one's model.
      */
     pending: PendingCondition? = null,
     /**
@@ -104,8 +104,9 @@ fun EventEntryScreen(
      */
     onSaved: ((String) -> Unit)? = null,
     /**
-     * #117: the FORM schedule this new entry completes — its Save writes the completion. The key names it only when
-     * set, as it does [pending], so an ordinary entry's key is unchanged and two schedules' forms never share a model.
+     * #117: the FORM schedule this new entry completes — its Record entry writes the completion.
+     * The key names it only when set, as it does [pending], so an ordinary entry's key is unchanged
+     * and two schedules' forms never share a model.
      */
     scheduleId: String? = null,
 ) {
@@ -178,7 +179,7 @@ fun EventEntryScreen(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 24.dp),
         ) {
-            // #82: P82-5, once, under the eyebrow — this Save records the held condition too.
+            // #82: P82-5, once, under the eyebrow — Record entry writes the held condition too.
             state.alsoRecords?.let { condition ->
                 QuietLine(savingAlsoRecordsLine(state.assetName, condition), Modifier.padding(top = 8.dp))
             }
