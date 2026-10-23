@@ -183,9 +183,10 @@ fun ServiceTagRoot(
                             flow = graph.completionFlow,
                             due = graph.dueReadModel,
                             onDismiss = { logging = false },
-                            onLogForm = { assetId, profileId ->
+                            // #117: the whole NeedsForm, so the entry completes its schedule.
+                            onLogForm = { form ->
                                 logging = false
-                                backStack.add(Route.EventEntry(assetId, profileId, null))
+                                backStack.add(formEntry(form))
                             },
                             // A group round is a checklist this flow cannot complete without naming
                             // a member, so its row opens the screen that can.
@@ -366,6 +367,8 @@ fun ServiceTagRoot(
                         } else {
                             null
                         },
+                        // #117: a form opened for a FORM schedule saves as that schedule's completion.
+                        scheduleId = key.scheduleId,
                     )
                 }
                 entry<Route.EventDetail> { key ->
@@ -540,10 +543,15 @@ fun ServiceTagRoot(
                         // rule column: the five operations never write one (master plan §5.2).
                         onEditRecurrence = { backStack.add(Route.ScheduleEdit(it)) },
                         // A `FORM` schedule's completion is collected by its own profile form;
-                        // nothing about it is fabricated on the way there.
-                        onLogForm = { assetId, profileId ->
-                            backStack.add(Route.EventEntry(assetId, profileId, null))
+                        // nothing about it is fabricated on the way there. #117 (§3.3): an arrival
+                        // that hands over is used up here, before the push — no question is open, so
+                        // replacing this entry's key disposes nothing the owner is answering.
+                        onLogForm = { form ->
+                            backStack.clearArrival(key)
+                            backStack.add(formEntry(form))
                         },
+                        // #117 (§3.3): the arrival's other endings — completed, cancelled, refused.
+                        onArrivalEnded = { backStack.clearArrival(key) },
                     )
                 }
                 entry<Route.ScheduleEdit> { key ->
@@ -682,9 +690,7 @@ fun ServiceTagRoot(
                         onReviewSchedule = { backStack.add(Route.ScheduleDetail(it)) },
                         // A `FORM` schedule's completion is collected by its own profile form; the
                         // sheet stays under it, which is how the sequential run picks up again.
-                        onLogForm = { assetId, profileId ->
-                            backStack.add(Route.EventEntry(assetId, profileId, null))
-                        },
+                        onLogForm = { backStack.add(formEntry(it)) },
                         // "Not now" writes nothing at all and simply leaves.
                         onDismiss = { backStack.removeLastOrNull() },
                         // #82: the same combined Incident entry, over the sheet, as from asset detail.
@@ -733,6 +739,19 @@ private fun NavKey.isWriteFlow(): Boolean =
  * store and cancels the write; a reset would pop them just the same, so it never happens over one.
  * A cold start's `[Dashboard]` stays `[Dashboard]` rather than gaining a second, identical key.
  */
+/**
+ * #117 (F1, §3.3). A notification's arrival on a schedule asks once: this turns that arrival's entry
+ * into the same schedule's plain detail **in place**, and touches no other entry. The key is the
+ * entry's content key, so the replacement disposes the entry and its view model — which is why it
+ * runs only when no question is open: from the detail's form hand-over, before the push, and when the
+ * arrival has ended. A key that is no arrival, or one no longer on the stack, changes nothing.
+ */
+internal fun MutableList<NavKey>.clearArrival(key: Route.ScheduleDetail) {
+    if (!key.complete) return
+    val at = lastIndexOf(key)
+    if (at >= 0) set(at, key.copy(complete = false))
+}
+
 internal fun MutableList<NavKey>.openDeepLink(route: Route) {
     when {
         route !in TopLevelRoutes -> add(route)

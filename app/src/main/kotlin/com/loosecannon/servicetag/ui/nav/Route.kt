@@ -4,6 +4,7 @@ import androidx.navigation3.runtime.NavKey
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.ui.condition.PendingCondition
+import com.loosecannon.servicetag.ui.maintenance.CompletionOutcome
 import kotlinx.serialization.Serializable
 
 /**
@@ -53,6 +54,10 @@ sealed interface Route : NavKey {
      *
      * #79 (C20): [thenServiceCase] is P79-19 on an asset with no current Incident — the saved
      * Incident (after any Workflow B answer) is replaced by the case editor on it. Absent, false.
+     *
+     * #117: [scheduleId] is the FORM schedule this new entry completes — its save writes the
+     * completion. Null is an ordinary entry, and every back stack stored before #117 decodes so;
+     * never set with an [eventId] or a [pending]. Only [formEntry] sets it.
      */
     @Serializable data class EventEntry(
         val assetId: String,
@@ -61,6 +66,7 @@ sealed interface Route : NavKey {
         val kind: String? = null,
         val pending: PendingConditionArgs? = null,
         val thenServiceCase: Boolean = false,
+        val scheduleId: String? = null,
     ) : Route
     @Serializable data class EventDetail(val id: String) : Route
 
@@ -159,6 +165,11 @@ sealed interface Route : NavKey {
      * leaving the owner to find the button (#50's redirect, amended into B09 at B07's review). It
      * defaults false, so every other way in — the deep link included — is unchanged: an external
      * `servicetag://schedule/<uuid>` still only navigates (invariant 57).
+     *
+     * #117 (§3.3): an arrival is used once. The root clears [complete] on this entry in place once
+     * the arrival hands over to a form or ends, so coming back from the form, or a rotation or a
+     * process restore after it, never asks again. A restore while the question is still open asks
+     * it again: nothing was written.
      */
     @Serializable data class ScheduleDetail(val id: String, val complete: Boolean = false) : Route
 
@@ -239,6 +250,15 @@ fun newServiceCaseRoute(assetId: String, currentIncidentId: String?): Route =
     } else {
         Route.EventEntry(assetId, null, null, kind = EventKind.INCIDENT.name, thenServiceCase = true)
     }
+
+/**
+ * #117: the one way a [CompletionOutcome.NeedsForm] becomes a route. The whole outcome comes in, so
+ * the schedule cannot be dropped on the way: a new entry on the schedule's asset and profile, which
+ * saves as that schedule's completion. No kind and no held condition — the schedule decides the one,
+ * and a completion never carries the other.
+ */
+fun formEntry(form: CompletionOutcome.NeedsForm): Route.EventEntry =
+    Route.EventEntry(form.assetId.value, form.profileId?.value, null, scheduleId = form.scheduleId.value)
 
 /**
  * The three roots the bottom bar switches between; nothing else ever shows it.

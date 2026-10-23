@@ -183,7 +183,7 @@ class ScanSheetTest {
                     tagId = tagId,
                     onOpenAsset = { record += "asset:$it" },
                     onReviewSchedule = { record += "review:$it" },
-                    onLogForm = { asset, profile -> record += "form:$asset:$profile" },
+                    onLogForm = { form -> record += "form:${form.assetId.value}:${form.profileId?.value}:${form.scheduleId.value}" },
                     onDismiss = { record += "dismiss" },
                     onLogIncidentDetails = onLogIncidentDetails,
                     onLogIncident = onLogIncident,
@@ -331,7 +331,7 @@ class ScanSheetTest {
                     startCompletion = startCompletion,
                     onBack = {},
                     onEditRecurrence = {},
-                    onLogForm = { _, _ -> },
+                    onLogForm = {},
                 )
             }
         }
@@ -577,7 +577,7 @@ class ScanSheetTest {
             ServiceTagTheme {
                 MaintenanceSheet(
                     graph = graph, assetId = pack.value, tagId = null, onOpenAsset = {}, onReviewSchedule = {},
-                    onLogForm = { _, _ -> }, onDismiss = {},
+                    onLogForm = {}, onDismiss = {},
                 )
             }
         }
@@ -719,7 +719,7 @@ class ScanSheetTest {
                 if (shown) {
                     MaintenanceSheet(
                         graph = graph, assetId = pack.value, tagId = null,
-                        onOpenAsset = {}, onReviewSchedule = {}, onLogForm = { _, _ -> }, onDismiss = {},
+                        onOpenAsset = {}, onReviewSchedule = {}, onLogForm = {}, onDismiss = {},
                     )
                 }
             }

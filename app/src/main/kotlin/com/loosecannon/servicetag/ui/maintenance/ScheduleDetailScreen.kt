@@ -82,7 +82,11 @@ fun ScheduleDetailScreen(
     scheduleId: String,
     onBack: () -> Unit,
     onEditRecurrence: (String) -> Unit,
-    onLogForm: (assetId: String, profileId: String?) -> Unit,
+    /**
+     * A `FORM` schedule's completion, handed over whole (#117): the host builds the entry route with
+     * `formEntry`, so the schedule it completes travels with it.
+     */
+    onLogForm: (CompletionOutcome.NeedsForm) -> Unit,
     /**
      * B07's **"Done"** on a `FORM` schedule, or a `QUICK` one carrying a meter rule, arrives with
      * this set: the canonical [CompletionFlow] opens on arrival, so the notification's action lands
@@ -90,6 +94,12 @@ fun ScheduleDetailScreen(
      * redirect, B09's amendment). **Once per arrival**, and every other way in leaves it false.
      */
     startCompletion: Boolean = false,
+    /**
+     * #117 (§3.3): the arrival ended — completed, cancelled or refused, after any offer — so the host
+     * clears [startCompletion] on this entry. Never after a hand-over to the form (the host clears it
+     * there itself) nor after the held refusal, whose line must stay on screen.
+     */
+    onArrivalEnded: () -> Unit = {},
 ) {
     val model: ScheduleDetailViewModel =
         viewModel(key = scheduleId) { ScheduleDetailViewModel(graph, scheduleId) }
@@ -102,12 +112,16 @@ fun ScheduleDetailScreen(
         onPauseOrDispose { }
     }
     LaunchedEffect(model) {
-        model.needsForm.collect { form -> onLogForm(form.assetId.value, form.profileId?.value) }
+        model.needsForm.collect { form -> onLogForm(form) }
+    }
+    LaunchedEffect(model) {
+        model.arrivalEnded.collect { onArrivalEnded() }
     }
     // Keyed on the model rather than on the flag, so a resume — which re-derives — does not re-ask
-    // a question the owner has already answered or backed out of.
+    // a question the owner has already answered or backed out of; and `arrive()` runs once per model,
+    // so neither does this screen composed afresh over the same model (#117, §3.3).
     LaunchedEffect(model) {
-        if (startCompletion) model.complete()
+        if (startCompletion) model.arrive()
     }
 
     var closing by remember { mutableStateOf(false) }

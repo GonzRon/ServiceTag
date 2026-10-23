@@ -466,7 +466,8 @@ fun LogMaintenancePicker(
     flow: CompletionFlow,
     due: DueReadModel,
     onDismiss: () -> Unit,
-    onLogForm: (assetId: String, profileId: String?) -> Unit,
+    /** A `FORM` schedule's completion, handed over whole (#117), so the host's entry route completes it. */
+    onLogForm: (CompletionOutcome.NeedsForm) -> Unit,
     onOpenSchedule: (scheduleId: String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -513,9 +514,7 @@ fun LogMaintenancePicker(
                             } else {
                                 scope.launch {
                                     val outcome = flow.complete(item.scheduleId, asset)
-                                    if (outcome is CompletionOutcome.NeedsForm) {
-                                        onLogForm(outcome.assetId.value, outcome.profileId?.value)
-                                    }
+                                    if (outcome is CompletionOutcome.NeedsForm) onLogForm(outcome)
                                     onDismiss()
                                 }
                             }

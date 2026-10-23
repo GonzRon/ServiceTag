@@ -101,7 +101,7 @@ class ScheduleOperationsTest {
                     scheduleId = scheduleId,
                     onBack = { record += "back" },
                     onEditRecurrence = { record += "edit:$it" },
-                    onLogForm = { assetId, profileId -> record += "form:$assetId:$profileId" },
+                    onLogForm = { form -> record += "form:${form.assetId.value}:${form.profileId?.value}:${form.scheduleId.value}" },
                 )
             }
         }

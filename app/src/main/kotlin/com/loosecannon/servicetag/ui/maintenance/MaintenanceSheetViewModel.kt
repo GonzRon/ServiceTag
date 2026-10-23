@@ -446,6 +446,9 @@ class MaintenanceSheetViewModel(
      */
     private var batch = OfferBatch()
 
+    /** #117 (§3.4): whether [onResumed] has run once — the first resume follows `init`'s load. */
+    private var resumed = false
+
     init {
         refresh()
     }
@@ -475,9 +478,24 @@ class MaintenanceSheetViewModel(
     }
 
     /**
+     * #117 (F2, §3.4): the sheet's resume. Coming back from a profile form is how the sequential run advances, so
+     * every resume re-derives and resumes the queue ([refresh]) — except the **first** of this model's life, which
+     * its `init` has already loaded (nit 14). The guard is a model field because the model outlives the sheet's
+     * composition: under a pushed form the sheet leaves composition and comes back fresh, and a guard it remembered
+     * itself reset there, so the first resume back from a form re-derived nothing and the queue never resumed.
+     */
+    fun onResumed() {
+        if (!resumed) {
+            resumed = true
+            return
+        }
+        refresh()
+    }
+
+    /**
      * #82 (C11, NOTE 1): re-reads **only** [IncidentNeed] — called by the sheet on every resume, so the
      * flag drops as soon as the owner is back from the Incident entry "Log incident" opened, whatever
-     * the shipped resume guard skips. The list, the selection and the form queue are left alone, and
+     * [onResumed]'s guard skips. The list, the selection and the form queue are left alone, and
      * nothing is written.
      */
     fun onShown() {

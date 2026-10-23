@@ -1,8 +1,13 @@
 package com.loosecannon.servicetag.ui.nav
 
 import androidx.navigation3.runtime.NavKey
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.reminders.sourceFile
 import com.loosecannon.servicetag.ui.condition.PendingCondition
+import com.loosecannon.servicetag.ui.maintenance.CompletionOutcome
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -220,6 +225,132 @@ class RouteTest {
         assertFalse(
             "a plain entry writes no thenServiceCase key",
             "thenServiceCase" in Json.encodeToString(Route.EventEntry.serializer(), Route.EventEntry("a1", null, null)),
+        )
+    }
+
+    /**
+     * #117 RT1: a FORM schedule's hand-over keeps the schedule. `formEntry` is the one way a `NeedsForm` becomes a
+     * route, and the entry it builds is a new one (no event), with no kind and no held condition — the two a
+     * schedule-opened model refuses at construction (I5).
+     */
+    @Test fun aNeedsFormBecomesANewEntryCarryingItsSchedule() {
+        assertEquals(
+            Route.EventEntry("a1", "p1", null, scheduleId = "s1"),
+            formEntry(CompletionOutcome.NeedsForm(ScheduleId("s1"), AssetId("a1"), ProfileId("p1"))),
+        )
+
+        val profileLess = formEntry(CompletionOutcome.NeedsForm(ScheduleId("s2"), AssetId("a1"), null))
+        assertEquals(Route.EventEntry("a1", null, null, scheduleId = "s2"), profileLess)
+        assertNull(profileLess.profileId)
+        assertNull(profileLess.eventId)
+        assertNull("no kind: the schedule's profile, else MAINTENANCE, decides", profileLess.kind)
+        assertNull(profileLess.pending)
+        assertFalse(profileLess.thenServiceCase)
+    }
+
+    /**
+     * #117 RT2 (I10): a back stack stored by 1.8.0 has no `scheduleId`; it decodes as an ordinary entry. An ordinary
+     * entry writes no such key, and one opened for a schedule keeps it through a stored back stack.
+     */
+    @Test fun anEventEntryForAScheduleRoundTripsAndA180OneDecodesAsBefore() {
+        listOf(
+            """{"assetId":"a1","profileId":"p1","eventId":null}""" to Route.EventEntry("a1", "p1", null),
+            """{"assetId":"a1","profileId":null,"eventId":"e1"}""" to Route.EventEntry("a1", null, "e1"),
+            """{"assetId":"a1","profileId":null,"eventId":null,"kind":"INCIDENT","thenServiceCase":true}""" to
+                Route.EventEntry("a1", null, null, kind = "INCIDENT", thenServiceCase = true),
+        ).forEach { (stored, expected) ->
+            val restored = Json.decodeFromString(Route.EventEntry.serializer(), stored)
+            assertEquals(stored, expected, restored)
+            assertNull(stored, restored.scheduleId)
+        }
+        assertFalse(
+            "an ordinary entry writes no scheduleId key",
+            "scheduleId" in Json.encodeToString(Route.EventEntry.serializer(), Route.EventEntry("a1", "p1", null)),
+        )
+
+        val linked = Route.EventEntry("a1", "p1", null, scheduleId = "s1")
+        val stored = Json.encodeToString(Route.EventEntry.serializer(), linked)
+        assertTrue(stored, "\"scheduleId\":\"s1\"" in stored)
+        assertEquals(linked, Json.decodeFromString(Route.EventEntry.serializer(), stored))
+    }
+
+    /**
+     * #117 RT3 (I6): the root's three form hand-overs — the Log maintenance picker, the schedule detail and the scan
+     * sheet — each build their route with `formEntry`, never by hand. CI's only guard on the root wiring, read from
+     * the source with anchored patterns: every line that opens an `onLogForm` lambda, and that lambda's body to its
+     * closing brace. The detail's clears its arrival before the push, and its arrival's other ending clears it too —
+     * the only two places `clearArrival` is called (§3.3).
+     */
+    @Test fun everyFormHandOverInTheRootGoesThroughFormEntry() {
+        val source = sourceFile("kotlin/com/loosecannon/servicetag/ui/nav/ServiceTagRoot.kt").readText()
+        val lines = source.lines()
+        val opener = Regex("""^\s*onLogForm = \{""")
+        val bodies = lines.indices.filter { opener.containsMatchIn(lines[it]) }.map { lambdaBody(lines, it) }
+
+        assertEquals("the picker, the detail and the sheet", 3, bodies.size)
+        bodies.forEach { body ->
+            assertTrue(body, "formEntry(" in body)
+            assertFalse(body, "Route.EventEntry(" in body)
+        }
+
+        val detail = bodies.filter { "clearArrival(" in it }
+        assertEquals("only the detail's hand-over clears an arrival", 1, detail.size)
+        val clear = detail.single().indexOf("backStack.clearArrival(key)")
+        val push = detail.single().indexOf("backStack.add(formEntry(")
+        assertTrue(detail.single(), clear in 0 until push)
+
+        val onEnded = Regex("""^\s*onArrivalEnded = \{ backStack\.clearArrival\(key\) },?$""")
+        assertEquals("the arrival's other ending", 1, lines.count { onEnded.matches(it) })
+        val calls = Regex("""\bclearArrival\(""").findAll(source).count()
+        val definitions = Regex("""fun MutableList<NavKey>\.clearArrival\(""").findAll(source).count()
+        assertEquals("one definition", 1, definitions)
+        assertEquals("called from the detail's two handlers only", 2, calls - definitions)
+    }
+
+    /** The text from the `{` on [start]'s line to its matching `}`. */
+    private fun lambdaBody(lines: List<String>, start: Int): String {
+        val text = lines.drop(start).joinToString("\n")
+        val open = text.indexOf('{')
+        var depth = 0
+        for (i in open until text.length) {
+            if (text[i] == '{') depth++
+            if (text[i] == '}' && --depth == 0) return text.substring(open, i + 1)
+        }
+        error("unclosed lambda at line ${start + 1}")
+    }
+
+    /**
+     * #117 RT4 (§3.3): an arrival is used once. `clearArrival` turns that arrival's entry into the same schedule's
+     * plain detail **in place** — same position, same size, nothing popped or pushed — and touches no other entry: the
+     * same schedule's plain detail elsewhere, another schedule's arrival and everything else stay. Absent, or a key
+     * that is no arrival, it does nothing.
+     */
+    @Test fun anArrivalIsClearedInPlaceAndNothingElseMoves() {
+        val arrival = Route.ScheduleDetail("s1", complete = true)
+        val stack = mutableListOf<NavKey>(
+            Route.Maintenance,
+            Route.ScheduleDetail("s1"),
+            Route.ScheduleDetail("s2", complete = true),
+            arrival,
+        )
+        stack.clearArrival(arrival)
+        assertEquals(
+            listOf(Route.Maintenance, Route.ScheduleDetail("s1"), Route.ScheduleDetail("s2", complete = true), Route.ScheduleDetail("s1")),
+            stack,
+        )
+
+        val under = mutableListOf<NavKey>(Route.Dashboard, arrival, Route.AssetDetail("a1"))
+        under.clearArrival(arrival)
+        assertEquals(listOf(Route.Dashboard, Route.ScheduleDetail("s1"), Route.AssetDetail("a1")), under)
+
+        val absent = listOf<NavKey>(Route.Dashboard, Route.ScheduleDetail("s2", complete = true), Route.ScheduleDetail("s1"))
+        assertEquals("absent", absent, absent.toMutableList().apply { clearArrival(arrival) })
+
+        val cleared = listOf<NavKey>(Route.Dashboard, arrival)
+        assertEquals(
+            "a key that is no arrival changes nothing",
+            cleared,
+            cleared.toMutableList().apply { clearArrival(Route.ScheduleDetail("s1")) },
         )
     }
 }

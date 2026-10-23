@@ -94,7 +94,8 @@ fun MaintenanceSheet(
     tagId: String?,
     onOpenAsset: (String) -> Unit,
     onReviewSchedule: (String) -> Unit,
-    onLogForm: (assetId: String, profileId: String?) -> Unit,
+    /** A `FORM` schedule's completion, handed over whole (#117), so the host's entry route completes it. */
+    onLogForm: (CompletionOutcome.NeedsForm) -> Unit,
     onDismiss: () -> Unit,
     /** #82 — Change condition's P82-3: the held DOWN or DEGRADED, for the host's Incident entry. */
     onLogIncidentDetails: (PendingCondition) -> Unit = {},
@@ -114,22 +115,22 @@ fun MaintenanceSheet(
 
     // Coming back from a profile form is how the sequential run advances, so the sheet re-derives
     // on every resume rather than trusting the list it drew before it left — but not on the
-    // **first** one, which the view model's own `init` has already done (nit 14).
-    var resumed by remember { mutableStateOf(false) }
+    // **first** one, which the view model's own `init` has already done (nit 14). #117 (§3.4): that
+    // guard is the view model's, which outlives this composition under a pushed form.
     LifecycleResumeEffect(model) {
-        if (resumed) model.refresh() else resumed = true
+        model.onResumed()
         onPauseOrDispose { }
     }
     // #82 (C11, NOTE 1): the Incident flag is read again on **every** resume, the first included and
-    // apart from the guard above — back from the Incident entry, the sheet composes afresh with the
-    // guard reset, and "Log incident" must drop at once rather than on some later refresh.
+    // apart from the guard above, so "Log incident" drops at once back from the Incident entry rather
+    // than on some later refresh.
     LifecycleResumeEffect(model) {
         model.onShown()
         onPauseOrDispose { }
     }
 
     LaunchedEffect(model) {
-        model.needsForm.collect { form -> onLogForm(form.assetId.value, form.profileId?.value) }
+        model.needsForm.collect { form -> onLogForm(form) }
     }
 
     // The route is reached only with actionable work, so an empty **first** load is a back stack

@@ -305,6 +305,17 @@ class ScheduleDetailViewModel(
     private val _messages = Channel<String>(Channel.BUFFERED)
     val messages: Flow<String> = _messages.receiveAsFlow()
 
+    /**
+     * #117 (F1, §3.3): the notification's arrival ended — completed, cancelled or refused, after its offers — and the
+     * host clears the arrival. Held until a collector reads it, and read once. Never after a hand-over to the form,
+     * which the host clears itself, nor after the held refusal (#77, P77-35), whose line must stay on screen.
+     */
+    private val _arrivalEnded = Channel<Unit>(Channel.CONFLATED)
+    val arrivalEnded: Flow<Unit> = _arrivalEnded.receiveAsFlow()
+
+    /** #117: whether this model has run its arrival. A model field, so a rotation or a fresh composition keeps it. */
+    private var arrived = false
+
     init {
         refresh()
         // #84 C7 (77-5): while the model lives, a change to the held set re-derives the screen, so `editable` follows
@@ -419,11 +430,37 @@ class ScheduleDetailViewModel(
      * #77 (MJ-1): a standing post's "Done" reaches here with `complete = true` whatever the screen draws, so a
      * transferred-out owner is refused **before** the flow: no prompt, no form, nothing written, and P77-35.
      */
-    fun complete(assetId: AssetId? = null) = operate {
-        if (refusedAsHeld()) return@operate
+    fun complete(assetId: AssetId? = null) = operate { runCompletion(assetId) }
+
+    /**
+     * #117 (F1, §3.3): B07's **"Done"** arrival — [complete], **at most once per model**. Back from the form, after a
+     * rotation, the screen composed afresh over this model asks nothing again; and the busy guard already refuses a
+     * second run while one is open. The run's last act, after its offers, says [arrivalEnded] when it ended.
+     */
+    fun arrive() {
+        if (arrived || _state.value.busy) return
+        arrived = true
+        operate {
+            val outcome = runCompletion(assetId = null) ?: return@operate
+            if (outcome.endsArrival()) _arrivalEnded.trySend(Unit)
+        }
+    }
+
+    /** [complete]'s run; null when the held owner was refused before the flow (P77-35 said). */
+    private suspend fun runCompletion(assetId: AssetId?): CompletionOutcome? {
+        if (refusedAsHeld()) return null
         val outcome = completion.complete(scheduleId, assetId)
         if (outcome is CompletionOutcome.NeedsForm) _needsForm.tryEmit(outcome)
         sayIfHeld(outcome)
+        return outcome
+    }
+
+    /** #117 (§3.3): an arrival ends with its run, except a hand-over to the form and the held refusal. */
+    private fun CompletionOutcome.endsArrival(): Boolean = when (this) {
+        is CompletionOutcome.Completed -> true
+        CompletionOutcome.Cancelled -> true
+        is CompletionOutcome.Refused -> cause !is AssetTransferredOut
+        is CompletionOutcome.NeedsForm -> false
     }
 
     /** "Complete all": every outstanding required member of the round, in one write. */
