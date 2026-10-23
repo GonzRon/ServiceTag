@@ -276,10 +276,11 @@ class RouteTest {
 
     /**
      * #117 RT3 (I6): the root's three form hand-overs — the Log maintenance picker, the schedule detail and the scan
-     * sheet — each build their route with `formEntry`, never by hand. CI's only guard on the root wiring, read from
-     * the source with anchored patterns: every line that opens an `onLogForm` lambda, and that lambda's body to its
-     * closing brace. The detail's clears its arrival before the push, and its arrival's other ending clears it too —
-     * the only two places `clearArrival` is called (§3.3).
+     * sheet — each open the form through `openForm`, never by hand and never with a plain push (F-1), and `openForm`
+     * is the one place the root builds a route with `formEntry`. CI's only guard on the root wiring, read from the
+     * source with anchored patterns: every line that opens an `onLogForm` lambda, and that lambda's body to its
+     * closing brace. The detail's clears its arrival before the form opens, and its arrival's other ending clears it
+     * too — the only two places `clearArrival` is called (§3.3).
      */
     @Test fun everyFormHandOverInTheRootGoesThroughFormEntry() {
         val source = sourceFile("kotlin/com/loosecannon/servicetag/ui/nav/ServiceTagRoot.kt").readText()
@@ -289,14 +290,20 @@ class RouteTest {
 
         assertEquals("the picker, the detail and the sheet", 3, bodies.size)
         bodies.forEach { body ->
-            assertTrue(body, "formEntry(" in body)
+            assertTrue(body, "backStack.openForm(" in body)
+            assertFalse(body, "formEntry(" in body)
             assertFalse(body, "Route.EventEntry(" in body)
         }
+        val openForm = Regex("""fun MutableList<NavKey>\.openForm\(form: CompletionOutcome\.NeedsForm\)""")
+        assertEquals("one definition", 1, openForm.findAll(source).count())
+        assertEquals("built in openForm alone", 1, Regex("""\bformEntry\(""").findAll(source).count())
+        val built = lines.indexOfFirst { openForm.containsMatchIn(it) }
+        assertTrue(lambdaBody(lines, built), "formEntry(form)" in lambdaBody(lines, built))
 
         val detail = bodies.filter { "clearArrival(" in it }
         assertEquals("only the detail's hand-over clears an arrival", 1, detail.size)
         val clear = detail.single().indexOf("backStack.clearArrival(key)")
-        val push = detail.single().indexOf("backStack.add(formEntry(")
+        val push = detail.single().indexOf("backStack.openForm(")
         assertTrue(detail.single(), clear in 0 until push)
 
         val onEnded = Regex("""^\s*onArrivalEnded = \{ backStack\.clearArrival\(key\) },?$""")
@@ -352,5 +359,45 @@ class RouteTest {
             cleared,
             cleared.toMutableList().apply { clearArrival(Route.ScheduleDetail("s1")) },
         )
+    }
+
+    /**
+     * #117 RT5 (F-1): a schedule's form is open once. Absent, `openForm` pushes it. Already on the stack, it returns
+     * to it: it pops back to that entry, so everything above it goes — the arrival detail cleared on the way in among
+     * it — and nothing is pushed, so saving cannot complete two occurrences. Another schedule's form, or an ordinary
+     * entry on the same asset and profile, is a different key: the form is pushed and what is beneath stays.
+     */
+    @Test fun aSchedulesFormIsOpenOnceAndAnotherSchedulesIsPushed() {
+        val blade = CompletionOutcome.NeedsForm(ScheduleId("s1"), AssetId("a1"), ProfileId("p1"))
+        val deck = CompletionOutcome.NeedsForm(ScheduleId("s2"), AssetId("a1"), ProfileId("p1"))
+
+        val absent = mutableListOf<NavKey>(Route.Dashboard, Route.ScheduleDetail("s1"))
+        absent.openForm(blade)
+        assertEquals(listOf(Route.Dashboard, Route.ScheduleDetail("s1"), formEntry(blade)), absent)
+
+        // The reminder's Done again over the open form: its arrival is cleared in place, then the form is returned to.
+        val arrival = Route.ScheduleDetail("s1", complete = true)
+        val again = mutableListOf<NavKey>(Route.Dashboard, Route.ScheduleDetail("s1"), formEntry(blade), arrival)
+        again.clearArrival(arrival)
+        again.openForm(blade)
+        assertEquals("no twin", listOf(Route.Dashboard, Route.ScheduleDetail("s1"), formEntry(blade)), again)
+
+        // A re-scan's sheet over it: the sheet goes as well.
+        val rescan = mutableListOf<NavKey>(Route.Dashboard, formEntry(blade), Route.MaintenanceSheet("a1", "t1"))
+        rescan.openForm(blade)
+        assertEquals(listOf(Route.Dashboard, formEntry(blade)), rescan)
+
+        val onTop = mutableListOf<NavKey>(Route.Dashboard, formEntry(blade))
+        onTop.openForm(blade)
+        assertEquals("on top already: nothing moves", listOf(Route.Dashboard, formEntry(blade)), onTop)
+
+        val other = mutableListOf<NavKey>(Route.Dashboard, formEntry(blade), Route.MaintenanceSheet("a1"))
+        other.openForm(deck)
+        assertEquals(listOf(Route.Dashboard, formEntry(blade), Route.MaintenanceSheet("a1"), formEntry(deck)), other)
+
+        val ordinary = Route.EventEntry("a1", "p1", null)
+        val unlinked = mutableListOf<NavKey>(Route.Dashboard, Route.AssetDetail("a1"), ordinary)
+        unlinked.openForm(blade)
+        assertEquals(listOf(Route.Dashboard, Route.AssetDetail("a1"), ordinary, formEntry(blade)), unlinked)
     }
 }

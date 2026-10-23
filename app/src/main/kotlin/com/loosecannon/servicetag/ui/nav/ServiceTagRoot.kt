@@ -39,6 +39,7 @@ import com.loosecannon.servicetag.ui.installed.InstalledComponentsListScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.loan.LoanEditScreen
+import com.loosecannon.servicetag.ui.maintenance.CompletionOutcome
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
@@ -186,7 +187,7 @@ fun ServiceTagRoot(
                             // #117: the whole NeedsForm, so the entry completes its schedule.
                             onLogForm = { form ->
                                 logging = false
-                                backStack.add(formEntry(form))
+                                backStack.openForm(form)
                             },
                             // A group round is a checklist this flow cannot complete without naming
                             // a member, so its row opens the screen that can.
@@ -544,11 +545,12 @@ fun ServiceTagRoot(
                         onEditRecurrence = { backStack.add(Route.ScheduleEdit(it)) },
                         // A `FORM` schedule's completion is collected by its own profile form;
                         // nothing about it is fabricated on the way there. #117 (§3.3): an arrival
-                        // that hands over is used up here, before the push — no question is open, so
-                        // replacing this entry's key disposes nothing the owner is answering.
+                        // that hands over is used up here, before the form opens — no question is
+                        // open, so replacing this entry's key, or popping it to return to the same
+                        // schedule's form already open beneath (F-1), disposes nothing being answered.
                         onLogForm = { form ->
                             backStack.clearArrival(key)
-                            backStack.add(formEntry(form))
+                            backStack.openForm(form)
                         },
                         // #117 (§3.3): the arrival's other endings — completed, cancelled, refused.
                         onArrivalEnded = { backStack.clearArrival(key) },
@@ -690,7 +692,7 @@ fun ServiceTagRoot(
                         onReviewSchedule = { backStack.add(Route.ScheduleDetail(it)) },
                         // A `FORM` schedule's completion is collected by its own profile form; the
                         // sheet stays under it, which is how the sequential run picks up again.
-                        onLogForm = { backStack.add(formEntry(it)) },
+                        onLogForm = { backStack.openForm(it) },
                         // "Not now" writes nothing at all and simply leaves.
                         onDismiss = { backStack.removeLastOrNull() },
                         // #82: the same combined Incident entry, over the sheet, as from asset detail.
@@ -733,13 +735,26 @@ private fun NavKey.isWriteFlow(): Boolean =
  * #117 (F1, §3.3). A notification's arrival on a schedule asks once: this turns that arrival's entry
  * into the same schedule's plain detail **in place**, and touches no other entry. The key is the
  * entry's content key, so the replacement disposes the entry and its view model — which is why it
- * runs only when no question is open: from the detail's form hand-over, before the push, and when the
+ * runs only when no question is open: from the detail's form hand-over, before the form opens, and when the
  * arrival has ended. A key that is no arrival, or one no longer on the stack, changes nothing.
  */
 internal fun MutableList<NavKey>.clearArrival(key: Route.ScheduleDetail) {
     if (!key.complete) return
     val at = lastIndexOf(key)
     if (at >= 0) set(at, key.copy(complete = false))
+}
+
+/**
+ * #117 (F-1): a schedule's form is open once. Its route is [formEntry], the same key every time for one
+ * schedule, so a second hand-over while that form is on the stack — a reminder's **Done** tapped again, a
+ * re-scan — would push a twin, and saving both would complete two occurrences. If the form is already on the
+ * stack this returns to it instead: it pops back to that entry, so everything above it goes (an arrival detail
+ * cleared on the way in among it) and nothing is pushed. Another schedule's form is a different key, and pushed.
+ */
+internal fun MutableList<NavKey>.openForm(form: CompletionOutcome.NeedsForm) {
+    val route = formEntry(form)
+    val at = lastIndexOf(route)
+    if (at < 0) add(route) else while (size > at + 1) removeAt(lastIndex)
 }
 
 /**

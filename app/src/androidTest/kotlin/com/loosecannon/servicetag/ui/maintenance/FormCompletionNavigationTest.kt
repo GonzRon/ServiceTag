@@ -66,12 +66,13 @@ import org.junit.runner.RunWith
  * route on `deepLinks` (a scan and the notification's **Done** push the same routes) and driven only by semantic taps.
  *
  * What only the root proves is its wiring: the detail's, the scan sheet's and the Maintenance destination's
- * **Log maintenance** picker's `onLogForm` lambdas build the entry route with `formEntry`, so the form's
- * **Record entry** writes the completion (N1, N2, N3, N4); a notification's arrival asks once, so back from the form
- * — saved (N2) or closed with ✕ (N2b) — the detail does not open the form again (§3.3); and back from a form the scan
- * sheet re-reads its list and walks on to the next selected form (N3, N3b; §3.4). An arrival over the same schedule's
- * plain detail leaves two equal detail keys once it is cleared, and the stack still backs out through both to the
- * dashboard (N2c). N4 also proves #120: the picker waits for its rows before it decides there is nothing to log.
+ * **Log maintenance** picker's `onLogForm` lambdas open the form with `openForm`, which builds its route with
+ * `formEntry`, so the form's **Record entry** writes the completion (N1, N2, N3, N4); a notification's arrival asks
+ * once, so back from the form — saved (N2) or closed with ✕ (N2b) — the detail does not open the form again (§3.3);
+ * and back from a form the scan sheet re-reads its list and walks on to the next selected form (N3, N3b; §3.4). An
+ * arrival over the same schedule's plain detail leaves two equal detail keys once it is cleared, and the stack still
+ * backs out through both to the dashboard (N2c); an arrival over its own open form returns to that form rather than
+ * pushing a twin (N2d). N4 also proves #120: the picker waits for its rows before it decides there is nothing to log.
  * A picker with nothing to log draws no dialog and closes itself once (#120's other half).
  *
  * The last three cases compose the detail screen alone, because what they count is its callbacks: an arrival's end
@@ -149,6 +150,35 @@ class FormCompletionNavigationTest {
         backFromTheDetail()
         awaitTheDetailListsTheCompletion()
         backFromTheDetail()
+        rule.waitUntil(conditionDescription = "back on the dashboard", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodesWithText("ServiceTag").fetchSemanticsNodes().isNotEmpty() &&
+                rule.onAllNodesWithContentDescription(BACK).fetchSemanticsNodes().isEmpty()
+        }
+        assertEquals(1, runBlocking { app.graph.events.all().size })
+    }
+
+    /**
+     * N2d (F-1): the notification's **Done** again while the form it opened is still up. The second arrival returns
+     * to that form rather than pushing a twin: one form on top, whose **Record entry** completes the schedule once and
+     * lands on the detail; back from there is the dashboard, never a second copy of the form.
+     */
+    @Test fun anArrivalOverItsOwnOpenFormReturnsToItAndCompletesOnce() {
+        val mower = seed(BLADE)
+        val arrival = Route.ScheduleDetail(mower.schedule(BLADE), complete = true)
+        open(arrival)
+        awaitFormAlone()
+
+        deepLinks.tryEmit(arrival)
+        awaitADetailFrame()
+        awaitFormAlone()
+
+        recordTheReading()
+        awaitFormClosed()
+        awaitTheDetailListsTheCompletion()
+        assertEquals(listOf(mower.schedule(BLADE)), linkedSchedules())
+
+        backFromTheDetail()
+        assertFalse("back from the detail opened a second copy of the form", formReopens())
         rule.waitUntil(conditionDescription = "back on the dashboard", timeoutMillis = TIMEOUT_MS) {
             rule.onAllNodesWithText("ServiceTag").fetchSemanticsNodes().isNotEmpty() &&
                 rule.onAllNodesWithContentDescription(BACK).fetchSemanticsNodes().isEmpty()
@@ -350,6 +380,32 @@ class FormCompletionNavigationTest {
         }
     }
 
+    /**
+     * Steps the clock a frame at a time until a detail's back arrow is drawn. An arrival's detail is up only for the
+     * frames before it hands over to the form, which an advancing clock runs straight through inside one idle wait;
+     * this is how a case knows the arrival it emitted has been taken.
+     */
+    private fun awaitADetailFrame() {
+        rule.mainClock.autoAdvance = false
+        try {
+            repeat(DETAIL_FRAMES) {
+                if (rule.onAllNodesWithContentDescription(BACK).fetchSemanticsNodes().isNotEmpty()) return
+                rule.mainClock.advanceTimeByFrame()
+            }
+            throw AssertionError("no detail was drawn within $DETAIL_FRAMES frames")
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+    }
+
+    /** One form up and settled: the detail it opened over has left the screen. */
+    private fun awaitFormAlone() {
+        awaitForm()
+        rule.waitUntil(conditionDescription = "the form alone", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodesWithContentDescription(BACK).fetchSemanticsNodes().isEmpty()
+        }
+    }
+
     /** The open form's required reading, then its bottom **Record entry**. */
     private fun recordTheReading() {
         awaitForm()
@@ -530,6 +586,9 @@ class FormCompletionNavigationTest {
 
         /** How long a closed form is watched for coming back; a re-run arrival reopens it within a frame or two. */
         const val SETTLE_MS = 3_000L
+
+        /** How many frames [awaitADetailFrame] steps before it gives up: a pushed detail draws in the first. */
+        const val DETAIL_FRAMES = 120
 
         const val MOWER = "Mower"
 
