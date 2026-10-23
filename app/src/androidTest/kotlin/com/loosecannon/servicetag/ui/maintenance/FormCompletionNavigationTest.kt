@@ -72,6 +72,7 @@ import org.junit.runner.RunWith
  * sheet re-reads its list and walks on to the next selected form (N3, N3b; §3.4). An arrival over the same schedule's
  * plain detail leaves two equal detail keys once it is cleared, and the stack still backs out through both to the
  * dashboard (N2c). N4 also proves #120: the picker waits for its rows before it decides there is nothing to log.
+ * A picker with nothing to log draws no dialog and closes itself once (#120's other half).
  *
  * The last three cases compose the detail screen alone, because what they count is its callbacks: an arrival's end
  * reaches `onArrivalEnded` exactly once after an answer or a cancel, and never after a hand-over to the form.
@@ -235,6 +236,28 @@ class FormCompletionNavigationTest {
         awaitFormClosed()
         rule.awaitText(LOG_MAINTENANCE_LABEL)
         assertEquals(listOf(mower.schedule(BLADE)), linkedSchedules())
+    }
+
+    /** #120, a pin: with nothing actionable, once its rows have loaded, the picker draws no dialog and closes itself once. */
+    @Test fun aPickerWithNothingToLogClosesQuietly() {
+        val graph = app.graph
+        val dismissed = mutableListOf<Unit>()
+        rule.setContent {
+            ServiceTagTheme {
+                LogMaintenancePicker(
+                    flow = graph.completionFlow,
+                    due = graph.dueReadModel,
+                    onDismiss = { dismissed += Unit },
+                    onLogForm = {},
+                    onOpenSchedule = {},
+                )
+            }
+        }
+        rule.waitUntil(conditionDescription = "the empty picker closes", timeoutMillis = TIMEOUT_MS) {
+            rule.runOnIdle { dismissed.isNotEmpty() }
+        }
+        rule.onAllNodes(isDialog()).assertCountEquals(0)
+        assertEquals(1, rule.runOnIdle { dismissed.size })
     }
 
     /** T1b2 review, O2: a QUICK meter arrival answered — one completion, and its end said to the host once. */
