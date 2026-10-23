@@ -74,9 +74,9 @@ class JournalSmokeTest {
             rule.awaitText("HIGH")
             rule.onNodeWithText("HIGH").assertIsDisplayed()
 
-            // The app bar's Save is the one that commits; the button at the foot of the form reads
-            // "Record entry", so this is unambiguous — `onFirst` only guards against a future twin.
-            rule.onAllNodesWithText("Save").onFirst().performClick()
+            // The form's one commit control is the button at its foot, "Record entry" on a new entry;
+            // it ends the form's scrolling column, so it is scrolled into view first.
+            rule.onNodeWithText("Record entry").performScrollTo().performClick()
 
             // Back on the asset. `SectionHeader` renders its title uppercase, so that is what the
             // semantics tree carries.
@@ -128,7 +128,7 @@ class JournalSmokeTest {
             // Asked again, answered again: the entry's Save records both, and the sheet closes.
             rule.onNodeWithText("Log incident details").performClick()
             rule.awaitText("Saving also records Pump as DOWN.")
-            rule.onAllNodesWithText("Save").onFirst().performClick()
+            rule.onNodeWithText("Record entry").performScrollTo().performClick()
             rule.awaitText("SERVICE RECORD")
             rule.waitUntil(TIMEOUT_MS) {
                 rule.onAllNodesWithText("Save condition").fetchSemanticsNodes().isEmpty() &&

@@ -133,7 +133,6 @@
     <string name="journal_delete_readings_go">その測定値も一緒に削除されます。</string>
     <string name="journal_cancel">キャンセル</string>
     <string name="journal_close">閉じる</string>
-    <string name="journal_save">保存</string>
     <string name="journal_field_entry">記録</string>
     <string name="journal_save_entry">記録を保存</string>
     <string name="journal_record_entry">記録を追加</string>

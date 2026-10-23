@@ -273,8 +273,6 @@
     <string name="journal_cancel">Cancel</string>
     <!-- The entry form's close (✕) button, for TalkBack. -->
     <string name="journal_close">Close</string>
-    <!-- The entry form's app bar save action. -->
-    <string name="journal_save">Save</string>
     <!-- The entry form's title field, shown only when no profile names the entry. -->
     <string name="journal_field_entry">Entry</string>
     <!-- The entry form's bottom button when editing a stored entry. -->

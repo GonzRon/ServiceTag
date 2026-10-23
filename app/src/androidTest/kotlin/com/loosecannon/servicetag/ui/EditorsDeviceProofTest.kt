@@ -481,11 +481,12 @@ private fun ComposeTestRule.awaitFocus(tag: String) {
 }
 
 /**
- * The app bar's Save, which is the one that commits; the buttons at the foot of the forms read
- * "Record entry", "Save entry", "Save reading" and "Save action", so this is unambiguous.
+ * The entry form's one commit control: the button at its foot, "Record entry" on the new entries
+ * this suite logs. It ends the form's scrolling column, so it is scrolled into view first. The
+ * reading and action editors' own "Save" is theirs and stays where it is.
  */
 private fun ComposeTestRule.saveEntry() {
-    onNodeWithText("Save").performClick()
+    onNodeWithText("Record entry").performScrollTo().performClick()
 }
 
 /**

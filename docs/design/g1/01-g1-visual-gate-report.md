@@ -49,11 +49,11 @@ a 16dp glyph. Touch targets ≥ 44dp (48dp in production). TalkBack: every badge
 
 | Aspect | Specification |
 |---|---|
-| Hierarchy | App bar (✕, "WATER TEST · HOT TUB", text button Save) → TESTED label + timestamp (editable) → column header READING / VALUE / TARGET → one **measurement row per definition** in the profile → TREATMENT ADDED section → notes field → filled "Record test". |
+| Hierarchy | App bar (✕, "WATER TEST · HOT TUB") → TESTED label + timestamp (editable) → column header READING / VALUE / TARGET → one **measurement row per definition** in the profile → TREATMENT ADDED section → notes field → filled "Record entry" ("Save entry" when editing), the form's one commit control (#118: the app bar has no Save). |
 | Measurement row | 3-column grid (1fr / 92dp / 72dp); name 15sp Medium; state badge under the name; value is an **outlined field** (`outline`, 6dp, `surface` fill) holding a 22sp mono number with a 12sp unit inside the field; target column shows a 10sp "TARGET" eyebrow over the range. A 3dp left rail in the state colour spans the row. Nothing else in the row is tinted. |
 | States | `↑ HIGH`, `↓ LOW`, `✓ IN RANGE` from D12 §5, plus **`NO TARGET SET`** (neutral, `surfaceContainerHigh` / `onSurfaceVariant`) for a definition without a configured range — required by the owner's data (TDS logged without a range) and missing from D12 (§3 correction f). |
 | Treatment | Separate section; rows "product · quantity (mono) unit (small) · remove"; "+ Add treatment" outlined full-width; quantities keep the unit the user chose (oz, ppm, g). Measurements and treatments save as one event with one timestamp (D4 §7), matching how the owner's log interleaves them. |
-| Keyboard | Numeric keypad for value fields; focus moves down the column; the Save action in the app bar mirrors the bottom button so it is reachable with the keyboard open. |
+| Keyboard | Numeric keypad for value fields; focus moves down the column; the one commit button ends the scrolling column, so it is reachable with the keyboard open. |
 | Light/dark | Value fields are the brightest surfaces on the sheet in both themes (`surface`), so the numbers read first. |
 
 ### 1.4 NFC interaction

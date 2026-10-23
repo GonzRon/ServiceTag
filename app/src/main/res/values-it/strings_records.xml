@@ -134,7 +134,6 @@
     <string name="journal_delete_readings_go">Con essa vengono eliminate anche le sue letture.</string>
     <string name="journal_cancel">Annulla</string>
     <string name="journal_close">Chiudi</string>
-    <string name="journal_save">Salva</string>
     <string name="journal_field_entry">Voce</string>
     <string name="journal_save_entry">Salva voce</string>
     <string name="journal_record_entry">Registra voce</string>

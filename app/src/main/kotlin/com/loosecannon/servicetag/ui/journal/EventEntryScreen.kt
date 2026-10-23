@@ -27,7 +27,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -71,11 +70,13 @@ import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
 
 /**
- * The field test sheet of G1 §1.3: app bar with ✕, the eyebrow and Save; the date it is logged
- * against; one row per profile field under a READING / VALUE / TARGET header; the materials that
- * went in, kept deliberately apart from the readings (D12 §9 — measurement ≠ intervention); a
- * note; and Save again at the bottom so it stays reachable with the keyboard open. Anything the
- * asset derives from those inputs reads back live under them, never as a field (spec §5).
+ * The field test sheet of G1 §1.3: app bar with ✕ and the eyebrow; the date it is logged against;
+ * one row per profile field under a READING / VALUE / TARGET header; the materials that went in,
+ * kept deliberately apart from the readings (D12 §9 — measurement ≠ intervention); a note; and the
+ * one commit button at the foot, "Record entry" on a new entry and "Save entry" on an edit, inside
+ * the scrolling column so it stays reachable with the keyboard open (#118: the app bar has no
+ * Save). Anything the asset derives from those inputs reads back live under them, never as a field
+ * (spec §5).
  *
  * The form knows nothing about what kind of asset this is: the rows come from the profile and the
  * control in each row comes from its definition's value type.
@@ -162,11 +163,6 @@ fun EventEntryScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.journal_close))
-                    }
-                },
-                actions = {
-                    TextButton(onClick = model::save, enabled = state.loaded && !state.saving) {
-                        Text(stringResource(R.string.journal_save))
                     }
                 },
             )
