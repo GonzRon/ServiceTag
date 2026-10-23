@@ -532,7 +532,7 @@ class EventEntryViewModel(
     }
 
     /**
-     * Logs or edits, then names the event the screen should leave for, once, on [saved]. The write
+     * Logs, completes the schedule the form was opened for (#117), or edits, then names the event the screen should leave for, once, on [saved]. The write
      * runs in `viewModelScope` so a rotation halfway through cannot abandon it with `saving` stuck
      * true, and the guard is set before the first suspension, so two taps in one frame log one
      * event rather than two.
@@ -628,8 +628,9 @@ class EventEntryViewModel(
      * in. The write has committed; a sweep that fails is the backstop's to repeat, never the save's failure.
      */
     private suspend fun reconcileAfterWrite() {
+        val sweep = checkNotNull(reconcile)
         try {
-            checkNotNull(reconcile).run()
+            sweep.run()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failed: Exception) {

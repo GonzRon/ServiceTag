@@ -1132,6 +1132,8 @@ class EventEntryViewModelTest {
         val saved = CompletableDeferred<EventId>()
         backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { saved.complete(vm.saved.first()) }
         vm.typeWaterTest(spa)
+        vm.onNotes("Example note")
+        vm.onTime("09:30")
         vm.save()
         val left = saved.await()
 
@@ -1139,6 +1141,8 @@ class EventEntryViewModelTest {
         assertEquals(left, stored.id)
         assertEquals(schedule.id, stored.scheduleId)
         assertEquals(dueBefore, stored.occurrenceOn)
+        assertEquals("Example note", stored.notes)
+        assertEquals("09:30", stored.occurredTime)
         assertFalse(stored.detailsPending)
         assertEquals(EventSource.MANUAL, stored.source)
         assertEquals(spa.profile.eventKind, stored.kind)
