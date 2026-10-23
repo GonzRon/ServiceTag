@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -698,6 +699,65 @@ class ScheduleOperationsTest {
         val full = complete.run(schedule.id, completion("2026-07-02", mapOf(meterId to "18.5")))
         assertEquals(false, full.detailsPending)
         assertEquals(18.5, full.measurements.single().valueNum)
+    }
+
+    /** #117 C1: the form collected the details, so a form completion with nothing typed never owes them. */
+    @Test
+    fun aFormCompletionWithNothingTypedNeverOwesItsDetails() = runTest {
+        val assetId = seedAsset()
+        val profileId = seedProfile(assetId)
+        val schedule = save.run(
+            null,
+            quarterlyCommand(assetId).copy(completionMode = CompletionMode.FORM, profileId = profileId),
+        )
+
+        today = LocalDate.parse("2026-03-20")
+        val event = complete.run(schedule.id, completion("2026-03-20").copy(viaForm = true))
+        assertEquals(false, event.detailsPending)
+        assertEquals(profileId, event.profileId)
+        assertEquals(EventSource.MANUAL, event.source)
+    }
+
+    /** #117 C2: through the form the profile's required fields apply; a refusal writes nothing. */
+    @Test
+    fun aFormCompletionIsHeldToTheProfilesRequiredFields() = runTest {
+        val assetId = seedAsset()
+        val meterId = seedMeter(assetId)
+        val profileId = seedProfile(assetId)
+        val profile = profiles.get(profileId)!!
+        profiles.upsert(
+            profile.copy(fields = listOf(ProfileField("f1", meterId, required = true, sortOrder = 0))),
+        )
+        val schedule = save.run(
+            null,
+            quarterlyCommand(assetId).copy(completionMode = CompletionMode.FORM, profileId = profileId),
+        )
+        val dueBefore = states.get(schedule.id)!!.computedDueOn
+
+        today = LocalDate.parse("2026-03-20")
+        val refused = assertFailsWith<EventValidation> {
+            complete.run(schedule.id, completion("2026-03-20").copy(viaForm = true))
+        }
+        assertEquals(listOf<FieldProblem>(FieldProblem.Required(meterId)), refused.problems)
+        assertEquals(emptyList(), events.all())
+        assertEquals(dueBefore, states.get(schedule.id)!!.computedDueOn)
+    }
+
+    /** #117 C3: a profile-less form names its own entry; every other caller keeps the schedule's title. */
+    @Test
+    fun aFormCompletionCanNameItsOwnTitle() = runTest {
+        val assetId = seedAsset()
+        val schedule = save.run(
+            null,
+            quarterlyCommand(assetId).copy(completionMode = CompletionMode.FORM),
+        )
+
+        today = LocalDate.parse("2026-03-20")
+        val named = complete.run(schedule.id, completion("2026-03-20").copy(title = "Blade swap", viaForm = true))
+        assertEquals("Blade swap", named.title)
+
+        val unnamed = complete.run(schedule.id, completion("2026-07-02").copy(viaForm = true))
+        assertEquals("Quarterly inspection", unnamed.title)
     }
 
     /**
