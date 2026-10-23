@@ -75,6 +75,8 @@ import kotlinx.coroutines.launch
  */
 internal const val SNOOZE_MILLIS = 86_400_000L
 
+private const val TAG = "ScheduleDetail"
+
 /**
  * B06's `ReminderSnooze`, as this brief needs it: the **device-local instant only**.
  *
@@ -278,6 +280,8 @@ class ScheduleDetailViewModel(
     private val scheduleId: ScheduleId,
     /** #77 (C19): the held set. Null holds nothing — a test that is not about transfers. */
     private val transfers: TransferRecordRepository? = null,
+    /** #123: the reminder sweep every completion here runs after its write. The no-op — a test that is not about it. */
+    private val reconcile: ReminderReconcile = ReminderReconcile {},
 ) : ViewModel() {
 
     constructor(graph: AppGraph, scheduleId: String) : this(
@@ -286,6 +290,7 @@ class ScheduleDetailViewModel(
         graph.archiveSchedule, graph.closeRound, graph.scheduleSnooze, graph.today, graph.clock,
         graph.completionFlow, ScheduleId(scheduleId),
         transfers = graph.transferRecords,
+        reconcile = graph.reminderReconcile,
     )
 
     private val _state = MutableStateFlow(ScheduleDetailState())
@@ -449,7 +454,7 @@ class ScheduleDetailViewModel(
     /** [complete]'s run; null when the held owner was refused before the flow (P77-35 said). */
     private suspend fun runCompletion(assetId: AssetId?): CompletionOutcome? {
         if (refusedAsHeld()) return null
-        val outcome = completion.complete(scheduleId, assetId)
+        val outcome = completion.complete(scheduleId, assetId) { reconcile.runAfterWrite(TAG) }
         if (outcome is CompletionOutcome.NeedsForm) _needsForm.tryEmit(outcome)
         sayIfHeld(outcome)
         return outcome
@@ -466,13 +471,13 @@ class ScheduleDetailViewModel(
     /** "Complete all": every outstanding required member of the round, in one write. */
     fun completeAll() = operate {
         if (refusedAsHeld()) return@operate
-        sayIfHeld(completion.completeAll(scheduleId))
+        sayIfHeld(completion.completeAll(scheduleId) { reconcile.runAfterWrite(TAG) })
     }
 
     /** "Complete selected": the members named, and no other (invariants 28, 29). */
     fun completeSelected(assetIds: List<AssetId>) = operate {
         if (refusedAsHeld()) return@operate
-        if (assetIds.isNotEmpty()) sayIfHeld(completion.completeSelected(scheduleId, assetIds))
+        if (assetIds.isNotEmpty()) sayIfHeld(completion.completeSelected(scheduleId, assetIds) { reconcile.runAfterWrite(TAG) })
     }
 
     /** MJ-1: whether this schedule's owner is transferred out here — `load()`'s rule, read now — and P77-35 if so. */

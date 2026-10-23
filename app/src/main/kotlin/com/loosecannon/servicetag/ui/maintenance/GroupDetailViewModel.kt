@@ -37,6 +37,8 @@ import kotlinx.coroutines.launch
 /** How long the repository flows stay hot after the last collector leaves (a rotation, typically). */
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
+private const val TAG = "GroupDetail"
+
 /**
  * One membership as the group screens draw it: the Asset behind the window, by name.
  *
@@ -138,6 +140,8 @@ class GroupDetailViewModel(
     private val id: GroupId,
     /** #77 (C19): the held set. Null holds nothing — a test that is not about transfers. */
     private val transfers: TransferRecordRepository? = null,
+    /** #123: the reminder sweep every completion here runs after its write. The no-op — a test that is not about it. */
+    private val reconcile: ReminderReconcile = ReminderReconcile {},
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
@@ -151,6 +155,7 @@ class GroupDetailViewModel(
         graph.completionFlow,
         GroupId(id),
         transfers = graph.transferRecords,
+        reconcile = graph.reminderReconcile,
     )
 
     private val rows = groups.observeAll()
@@ -203,11 +208,13 @@ class GroupDetailViewModel(
      * The member list is derived inside `CompleteGroupMembers`, not here, which is what stops a
      * surface completing somebody the round does not oblige (invariants 28, 29).
      */
-    fun completeAll(scheduleId: ScheduleId) = operate { sayIfHeld(completion.completeAll(scheduleId)) }
+    fun completeAll(scheduleId: ScheduleId) = operate {
+        sayIfHeld(completion.completeAll(scheduleId) { reconcile.runAfterWrite(TAG) })
+    }
 
     /** **"Complete selected"**: exactly the members named, and no other (invariants 28, 29). */
     fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>) = operate {
-        if (assetIds.isNotEmpty()) sayIfHeld(completion.completeSelected(scheduleId, assetIds))
+        if (assetIds.isNotEmpty()) sayIfHeld(completion.completeSelected(scheduleId, assetIds) { reconcile.runAfterWrite(TAG) })
     }
 
     /**
@@ -220,7 +227,7 @@ class GroupDetailViewModel(
      * that cannot be taken.
      */
     fun completeMember(scheduleId: ScheduleId, assetId: AssetId) = operate {
-        sayIfHeld(completion.complete(scheduleId, assetId))
+        sayIfHeld(completion.complete(scheduleId, assetId) { reconcile.runAfterWrite(TAG) })
     }
 
     /** mn-1: a completion the guard refused (the group came to name a held asset) says P77-35. */

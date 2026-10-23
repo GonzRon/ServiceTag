@@ -64,7 +64,7 @@ class GroupDetailViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(id: String) = GroupDetailViewModel(
+    private fun viewModel(id: String, reconcile: ReminderReconcile = ReminderReconcile {}) = GroupDetailViewModel(
         groups = graph.groups,
         assets = graph.assets,
         schedules = graph.schedules,
@@ -74,6 +74,7 @@ class GroupDetailViewModelTest {
         today = graph.todayPort,
         completion = graph.completionFlow,
         id = GroupId(id),
+        reconcile = reconcile,
     )
 
     /** Answers the flow's affordance as soon as it opens, with the date given. */
@@ -400,5 +401,89 @@ class GroupDetailViewModelTest {
         val vm = viewModel("g-gone")
         backgroundScope.launch { vm.missing.collect() }
         assertTrue(vm.missing.first { it })
+    }
+
+    // ---------------------------------------------------------------- #123: one sweep after every completion (§3.7)
+
+    /** #123: a sweep that records, as it runs, the events the store holds and whether an offer is open. */
+    private fun sweep(failure: Throwable? = null) = CountingSweep(failure) {
+        SweepSighting(events = graph.events.all().size, offerOpen = graph.completionFlow.offer.value != null)
+    }
+
+    /**
+     * GD1: **Complete all** sweeps once after its write. (A second one writes the next round, since a complete round
+     * is no longer the current occurrence; the empty `Completed` is reached by naming a member already done, GD2.)
+     */
+    @Test fun completeAllSweepsOnceAfterTheWrite() = runTest {
+        val (scheduleId, assets) = aRound(members = 3)
+        val sweep = sweep()
+        val vm = viewModel("g1", reconcile = sweep)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null && it.schedules.isNotEmpty() }
+
+        vm.completeAll(ScheduleId(scheduleId))
+        answer("2026-04-15")
+        vm.busy.first { !it }
+
+        assertEquals(assets.size, graph.events.all().size)
+        assertEquals(listOf(SweepSighting(assets.size, false)), sweep.sightings)
+    }
+
+    /**
+     * GD2: **Complete selected** sweeps once after its write; the same member again — already done, so nothing is
+     * written, an empty `Completed` — sweeps once more (F-4).
+     */
+    @Test fun completeSelectedSweepsOnceAndAnEmptyCompletionSweepsToo() = runTest {
+        val (scheduleId, assets) = aRound(members = 3)
+        val sweep = sweep()
+        val vm = viewModel("g1", reconcile = sweep)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null && it.schedules.isNotEmpty() }
+
+        vm.completeSelected(ScheduleId(scheduleId), listOf(assets.first().id))
+        answer("2026-04-15")
+        vm.busy.first { !it }
+        assertEquals(listOf(SweepSighting(1, false)), sweep.sightings)
+
+        vm.completeSelected(ScheduleId(scheduleId), listOf(assets.first().id))
+        answer("2026-04-15")
+        vm.busy.first { !it }
+        assertEquals("nothing more written", 1, graph.events.all().size)
+        assertEquals("the empty one sweeps too", listOf(SweepSighting(1, false), SweepSighting(1, false)), sweep.sightings)
+    }
+
+    /** GD3: one member's completion sweeps once after its write. */
+    @Test fun completingAMemberSweepsOnceAfterTheWrite() = runTest {
+        val (scheduleId, assets) = aRound(members = 3)
+        val sweep = sweep()
+        val vm = viewModel("g1", reconcile = sweep)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null && it.schedules.isNotEmpty() }
+
+        vm.completeMember(ScheduleId(scheduleId), assets.first().id)
+        answer("2026-04-15")
+        vm.busy.first { !it }
+
+        assertEquals(listOf(SweepSighting(1, false)), sweep.sightings)
+    }
+
+    /**
+     * GD4 (I13): a sweep that throws is attempted once and the write stands; nothing reaches the scope's handler (an
+     * uncaught exception there fails `runTest`), and the screen is not left busy.
+     */
+    @Test fun aFailedSweepLeavesTheWriteStandingAndTheScreenFree() = runTest {
+        val (scheduleId, assets) = aRound(members = 3)
+        val sweep = sweep(IllegalStateException("the provider refused"))
+        val vm = viewModel("g1", reconcile = sweep)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null && it.schedules.isNotEmpty() }
+
+        vm.completeMember(ScheduleId(scheduleId), assets.first().id)
+        answer("2026-04-15")
+        vm.busy.first { !it }
+
+        assertEquals("attempted once", 1, sweep.runs)
+        assertEquals("the write stands", 1, graph.events.all().size)
+        assertFalse(vm.busy.value)
     }
 }

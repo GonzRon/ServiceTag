@@ -4,19 +4,25 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import java.time.LocalDate
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -243,5 +249,142 @@ class CompletionFlowTest {
         val events = (outcome.await() as CompletionOutcome.Completed).events
         assertEquals(setOf(north.id, south.id), events.map { it.assetId }.toSet())
         assertEquals("one event each, and no more", 2, graph.events.all().size)
+    }
+
+    // ---------------------------------------------------------------- #123: the sweep after the write (§3.7)
+
+    /** #123: a sweep that records, as it runs, the events the store holds and whether an offer is open. */
+    private fun sweep(failure: Throwable? = null) = CountingSweep(failure) {
+        SweepSighting(events = graph.events.all().size, offerOpen = graph.completionFlow.offer.value != null)
+    }
+
+    /** Two sprinklers in "North run" and its quarterly "Head check" round, open today. */
+    private suspend fun aGroupRound(): Pair<ScheduleId, List<AssetId>> {
+        val north = graph.createAsset.run(AssetCommand(name = "Sprinkler 1", category = "Irrigation"))
+        val south = graph.createAsset.run(AssetCommand(name = "Sprinkler 2", category = "Irrigation"))
+        val group = graph.saveGroup.run(
+            null,
+            GroupCommand(
+                name = "North run",
+                members = listOf(GroupMemberInput(assetId = north.id), GroupMemberInput(assetId = south.id)),
+            ),
+        )
+        val schedule = graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = null,
+                targetGroupId = group.id,
+                title = "Head check",
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = "2026-01-01",
+            ),
+        )
+        return schedule.id to listOf(north.id, south.id)
+    }
+
+    /** A QUICK "Blade sharpen" on a Mower that is DOWN, so its completion asks "Mark operational?". */
+    private suspend fun aQuickScheduleWithAnOffer(): ScheduleId {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        graph.conditions.insert(conditionRow("c-mower", mower.id.value, OperationalCondition.DOWN, "2026-04-01"))
+        return graph.saveSchedule.run(null, quarterly(mower.id)).id
+    }
+
+    /** F1: "Complete all" runs its `afterWrite` once, after the members are written and before any offer. */
+    @Test fun completeAllRunsItsAfterWriteOnceAfterTheWrite() = runTest {
+        val (round, members) = aGroupRound()
+        val sweep = sweep()
+        val flow = graph.completionFlow
+
+        val outcome = async { flow.completeAll(round) { sweep.run() } }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+
+        val events = (outcome.await() as CompletionOutcome.Completed).events
+        assertEquals(members.toSet(), events.map { it.assetId }.toSet())
+        assertEquals("once, with both members stored and no offer open", listOf(SweepSighting(2, false)), sweep.sightings)
+    }
+
+    /** F2: "Complete selected" runs its `afterWrite` once, after the one write. */
+    @Test fun completeSelectedRunsItsAfterWriteOnceAfterTheWrite() = runTest {
+        val (round, members) = aGroupRound()
+        val sweep = sweep()
+        val flow = graph.completionFlow
+
+        val outcome = async { flow.completeSelected(round, members) { sweep.run() } }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+
+        assertEquals(2, (outcome.await() as CompletionOutcome.Completed).events.size)
+        assertEquals(listOf(SweepSighting(2, false)), sweep.sightings)
+    }
+
+    /** F3, a pin: backed out at the prompt, or refused (an archived schedule), neither group call runs `afterWrite`. */
+    @Test fun aCancelledOrRefusedGroupCompletionRunsNoAfterWrite() = runTest {
+        val (round, members) = aGroupRound()
+        val sweep = sweep()
+        val flow = graph.completionFlow
+
+        val cancelledAll = async { flow.completeAll(round) { sweep.run() } }
+        flow.prompt.first { it != null }
+        flow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, cancelledAll.await())
+        val cancelledSelected = async { flow.completeSelected(round, members) { sweep.run() } }
+        flow.prompt.first { it != null }
+        flow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, cancelledSelected.await())
+
+        graph.archiveSchedule.run(round, true)
+        val refusedAll = async { flow.completeAll(round) { sweep.run() } }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        assertTrue("${refusedAll.await()}", refusedAll.await() is CompletionOutcome.Refused)
+        val refusedSelected = async { flow.completeSelected(round, members) { sweep.run() } }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        assertTrue("${refusedSelected.await()}", refusedSelected.await() is CompletionOutcome.Refused)
+
+        assertEquals(0, sweep.runs)
+        assertEquals(0, graph.events.all().size)
+    }
+
+    /** F4, a pin: on a QUICK schedule with an offer to make, `afterWrite` runs once, before the offer is published. */
+    @Test fun completeRunsItsAfterWriteBeforeTheOffer() = runTest {
+        val schedule = aQuickScheduleWithAnOffer()
+        val sweep = sweep()
+        val flow = graph.completionFlow
+
+        val outcome = async { flow.complete(schedule) { sweep.run() } }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        flow.offer.first { it != null }
+        assertEquals("once, the event stored and the offer not yet open", listOf(SweepSighting(1, false)), sweep.sightings)
+        flow.declineOffer()
+
+        assertTrue(outcome.await() is CompletionOutcome.Completed)
+        assertEquals(1, sweep.runs)
+    }
+
+    /**
+     * F5 (F-3, I13): the sweep cancelled under the flow — `runAfterWrite` rethrows, so the call ends in that
+     * `CancellationException`; the event stands and no offer is published.
+     */
+    @Test fun aCancelledSweepEndsTheCallWithTheEventWrittenAndNoOffer() = runTest {
+        val schedule = aQuickScheduleWithAnOffer()
+        val sweep = sweep(CancellationException("the screen left"))
+        val flow = graph.completionFlow
+        val offered = mutableListOf<Any>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { flow.offer.filterNotNull().collect { offered += it } }
+
+        val outcome = async { runCatching { flow.complete(schedule) { sweep.runAfterWrite("CompletionFlowTest") } } }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+
+        val failure = outcome.await().exceptionOrNull()
+        assertTrue("$failure", failure is CancellationException)
+        assertEquals(1, sweep.runs)
+        assertEquals("the event stands", 1, graph.events.all().size)
+        assertTrue("no offer published", offered.isEmpty())
+        assertNull(flow.offer.value)
     }
 }

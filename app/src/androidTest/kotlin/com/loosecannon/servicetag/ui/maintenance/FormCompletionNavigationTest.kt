@@ -51,6 +51,7 @@ import com.loosecannon.servicetag.ui.nav.ServiceTagRoot
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.Collections
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -73,7 +74,8 @@ import org.junit.runner.RunWith
  * arrival over the same schedule's plain detail leaves two equal detail keys once it is cleared, and the stack still
  * backs out through both to the dashboard (N2c); an arrival over its own open form returns to that form rather than
  * pushing a twin (N2d). N4 also proves #120: the picker waits for its rows before it decides there is nothing to log.
- * A picker with nothing to log draws no dialog and closes itself once (#120's other half).
+ * A picker with nothing to log draws no dialog and closes itself once (#120's other half); a QUICK row completed from
+ * the picker runs the picker's reminder sweep once, after its write (#123, LP1).
  *
  * The last three cases compose the detail screen alone, because what they count is its callbacks: an arrival's end
  * reaches `onArrivalEnded` exactly once after an answer or a cancel, and never after a hand-over to the form.
@@ -288,6 +290,41 @@ class FormCompletionNavigationTest {
         }
         rule.onAllNodes(isDialog()).assertCountEquals(0)
         assertEquals(1, rule.runOnIdle { dismissed.size })
+    }
+
+    /**
+     * #123 LP1 (Q2, F-7): the picker composed with a counting sweep; its QUICK row tapped and the prompt answered — one
+     * event stored for the schedule, and the sweep ran once, with that event already stored.
+     */
+    @Test fun aQuickCompletionFromThePickerSweepsOnce() {
+        val deck = seedQuickSchedule()
+        val graph = app.graph
+        val seen = Collections.synchronizedList(mutableListOf<Int>())
+        val dismissed = Collections.synchronizedList(mutableListOf<Unit>())
+        rule.setContent {
+            ServiceTagTheme {
+                LogMaintenancePicker(
+                    flow = graph.completionFlow,
+                    due = graph.dueReadModel,
+                    onDismiss = { dismissed += Unit },
+                    onLogForm = {},
+                    onOpenSchedule = {},
+                    reconcile = ReminderReconcile { seen += graph.events.all().size },
+                )
+            }
+        }
+        rule.waitUntil(conditionDescription = "the picker lists the QUICK row", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodes(hasText(DECK) and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNode(hasText(DECK) and hasAnyAncestor(isDialog())).performClick()
+        rule.awaitText(WHEN_WAS_THIS_DONE)
+        rule.onNode(hasText(SAVE) and hasAnyAncestor(isDialog())).performClick()
+        rule.waitUntil(conditionDescription = "the completion ends and the picker closes", timeoutMillis = TIMEOUT_MS) {
+            dismissed.isNotEmpty()
+        }
+
+        assertEquals(listOf(deck), linkedSchedules())
+        assertEquals("one sweep, after the write", listOf(1), seen.toList())
     }
 
     /** T1b2 review, O2: a QUICK meter arrival answered — one completion, and its end said to the host once. */
@@ -547,6 +584,17 @@ class FormCompletionNavigationTest {
                 anchorMeter = 100.0,
             ),
         )
+        graph.recomputeSchedules.forSchedule(id)
+        id.value
+    }
+
+    /** LP1's QUICK "Deck clean" on the Mower, FIXED quarterly from two quarters back, so overdue and in the picker. */
+    private fun seedQuickSchedule(): String = runBlocking {
+        val graph = app.graph
+        val mower = graph.createAsset.run(AssetCommand(name = MOWER, category = "Yard")).id
+        val id = ScheduleId("t1-deck-clean")
+        val back = LocalDate.now().minusMonths(6)
+        graph.schedules.upsert(formSchedule(id, mower, DECK, profileId = null, back = back).copy(completionMode = CompletionMode.QUICK))
         graph.recomputeSchedules.forSchedule(id)
         id.value
     }
