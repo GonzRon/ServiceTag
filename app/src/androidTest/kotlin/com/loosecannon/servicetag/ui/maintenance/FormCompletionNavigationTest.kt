@@ -65,14 +65,13 @@ import org.junit.runner.RunWith
  * `ServiceTagRoot` composed as `ScanSheetIncidentNavigationTest` composes it, each way in reached by emitting its
  * route on `deepLinks` (a scan and the notification's **Done** push the same routes) and driven only by semantic taps.
  *
- * What only the root proves is its wiring: the detail's and the scan sheet's `onLogForm` lambdas build the entry
- * route with `formEntry`, so the form's **Record entry** writes the completion (N1, N2, N3); a notification's arrival
- * asks once, so back from the form — saved (N2) or closed with ✕ (N2b) — the detail does not open the form again
- * (§3.3); and back from a form the scan sheet re-reads its list and walks on to the next selected form (N3, N3b;
- * §3.4). An arrival over the same schedule's plain detail leaves two equal detail keys once it is cleared, and the
- * stack still backs out through both to the dashboard (N2c). The fourth way in, the Maintenance destination's
- * **Log maintenance** picker (N4), is not here yet: the picker closes itself before its rows load, and its case
- * joins this class with that fix.
+ * What only the root proves is its wiring: the detail's, the scan sheet's and the Maintenance destination's
+ * **Log maintenance** picker's `onLogForm` lambdas build the entry route with `formEntry`, so the form's
+ * **Record entry** writes the completion (N1, N2, N3, N4); a notification's arrival asks once, so back from the form
+ * — saved (N2) or closed with ✕ (N2b) — the detail does not open the form again (§3.3); and back from a form the scan
+ * sheet re-reads its list and walks on to the next selected form (N3, N3b; §3.4). An arrival over the same schedule's
+ * plain detail leaves two equal detail keys once it is cleared, and the stack still backs out through both to the
+ * dashboard (N2c). N4 also proves #120: the picker waits for its rows before it decides there is nothing to log.
  *
  * The last three cases compose the detail screen alone, because what they count is its callbacks: an arrival's end
  * reaches `onArrivalEnded` exactly once after an answer or a cancel, and never after a hand-over to the form.
@@ -213,6 +212,29 @@ class FormCompletionNavigationTest {
         awaitTheSheetWithout(BLADE, DECK)
         assertEquals(setOf(mower.schedule(BLADE), mower.schedule(DECK)), linkedSchedules().toSet())
         assertEquals(2, runBlocking { app.graph.events.all().size })
+    }
+
+    /** N4: the Maintenance destination's **Log maintenance** → the FORM row → its form → **Record entry**. */
+    @Test fun theMaintenancePickersFormCompletesTheSchedule() {
+        val mower = seed(BLADE)
+        open(Route.Maintenance)
+
+        // The destination lists the due row, so the picker has work to offer.
+        rule.awaitText(BLADE)
+        rule.awaitText(LOG_MAINTENANCE_LABEL)
+        rule.onNodeWithText(LOG_MAINTENANCE_LABEL).performClick()
+        rule.waitUntil(conditionDescription = "the picker opens", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.waitUntil(conditionDescription = "the picker lists the FORM row", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodes(hasText(BLADE) and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNode(hasText(BLADE) and hasAnyAncestor(isDialog())).performClick()
+
+        recordTheReading()
+        awaitFormClosed()
+        rule.awaitText(LOG_MAINTENANCE_LABEL)
+        assertEquals(listOf(mower.schedule(BLADE)), linkedSchedules())
     }
 
     /** T1b2 review, O2: a QUICK meter arrival answered — one completion, and its end said to the host once. */

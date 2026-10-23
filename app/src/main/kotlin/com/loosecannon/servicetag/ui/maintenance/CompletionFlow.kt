@@ -460,6 +460,8 @@ fun CompletionFlowHost(flow: CompletionFlow) {
  * other surface draws, which is why this picker needs no string of its own. A phone with nothing
  * actionable gets no dialog at all: §17 ratifies no line for "there is nothing to log", and a brief
  * that needed one would be drafting it — so the finding is reported and the action stays quiet.
+ * That is decided only once the list has loaded: until `due.items()` returns, the picker draws
+ * nothing and stays open, so a list still loading is never taken for an empty one (#120).
  */
 @Composable
 fun LogMaintenancePicker(
@@ -471,7 +473,8 @@ fun LogMaintenancePicker(
     onOpenSchedule: (scheduleId: String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val items by produceState(initialValue = emptyList<DueItem>(), due) {
+    // Null until the rows have loaded, so "not loaded yet" is never read as "nothing to log" (#120).
+    val loaded by produceState<List<DueItem>?>(initialValue = null, due) {
         value = due.items().filter { it.countsAsDue || it.isRepairableNoData }
     }
     val prompt by flow.prompt.collectAsStateWithLifecycle()
@@ -483,6 +486,7 @@ fun LogMaintenancePicker(
     // Once the flow has the owner's attention — its question, or the offer after it — the picker
     // steps out of the way rather than stacking a second dialog over its own.
     if (prompt != null || offer != null) return
+    val items = loaded ?: return
     if (items.isEmpty()) {
         LaunchedEffect(items) { onDismiss() }
         return
