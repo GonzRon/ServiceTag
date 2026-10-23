@@ -49,8 +49,9 @@ sealed interface Route : NavKey {
      * REPLACEMENT or NOTE — and is the name of an `EventKind`, never an index.
      *
      * #82 (C7): [pending] is Change condition's held DOWN or DEGRADED, when "Log incident details"
-     * opened this entry; its Save then records the Incident and that row together. Absent — every
-     * back stack stored before #82, and every other way in — it is null and the entry is as before.
+     * opened this entry; its Record entry then writes the Incident and that row together. Absent —
+     * every back stack stored before #82, and every other way in — it is null and the entry is as
+     * before.
      *
      * #79 (C20): [thenServiceCase] is P79-19 on an asset with no current Incident — the saved
      * Incident (after any Workflow B answer) is replaced by the case editor on it. Absent, false.

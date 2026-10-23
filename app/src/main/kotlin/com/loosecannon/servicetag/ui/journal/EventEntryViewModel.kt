@@ -153,8 +153,8 @@ data class EventEntryState(
      */
     val offer: EventOffer? = null,
     /**
-     * #82 (C7): the held DOWN or DEGRADED this entry's Save also records — P82-5 is drawn from it
-     * and the asset's name. Null for every entry but the combined flow's.
+     * #82 (C7): the held DOWN or DEGRADED this entry's Record entry also writes — P82-5 is drawn
+     * from it and the asset's name. Null for every entry but the combined flow's.
      */
     val alsoRecords: OperationalCondition? = null,
 )
@@ -213,8 +213,9 @@ class EventEntryViewModel(
     private val offers: EntryOffers,
     /**
      * #82 (C7, R82-3): Change condition's held DOWN or DEGRADED, when "Log incident details" opened
-     * this entry. The entry then opens as a prefilled INCIDENT, and its Save writes the Incident and
-     * that row in one transaction through [recordWithIncident] — never [logEvent], never an offer.
+     * this entry. The entry then opens as a prefilled INCIDENT, and its Record entry writes the
+     * Incident and that row in one transaction through [recordWithIncident] — never [logEvent], never
+     * an offer.
      */
     private val pending: PendingCondition? = null,
     private val recordWithIncident: RecordConditionWithIncident? = null,
@@ -532,10 +533,10 @@ class EventEntryViewModel(
     }
 
     /**
-     * Logs, completes the schedule the form was opened for (#117), or edits, then names the event the screen should leave for, once, on [saved]. The write
-     * runs in `viewModelScope` so a rotation halfway through cannot abandon it with `saving` stuck
-     * true, and the guard is set before the first suspension, so two taps in one frame log one
-     * event rather than two.
+     * Logs, completes the schedule the form was opened for (#117), or edits, then names the event
+     * the screen should leave for, once, on [saved]. The write runs in `viewModelScope` so a
+     * rotation halfway through cannot abandon it with `saving` stuck true, and the guard is set
+     * before the first suspension, so two taps in one frame log one event rather than two.
      */
     fun save() {
         val state = _state.value

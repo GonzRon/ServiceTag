@@ -706,7 +706,7 @@ class ScanSheetTest {
 
     /**
      * #82 (C11, NOTE 1): back from the Incident entry the sheet composes afresh over the same view
-     * model, and the shipped resume guard skips that first resume. The flag is read again anyway, so
+     * model, and the flag is read again on every resume (`onShown`), whatever `onResumed` does, so
      * "Log incident" is gone once the failure has its Incident.
      */
     @Test fun backFromTheIncidentEntryTheFlagIsReadAgain() {

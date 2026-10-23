@@ -811,14 +811,13 @@ class MaintenanceSheetViewModelTest {
         advanceUntilIdle()
         assertEquals("one form at a time", listOf("f1"), forms)
 
-        // The owner saves the first form, which is what the journal entry screen does.
+        // The owner saves the first form (simulated: the entry form's own sweep is not part of this model).
         graph.completeSchedule.run(ScheduleId("f1"), CompletionCommand(occurredOn = graph.today.toString(), tzId = "UTC"))
         model.refresh()
         advanceUntilIdle()
         assertEquals("and only then does the second open", listOf("f1", "f2"), forms)
-        // #50 AC 8 on the FORM path: the journal screen wrote the event and reconciles nothing, so
-        // the sheet is where the standing notification is quiesced by canonical state
-        // (should-fix 4).
+        // #50 AC 8 on the FORM path: the sheet sweeps once on the resume after a saved form,
+        // quiescing the standing notification by canonical state (should-fix 4).
         assertEquals(1, reconciles)
 
         // …and abandons the second. The run stops rather than carrying on behind their back.

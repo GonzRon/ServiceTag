@@ -672,10 +672,10 @@ class MaintenanceSheetViewModel(
             settle()
             return
         }
-        // The form **was** saved, and the journal screen that wrote the event reconciles nothing —
-        // so this is the one point on the FORM path where the standing notification can be quiesced
-        // by canonical state rather than left up until the next digest or backstop sweep (#50 AC 8,
-        // review should-fix 4). It runs whether or not there is more queue to walk.
+        // The form **was** saved. The entry form has already swept once after its write (#117, D8);
+        // this sweep repeats it from canonical state, idempotently, so a form saved by any older way
+        // in is still quiesced here (#50 AC 8, review should-fix 4). It runs whether or not there is
+        // more queue to walk.
         reconcile.run()
         if (queue.isEmpty()) {
             settle()
