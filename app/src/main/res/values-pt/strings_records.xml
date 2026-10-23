@@ -134,7 +134,6 @@
     <string name="journal_delete_readings_go">As leituras dele também serão excluídas.</string>
     <string name="journal_cancel">Cancelar</string>
     <string name="journal_close">Fechar</string>
-    <string name="journal_save">Salvar</string>
     <string name="journal_field_entry">Registro</string>
     <string name="journal_save_entry">Salvar registro</string>
     <string name="journal_record_entry">Criar registro</string>

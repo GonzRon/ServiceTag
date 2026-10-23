@@ -446,6 +446,9 @@ class MaintenanceSheetViewModel(
      */
     private var batch = OfferBatch()
 
+    /** #117 (§3.4): whether [onResumed] has run once — the first resume follows `init`'s load. */
+    private var resumed = false
+
     init {
         refresh()
     }
@@ -475,9 +478,24 @@ class MaintenanceSheetViewModel(
     }
 
     /**
+     * #117 (F2, §3.4): the sheet's resume. Coming back from a profile form is how the sequential run advances, so
+     * every resume re-derives and resumes the queue ([refresh]) — except the **first** of this model's life, which
+     * its `init` has already loaded (nit 14). The guard is a model field because the model outlives the sheet's
+     * composition: under a pushed form the sheet leaves composition and comes back fresh, and a guard it remembered
+     * itself reset there, so the first resume back from a form re-derived nothing and the queue never resumed.
+     */
+    fun onResumed() {
+        if (!resumed) {
+            resumed = true
+            return
+        }
+        refresh()
+    }
+
+    /**
      * #82 (C11, NOTE 1): re-reads **only** [IncidentNeed] — called by the sheet on every resume, so the
      * flag drops as soon as the owner is back from the Incident entry "Log incident" opened, whatever
-     * the shipped resume guard skips. The list, the selection and the form queue are left alone, and
+     * [onResumed]'s guard skips. The list, the selection and the form queue are left alone, and
      * nothing is written.
      */
     fun onShown() {
@@ -654,10 +672,10 @@ class MaintenanceSheetViewModel(
             settle()
             return
         }
-        // The form **was** saved, and the journal screen that wrote the event reconciles nothing —
-        // so this is the one point on the FORM path where the standing notification can be quiesced
-        // by canonical state rather than left up until the next digest or backstop sweep (#50 AC 8,
-        // review should-fix 4). It runs whether or not there is more queue to walk.
+        // The form **was** saved. The entry form has already swept once after its write (#117, D8);
+        // this sweep repeats it from canonical state, idempotently, so a form saved by any older way
+        // in is still quiesced here (#50 AC 8, review should-fix 4). It runs whether or not there is
+        // more queue to walk.
         reconcile.run()
         if (queue.isEmpty()) {
             settle()

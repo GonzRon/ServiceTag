@@ -134,7 +134,6 @@
     <string name="journal_delete_readings_go">Seine Messwerte werden mitgelöscht.</string>
     <string name="journal_cancel">Abbrechen</string>
     <string name="journal_close">Schließen</string>
-    <string name="journal_save">Speichern</string>
     <string name="journal_field_entry">Eintrag</string>
     <string name="journal_save_entry">Eintrag speichern</string>
     <string name="journal_record_entry">Eintrag erfassen</string>

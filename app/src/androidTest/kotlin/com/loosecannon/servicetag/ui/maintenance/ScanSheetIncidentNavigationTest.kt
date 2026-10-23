@@ -6,7 +6,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -68,7 +67,7 @@ class ScanSheetIncidentNavigationTest {
         rule.onNodeWithText("Log incident").performScrollTo().performClick()
         rule.waitUntil(TIMEOUT_MS) { rule.onAllNodes(hasSetTextAction() and hasText("Entry")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNode(hasSetTextAction() and hasText("Entry")).assert(hasText("Incident"))
-        rule.onAllNodesWithText("Save").onFirst().performClick()
+        rule.onNodeWithText("Record entry").performScrollTo().performClick()
         // Back on the sheet, which reads its flag again: the failure has its Incident now.
         rule.awaitText("Change condition")
         rule.waitUntil(TIMEOUT_MS) { rule.onAllNodesWithText("Log incident").fetchSemanticsNodes().isEmpty() }

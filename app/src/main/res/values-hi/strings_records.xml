@@ -134,7 +134,6 @@
     <string name="journal_delete_readings_go">इसकी रीडिंग भी इसके साथ मिट जाएँगी।</string>
     <string name="journal_cancel">रद्द करें</string>
     <string name="journal_close">बंद करें</string>
-    <string name="journal_save">सहेजें</string>
     <string name="journal_field_entry">प्रविष्टि</string>
     <string name="journal_save_entry">प्रविष्टि सहेजें</string>
     <string name="journal_record_entry">प्रविष्टि दर्ज करें</string>

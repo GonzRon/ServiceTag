@@ -134,7 +134,6 @@
     <string name="journal_delete_readings_go">Ses relevés sont supprimés avec elle.</string>
     <string name="journal_cancel">Annuler</string>
     <string name="journal_close">Fermer</string>
-    <string name="journal_save">Enregistrer</string>
     <string name="journal_field_entry">Entrée</string>
     <string name="journal_save_entry">Enregistrer l\'entrée</string>
     <string name="journal_record_entry">Ajouter l\'entrée</string>

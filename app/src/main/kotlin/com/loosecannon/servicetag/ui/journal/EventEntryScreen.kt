@@ -27,7 +27,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -71,11 +70,14 @@ import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
 
 /**
- * The field test sheet of G1 §1.3: app bar with ✕, the eyebrow and Save; the date it is logged
- * against; one row per profile field under a READING / VALUE / TARGET header; the materials that
- * went in, kept deliberately apart from the readings (D12 §9 — measurement ≠ intervention); a
- * note; and Save again at the bottom so it stays reachable with the keyboard open. Anything the
- * asset derives from those inputs reads back live under them, never as a field (spec §5).
+ * The field test sheet of G1 §1.3: app bar with ✕ and the eyebrow; the date it is logged against;
+ * one row per profile field under a READING / VALUE / TARGET header; the materials that went in,
+ * kept deliberately apart from the readings (D12 §9 — measurement ≠ intervention); a note; and the
+ * one commit button at the foot, "Record entry" on a new entry and "Save entry" on an edit, at the
+ * end of the scrolling column (#118: the app bar has no Save). The button is reachable once the
+ * keyboard closes; with the keyboard open it can sit under it, and #121 (1.8.2) makes it reachable
+ * while typing. Anything the asset derives from those inputs reads back live under them, never as
+ * a field (spec §5).
  *
  * The form knows nothing about what kind of asset this is: the rows come from the profile and the
  * control in each row comes from its definition's value type.
@@ -93,8 +95,8 @@ fun EventEntryScreen(
     kind: String? = null,
     /**
      * #82 (C7): Change condition's held DOWN or DEGRADED, when "Log incident details" opened this
-     * entry — its Save records the Incident and that row together. The key names its id, so a
-     * second combined entry on the same asset is never handed this one's model.
+     * entry — its Record entry writes the Incident and that row together. The key names its id, so
+     * a second combined entry on the same asset is never handed this one's model.
      */
     pending: PendingCondition? = null,
     /**
@@ -102,10 +104,17 @@ fun EventEntryScreen(
      * hands over to the case editor on it, after any Workflow B answer.
      */
     onSaved: ((String) -> Unit)? = null,
+    /**
+     * #117: the FORM schedule this new entry completes — its Record entry writes the completion.
+     * The key names it only when set, as it does [pending], so an ordinary entry's key is unchanged
+     * and two schedules' forms never share a model.
+     */
+    scheduleId: String? = null,
 ) {
-    val modelKey = eventId ?: "new-$assetId-$profileId-$kind" + pending?.let { "-pending-${it.id}" }.orEmpty()
+    val modelKey = eventId ?: "new-$assetId-$profileId-$kind" + pending?.let { "-pending-${it.id}" }.orEmpty() +
+        scheduleId?.let { "-schedule-$it" }.orEmpty()
     val model: EventEntryViewModel = viewModel(key = modelKey) {
-        EventEntryViewModel(graph, assetId, profileId, eventId, kind, pending)
+        EventEntryViewModel(graph, assetId, profileId, eventId, kind, pending, scheduleId)
     }
     val state by model.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -158,11 +167,6 @@ fun EventEntryScreen(
                         Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.journal_close))
                     }
                 },
-                actions = {
-                    TextButton(onClick = model::save, enabled = state.loaded && !state.saving) {
-                        Text(stringResource(R.string.journal_save))
-                    }
-                },
             )
         },
     ) { padding ->
@@ -176,7 +180,7 @@ fun EventEntryScreen(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 24.dp),
         ) {
-            // #82: P82-5, once, under the eyebrow — this Save records the held condition too.
+            // #82: P82-5, once, under the eyebrow — Record entry writes the held condition too.
             state.alsoRecords?.let { condition ->
                 QuietLine(savingAlsoRecordsLine(state.assetName, condition), Modifier.padding(top = 8.dp))
             }

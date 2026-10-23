@@ -41,6 +41,8 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * - a **minimal** completion against a `FORM` schedule is allowed and marks itself
  *   `details_pending`: the notification's one-tap action and a bodyless API call both land here,
  *   and demanding the form's required fields would make the quick path impossible.
+ *   A completion collected by the form (`viaForm`) is never minimal: it is held to the profile's
+ *   required fields and never owes its details.
  *
  * A group-targeted schedule is refused, and permanently: this operation takes no member list, so
  * obeying it would mean picking an Asset to write an event against — exactly what invariants 28 and
@@ -73,7 +75,7 @@ class CompleteSchedule(
 
         val profileRow = schedule.profileId?.let { profiles.get(it) }
         val minimal = cmd.values.isEmpty() && cmd.consumables.isEmpty()
-        val detailsPending = schedule.completionMode == CompletionMode.FORM && minimal
+        val detailsPending = schedule.completionMode == CompletionMode.FORM && minimal && !cmd.viaForm
 
         val now = clock.nowMillis()
         return uow.write {
@@ -81,7 +83,7 @@ class CompleteSchedule(
                 assetId = target.assetId,
                 profileId = schedule.profileId,
                 kind = profileRow?.eventKind ?: EventKind.MAINTENANCE,
-                title = schedule.title,
+                title = cmd.title ?: schedule.title,
                 occurredOn = cmd.occurredOn,
                 occurredTime = cmd.occurredTime,
                 tzId = cmd.tzId,

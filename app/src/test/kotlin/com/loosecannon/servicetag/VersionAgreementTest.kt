@@ -56,10 +56,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs180AndCode21() {
-        assertEquals("1.8.0", BuildConfig.VERSION_NAME)
-        assertEquals(21, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.8.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs181AndCode22() {
+        assertEquals("1.8.1", BuildConfig.VERSION_NAME)
+        assertEquals(22, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.8.1", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -154,7 +154,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.8.0", status.appVersion)
+        assertEquals("1.8.1", status.appVersion)
         assertEquals(21, status.schemaVersion)
         assertEquals(20, status.backupFormatVersion)
     }
@@ -486,6 +486,49 @@ class VersionAgreementTest {
         assertEquals("the 1.7.0 / 20 row must still be there, once", 1, previous.size)
         assertTrue(
             "the 1.8.0 row must follow the 1.7.0 row",
+            previous.single().range.first < text.indexOf(rows.single()),
+        )
+    }
+
+    /**
+     * The 1.8.1 / 22 row: a PATCH with no schema or format change, so it names its three issues
+     * (#117 a FORM schedule completes from its form, #118 the entry form's one commit button, #120
+     * the Maintenance screen's Log maintenance picker), says the schema and the format are the ones
+     * 1.8.0 shipped, unchanged, and names its reason for being a PATCH — behaviour that was
+     * supposed to work already. It links release notes that exist and names its tag. Anchored at
+     * the start of the row; `versionCode` 22 is claimed by this row and by nothing else, and the
+     * 1.8.0 row it follows is still there, once (`versioningRecords180` holds what that row says).
+     */
+    @Test fun versioningRecords181() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.8\.1\s*\|\s*22\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.8.1 / 22 row", 1, rows.size)
+        val row = rows.single()
+        for (issue in listOf("#117", "#118", "#120")) {
+            assertTrue("the row must name $issue", Regex("""$issue\b""").containsMatchIn(row))
+        }
+        assertTrue(
+            "the row must name the schema and the format, unchanged",
+            Regex("""schema \*\*21\*\*.*format \*\*20\*\*""").containsMatchIn(row) &&
+                row.contains("format **20** unchanged"),
+        )
+        assertTrue("the row must say it is a PATCH", row.contains("**PATCH**"))
+        assertTrue(
+            "the row must link the 1.8.1 release notes, which must exist",
+            row.contains("`docs/releases/1.8.1.md`") && repoFile("docs/releases/1.8.1.md").isFile,
+        )
+        assertTrue("the row must name its tag", row.contains("`servicetag-v1.8.1`"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 22",
+            1,
+            Regex("""^\|[^\n]*\|\s*22\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        val previous = Regex("""^\|\s*1\.8\.0\s*\|\s*21\s*\|""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("the 1.8.0 / 21 row must still be there, once", 1, previous.size)
+        assertTrue(
+            "the 1.8.1 row must follow the 1.8.0 row",
             previous.single().range.first < text.indexOf(rows.single()),
         )
     }

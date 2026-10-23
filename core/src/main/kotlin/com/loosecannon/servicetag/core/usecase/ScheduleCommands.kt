@@ -68,6 +68,10 @@ data class CompletionCommand(
     val values: Map<DefinitionId, String> = emptyMap(),
     val consumables: List<ConsumableInput> = emptyList(),
     val assetId: AssetId? = null,
+    /** #117: a profile-less form's Entry field; null is the schedule's title (every other caller, every profile-backed form). */
+    val title: String? = null,
+    /** #117: the profile form collected the details — never details_pending; the profile's required fields apply. */
+    val viaForm: Boolean = false,
 )
 
 /**

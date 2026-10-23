@@ -42,16 +42,16 @@ android {
         // `targetSdk` stays 36 on purpose: `targetSdk 37` plus the `DISPATCH_NFC_MESSAGE`
         // permission on the dispatch activity is Phase 7 (spec §5.8), not 1.2.
         targetSdk = 36
-        // 1.8.0 is a MINOR: new user-facing capability (nine language packs offered in Android's
-        // per-app language setting, with dates and decimals in the language's own form #102), with
-        // the former 1.7.1 train (#94 #99 #101 #103) and the Home Assistant entity browser (#105)
-        // folded in. No schema or backup-format change — schema 21 / format 20, as 1.7.0, so a
-        // 1.8.0 archive restores into 1.7.0 and a 1.7.0 archive into 1.8.0 (docs/versioning.md).
+        // 1.8.1 is a PATCH: three fixes to behaviour that was supposed to work already (#117 a
+        // FORM schedule completes from its form, #118 the entry form keeps one commit button,
+        // #120 the Maintenance screen's Log maintenance picker opens its list). No schema or
+        // backup-format change — schema 21 / format 20, as 1.8.0, so a 1.8.1 archive restores
+        // into 1.8.0 and a 1.8.0 archive into 1.8.1 (docs/versioning.md).
         // `versionCode` is +1 on every release and is never reset; it must agree with the tag
-        // `servicetag-v1.8.0` or the release workflow refuses to publish. VersionAgreementTest
+        // `servicetag-v1.8.1` or the release workflow refuses to publish. VersionAgreementTest
         // asserts these two against the schema and format numbers.
-        versionCode = 21
-        versionName = "1.8.0"
+        versionCode = 22
+        versionName = "1.8.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ndefTagPath"] = "/$tagExternalDomain:$tagTypeName"

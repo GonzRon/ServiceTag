@@ -1,6 +1,6 @@
 # Current ServiceTag capabilities
 
-The current released baseline is **ServiceTag 1.8.0**. See the [1.8.0 release notes](releases/1.8.0.md) for the exact release delta.
+The current released baseline is **ServiceTag 1.8.1**. See the [1.8.1 release notes](releases/1.8.1.md) for the exact release delta.
 
 ServiceTag is an NFC-first, local-first equipment maintenance application. The NFC tag is the doorway; the Asset record and its long-lived service history are the product.
 
@@ -193,6 +193,7 @@ Those boundaries keep the core product focused on durable equipment identity and
 - [Local-first design, privacy, and permissions](local-first-and-permissions.md)
 - [Home Assistant season sync](home-assistant-season-sync.md)
 - [Developer API v1](api/v1.md)
+- [1.8.1 release notes](releases/1.8.1.md)
 - [1.8.0 release notes](releases/1.8.0.md)
 - [1.7.0 release notes](releases/1.7.0.md)
 - [Current roadmap — #104](https://github.com/GonzRon/ServiceTag/issues/104)

@@ -4,18 +4,28 @@ import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
+import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.FieldProblem
+import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.ProfileConsumableInput
+import com.loosecannon.servicetag.core.usecase.ProfileFieldInput
 import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.l10n.AppText
@@ -24,13 +34,18 @@ import com.loosecannon.servicetag.testing.EnglishResources
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.ResourcePack
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.EntryOffers
 import com.loosecannon.servicetag.ui.condition.EventOffer
 import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
+import com.loosecannon.servicetag.ui.condition.OperationalOfferPrompt
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.savingAlsoRecordsLine
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +63,9 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -1019,5 +1036,478 @@ class EventEntryViewModelTest {
         vm.state.first { !it.saving }
 
         assertEquals(emptyList<Any>(), graph.events.forAsset(spa.id).single().consumables)
+    }
+
+    // --- #117 (V1–V13): a form opened for a FORM schedule completes it -----------------------------
+
+    /** The sweeps the form ran, in the order they ran against the offers (D8, I9). */
+    private val sweeps = mutableListOf<String>()
+    private val countingReconcile = ReminderReconcile { sweeps += "reconcile" }
+    private val reconciles: Int get() = sweeps.count { it == "reconcile" }
+
+    /** Notes when the offers are asked, into the same list the reconcile writes to. */
+    private class OrderedOffers(private val real: EntryOffers, private val order: MutableList<String>) : EntryOffers by real {
+        override suspend fun offersAfter(event: AssetEvent): List<EventOffer> {
+            order += "offers"
+            return real.offersAfter(event)
+        }
+    }
+
+    /** The entry route as the root builds it for a schedule's form: the completion collaborators always present. */
+    private fun formModel(
+        assetId: AssetId,
+        profileId: ProfileId?,
+        scheduleId: ScheduleId?,
+        eventId: EventId? = null,
+        offers: EntryOffers = graph.eventOffers,
+        reconcile: ReminderReconcile = countingReconcile,
+    ) = EventEntryViewModel(
+        graph.assets, graph.definitions, graph.profiles, graph.events,
+        graph.logEvent, graph.updateEvent, graph.clock,
+        assetId, profileId, eventId, offers = offers,
+        supplyItems = graph.supplyItems,
+        scheduleId = scheduleId,
+        completeSchedule = graph.completeSchedule,
+        schedules = graph.schedules,
+        reconcile = reconcile,
+    )
+
+    /**
+     * A FORM schedule on [assetId], FIXED quarterly from 2025-08-01 and never done: due 2025-08-01, so on the
+     * tenth of February 2026 it is two quarters overdue, and one completion on the tenth moves it to 2026-05-01.
+     */
+    private suspend fun formSchedule(
+        assetId: AssetId,
+        profileId: ProfileId?,
+        title: String = "Quarterly water check",
+        id: String = "s-water",
+    ): MaintenanceSchedule {
+        val schedule = scheduleOf(
+            id, assetId = assetId.value, title = title, anchorOn = "2025-08-01", leadDays = 0,
+            completionMode = CompletionMode.FORM, createdOn = "2025-08-01",
+        ).copy(profileId = profileId)
+        graph.schedules.upsert(schedule)
+        graph.recomputeSchedules.forSchedule(schedule.id)
+        return schedule
+    }
+
+    /** The schedule's computed due as the engine derives it now. */
+    private suspend fun dueOf(id: ScheduleId): String? =
+        graph.recomputeSchedules.stateOf(graph.schedules.get(id)!!).computedDueOn
+
+    /** A MAINTENANCE quick action on the spa: pH and alkalinity, chlorine suggested and a cartridge line naming [link]. */
+    private suspend fun service(spa: Spa, phRequired: Boolean = true, link: SupplyId? = null): EventProfile =
+        graph.saveProfile.run(
+            null,
+            ProfileCommand(
+                spa.id, "Service", EventKind.MAINTENANCE, "Service",
+                listOf(ProfileFieldInput(spa.def("ph").id, phRequired), ProfileFieldInput(spa.def("alkalinity").id, false)),
+                listOf(
+                    ProfileConsumableInput(null, "Chlorine", 1.0, "oz", supplyId = null),
+                    ProfileConsumableInput(null, "Filter cartridge", 1.0, "ea", link),
+                ),
+            ),
+        )
+
+    private suspend fun EventEntryViewModel.typeWaterTest(spa: Spa) {
+        state.first { it.loaded }
+        onDate("2026-02-10")
+        onValue(spa.def("ph").id, "7.4")
+        onValue(spa.def("free_chlorine").id, "2.0")
+    }
+
+    /**
+     * V1: the owner's report. A FORM schedule two quarters overdue, its form saved with the required readings, writes
+     * **one** event linked to it — the occurrence the engine said was open, never owing details, a manual entry of the
+     * profile's kind — leaves, and the due moves to the first series date after the tenth, not one quarter on.
+     */
+    @Test fun aScheduleOpenedFormCompletesTheOpenOccurrence() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val dueBefore = dueOf(schedule.id)
+        assertEquals("2025-08-01", dueBefore)
+
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        val saved = CompletableDeferred<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { saved.complete(vm.saved.first()) }
+        vm.typeWaterTest(spa)
+        vm.onNotes("Example note")
+        vm.onTime("09:30")
+        vm.save()
+        val left = saved.await()
+
+        val stored = graph.events.all().single()
+        assertEquals(left, stored.id)
+        assertEquals(schedule.id, stored.scheduleId)
+        assertEquals(dueBefore, stored.occurrenceOn)
+        assertEquals("Example note", stored.notes)
+        assertEquals("09:30", stored.occurredTime)
+        assertFalse(stored.detailsPending)
+        assertEquals(EventSource.MANUAL, stored.source)
+        assertEquals(spa.profile.eventKind, stored.kind)
+        assertEquals(spa.profile.id, stored.profileId)
+        assertEquals("2026-02-10", stored.occurredOn)
+        assertEquals("no replay: one next occurrence after the tenth", "2026-05-01", dueOf(schedule.id))
+    }
+
+    /**
+     * V2: everything the form collected rides on the linked event — the readings, a suggested material and one linked
+     * to a SupplyItem — as the plain save sends them: numbers read in the owner's language (German here), units, links.
+     */
+    @Test fun aScheduleOpenedFormCarriesItsReadingsAndMaterials() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val cartridge = supplyItem("Example Filter Cartridge")
+        val profile = service(spa, link = cartridge)
+        val schedule = formSchedule(spa.id, profile.id, title = "Quarterly service")
+        AppText.install(ResourcePack.pack("de"))
+        try {
+            val vm = formModel(spa.id, profile.id, schedule.id)
+            val loaded = vm.state.first { it.loaded }
+            vm.onDate("2026-02-10")
+            vm.onValue(spa.def("ph").id, "7,4")
+            vm.onValue(spa.def("alkalinity").id, "90")
+            loaded.suggestions.forEach(vm::addSuggested)
+            vm.onConsumable(0, quantity = "0,5")
+            vm.save()
+            vm.state.first { !it.saving }
+        } finally {
+            AppText.install(EnglishResources())
+        }
+
+        val stored = graph.events.all().single()
+        assertEquals(schedule.id, stored.scheduleId)
+        assertEquals(7.4, stored.measurements.single { it.definitionId == spa.def("ph").id }.valueNum!!, 0.0)
+        assertEquals(90.0, stored.measurements.single { it.definitionId == spa.def("alkalinity").id }.valueNum!!, 0.0)
+        val used = stored.consumables.sortedBy { it.sortOrder }
+        assertEquals(listOf("Chlorine", "Filter cartridge"), used.map { it.name })
+        assertEquals(listOf(0.5, 1.0), used.map { it.quantity })
+        assertEquals(listOf("oz", "ea"), used.map { it.unit })
+        assertEquals(listOf(null, cartridge), used.map { it.supplyId })
+    }
+
+    /** V3: a required reading left empty is refused against its row; nothing is written and the due stays put. */
+    @Test fun aScheduleOpenedFormIsHeldToItsRequiredReadings() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        vm.state.first { it.loaded }
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals("pH is required", refused.firstProblem)
+        assertTrue(refused.fields.first().problem is FieldProblem.Required)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+        assertEquals("2025-08-01", dueOf(schedule.id))
+        assertEquals(0, reconciles)
+    }
+
+    /** V4: an all-optional form saved with nothing typed completes the occurrence; the form collected it, so nothing is owed. */
+    @Test fun anAllOptionalFormSavedEmptyCompletesWithNothingOwed() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val profile = service(spa, phRequired = false)
+        val schedule = formSchedule(spa.id, profile.id, title = "Quarterly service")
+        val vm = formModel(spa.id, profile.id, schedule.id)
+        vm.state.first { it.loaded }
+        vm.onDate("2026-02-10")
+
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val stored = graph.events.all().single()
+        assertEquals(schedule.id, stored.scheduleId)
+        assertFalse("the form collected the details", stored.detailsPending)
+        assertEquals(profile.id, stored.profileId)
+        assertEquals("2026-05-01", dueOf(schedule.id))
+    }
+
+    /** V5 (pin): the same asset and profile without a schedule id — the asset screen's way in — log an ordinary entry. */
+    @Test fun theSameProfileWithoutAScheduleIdStaysAnOrdinaryEntry() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val vm = formModel(spa.id, spa.profile.id, scheduleId = null)
+        vm.typeWaterTest(spa)
+
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val stored = graph.events.all().single()
+        assertNull(stored.scheduleId)
+        assertNull(stored.occurrenceOn)
+        assertEquals("Water test", stored.title)
+        assertEquals("2025-08-01", dueOf(schedule.id))
+        assertEquals(0, reconciles)
+    }
+
+    /** V6 (pin): editing a linked completion keeps its id, link and occurrence key; it never completes, asks or sweeps. */
+    @Test fun editingALinkedCompletionKeepsItsLinkAndNeverCompletes() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val done = graph.completeSchedule.run(
+            schedule.id,
+            CompletionCommand(
+                occurredOn = "2026-02-10", tzId = "UTC",
+                values = mapOf(spa.def("ph").id to "7.4", spa.def("free_chlorine").id to "2.0"),
+            ),
+        )
+        val dueAfterDone = dueOf(schedule.id)
+        val offers = RecordingOffers(graph.eventOffers)
+        val vm = formModel(spa.id, null, scheduleId = null, eventId = done.id, offers = offers)
+        vm.state.first { it.loaded }
+
+        vm.onNotes("Cloudy")
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val stored = graph.events.all().single()
+        assertEquals(done.id, stored.id)
+        assertEquals(schedule.id, stored.scheduleId)
+        assertEquals(done.occurrenceOn, stored.occurrenceOn)
+        assertEquals("Cloudy", stored.notes)
+        assertEquals(dueAfterDone, dueOf(schedule.id))
+        assertEquals("an edit never asks", 0, offers.asked)
+        assertEquals("an edit never sweeps", 0, reconciles)
+    }
+
+    /**
+     * V7: the schedule archived, or deleted, while its form was open: the shipped could-not-save line and **no** event —
+     * never an unlinked entry in its place (D5, I1).
+     */
+    @Test fun anArchivedOrDeletedScheduleRefusesTheSaveAndWritesNothing() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val archived = formSchedule(spa.id, spa.profile.id)
+        val vm = formModel(spa.id, spa.profile.id, archived.id)
+        vm.typeWaterTest(spa)
+        graph.archiveSchedule.run(archived.id, archived = true)
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+        assertEquals(CANNOT_SAVE, refused.firstProblem)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+
+        val deleted = formSchedule(spa.id, spa.profile.id, id = "s-gone")
+        val gone = formModel(spa.id, spa.profile.id, deleted.id)
+        gone.typeWaterTest(spa)
+        graph.schedules.deleteAll()
+
+        gone.save()
+        val alsoRefused = gone.state.first { !it.saving }
+        assertEquals(CANNOT_SAVE, alsoRefused.firstProblem)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+        assertEquals("nothing written, nothing swept", 0, reconciles)
+    }
+
+    /** V7c: the schedule re-targeted to a group (QUICK, no profile) while its form was open: could-not-save, no event. */
+    @Test fun aScheduleRetargetedToAGroupRefusesTheSave() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        vm.typeWaterTest(spa)
+        val spas = graph.saveGroup.run(null, GroupCommand(name = "Spas")).id
+        graph.schedules.upsert(
+            schedule.copy(
+                target = ScheduleTarget.GroupTarget(spas),
+                completionMode = CompletionMode.QUICK,
+                profileId = null,
+            ),
+        )
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals(CANNOT_SAVE, refused.firstProblem)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+        assertEquals(0, reconciles)
+    }
+
+    /**
+     * V8a: a profile-less FORM schedule's form opens its Entry field with the schedule's title; saved untouched it
+     * stores that title, and an edit there is stored as typed.
+     */
+    @Test fun aProfileLessFormOpensWithTheSchedulesTitle() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, profileId = null, title = "Deck clean")
+
+        val first = formModel(spa.id, null, schedule.id)
+        assertEquals("Deck clean", first.state.first { it.loaded }.title)
+        first.onDate("2026-02-10")
+        first.save()
+        first.state.first { !it.saving }
+        assertEquals(listOf("Deck clean"), graph.events.all().map { it.title })
+        assertEquals(schedule.id, graph.events.all().single().scheduleId)
+
+        val second = formModel(spa.id, null, schedule.id)
+        second.state.first { it.loaded }
+        second.onDate("2026-02-10")
+        second.onTitle("Deck clean and oil")
+        second.save()
+        second.state.first { !it.saving }
+        val titles = graph.events.all().filter { it.scheduleId == schedule.id }.map { it.title }.sorted()
+        assertEquals(listOf("Deck clean", "Deck clean and oil"), titles)
+    }
+
+    /** V8b: a profile-backed form stores the schedule's title, not the profile's default title (D3). */
+    @Test fun aProfileBackedFormStoresTheSchedulesTitle() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id, title = "Quarterly water check")
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        assertEquals("the form draws the profile's default", "Water test", vm.state.first { it.loaded }.title)
+        vm.typeWaterTest(spa)
+
+        vm.save()
+        vm.state.first { !it.saving }
+
+        assertEquals("Quarterly water check", graph.events.all().single().title)
+    }
+
+    /** V9 (pin): a schedule-opened save asks its offers once, as any new entry does, and leaves once after the answer. */
+    @Test fun aScheduleOpenedSaveAsksItsOffersOnce() = runTest {
+        onTheTenth()
+        val spa = spa()
+        graph.conditions.insert(conditionRow("c-spa", spa.id.value, OperationalCondition.DOWN, "2026-02-01"))
+        val profile = service(spa)
+        val schedule = formSchedule(spa.id, profile.id, title = "Quarterly service")
+        val offers = RecordingOffers(graph.eventOffers)
+        val vm = formModel(spa.id, profile.id, schedule.id, offers = offers)
+        vm.state.first { it.loaded }
+        val saved = mutableListOf<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { vm.saved.collect { saved += it } }
+        vm.onDate("2026-02-10")
+        vm.onValue(spa.def("ph").id, "7.4")
+
+        vm.save()
+        val asking = vm.state.first { it.offer != null }
+        assertTrue(asking.offer is OperationalOfferPrompt)
+        vm.declineOffer()
+        vm.state.first { it.offer == null && !it.saving }
+        advanceUntilIdle()
+
+        assertEquals(1, offers.asked)
+        assertEquals(listOf(graph.events.all().single().id), saved)
+    }
+
+    /** V10 (pin): two taps in one frame write one event, leave once, and move the due at most one occurrence on. */
+    @Test fun twoTapsOnAScheduleOpenedFormWriteOneEvent() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        val saved = mutableListOf<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { vm.saved.collect { saved += it } }
+        vm.typeWaterTest(spa)
+
+        vm.save()
+        vm.save()
+        vm.state.first { !it.saving }
+        advanceUntilIdle()
+
+        assertEquals(1, graph.events.all().size)
+        assertEquals(1, saved.size)
+        assertNotEquals("never two occurrences", "2026-08-01", dueOf(schedule.id))
+    }
+
+    /**
+     * V11 (I5): a schedule id comes only with the completion collaborators and only on a new, plain entry — never with
+     * an edit's event id, never with a held condition.
+     */
+    @Test fun aScheduleIdIsRefusedOnAnEditAPendingEntryOrWithoutTheCompletion() = runTest {
+        val spa = spa()
+        val id = ScheduleId("s-any")
+        fun build(
+            eventId: EventId? = null,
+            held: PendingCondition? = null,
+            complete: Boolean = true,
+            repository: Boolean = true,
+            sweep: Boolean = true,
+        ) = EventEntryViewModel(
+            graph.assets, graph.definitions, graph.profiles, graph.events,
+            graph.logEvent, graph.updateEvent, graph.clock,
+            spa.id, null, eventId, offers = graph.eventOffers,
+            pending = held, recordWithIncident = graph.recordConditionWithIncident.takeIf { held != null },
+            scheduleId = id,
+            completeSchedule = graph.completeSchedule.takeIf { complete },
+            schedules = graph.schedules.takeIf { repository },
+            reconcile = countingReconcile.takeIf { sweep },
+        )
+
+        assertThrows(IllegalArgumentException::class.java) { build(eventId = EventId("e-1")) }
+        assertThrows(IllegalArgumentException::class.java) { build(held = heldDown()) }
+        assertThrows(IllegalArgumentException::class.java) { build(complete = false) }
+        assertThrows(IllegalArgumentException::class.java) { build(repository = false) }
+        assertThrows(IllegalArgumentException::class.java) { build(sweep = false) }
+    }
+
+    /**
+     * V12 (D8, I9): the form sweeps the reminders once after a schedule-opened write and before the offers are read;
+     * never after a plain entry or an edit; and a sweep that fails leaves the save standing.
+     */
+    @Test fun aScheduleOpenedWriteSweepsTheRemindersOnceBeforeItsOffers() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+
+        val completes = formModel(spa.id, spa.profile.id, schedule.id, offers = OrderedOffers(graph.eventOffers, sweeps))
+        completes.typeWaterTest(spa)
+        completes.save()
+        completes.state.first { !it.saving }
+        assertEquals(listOf("reconcile", "offers"), sweeps)
+
+        sweeps.clear()
+        val plain = formModel(spa.id, spa.profile.id, scheduleId = null, offers = OrderedOffers(graph.eventOffers, sweeps))
+        plain.typeWaterTest(spa)
+        plain.save()
+        plain.state.first { !it.saving }
+        val edit = formModel(spa.id, null, scheduleId = null, eventId = graph.events.all().first().id)
+        edit.state.first { it.loaded }
+        edit.onNotes("Edited")
+        edit.save()
+        edit.state.first { !it.saving }
+        assertEquals("a plain entry and an edit never sweep", listOf("offers"), sweeps)
+
+        val failing = formModel(
+            spa.id, spa.profile.id, schedule.id,
+            reconcile = ReminderReconcile { throw IllegalStateException("example sweep failure") },
+        )
+        val left = CompletableDeferred<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { left.complete(failing.saved.first()) }
+        failing.typeWaterTest(spa)
+        failing.save()
+        val written = left.await()
+        assertNull(failing.state.value.firstProblem)
+        assertEquals(schedule.id, graph.events.get(written)!!.scheduleId)
+        assertEquals("the second occurrence is written too", 2, graph.events.all().count { it.scheduleId == schedule.id })
+    }
+
+    /** V13: the asset transferred out while the form was open: the transferred-out line (P77-35), and nothing written. */
+    @Test fun aTransferredOutAssetRefusesTheSaveWithItsOwnLine() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        vm.typeWaterTest(spa)
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-1", assetId = spa.id, kind = TransferKind.OUT, packId = "0f1e2d3c-pack",
+                lineage = emptyList(), at = dayMillis("2026-02-10"), packSha256 = "ab".repeat(32),
+                nameSnapshot = "Spa", note = "",
+            ),
+        )
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals(TransferImportStrings.ASSET_TRANSFERRED_OUT, refused.firstProblem)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+        assertEquals(0, reconciles)
     }
 }

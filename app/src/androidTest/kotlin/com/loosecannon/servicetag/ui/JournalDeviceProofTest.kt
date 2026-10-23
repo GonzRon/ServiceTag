@@ -14,7 +14,6 @@ import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -433,11 +432,11 @@ private fun ComposeTestRule.textFieldAfter(holding: String): SemanticsNodeIntera
 }
 
 /**
- * The app bar's Save, which is the one that commits; the button at the foot of the form reads
- * "Record entry" or "Save entry", so this is unambiguous.
+ * The form's one commit control: the button at its foot, "Record entry" on a new entry and "Save
+ * entry" on an edit. It ends the form's scrolling column, so it is scrolled into view first.
  */
 private fun ComposeTestRule.saveEntry() {
-    onAllNodesWithText("Save").onFirst().performClick()
+    onNode(hasText("Record entry") or hasText("Save entry")).performScrollTo().performClick()
 }
 
 /**

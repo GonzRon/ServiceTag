@@ -136,7 +136,6 @@
     <string name="journal_delete_readings_go">Её показания удалятся вместе с ней.</string>
     <string name="journal_cancel">Отмена</string>
     <string name="journal_close">Закрыть</string>
-    <string name="journal_save">Сохранить</string>
     <string name="journal_field_entry">Запись</string>
     <string name="journal_save_entry">Сохранить запись</string>
     <string name="journal_record_entry">Добавить запись</string>

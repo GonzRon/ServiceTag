@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
@@ -12,8 +13,11 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.listedForDue
 import com.loosecannon.servicetag.core.usecase.AssetCommand
@@ -38,10 +42,14 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -82,7 +90,7 @@ class ScheduleDetailViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(scheduleId: ScheduleId) = ScheduleDetailViewModel(
+    private fun viewModel(scheduleId: ScheduleId, transfers: TransferRecordRepository? = null) = ScheduleDetailViewModel(
         schedules = graph.schedules,
         assets = graph.assets,
         groups = graph.groups,
@@ -98,6 +106,7 @@ class ScheduleDetailViewModelTest {
         clock = graph.clock,
         completion = graph.completionFlow,
         scheduleId = scheduleId,
+        transfers = transfers,
     )
 
     private suspend fun anAssetSchedule(
@@ -713,5 +722,169 @@ class ScheduleDetailViewModelTest {
         vm.cancelLinkGuard()
         assertNull(vm.state.value.linkGuard)
         assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(id)!!.status)
+    }
+
+    // ---------------------------------------------------------------- #117 (F1): an arrival asks once
+
+    /** Every `arrivalEnded` [vm] says, collected from now on. */
+    private fun TestScope.endings(vm: ScheduleDetailViewModel): List<Unit> {
+        val ended = mutableListOf<Unit>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.arrivalEnded.collect { ended += it } }
+        return ended
+    }
+
+    /**
+     * #117 SD1 (§3.3, I8): the notification's **Done** on a FORM schedule hands over to the form **once**. A second
+     * `arrive()` on the same model — the detail composed afresh back from the form, a rotation — opens no second
+     * form. Handing over is no ending: the root clears that arrival itself, beside the push.
+     */
+    @Test fun aFormArrivalHandsOverOnceAndIsNoEnding() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val schedule = graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = mower.id,
+                targetGroupId = null,
+                title = "Blade sharpen",
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = "2026-01-01",
+                completionMode = CompletionMode.FORM,
+            ),
+        )
+        val vm = viewModel(schedule.id)
+        vm.state.first { it.loaded }
+        val forms = mutableListOf<CompletionOutcome.NeedsForm>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.needsForm.collect { forms += it } }
+        val ended = endings(vm)
+
+        vm.arrive()
+        vm.state.first { !it.busy }
+        vm.arrive()
+        advanceUntilIdle()
+
+        assertEquals("one form", listOf(CompletionOutcome.NeedsForm(schedule.id, mower.id, null)), forms)
+        assertEquals("a hand-over is no ending", 0, ended.size)
+        assertTrue("nothing written", graph.events.all().isEmpty())
+    }
+
+    /**
+     * #117 SD1 (§3.3): a QUICK schedule carrying a meter rule arrives on "When was this done?" **once** per model —
+     * not again while it is open, nor after the owner backed out. Each run's end is said exactly once: Cancelled,
+     * and on a second arrival Completed, after which the root clears the arrival and the detail re-derives.
+     */
+    @Test fun aMeterArrivalAsksOnceAndEachEndingIsSaidOnce() = runTest {
+        val tractor = graph.createAsset.run(AssetCommand(name = "Tractor", category = "Yard"))
+        val hours = meterDefinitionOf("d-hours", tractor.id.value)
+        graph.definitions.upsert(hours)
+        val schedule = graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = tractor.id,
+                targetGroupId = null,
+                title = "Oil change",
+                meterDefinitionId = hours.id,
+                meterInterval = 100.0,
+                anchorMeter = 400.0,
+            ),
+        )
+        val prompts = mutableListOf<CompletionPrompt>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) {
+            graph.completionFlow.prompt.filterNotNull().collect { prompts += it }
+        }
+
+        val backedOut = viewModel(schedule.id)
+        backedOut.state.first { it.loaded }
+        val endedBackedOut = endings(backedOut)
+        backedOut.arrive()
+        graph.completionFlow.prompt.first { it != null }
+        backedOut.arrive()
+        graph.completionFlow.cancel()
+        backedOut.state.first { !it.busy }
+        backedOut.arrive()
+        advanceUntilIdle()
+        assertEquals("one question", 1, prompts.size)
+        assertNull(graph.completionFlow.prompt.value)
+        assertEquals("Cancelled, said once", 1, endedBackedOut.size)
+
+        val answered = viewModel(schedule.id)
+        answered.state.first { it.loaded }
+        val endedAnswered = endings(answered)
+        answered.arrive()
+        answer("2026-04-15", meterValue = "512")
+        answered.state.first { !it.busy && it.history.isNotEmpty() }
+        answered.arrive()
+        advanceUntilIdle()
+        assertEquals(2, prompts.size)
+        assertEquals("Completed, said once", 1, endedAnswered.size)
+        assertEquals(1, graph.events.all().size)
+    }
+
+    /**
+     * #117 SD1 (§3.3): a refused run ends the arrival, said once. The held refusal (#77, P77-35) does not: it wrote
+     * nothing and its sentence stays on screen, and the same model never says it twice.
+     */
+    @Test fun aRefusedArrivalEndsAndAHeldOneDoesNot() = runTest {
+        val (_, round, _) = aGroupRound()
+        val refused = viewModel(round)
+        refused.state.first { it.loaded }
+        val endedRefused = endings(refused)
+        refused.arrive()
+        refused.state.first { !it.busy }
+        advanceUntilIdle()
+        assertNull("no question for a group with no member named", graph.completionFlow.prompt.value)
+        assertEquals("Refused, said once", 1, endedRefused.size)
+
+        val (mower, id) = anAssetSchedule()
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-mower", assetId = mower, kind = TransferKind.OUT, packId = "0f1e2d3c-4b5a-4968-8776-655443322110",
+                lineage = emptyList(), at = dayMillis("2026-04-01"), packSha256 = "ab".repeat(32), nameSnapshot = "Mower",
+                note = "",
+            ),
+        )
+        val held = viewModel(id, transfers = graph.transferRecords)
+        held.state.first { it.loaded }
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { held.messages.collect { said += it } }
+        val endedHeld = endings(held)
+        held.arrive()
+        held.state.first { !it.busy }
+        held.arrive()
+        advanceUntilIdle()
+        assertNull("no question", graph.completionFlow.prompt.value)
+        assertEquals(listOf("This asset was transferred out."), said)
+        assertEquals("the held refusal is no ending", 0, endedHeld.size)
+        assertTrue("nothing written", graph.events.all().isEmpty())
+    }
+
+    /**
+     * #117 SD1 (§3.3): the held refusal's race shape — the model reads no hold, so the arrival asks, and the guarded
+     * write refuses the answer (`Refused(AssetTransferredOut)`). That run is no ending either: P77-35 said once, and
+     * nothing written.
+     */
+    @Test fun aHeldRefusalFromTheGuardedWriteEndsNoArrival() = runTest {
+        val (mower, id) = anAssetSchedule()
+        // Built without `transfers`, so the model's own check passes and the question opens.
+        val raced = viewModel(id)
+        raced.state.first { it.loaded }
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-mower", assetId = mower, kind = TransferKind.OUT, packId = "0f1e2d3c-4b5a-4968-8776-655443322110",
+                lineage = emptyList(), at = dayMillis("2026-04-01"), packSha256 = "ab".repeat(32), nameSnapshot = "Mower",
+                note = "",
+            ),
+        )
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { raced.messages.collect { said += it } }
+        val ended = endings(raced)
+        raced.arrive()
+        answer("2026-04-15")
+        raced.state.first { !it.busy }
+        advanceUntilIdle()
+        assertNull(graph.completionFlow.prompt.value)
+        assertEquals(listOf("This asset was transferred out."), said)
+        assertEquals("the held refusal is no ending", 0, ended.size)
+        assertTrue("nothing written", graph.events.all().isEmpty())
     }
 }

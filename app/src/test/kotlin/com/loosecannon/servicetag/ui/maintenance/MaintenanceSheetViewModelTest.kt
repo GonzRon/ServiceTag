@@ -811,14 +811,13 @@ class MaintenanceSheetViewModelTest {
         advanceUntilIdle()
         assertEquals("one form at a time", listOf("f1"), forms)
 
-        // The owner saves the first form, which is what the journal entry screen does.
+        // The owner saves the first form (simulated: the entry form's own sweep is not part of this model).
         graph.completeSchedule.run(ScheduleId("f1"), CompletionCommand(occurredOn = graph.today.toString(), tzId = "UTC"))
         model.refresh()
         advanceUntilIdle()
         assertEquals("and only then does the second open", listOf("f1", "f2"), forms)
-        // #50 AC 8 on the FORM path: the journal screen wrote the event and reconciles nothing, so
-        // the sheet is where the standing notification is quiesced by canonical state
-        // (should-fix 4).
+        // #50 AC 8 on the FORM path: the sheet sweeps once on the resume after a saved form,
+        // quiescing the standing notification by canonical state (should-fix 4).
         assertEquals(1, reconciles)
 
         // …and abandons the second. The run stops rather than carrying on behind their back.
@@ -828,6 +827,46 @@ class MaintenanceSheetViewModelTest {
         assertEquals(1, graph.events.all().count { it.scheduleId?.value == "f1" })
         assertEquals(0, graph.events.all().count { it.scheduleId?.value == "f2" })
         assertEquals("an abandoned form reconciles nothing", 1, reconciles)
+    }
+
+    /**
+     * #117 SH1 (§3.4, I11): the resume guard lives in the model, which outlives the sheet's composition under a form.
+     * The first `onResumed()` of a model's life follows its `init`'s load and re-derives nothing — a schedule written
+     * behind it does not appear. Every later one re-derives: back from the first form, saved through the completion
+     * use case as the entry form now saves it, the row drops, the next selected form opens and the sheet reconciles
+     * once.
+     */
+    @Test fun theFirstResumeIsTheLoadAndTheNextResumesTheQueue() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("f1", assetId = asset.value, title = "Annual service", anchorOn = "2026-01-01", leadDays = 0, completionMode = CompletionMode.FORM))
+        seed(scheduleOf("f2", assetId = asset.value, title = "Deep clean", anchorOn = "2026-01-02", leadDays = 0, completionMode = CompletionMode.FORM))
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        val forms = mutableListOf<String>()
+        backgroundScope.launch { model.needsForm.collect { forms += it.scheduleId.value } }
+        advanceUntilIdle()
+
+        seed(scheduleOf("f3", assetId = asset.value, title = "Belt check", anchorOn = "2026-01-03", leadDays = 0, completionMode = CompletionMode.FORM))
+        model.onResumed()
+        advanceUntilIdle()
+        assertEquals("the first resume re-derives nothing", listOf("f1", "f2"), model.state.value.items.map { it.scheduleId.value })
+
+        model.toggle(ScheduleId("f1"))
+        model.toggle(ScheduleId("f2"))
+        model.completeSelected()
+        advanceUntilIdle()
+        assertEquals(listOf("f1"), forms)
+
+        graph.completeSchedule.run(
+            ScheduleId("f1"),
+            CompletionCommand(occurredOn = graph.today.toString(), tzId = "UTC", viaForm = true),
+        )
+        model.onResumed()
+        advanceUntilIdle()
+        assertFalse("the saved row drops", model.state.value.items.any { it.scheduleId.value == "f1" })
+        assertEquals("and the next selected form opens", listOf("f1", "f2"), forms)
+        assertEquals(1, reconciles)
+        assertEquals(1, graph.events.all().count { it.scheduleId?.value == "f1" })
     }
 
     /** #50 AC 5 / #11: a meter schedule cannot be completed without its required reading. */

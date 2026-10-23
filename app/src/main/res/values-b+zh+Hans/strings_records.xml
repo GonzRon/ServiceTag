@@ -133,7 +133,6 @@
     <string name="journal_delete_readings_go">其读数会一并删除。</string>
     <string name="journal_cancel">取消</string>
     <string name="journal_close">关闭</string>
-    <string name="journal_save">保存</string>
     <string name="journal_field_entry">记录</string>
     <string name="journal_save_entry">保存记录</string>
     <string name="journal_record_entry">添加记录</string>

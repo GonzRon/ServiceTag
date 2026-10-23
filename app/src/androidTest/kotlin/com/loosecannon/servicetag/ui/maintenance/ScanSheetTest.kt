@@ -183,7 +183,7 @@ class ScanSheetTest {
                     tagId = tagId,
                     onOpenAsset = { record += "asset:$it" },
                     onReviewSchedule = { record += "review:$it" },
-                    onLogForm = { asset, profile -> record += "form:$asset:$profile" },
+                    onLogForm = { form -> record += "form:${form.assetId.value}:${form.profileId?.value}:${form.scheduleId.value}" },
                     onDismiss = { record += "dismiss" },
                     onLogIncidentDetails = onLogIncidentDetails,
                     onLogIncident = onLogIncident,
@@ -331,7 +331,7 @@ class ScanSheetTest {
                     startCompletion = startCompletion,
                     onBack = {},
                     onEditRecurrence = {},
-                    onLogForm = { _, _ -> },
+                    onLogForm = {},
                 )
             }
         }
@@ -577,7 +577,7 @@ class ScanSheetTest {
             ServiceTagTheme {
                 MaintenanceSheet(
                     graph = graph, assetId = pack.value, tagId = null, onOpenAsset = {}, onReviewSchedule = {},
-                    onLogForm = { _, _ -> }, onDismiss = {},
+                    onLogForm = {}, onDismiss = {},
                 )
             }
         }
@@ -706,7 +706,7 @@ class ScanSheetTest {
 
     /**
      * #82 (C11, NOTE 1): back from the Incident entry the sheet composes afresh over the same view
-     * model, and the shipped resume guard skips that first resume. The flag is read again anyway, so
+     * model, and the flag is read again on every resume (`onShown`), whatever `onResumed` does, so
      * "Log incident" is gone once the failure has its Incident.
      */
     @Test fun backFromTheIncidentEntryTheFlagIsReadAgain() {
@@ -719,7 +719,7 @@ class ScanSheetTest {
                 if (shown) {
                     MaintenanceSheet(
                         graph = graph, assetId = pack.value, tagId = null,
-                        onOpenAsset = {}, onReviewSchedule = {}, onLogForm = { _, _ -> }, onDismiss = {},
+                        onOpenAsset = {}, onReviewSchedule = {}, onLogForm = {}, onDismiss = {},
                     )
                 }
             }

@@ -8,7 +8,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -186,7 +185,7 @@ class AssetServiceCasesTest {
         rule.awaitText("Entry")
         rule.onAllNodesWithText(SAVE_CASE).assertCountEquals(0)
         rule.onNode(hasSetTextAction() and hasText("Entry")).performTextReplacement("Trips the breaker")
-        rule.onAllNodesWithText("Save").onFirst().performClick()
+        rule.onNodeWithText("Record entry").performScrollTo().performClick()
         rule.awaitText(NO_CHANGE)
         rule.onNodeWithText(NO_CHANGE).performClick()
 
