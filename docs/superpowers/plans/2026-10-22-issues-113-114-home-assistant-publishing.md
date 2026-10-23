@@ -1,4 +1,33 @@
-# #113 + #114 — Home Assistant publishing: equipment status and the Season Start service: master plan (rev 4.1, 2026-10-23)
+# #113 + #114 — Home Assistant publishing: equipment status and the Season Start service: master plan (rev 5, 2026-10-23)
+
+> **Rev 5 (2026-10-23)** folds the owner-forwarded external review of rev 4.1's MCP parity and the controller's
+> rulings (`external-review-rev4.1-mcp.md`, binding here; the owner's instruction: "ensure all new features and
+> functionality in 113 and 114 are accessible" over MCP), nothing else. **Appendix W is dissolved into required
+> scope:** O-7 and O-21 read **RULED by the owner's instruction 2026-10-23: full MCP parity** (§6), and G17 now fences
+> only the phone-only list. The Season Start role is a canonical command over `/v1` and MCP with its boundary date and
+> the QUICK election (**C10a**; A2 +, A5b +); the five publishing controls — enable, change target, disable, check
+> helper, Publish now — and the tombstone acknowledgement go over `/v1` and MCP (**C25a**, **C35b**); readiness and
+> published values stay derived and no route takes a value (G17, I33). **Helper discovery:**
+> `GET /v1/ha-connection/entities/{scope}` and MCP `list_ha_entities(scope)` over the shipped #105 list read, three
+> scopes, bounded, `options` / `hasDate` / `hasTime` only, the same network and token rule, never cached (**C29b**,
+> A4w, rows 114, 115; the ruling's `?scope=` is a path segment because the framing drops every query string).
+> **Correction 1:** the plan route returns a `planId` fingerprint over the asset, kind, action, target, boundary, the
+> connection's id and `config_generation`, the binding revision and the validated remote shapes; the action echoes it;
+> stale → 409 `STALE_PLAN`, a new `PublishRefusal.STALE_PLAN` with P113-44 (C25a, C35b, rows 116, 117).
+> **Correction 2:** per-action validation — Disable commits locally with no HA read, Check helper validates the stored
+> destination, Enable and Change target commit the plan step's fresh validation, Publish now needs none (C25a, row
+> 118). **Correction 3:** Publish now answers **202** with a `requestId` and never holds the API connection; the read's
+> `request.progress` tells `ACCEPTED`, `PUBLISHED` and `VERIFIED` apart (or `FAILED`), derived from the existing pairs
+> and two schema-22 columns, `last_request_id` / `last_request_at` (C4.3, C35, C35b, rows 119, 122). **Correction 4:**
+> one statement, used verbatim in C35b and §6 O-21(b):
+> **Tombstone acknowledgement is in scope (O-21(b)):** `POST /v1/ha-publishing/decommissions/{id}/acknowledge` and MCP `acknowledge_ha_decommission` acknowledge an UNDELIVERABLE tombstone as cleared in Home Assistant by hand only when the body carries the tombstone id (`decommissionId`, equal to the path's) and `acknowledgedClearedInHa: true`, both set by the caller — the tool never invents either — and the sentence the phone shows (P114-38) is unchanged.
+> **Bookkeeping:** three new briefs — **A4w** (wave 7, lane 2: the role route, the PATCH flag, discovery), **B5w1**
+> (wave 11, lane 2: the plan and Enable / Change target), **B5w2** (a new wave 12, lane 2: Disable, Check helper,
+> Publish now, the acknowledgement) — **twenty-two dispatches in twelve waves**; eight new MCP tools, **101** at the tip
+> (C29a's ladder by wave: 91, 93, 94, 95, 97, 101); `command-shapes.json` and its pins in A4w, B5w1 and B5w2;
+> `_POSTS_THAT_WRITE_NOTHING` matches path shapes and holds the plan route; R6's parity greps replace rev 4.1's D3
+> greps; rows 112–122; 89 strings and one plural. One addition the rulings imply: the acknowledgement covers exactly
+> what P114-38 covers, an UNDELIVERABLE tombstone (`DecommissionStillPending`, C25a).
 
 > **Rev 4.1 (2026-10-23)** folds the MCP and `/v1` surface audit of rev 4 (`mcp-surface-audit.md`, read on
 > `62e39670`), nothing else: its **Part R** (reads, recommended whatever O-7 says) and the five defects in rev 4's own
@@ -124,7 +153,7 @@
 > planner re-read on the same base every site this plan cites and **corrects the audit in eighteen places** (§10; rev 2 fixes c8 and c13 and four of its own citations).
 > **Worktree / branch:** `../noteNFC-wt-113`, branch `issue-113-114-ha-publishing`.
 > **Base:** master `62e39670` (1.8.0 / code 21, Room schema 21 / backup format 20, MCP 90 tools, gitlink `7e0377a`,
-> 78 connected classes in 76 files / 430 tests). **Nineteen dispatches** in eleven waves on two lanes (§4, rev 2; B5r rev 4.1); each brief's
+> 78 connected classes in 76 files / 430 tests). **Twenty-two dispatches** in twelve waves on two lanes (§4, rev 2; B5r rev 4.1; A4w, B5w1, B5w2 rev 5); each brief's
 > `<base>` is the previous accepted tip of its lane.
 
 **Goal:** a fictional "Example Heater" (a pellet-type appliance, top-level, `MANUAL` season, its inbound #16 binding following
@@ -173,7 +202,9 @@ Each line is a sentence a reviewer can test against the diff.
 3. **#16's GET-only contract is untouched.** `HomeAssistantStateClient`'s requests, headers, caps, mapping and its
    tests (`T/seasonsync/HomeAssistantStateClientTest.kt`, `SeasonSyncScenarioTest.kt`, `SeasonSyncRunnerTest.kt`,
    `SeasonSyncWorkerBodyTest.kt`, `CT/seasonsync/*`) are byte-identical at the tip but for the one extraction B2 makes
-   (C21), which moves code without changing an assertion; the inbound runner, worker, work and cadence are unchanged. The four
+   (C21), which moves code without changing an assertion, and the one #105 extension A4w makes (C29b:
+   `HaEntityCandidate` gains a trailing defaulted `attributes`, filled only for `input_select` and `input_datetime`
+   ids, which no shipped fixture lists); the inbound runner, worker, work and cadence are unchanged. The four
    #16 commands C26/C28 extend (`LinkSeasonSync`, `EditSeasonSyncEntity`, `SaveHaConnection`, `ForgetHaConnection`)
    take their new collaborator as a **trailing parameter defaulted to `OutboundTargets.NONE`**, so every shipped
    positional construction (`CT/seasonsync/LinkSeasonSyncTest.kt:80-89` and the rest) compiles unchanged and
@@ -203,7 +234,7 @@ Each line is a sentence a reviewer can test against the diff.
     revocation.
 11. **Exhaustive `when`, never `else`,** over every new closed set: `PublishKind`, `PublishErrorKind`, `PublishState`,
     `NotReadyReason`, `BoundarySource`, `HaBoundary` (sealed), `PublishRefusal`, `SeasonStartRefusal`, `SeasonStartStrandCause`,
-    `HaServiceAction`, `ScheduleRole`, and each new
+    `HaServiceAction`, `ScheduleRole`, `RequestProgress` (C35b), and each new
     API arm (#47 E-18: a new exception never reaches `ApiJson`'s `else` → 500).
 12. **Every user-visible string is a resource in all ten packs** (`values` + `values-{b+zh+Hans,de,es,fr,hi,it,ja,pt,ru}`),
     ratified in §5 before its brief runs, read through getters, held by `LocalizationCoverageTest` and
@@ -225,11 +256,13 @@ Each line is a sentence a reviewer can test against the diff.
 17. **The fence (out, everywhere):** an inbound listener, webhook, WebSocket, SSE or MQTT; a generic REST source (#100);
     publishing maintenance health, bands, due dates or readiness as a condition; a fourth equipment value; a release
     or revoke workflow beyond completing and un-completing the schedule; a cycle identifier; Assets-tab indicators
-    (#116); any API or MCP **write** for publishing or the role (O-7, O-21; Appendix W is pending and out of scope until
-    ruled); the base URL, token or Wi-Fi name over API or MCP.
+    (#116); over API or MCP (rev 5: O-7 and O-21 RULED, full parity) — any route or tool that takes a value, a date to
+    publish or READY (#114 point 5); the token, the base URL, the Wi-Fi name and its capture, the location asks, Test
+    connection, saving the connection and an address change, Forget and its drain, the #16 link and Follow/Force, and
+    the value of `activatedInstallationId` (O-21(d), I33).
 18. **The API adds codes, never sentences:** additive, version 1; `ignoreUnknownKeys = false` stays
-    (`A/api/ApiJson.kt:104`), so the role keys appear only in responses and a request body carrying them is the
-    shipped 400.
+    (`A/api/ApiJson.kt:104`), so the role keys appear only in responses and a schedule body carrying them is the
+    shipped 400 — the role has its own route (C29b), and no route takes a value, a date to publish or READY (G17).
 19. **No personal data (operator note, 2026-10-22, binding).** Fixtures, docs and this plan use the fictional names of
     the Goal ("Example Heater", "Example Boiler", "Example pre-season check"), `ha.example`, `http://192.168.0.10:8123`,
     `ExampleHomeWifi`; the owner's asset, schedule and group names, entity ids, fixture helper ids, address, Wi-Fi, host
@@ -258,8 +291,10 @@ service date (or `1970-01-01`) to a date-only `input_datetime` — through two a
 serialized latest-desired-state sender with generation fencing and readback, post-commit projection and reconcile
 scans, installation-fenced activation and no inheritance, and, for a date binding on a `MANUAL` asset whose season HA
 drives, one read of HA's season-ended helper as its readiness boundary; plus a passive `SEASON_START` role on one schedule per
-eligible asset (or, under C1, per group), a commissioning boundary, a pure readiness rule, its phone lines and
-read-only API/MCP projections. Nothing more.*
+eligible asset (or, under C1, per group), a commissioning boundary, a pure readiness rule, its phone lines, and
+API/MCP parity for every new fact and control — the read projections, the role command, the publishing controls,
+the tombstone acknowledgement and helper discovery — with the token, the connection and Forget phone-only (rev 5:
+O-7, O-21). Nothing more.*
 
 **In scope — #113's acceptance lines (AC113-n) and #114's (AC114-n), each on its contracts and rows:**
 
@@ -282,18 +317,20 @@ read-only API/MCP projections. Nothing more.*
 | AC114-5 | with #113's layer, the opt-in publishes the date or `1970-01-01` through `set_datetime` only, under every #113 rule | C15, C22, C30 · rows 26, 34, 58 |
 | AC114-6 | every way ServiceTag stops writing publishes `1970-01-01` first; an undeliverable invalidation is shown | C34 · rows 70–74 |
 | AC114-7 | docs: role, boundary, rule, invalid date, HA pair and gate with the freeze override, the interim, no instant revocation, same day | C38, §8 · D1 |
+| AC-P | (the owner's instruction, 2026-10-23) every new fact and control of #113 and #114 is reachable over `/v1` and MCP, but the phone-only list of G17 | C10a, C25a, C29b, C35b · rows 112–122 |
 
 **Out of scope** (the fence, G17, and): #116's Assets-tab indicators; maintenance-health publication (#113's separate
 optional work); `input_boolean`/`input_text` publication and the cycle-identifier model of #113's addendum (superseded
 by #114's date design); a Season End role; more than one required schedule per asset; checklist revisions; readiness
 on a leaf child or inherited by children; any change to #16's inbound decision, cadence or guard; any change to #105's
-`input_boolean` scope other than adding two scopes beside it; #100; any HA-repository change (§8 is the owner's work).
+`input_boolean` scope other than adding two scopes beside it and the defaulted helper attributes (C29b); #100; any HA-repository change (§8 is the owner's work).
 
 **Boundaries with neighbouring issues.** **#16:** reused, not changed — the connection, endpoint policy, secret store,
 network eligibility, the gate (extracted, C21) and the re-bind command `EditSeasonSyncEntity`
 (`C/seasonsync/SeasonSyncCommands.kt:114-143`), which gains only the C2 refusal. **#105:** `EntityScope` gains
-`INPUT_SELECTS` and `INPUT_DATETIMES` beside `INPUT_BOOLEANS` (`C/seasonsync/EntityPicker.kt:7-9`); the browser is
-reused with a scope parameter; the inbound sheet keeps `INPUT_BOOLEANS`. **#100:** untouched; when it lands, C26's
+`INPUT_SELECTS` and `INPUT_DATETIMES` beside `INPUT_BOOLEANS` (`C/seasonsync/EntityPicker.kt:7-9`; A4w adds them, C29b); the browser
+is reused with a scope parameter; the inbound sheet keeps `INPUT_BOOLEANS`; the list read is exposed read-only over
+`/v1` and MCP for the three scopes as helper discovery (C29b). **#100:** untouched; when it lands, C26's
 cross-check is the place its source joins. **#116:** draws nothing of this plan's on the Assets tab.
 
 **Recorded limits (stated, not fixed):**
@@ -339,6 +376,9 @@ cross-check is the place its source joins. **#116:** draws nothing of this plan'
     never one allowed (§8).
 17. **A boundary helper is named at Enable** (C25): a date binding enabled before its asset's #16 link names none and
     reads the phone's END (P114-51) until Stop publishing and Enable name one.
+18. **An API plan lives ten minutes, in memory** (C35b): a plan dies with the Developer API screen, at its
+    `expiresAt`, or when anything it fingerprints moves (`STALE_PLAN`); the caller plans again. Publish now's 202
+    promises nothing about Home Assistant: the read is the poll.
 
 ## 1a. Stories
 
@@ -371,13 +411,19 @@ Out of scope: the hot tub's and the pool's Home Assistant rules (§8 describes o
   `RemoteEntity`, `ScheduleRole { NONE, SEASON_START }`, `Readiness`, `ReadinessBoundary`, `BoundarySource`,
   `NotReadyReason`, `OutboundTargets`, `SeasonStartRefusal`,
   `SeasonStartStrandCause`, `HaBoundary` (A1, C9a), `haBoundaryOf` (B1, C9a), `ImportContext` and `ReturnCarry` (A3, C20),
-  `ValidationResult` (B1, C14), the app seams `DesiredStateReconciler` (B4a), `PublishInputs` and `DeliveryRequester`
+  `ValidationResult` (B1, C14), rev 5's `planIdOf` (B3, C25a), `HelperAttributes` (A4w, C29b), `RequestProgress` (B5)
+  and `PublishRequest` (B4b2) (C35b), the app seams `DesiredStateReconciler` (B4a), `PublishInputs` and `DeliveryRequester`
   (B4b1) (C30–C32) and the
   app-layer `requestDelivery()` (B4b2, C32). Wire values: the options `UP`, `DEGRADED`, `DOWN`; the invalid date
   **`1970-01-01`**, declared once as `const val INVALID_SERVICE_DATE = "1970-01-01"` in `C/hapublish/`. WorkManager
   unique names `"ha-publish"` (one-time) and `"ha-publish-reconcile"` (periodic). Routes
   `GET /v1/assets/{id}/season-readiness` (A4), `GET /v1/assets/{id}/ha-publishing` (B5) and `GET /v1/ha-publishing`
-  (B5r, rev 4.1); MCP tools `get_season_readiness`, `get_ha_publishing`, `list_ha_publishing`; constant
+  (B5r, rev 4.1); rev 5: `POST /v1/schedules/{id}/role` and `GET /v1/ha-connection/entities/{scope}` (A4w),
+  `POST /v1/assets/{id}/ha-publishing-plan` and `POST /v1/assets/{id}/ha-publishing` (B5w1, B5w2),
+  `POST /v1/assets/{id}/ha-publishing/publish-now` and `POST /v1/ha-publishing/decommissions/{id}/acknowledge` (B5w2);
+  MCP tools, the "#113/#114" block in C29a's order: `get_season_readiness`, `set_schedule_role`, `list_ha_entities`,
+  `get_ha_publishing`, `list_ha_publishing`, `enable_ha_publishing`, `change_ha_publishing_target`,
+  `disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now`, `acknowledge_ha_decommission`; constant
   `_MIN_HA_PUBLISHING_SCHEMA_VERSION = 22`. **Never** the words
   "release", "authorize", "permission to start" or "safe" for what ServiceTag publishes (HA authorizes; ServiceTag
   reports), and never "read-only token".
@@ -388,11 +434,17 @@ Out of scope: the hot tub's and the pool's Home Assistant rules (§8 describes o
     `SeasonStartStrandCause` name) and the role schedules by id and title, like `SEASON_MODE_STRANDS_POLICY`.
     **Owned on the wire by A4 (rev 4.1, D4):** v1.md's "The #113/#114 codes" table, row 110 on each hooked route, and
     the `set_season_mode`, `update_asset`, `update_schedule` and `update_group` docstrings (C29a).
-  - **409 `SEASON_START_REFUSED`** from `SeasonStartRefused(reason, …)` (C10): unreachable over `/v1` while O-7 holds
-    (the role command is phone-only), mapped anyway so a later route or a hook-reached path can never 500. A4's
-    Errors table lists it as unreachable while O-7 holds (Appendix W's W1 would reach it).
+  - **409 `SEASON_START_REFUSED`** from `SeasonStartRefused(reason, …)` (C10): reached over `/v1` by C29b's role
+    route (rev 5, O-7 RULED), `reason` a `SeasonStartRefusal` name, C10a's `QUICK_NOT_ELECTED` included; A2 maps it,
+    A4w documents it.
+  - **Rev 5's codes (O-7 and O-21 RULED), each its own `is` arm:** 422 `SEASON_START_DATE_INVALID`, 409
+    `HA_PUBLISH_REFUSED` (`reason` a `PublishRefusal` name, `field`, `holderAssetId?`), 409 `STALE_PLAN` (C25a) and 409
+    `HA_HELPER_READ_FAILED` (`errorKind` a `PublishErrorKind` name, `detail`) — A4w (C29b); 422
+    `HA_PUBLISH_CONFIRMATION_REQUIRED` — B5w1; 404 `NO_SUCH_DECOMMISSION` and 409 `DECOMMISSION_STILL_PENDING` — B5w2
+    (C35b). Publish now answers **202** (C35b), the first 202 of `/v1`.
   - Reused unchanged: `no_such_asset` (404) on both new reads; every shipped schedule, season and group code.
-- **C3, the wire shapes.** C29 (readiness, schedule role keys) and C35 (publishing); `GET /v1/status` moves
+- **C3, the wire shapes.** C29 (readiness, schedule role keys) and C35 (publishing), and rev 5's C29b (the role
+  route, discovery) and C35b (the controls); `GET /v1/status` moves
   `schemaVersion` to 22 and `backupFormatVersion` to 21, nothing else.
 
 ### S1 — Room schema 22 (C4–C6)
@@ -430,7 +482,9 @@ Out of scope: the hot tub's and the pool's Home Assistant rules (§8 describes o
      DEFAULT 0`** (A05: an outstanding delivery or repair, C17); `attempts_at_revision INTEGER NOT NULL DEFAULT 0`;
      `last_attempt_at INTEGER`; **`boundary_value TEXT`**, **`boundary_read_at INTEGER`**,
      **`boundary_binding_revision INTEGER`** (A07: the last valid read of the boundary helper, C9a);
-     **`reconcile_pending INTEGER NOT NULL DEFAULT 0`** (C: a reconcile begun and not yet completed by a read, C17).
+     **`reconcile_pending INTEGER NOT NULL DEFAULT 0`** (C: a reconcile begun and not yet completed by a read, C17);
+     **`last_request_id TEXT`**, **`last_request_at INTEGER`** (rev 5, correction 3: the last API Publish now that
+     covered this binding, C35b; written only by the request stamp, C5).
   4. **`ha_publish_decommission`** — `id TEXT PK`; `connection_id TEXT NOT NULL` (**no foreign key**: it outlives a
      Forget, C34); `entity_id TEXT NOT NULL`; `asset_id TEXT` (display only, soft); `installation_id TEXT NOT NULL`;
      `state TEXT NOT NULL` (`PENDING` | `UNDELIVERABLE`); `requested_at INTEGER NOT NULL`; `error_kind TEXT`;
@@ -450,7 +504,9 @@ Out of scope: the hot tub's and the pool's Home Assistant rules (§8 describes o
   write that moves the binding revision or the desired revision sets `error_kind`, `error_detail`, `error_at` and both
   error revisions to null in the same statement** (A04: the clearing rule; the persisted pair is the second guard); tombstone insert-or-
   merge by `(connection_id, entity_id)`; deletes by id. Every binding write sets `claim_entity_id`
-  from `enabled` in the same statement. No DAO query reads a token column (there is none).
+  from `enabled` in the same statement. No DAO query reads a token column (there is none). **The request stamp (rev
+  5)** writes `last_request_id` and `last_request_at` only, in one statement over the covered binding ids — never a
+  revision, the desired value or an error — and no runner record writes them (C25a, C35b).
 - **C6, never travels.** No `BackupData`, DTO, `MergeTable`, `TransferTableClass`, manifest-count map or codec names
   any of the three tables; `T/backup/SeasonSyncNeverTravelsTest.kt` gains the three tables and the key words
   `ha_publish`, `desired_value`, `activated_installation_id`, `reconcile_pending` and an example entity id (row 12).
@@ -583,7 +639,8 @@ fun seasonReadiness(
 ### A2 — the role command and the refusals (C10–C13; core JVM, one app mapper)
 
 - **C10, `SetScheduleRole` (`C/usecase/SetScheduleRole.kt`, new).**
-  `suspend fun run(id: ScheduleId, role: ScheduleRole, sinceOn: String? = null): MaintenanceSchedule`, one
+  `suspend fun run(id: ScheduleId, role: ScheduleRole, sinceOn: String? = null, quickElected: Boolean = false):
+  MaintenanceSchedule` (rev 5: `quickElected`, C10a), one
   `uow.write`. `NONE` clears both fields (no refusal but `NoSuchSchedule`; allowed on an archived schedule; clearing a
   `NONE` is a no-op that writes nothing). `SEASON_START` — `sinceOn` defaults to today, must parse (`BadDate`, 422 shape
   of `ConditionProblem`'s) and be ≤ today (a bad date is P114-28); re-setting a role schedule with a new date moves only `roleSinceOn`.
@@ -601,11 +658,21 @@ fun seasonReadiness(
 | `GROUP_ARCHIVED` | the group target is archived | P114-22 |
 | `GROUP_HAS_NO_MEMBERS` | the group has no open member | P114-22 |
 | `DATE_IN_FUTURE` | `sinceOn` after today | P114-23 |
+| `QUICK_NOT_ELECTED` (rev 5, C10a) | a QUICK schedule without `quickElected` | P114-5 (reused) |
 
   For a group target every **open** member is checked; the first failing member, by name then id, is named (P114-21
   wraps the member sentence). The write moves `role`, `roleSinceOn` and `updatedAt` only — never `ruleChangedAt`,
-  `postponedDueOn` or a provider row — and calls no recompute (the role changes no rule; row 21). **No API or MCP
-  route reaches it in V1 (O-7; Appendix W's W1 is the pending alternative).**
+  `postponedDueOn` or a provider row — and calls no recompute (the role changes no rule; row 21). **Reached over
+  `/v1` and MCP by C10a and C29b (rev 5: O-7 RULED).**
+- **C10a, the role over `/v1` and MCP (rev 5; O-7 RULED by the owner's instruction 2026-10-23: full MCP parity).**
+  `SetScheduleRole.run` gains a trailing `quickElected: Boolean = false`: setting `SEASON_START` on a schedule whose
+  `completionMode` is QUICK (every group schedule is, `C/usecase/ScheduleCommands.kt:110-116`) is refused
+  `SeasonStartRefused(QUICK_NOT_ELECTED)` unless it is true — O-2's explicit election as a parameter (O-21(a)); FORM and
+  `NONE` ignore it. The new `SeasonStartRefusal` member is checked after `SCHEDULE_ARCHIVED` and before the asset rules,
+  and nothing is written (A2, row 112). The phone's confirm is the election: A5b passes `quickElected = true` from
+  P114-4/4g on a QUICK schedule (P114-5 shown), and its exhaustive arm for `QUICK_NOT_ELECTED` reuses P114-5 (no new
+  string). The wire is C29b's (A4w): `POST /v1/schedules/{id}/role` and the schedule PATCH's flag; no handler or tool
+  defaults the election to true.
 - **C11, the hooks on shipped commands — `SeasonStartStrands(assetId, cause, schedules)`, 409, phone sentences
   P114-24…27.** One shared pure helper `seasonStartStrandedBy(before, after, …)` in `C/usecase/SeasonCommands.kt`
   beside `strandedBy` (`:265-272`), called **after** the strands rule so a PRE_SERVICE refusal keeps priority:
@@ -623,8 +690,9 @@ fun seasonReadiness(
     - **QUICK election** (cause `QUICK_NEEDS_ELECTION`; O-2, F-22): `SaveSchedule.commit` refuses an edit that
     changes a role schedule's `completionMode` from FORM to QUICK unless a new defaulted parameter
     `seasonStartQuickElected: Boolean = false` (beside `unlinkHealthSubject`, `C/usecase/SaveSchedule.kt:81`) is true;
-    the phone's editor asks P114-5 and passes it; `PATCH /v1/schedules` and the MCP's `update_schedule` cannot, and
-    answer `SEASON_START_STRANDED` (P114-43 on the phone).
+    the phone's editor asks P114-5 and passes it; `PATCH /v1/schedules` passes it as the action flag
+    `seasonStartQuickElected` and the MCP's `update_schedule` as `season_start_quick_elected` (rev 5, C29b) — without
+    it they answer `SEASON_START_STRANDED` (P114-43 on the phone).
   - **Group membership** (cause `MEMBER_NOT_ELIGIBLE` / `MEMBER_ALREADY_COVERED`): `SaveGroup.run`
     (`C/usecase/SaveGroup.kt:43-106`) refuses an added member of a group a live role schedule targets when the member
     fails C10's asset rule or is covered by another role.
@@ -657,7 +725,8 @@ fun seasonReadiness(
     lastPublishedAt, publishedDesiredRevision, lastVerifiedValue, lastVerifiedAt, remoteValue, remoteReadAt,
     errorKind: PublishErrorKind?, errorDetail, errorAt, errorBindingRevision: Long?, errorDesiredRevision: Long?,
     outcomeUnknownSince, needsDelivery: Boolean, reconcilePending: Boolean, attemptsAtRevision, lastAttemptAt,
-    boundaryValue, boundaryReadAt, boundaryBindingRevision)`. **A04:** an error is **current** only when `(errorBindingRevision,
+    boundaryValue, boundaryReadAt, boundaryBindingRevision, lastRequestId: String?, lastRequestAt: Long?)` (the last
+    two rev 5's, C35b). **A04:** an error is **current** only when `(errorBindingRevision,
     errorDesiredRevision)` equals the binding's `(revision, desiredRevision)`; every pair-changing write also clears it
     (C5), so the two rules agree after any restart; no error history is kept (the block draws the current error only,
     and a repeat at the new pair records itself again).
@@ -963,11 +1032,41 @@ sealed interface CallOutcome {
   - **Invariant I19 (R-1):** no PENDING tombstone coexists with an enabled binding whose claim names the same
     `(connection, entity)`. Every tombstone insert-or-merge (Disable, Change target, the projector's orphan retirement,
     Forget) first checks the claim in the same write and is **skipped** when an enabled binding holds the pair.
-  - `DismissDecommission(id)`: deletes one tombstone at the owner's word ("I cleared it in Home Assistant", P114-38).
-  - `RequestPublishNow(assetId?)` is not a command: the runner's entry (C30).
+  - `DismissDecommission(id)`: deletes one tombstone at the owner's word ("I cleared it in Home Assistant", P114-38) —
+    an UNDELIVERABLE one only (rev 5, C25a).
+  - `RequestPublishNow(assetId?)` is not a command: the runner's entry (C30); the API's stamped request is B4b2's
+    facade method `requestPublishNow` (rev 5, C32, C35b).
   - **Status kind on a not-maintained asset:** Enable is refused (`NOT_MAINTAINED_HERE`); an enabled binding whose asset
     becomes not maintained stops sending (C15) and resumes on its own when the asset is maintained here again (#16's
     R16-18 shape; #113 "re-evaluate on return/unarchive").
+- **C25a, plan identity, per-action validation and the acknowledgement, in the domain (rev 5; O-21 RULED by the
+  owner's instruction 2026-10-23: full MCP parity; B3's).**
+  - **`PublishRefusal.STALE_PLAN`** (new member; P113-44 on the phone, B6a's exhaustive arm; on the wire its own 409
+    `STALE_PLAN`, C29b's mapper). **`planIdOf(…)`** (pure, `C/hapublish/PublishPlan.kt`, new): lowercase hex SHA-256
+    over canonical lines, the `fingerprintOf` precedent (`C/merge/MergePlan.kt:639-650`) — `asset|<id>`,
+    `kind|<PublishKind>`, `action|<ENABLE or CHANGE_TARGET>`, `target|<entityId>`, `boundary|<id or ->`,
+    `connection|<connectionId>|<configGeneration>`, `binding|<revision, 0 when none>`, and
+    `targetShape|<domain>|<options sorted, or ->|<hasDate>|<hasTime>` with the same line for the boundary helper (or
+    `-`). The connection's id rides beside `config_generation` because Forget and a new connection restart the counter
+    (C28); a helper's **state** is not its shape (a value HA changed is repaired by publication, never a stale plan).
+  - `EnablePublishing` and `ChangePublishTarget` take a trailing **`expectedPlanId: String? = null`**: when non-null the
+    command recomputes `planIdOf` in its own transaction from the stored connection and binding and the
+    `ValidationResult`s' remote shapes, and an unequal one is `STALE_PLAN` before any other refusal, nothing written.
+    The phone passes null (its confirm is P113-5 / P114-33 in the same sheet, C36); `STALE_READ` keeps its rule on both
+    paths.
+  - **`DismissDecommission(id)`** refuses an unknown id (`NoSuchDecommission`) and a PENDING row
+    (`DecommissionStillPending`) in its transaction and deletes only an UNDELIVERABLE row — the row P114-38 is drawn on
+    (C34), so the phone sees no change (a row that raced back to PENDING re-draws, B6b).
+  - **Per-action validation (correction 2; one rule for the sheet and the API):** **Enable** and **Change target**
+    commit the fresh `validate` (C30) of the target and, when C25 requires one, of the boundary helper, read **inside
+    the plan step** — the sheet's, or the API's plan route (C35b) — and never read again at the commit; **Disable**
+    commits locally with **no HA read**, and the date kind's tombstone is delivered later by the drain its
+    `requestDelivery()` starts (C34), so Disable succeeds while HA is unreachable; **Check helper** validates the
+    **stored** destination — the binding's `entityId` and `boundaryEntityId`, never a caller's — and never activates
+    (A08); **Publish now** needs no validation (C17's gate decides per binding); the **acknowledgement** reads nothing
+    (the caller's attestation).
+  - **The request stamp (correction 3):** `PublishDeliveryRepository.stampRequest(bindingIds, requestId, at)`, one
+    statement under C5's rule, with its Room adapter and in-memory double; only B4b2's facade calls it (C32, C35b).
 - **C26, the C2 cross-check (both directions, exact ids, one connection).** `EnablePublishing` and
   `ChangePublishTarget` refuse an `entityId` any `season_sync_binding` row names **or any publish binding names as its
   boundary helper** (`INBOUND_SOURCE`, P113-23), and a boundary id an enabled binding claims or a PENDING tombstone
@@ -984,7 +1083,8 @@ sealed interface CallOutcome {
   target** with Enable's destination-specific confirm — **never by Revalidate** — from `InstallationIdentity.id()` (`A/prefs/InstallationIdentity.kt:28`, the no-backup directory, created per
   installation). The sender, the projector and the tombstone drain compare it with the running installation and treat
   a mismatch as `COPIED_INSTALLATION`: nothing is sent, nothing is invalidated, the block says so (P113-21) and only
-  an explicit Enable on this phone (after a Check helper, which alone activates nothing) re-stamps it; a restored row
+  an explicit Enable on this phone — from its sheet, or a destination-confirmed API Enable this phone serves (O-21(c),
+  C35b) — (after a Check helper, which alone activates nothing) re-stamps it; a restored row
   that arrived with `enabled = true` stays inert through any number of Check helpers. A token re-entered after a platform restore (#16's
   NEEDS_TOKEN path) therefore never re-activates a copied writer (audit headline 7, K7). Tombstones carry
   `installation_id` under the same rule.
@@ -1032,7 +1132,7 @@ sealed interface CallOutcome {
   is **not** a readiness reason: it is the publishing projection's `state` (C35). Every
   schedule read (`ScheduleRowResponse`, `A/api/ScheduleRowResponse.kt:25-58`, and the MCP's `get_schedule`,
   `list_schedules`, `server.py:1591`, `:1609`) gains `role` (`"NONE"` \| `"SEASON_START"`) and `roleSinceOn`, response
-  only. MCP `get_season_readiness` appended as a "#114" block (the #16 tail-pin precedent, R16-17), gated by
+  only. MCP `get_season_readiness` opens the "#113/#114" block (the #16 tail-pin precedent, R16-17; C29a's ladder), gated by
   `_MIN_HA_PUBLISHING_SCHEMA_VERSION = 22`; `update_schedule` (`:1805`) never forwards the role keys and a pytest pins
   that an update of a role schedule leaves it a role schedule. Router counts and the v1.md sub-resource sentence move
   as twins; `ApiReadsWriteNothingTest` covers the route.
@@ -1045,33 +1145,96 @@ sealed interface CallOutcome {
     import on the phone, never set or cleared over the API — and in `list_events`'s docstring, and pins it (row 109).
   - **The strand code (D4).** v1.md gains an Errors table **"The #113/#114 codes"** after **The #92 codes**: 409
     `SEASON_START_STRANDED` — `problems` naming the `cause` (a `SeasonStartStrandCause` name) and the role schedules
-    by id and title, `field` null, its place in the refusal order stated beside `:704`'s — and 409
-    `SEASON_START_REFUSED`, marked unreachable while O-7 holds. Row 110 asserts the body on each hooked route. The
+    by id and title, `field` null, its place in the refusal order stated beside `:704`'s; A4w adds the rest of the table (rev 5, C29b). Row 110 asserts the body on each hooked route. The
     docstrings of `set_season_mode`, `update_asset`, `update_schedule` and `update_group` name the code, as `server.py`
     names `SEASON_SYNC_ENABLED` for #16 (`:2408`, `:2426`, `:2450`); `update_schedule`'s also says a role schedule's
-    FORM → QUICK change answers it with `QUICK_NEEDS_ELECTION`, the election being the phone's.
+    FORM → QUICK change answers it with `QUICK_NEEDS_ELECTION` unless the call carries the election flag (A4w adds
+    it, C29b).
   - **Format 21 on the MCP (D5).** A4 owns it, not A3: A3's fence excludes `tools`, and A4's base is A3's tip. The
     `import_merge` docstring (`server.py:1298`) and README (`M/README.md:459`) say "format 1–21", that format 21 adds
     each schedule's `role` and `roleSinceOn` and each event's `imported` (no table: still twenty-three), and name
     `SEASON_START_HELD_BY_A_LOCAL_ROW` and `SEASON_START_DUPLICATED_IN_ARCHIVE`; the pins at
     `M/tests/test_tools.py:980-998` (the range at `:985`, `:997`) move with them (row 111).
-  - **The count pins (D1), owned by the brief that adds each tool** — A4 `get_season_readiness` (90 → 91), B5
-    `get_ha_publishing` (→ 92), B5r `list_ha_publishing` (→ 93) — each site read on `62e39670`, moved in that brief
+  - **The count pins (D1), owned by the brief that adds each tool; the ladder by wave (rev 5)** — A4
+    `get_season_readiness` (wave 4: 90 → 91); A4w `set_schedule_role`, `list_ha_entities` (wave 7: → 93); B5
+    `get_ha_publishing` (wave 8: → 94); B5r `list_ha_publishing` (wave 10: → 95); B5w1 `enable_ha_publishing`,
+    `change_ha_publishing_target` (wave 11: → 97); B5w2 `disable_ha_publishing`, `check_ha_publishing_helper`,
+    `publish_ha_now`, `acknowledge_ha_decommission` (wave 12: → **101**) — each site read on `62e39670`, moved in that brief
     and inside its §4 row: `server.py:78-183` (`TOOL_NAMES`, the "#113/#114" block appended after `:182` with its
     comment; the guard's `expected_count` at `:4430` follows it); `M/tests/test_tools.py:23` (`EXPECTED_TOOLS`),
     `:127-138` (`test_tool_names_are_ninety`, its docstring, three `== 90`), `:1007`, `:1011` (`"Ninety:"`);
     `M/tests/test_argument_guard.py:8`, `:46`, `:51`, `:182`, `:203-204`, `:207`, `:256` (`test_the_tool_count_is_90`),
     `:257-258`, `:326`, `:341-342`; `M/tests/test_reference_tools.py:35`, `:61` (`…_is_90`), `:65-66`; the history docstrings
     `test_installed_component_tools.py:45`, `test_supply_tools.py:47`, `test_season_sync_tools.py:28`,
-    `test_maintenance_tools.py:45`; `M/README.md:115` ("Ninety:", the word moves); and the tail pins, each shifted by
-    the block's length so far (3 at the tip): `test_installed_component_tools.py:136` (`- 1:-1` → `- 4:-4`),
-    `test_supply_tools.py:129` (`- 6:-6` → `- 9:-9`), `test_season_sync_tools.py:86`
-    (`[-len(SEASON_SYNC_TOOLS):]` → `[-len(SEASON_SYNC_TOOLS) - 3:-3]`), plus the block's own tail pin in
-    `test_ha_publishing_tools.py`. `test_season_sync_tools.py:89-92` (no other tool's name carries `sync` or
+    `test_maintenance_tools.py:45`; `M/README.md:115` ("Ninety:", the word moves: "One hundred and one:" at the tip); and the tail
+    pins, each shifted by the block's length so far (11 at the tip): `test_installed_component_tools.py:136`
+    (`- 1:-1` → `- 12:-12`), `test_supply_tools.py:129` (`- 6:-6` → `- 17:-17`), `test_season_sync_tools.py:86`
+    (`[-len(SEASON_SYNC_TOOLS):]` → `[-len(SEASON_SYNC_TOOLS) - 11:-11]`), plus the block's own tail pin in
+    `test_ha_publishing_tools.py`, which pins the whole block in C1's order; the test names move with the number
+    (`test_tool_names_are_ninety`, `test_the_tool_count_is_90`, `…_is_90` → `…_one_hundred_and_one`, `…_101` at the
+    tip). `test_season_sync_tools.py:89-92` (no other tool's name carries `sync` or
     `home_assistant`) stays green unchanged.
   - **v1.md, A4's part:** the section "Season readiness and the Season Start role (#114)" (the route, the schedule
     `role` keys), the sub-resource count 28 → 29, and the role half of "What has no endpoint, deliberately" since
-    #113/#114 — any published value or READY, and the role while O-7 holds.
+    #113/#114 — any published value, date to publish or READY.
+
+### A4w — the role and helper discovery over API and MCP (C29b; app JVM, one core list field, pytest, docs; rev 5)
+
+- **C29b, A4w's wire (O-7 RULED by the owner's instruction 2026-10-23: full MCP parity).**
+  - **`POST /v1/schedules/{id}/role`** (a `/v1/schedules/{id}/…` sub-resource: another verb is a 404): body
+    `{"role", "sinceOn", "seasonStartQuickElected"}` — `role` `"SEASON_START"` or `"NONE"`, required; `sinceOn`
+    `"YYYY-MM-DD"`, absent or null = today; `seasonStartQuickElected` absent = false — runs `setScheduleRole` (C10,
+    C10a) → 200 `{schedule}` (`ScheduleRowResponse` with `role`, `roleSinceOn`); clearing a `NONE` writes nothing.
+    Refusals: 404 `NO_SUCH_SCHEDULE` (`A/api/ApiJson.kt:290`); 409 `SEASON_START_REFUSED` `{reason, assetId?,
+    scheduleId?, title?}`; 422 `SEASON_START_DATE_INVALID` (`field` `sinceOn`; C10's `BadDate`). Request DTO
+    `ScheduleRoleRequest` (`A/api/MaintenanceDtos.kt`).
+  - **`PATCH /v1/schedules/{id}`:** `ScheduleActionFlags` (`A/api/MaintenanceDtos.kt:443`) gains
+    `seasonStartQuickElected: Boolean = false` after `unlinkHealthSubject`, passed to `SaveSchedule`'s C11 parameter;
+    without it a role schedule's FORM → QUICK edit is 409 `SEASON_START_STRANDED` `QUICK_NEEDS_ELECTION`, its message
+    naming the flag (`ApiJson.kt:497-501`'s precedent); `role` in the body stays the 400 (K11).
+  - **Helper discovery, `GET /v1/ha-connection/entities/{scope}`**, `scope` one of `input_boolean`, `input_select`,
+    `input_datetime` — the three `EntityScope` domains; A4w adds `INPUT_SELECTS("input_select")` and
+    `INPUT_DATETIMES("input_datetime")` to `C/seasonsync/EntityPicker.kt:7-9` (B6a's sheet consumes them); any other
+    segment is a 404. The rulings' `?scope=` is written as a path segment because the framing drops every query
+    string (`A/api/HttpWire.kt:116-121`; v1.md `:128`: "no endpoint reads one"). The handler calls the shipped #105
+    read, `AppGraph.listHaEntities` (`A/di/AppGraph.kt:704-720`: the stored connection, its token from `SecretStore`,
+    one `GET /api/states` through #16's gate, headers, 30 s bound and 8 MiB cap — **the same network and token rule
+    as every check**), then `pickerRows(all, scope, "")` (sorted; at most `MAX_LISTED_ENTITIES` = 2,000, `truncated`
+    when more matched). 200 `{"scope", "entities": [{"entityId", "friendlyName", "options", "hasDate", "hasTime"}],
+    "truncated"}`: `options` only on an `input_select` row (C16's bounds — at most 64 strings, each at most 64
+    characters; null when HA reported none or more), `hasDate` / `hasTime` only on an `input_datetime` row, null
+    elsewhere; no other attribute, no state, never the base URL, Wi-Fi name or token. **Never cached:** every call is
+    one fresh GET and nothing it read is kept, so no answer outlives the `config_generation` it was read under.
+    Refusals: no stored connection → 409 `HA_PUBLISH_REFUSED` `{reason: "NO_CONNECTION"}`; `HaListOutcome.Failed(kind,
+    detail)` → 409 `HA_HELPER_READ_FAILED` `{errorKind: publishKindOf(kind) name, detail}` (`NEEDS_TOKEN`,
+    `NOT_ON_LOCAL_NETWORK` with its cause, `AUTH_REFUSED`, …). The attributes come from #105's mapper:
+    `HaEntityCandidate` (`C/seasonsync/HaEntityList.kt:12`) gains a trailing defaulted `attributes: HelperAttributes? =
+    null` (`options`, `hasDate`, `hasTime`), which `mapHaStatesAnswer` fills only for an `input_select` or
+    `input_datetime` id; every shipped fixture lists `input_boolean` and `switch` rows only, so `HaStatesMapperTest`,
+    `EntityPickerTest`, `HomeAssistantStateClientTest` and `LinkSeasonSyncViewModelTest` pass unchanged (G3; the new
+    cases live in `CT/hapublish/`, row 115). The handler is its own class, `A/api/HaEntityHandlers.kt`, taking the list
+    as a collaborator: a trailing defaulted handler group in `ApiHandlers` (the F-6 shape, so the shipped `T/api`
+    constructions compile unchanged), wired from the graph constructor, and `T/api/MaintenanceFixtures.kt`'s `V1Client`
+    passes a scripted list — no `AppGraph` or `FakeGraph` edit (G20).
+  - **The codes A4w maps** (each its own `is` arm, G11): 422 `SEASON_START_DATE_INVALID`; from `PublishRefused(reason,
+    field, holderAssetId?)` an exhaustive `when` over `PublishRefusal` that sends `STALE_PLAN` to its own 409
+    `STALE_PLAN` and every other member to 409 `HA_PUBLISH_REFUSED` with `reason`; 409 `HA_HELPER_READ_FAILED` from a
+    new `HelperReadFailed(kind, detail)`. A2's `SEASON_START_REFUSED` arm now reaches the wire.
+  - **MCP**, appended to the "#113/#114" block in this order: **`set_schedule_role(schedule_id, role, since_on=None,
+    season_start_quick_elected=None)`** (the flag sent only when true); **`list_ha_entities(scope)`** (`scope` checked
+    client-side against the three literals, nothing sent otherwise; the long read budget of C35b); and
+    `update_schedule` gains `season_start_quick_elected=None`, sent only when true, like `unlink_health_subject`. Each
+    gated at `_MIN_HA_PUBLISHING_SCHEMA_VERSION`; `set_schedule_role` with `retry_on_connect=False` (C35b). D1's count
+    pins move 91 → 93 (C29a's ladder).
+  - **`docs/api/command-shapes.json` and its pins:** `:8`'s schedule `actionFlags` → `["unlinkHealthSubject",
+    "seasonStartQuickElected"]`; a new `"scheduleRole": {"keys": ["role", "sinceOn", "seasonStartQuickElected"]}`;
+    the pins move with them — `T/api/CommandShapesGoldenTest.kt:44-58` (the command list), `:118-120` (the flags equal
+    `ScheduleActionFlags`' descriptor), one `assertEquals(keysOf("scheduleRole"), …)`; `M/src/servicetag_mcp/
+    command_shapes.py:44` (`SCHEDULE_ACTION_FLAGS`) and `:108`; `M/tests/test_command_shapes.py:65-76` (the server's
+    new flag constant is a vendored entry, like `_UNLINK_HEALTH_SUBJECT`).
+  - **v1.md, A4w's part:** the role section gains the route, the PATCH flag and the election rule; a new section "Home
+    Assistant helper discovery (#113, #114)"; the Errors table's A4w rows; the 405 row gains
+    `/v1/ha-connection/entities/{scope}`.
 
 ### B4a — the runner (C30; app JVM)
 
@@ -1166,7 +1329,10 @@ sealed interface CallOutcome {
     `PublishWork.enqueueOnce()`. **Every publishing control commit ends with it**: Enable, Change target, Revalidate,
     Disable (a tombstone or not), `SaveHaConnection` (token, network, cadence), `DismissDecommission` and Forget's
     drain — through one app-layer facade `PublishControls` (B4b2) that runs the core command and then calls it, so no
-    view model can call a bare command and forget; the observer (C31) is the backstop, never the only path. WorkManager
+    view model can call a bare command and forget (rev 5: its `enable` and `changeTarget` pass a trailing
+    `expectedPlanId: String? = null` to the command, C25a, and it gains `requestPublishNow(assetId): PublishRequest` —
+    one `uow.write` through `stampRequest` over the covered bindings, then `runner.publishNow(assetId)` launched on
+    `appScope`, never awaited, C35b); the observer (C31) is the backstop, never the only path. WorkManager
     setup alone never replaces the foreground dispatch. **No self-trigger (C):** an in-process drain that leaves
     TRANSIENT work hands it, when C30's rule answers `PERIODIC`, to `PublishWork.enqueueOnce()` and its backoff; it
     never re-launches a drain itself, and nothing a drain writes calls `requestDelivery()` (under `FOREGROUND_ONLY` the
@@ -1250,6 +1416,7 @@ sealed interface CallOutcome {
 | `lastError.current` | the error's persisted pair equals the current pair (A04) |
 | `boundary` | the date kind naming a boundary helper: `null` (no valid read cached) or `{"value", "readAt", "atCurrentRevision"}` from `boundary_value`, `boundary_read_at` and `boundary_binding_revision == revision`; otherwise `null` |
 | `pendingDecommissions[]` | each also `id` and `lastError` (`null` or `{"kind", "at"}`) |
+| `request` (rev 5, B5) | `null` or `{"id", "at", "progress"}`: the last API Publish now that covered this binding (`last_request_id`, `last_request_at`) and its `RequestProgress`, derived from the pairs above by B5's pure `requestProgressOf` in `A/api/HaPublishingDtos.kt` (C35b) |
 
   The fresh-or-unverified **verdict** stays the readiness route's (`boundarySource`, `boundaryUnverifiedSince`; C29,
   C9a): `readAt` and `atCurrentRevision` are its inputs, never a second computation. Still never the base URL, the
@@ -1265,8 +1432,8 @@ sealed interface CallOutcome {
   per-asset route cannot reach (404 `no_such_asset`), and those are the "may still allow starts" obligations
   (P114-36/37). One `uow.read` in the handler over the graph's existing repositories — **no `AppGraph` or `FakeGraph`
   edit** (G20: B5 stays the last). A path shape of its own, so another verb is a **405**. Writes nothing (row 108).
-  MCP **`list_ha_publishing()`**, no arguments, gated by `_MIN_HA_PUBLISHING_SCHEMA_VERSION`, appended last to the
-  "#113/#114" block.
+  MCP **`list_ha_publishing()`**, no arguments, gated by `_MIN_HA_PUBLISHING_SCHEMA_VERSION`, appended to the
+  "#113/#114" block (C29a's ladder).
   - **G-R6, the outbound side effect:** one sentence each in the docstrings of `record_condition`,
     `complete_schedule`, `update_event`, `delete_event`, `archive_schedule`, `end_season`, `set_season_mode`,
     `retire_asset`, `archive_asset`, `import_merge` and `replace_asset` — when an asset publishes to Home Assistant,
@@ -1277,19 +1444,123 @@ sealed interface CallOutcome {
     read through the repositories S1, B3 and #16 already give `FakeGraph`; the three #113/#114 reads (readiness,
     per-asset, collection) run against it (row 108).
 
-**`docs/api/v1.md` by section and owner (rev 4.1; Appendix W adds its own):**
+**`docs/api/v1.md` by section and owner (rev 5):**
 
 | section | content | owner |
 |---|---|---|
-| "Season readiness and the Season Start role (#114)" (new) | the readiness route; the schedule `role` keys | A4 |
-| "Home Assistant publishing (#113, #114)" (new) | C35 with rev 4.1's keys; C35a | B5; B5r |
+| "Season readiness and the Season Start role (#114)" (new) | the readiness route and the schedule `role` keys (A4); the role route, the PATCH flag and the election rule (A4w) | A4; A4w |
+| "Home Assistant helper discovery (#113, #114)" (new, rev 5) | the discovery route, its scopes, bounds, refusals and "never cached" | A4w |
+| "Home Assistant publishing (#113, #114)" (new) | C35 with rev 4.1's keys and rev 5's `request` (B5); C35a (B5r); the plan, `planId`, the confirm rule, Enable and Change target (B5w1); Disable, Check helper, Publish now's 202 and its progress, the acknowledgement and "no route takes a value" (B5w2) | B5; B5r; B5w1; B5w2 |
 | the events rows (`:207-210`, `:273`) and **Bodies** | `imported`: read-only, never set or cleared over the API | A4 |
-| Errors: "The #113/#114 codes" (new) | `SEASON_START_STRANDED`; `SEASON_START_REFUSED`, unreachable while O-7 holds | A4 |
-| Errors: the 405 row (`:1961`) | the `/v1/ha-publishing` path shape | B5r |
-| "What has no endpoint, deliberately", since #113/#114 | any published value or READY, and the role while O-7 holds (A4); every publishing control — enable, change target, stop, check helper, publish now, dismiss — while O-21 is unruled, and always the connection, token, address, Wi-Fi and Forget (B5r) | A4 / B5r |
-| the sub-resource sentence and the router KDoc | 28 → 29 (A4) → 30 (B5); the collection is no asset sub-resource | each route brief |
+| Errors: "The #113/#114 codes" (new) | `SEASON_START_STRANDED` (A4); `SEASON_START_REFUSED` with `QUICK_NOT_ELECTED`, `SEASON_START_DATE_INVALID`, `HA_PUBLISH_REFUSED`, `HA_HELPER_READ_FAILED` (A4w); `STALE_PLAN`, `HA_PUBLISH_CONFIRMATION_REQUIRED` (B5w1); `NO_SUCH_DECOMMISSION`, `DECOMMISSION_STILL_PENDING` (B5w2) | A4; A4w; B5w1; B5w2 |
+| Errors: the status table | a **202** row: Publish now only — the request accepted, its progress on the read (C35b) | B5w2 |
+| Errors: the 405 row (`:1961`) | `/v1/ha-connection/entities/{scope}` (A4w); `/v1/ha-publishing` (B5r); `/v1/ha-publishing/decommissions/{id}/acknowledge` (B5w2) | A4w; B5r; B5w2 |
+| "What has no endpoint, deliberately", since #113/#114 | any published value, date to publish or READY (A4); the token, the connection's save, test and address, the Wi-Fi name and its capture, the location asks, Forget and the #16 link (B5r; O-21(d)) | A4 / B5r |
+| the sub-resource sentence and the router KDoc | 28 → 29 (A4) → 30 (B5) → 31 (B5w1, `ha-publishing-plan`) → 32 (B5w2, `ha-publishing/publish-now`); the collection, discovery and the acknowledgement are no asset sub-resource; `/v1/schedules/{id}/role` is a schedule sub-resource, a 404 for another verb (A4w) | each route brief |
 | the merge tables and the format line | the two reasons; format 21 | A3 (unchanged) |
-| `:38`, `:39-42` | the outbound inventory | D1 (unchanged) |
+| `:38`, `:39-42` | the outbound inventory (D1 states it for the whole branch, the API-triggered reads and writes of C29b and C35b included, R-N8) | D1 |
+
+### B5w1 / B5w2 — the publishing controls over API and MCP (C35b; app JVM, pytest, docs; rev 5)
+
+- **C35b, the wire (O-21 RULED by the owner's instruction 2026-10-23: full MCP parity).** Every route needs the owner
+  holding the phone with the Developer API screen open and a fresh pairing (v1.md `:23-27`); the token never leaves
+  the phone — a control uses the stored one, as the phone's buttons do; every control runs through `PublishControls`
+  (C32), the phone's own path, ending in `requestDelivery()`; no request body names a value, a date to publish or
+  READY (`A/api/HaPublishingRequests.kt`, a file of request classes only; I33).
+  - **The plan (B5w1), `POST /v1/assets/{id}/ha-publishing-plan`** — writes nothing (the `replace-plan` precedent);
+    body `{"kind", "action", "entityId", "boundaryEntityId"}` (`action` `ENABLE` or `CHANGE_TARGET`;
+    `boundaryEntityId` optional). The handler runs `PublishRunner.validate` (C30): **the plan step is the validation**
+    (C25a). 200 `{"planId", "assetId", "kind", "action", "entityId", "boundaryEntityId", "boundaryRequired", "remote":
+    {"domain", "options", "hasDate", "hasTime"}, "boundary": null | {"value", "readAt", "hasDate", "hasTime"},
+    "mapping" (the status kind: `{"OPERATIONAL": "UP", "DEGRADED": "DEGRADED", "DOWN": "DOWN"}`) | "invalidDate":
+    "1970-01-01" (the date kind), "refusal": null | {"reason", "field"}, "readAt", "expiresAt"}`. `planId` is
+    `planIdOf` (C25a) over the validation's own provenance (connection id, `configGeneration`, binding revision) and
+    shapes, non-null exactly when `refusal` is null; a read or validator failure is a 200 with `refusal` (`reason` a
+    `PublishRefusal` or `PublishErrorKind` name) and `planId: null` (the replace-plan `problems` precedent).
+    `boundaryRequired` is C25's rule (the date kind on a `MANUAL` asset with an enabled #16 binding). `refusal` is the
+    validators' verdict only: C25's transaction refusals (`TARGET_IN_USE`, `INBOUND_SOURCE`, …) answer at the action.
+    404 `no_such_asset`.
+  - **The plan store (B5w1, `A/api/HaPublishingPlans.kt`):** in memory on the handler set, so closing the Developer
+    API screen drops every plan; at most 16 entries, the oldest evicted; each the plan's `Validated(target, boundary)`
+    keyed by its `planId`; expiring when the target's `readAt` is 10 minutes old (C25's bound, the answer's
+    `expiresAt`); removed by the action that commits it; never persisted.
+  - **The action, `POST /v1/assets/{id}/ha-publishing`** (C35's path; the `POST …/season {action}` precedent): body
+    `{"kind", "action", "planId", "confirmDestination"}`.
+    - **ENABLE, CHANGE_TARGET (B5w1):** `planId` and `confirmDestination` required — a missing key, or a
+      `confirmDestination` that is not exactly the plan's `entityId` → 422 `HA_PUBLISH_CONFIRMATION_REQUIRED` (`field`
+      the key), nothing written; a `planId` the store does not hold (expired, consumed, the screen reopened) or one
+      planned for another asset, kind or action → 409 `STALE_PLAN`; else `PublishControls.enable` / `changeTarget` with
+      the stored validation and `expectedPlanId = planId`, whose transaction answers `STALE_PLAN` when the connection,
+      its generation, the binding or a helper's shape moved since the plan (C25a), and C25's refusals as 409
+      `HA_PUBLISH_REFUSED` `{reason, field, holderAssetId?}`. No second HA read (C25a). **An explicit,
+      destination-confirmed API Enable or Change target counts as activation on the serving phone** (O-21(c)): it
+      stamps this installation's id through the same command (I26).
+    - **DISABLE, CHECK_HELPER (B5w2):** either confirmation key present → 422 `HA_PUBLISH_CONFIRMATION_REQUIRED`
+      (`field` the key: no action carries a confirmation it does not check). DISABLE → `PublishControls.disable`, no HA
+      read (C25a), and a disabled or absent binding is R-1's no-op (200, `binding` as stored or null). CHECK_HELPER →
+      `validate` of the **stored** `entityId` / `boundaryEntityId`, then `PublishControls.revalidate`; a read failure →
+      409 `HA_HELPER_READ_FAILED`; no binding of that kind → 409 `HA_PUBLISH_REFUSED` `BAD_ENTITY_ID` (`field` `kind`);
+      it never activates a copied installation (A08).
+    - Success: 200 `{"binding": …}` — C35's binding with rev 4.1's keys and rev 5's `request`.
+  - **Publish now (B5w2), `POST /v1/assets/{id}/ha-publishing/publish-now`**, body `{}` → **202** `{"requestId",
+    "acceptedAt", "bindings": [{"kind", "state"}]}` once `PublishControls.requestPublishNow(assetId)` (B4b2, C32) has
+    stamped `last_request_id` / `last_request_at` on each **covered** binding — enabled and past C17's gate, so not
+    `NOT_ENABLED`, `COPIED_INSTALLATION`, `NEEDS_VALIDATION`, `NEEDS_TOKEN` or `WAITING_FOR_SOURCE` — and launched
+    `runner.publishNow(assetId)` on `appScope`, **never awaited**: the one-request-at-a-time API (v1.md `:110-118`) is
+    never held for a delivery. No covered binding → 202 with `bindings: []`, nothing stamped. **Progress is the read:**
+    C35's binding carries `request` (B5): null, or `{"id", "at", "progress"}` with `progress` a `RequestProgress`
+    derived from the existing pairs — **`PUBLISHED`** ⇔ `lastPublished.current` and `lastPublished.at ≥ request.at`
+    (our POST, read back); else **`VERIFIED`** ⇔ `lastVerified.current` and `lastVerified.at ≥ request.at` (HA already
+    matched; read back, no POST); else **`FAILED`** ⇔ `lastError.current` and `lastError.at ≥ request.at`; else
+    **`ACCEPTED`**. **Timeout and retry:** the request is a delivery-work signal and carries no deadline of its own; the
+    runner's bounds apply (C22's 30 s per call, at most a boundary GET, a GET, a POST and a read-back per binding, two
+    loops, C30), so a pass ends within minutes, and a request still `ACCEPTED` after ten minutes was overtaken (the
+    process stopped, or the gate turned WAIT) — the next start or resume reconciles anyway (C31). A second Publish now
+    is safe: a new `requestId` replaces the stamp and the pass is the runner's single flight (C30's lock). Nothing
+    retries by itself.
+  - **The acknowledgement (B5w2):** **Tombstone acknowledgement is in scope (O-21(b)):** `POST /v1/ha-publishing/decommissions/{id}/acknowledge` and MCP `acknowledge_ha_decommission` acknowledge an UNDELIVERABLE tombstone as cleared in Home Assistant by hand only when the body carries the tombstone id (`decommissionId`, equal to the path's) and `acknowledgedClearedInHa: true`, both set by the caller — the tool never invents either — and the sentence the phone shows (P114-38) is unchanged.
+    Its body is exactly `{"decommissionId", "acknowledgedClearedInHa"}`, neither defaulted; it runs `DismissDecommission`
+    through `PublishControls` and answers 204. A missing key, `acknowledgedClearedInHa` other than the JSON `true`, or a
+    `decommissionId` other than the path's → 422 `HA_PUBLISH_CONFIRMATION_REQUIRED`, nothing deleted; an unknown id →
+    404 `NO_SUCH_DECOMMISSION`; a PENDING tombstone, which the drain is still delivering → 409
+    `DECOMMISSION_STILL_PENDING`, kept (C25a). A new path shape: another verb is a 405.
+  - **Phone-only, whatever the caller (O-21(d)):** the token and `SecretStore`; the base URL, the Wi-Fi name and its
+    capture, the location and background asks; Test connection, saving the connection and an address change
+    (`PUBLISHING_BLOCKS_ADDRESS_CHANGE`, C28); Forget with its drain-first and P113-41 warning (O-11), so
+    `drainBeforeForget` never reaches `A/api`; the #16 link, Follow/Force and `OUTBOUND_TARGET` (C26); the value of
+    `activatedInstallationId`. Readiness and every published value stay derived from canonical records (C15): no "set
+    READY", no route takes a value (G17, I33).
+  - **MCP (B5w1, B5w2)**, appended to the "#113/#114" block in this order, each gated at
+    `_MIN_HA_PUBLISHING_SCHEMA_VERSION`, each write with `retry_on_connect=False` (the save-as-document precedent,
+    `M/src/servicetag_mcp/client.py:203`: a re-send is the caller's decision):
+
+| tool | route | notes |
+|---|---|---|
+| `enable_ha_publishing(asset_id, kind, entity_id, boundary_entity_id=None, plan_id=None, confirm_destination=None)` (B5w1) | the plan, then the action `ENABLE` | without `plan_id` and `confirm_destination` it POSTs only the plan and returns it (writes nothing); with both it sends exactly `{kind, action, planId, confirmDestination}`; with one of them, or a `confirm_destination` unequal to `entity_id`, it sends nothing; it never fills `confirm_destination` itself |
+| `change_ha_publishing_target(…)` (B5w1) | the plan, then `CHANGE_TARGET` | as `enable_ha_publishing` |
+| `disable_ha_publishing(asset_id, kind)` (B5w2) | `DISABLE` | no HA read; the tombstone appears in `get_ha_publishing` |
+| `check_ha_publishing_helper(asset_id, kind)` (B5w2) | `CHECK_HELPER` | the stored destination |
+| `publish_ha_now(asset_id)` (B5w2) | publish-now | returns the 202 body (the accepted request); the docstring names `get_ha_publishing` as the poll — until each covered binding's `request.progress` is `PUBLISHED`, `VERIFIED` or `FAILED`, at most ten minutes |
+| `acknowledge_ha_decommission(decommission_id, acknowledged_cleared_in_ha)` (B5w2) | the acknowledgement | sends the caller's argument; refused client-side, nothing sent, unless it `is True` |
+
+  `list_ha_entities`, the plan call of `enable_ha_publishing` / `change_ha_publishing_target` and
+  `check_ha_publishing_helper` take `httpx.Timeout(30.0, read=120.0)` (one or two HA reads at #16's 30 s each, the
+  `_IMPORT_TIMEOUT` shape, `server.py:187`); every other new call keeps the default (no HA call inside the request).
+  **`_POSTS_THAT_WRITE_NOTHING`** (`server.py:269-271`) becomes a set of path **shapes** — it gains
+  `"/v1/assets/{id}/ha-publishing-plan"`, and `_call`'s membership test becomes a pure `_writes_nothing(path)`
+  matching `{id}` as one non-empty segment — so the two shipped literals match exactly as before
+  (`M/tests/test_maintenance_tools.py:248-251` green unchanged). No new name carries `sync` or `home_assistant`
+  (`test_season_sync_tools.py:89-92` green). D1's count pins move 95 → 97 (B5w1) and 97 → **101** (B5w2).
+  - **`docs/api/command-shapes.json`:** `"haPublishingPlan": {"keys": ["kind", "action", "entityId",
+    "boundaryEntityId"]}` and `"haPublishingAction": {"keys": ["kind", "action", "planId", "confirmDestination"]}`
+    (B5w1), `"haPublishingAcknowledgement": {"keys": ["decommissionId", "acknowledgedClearedInHa"]}` (B5w2), each with
+    its `CommandShapesGoldenTest` line and the command list at `:44-58`, and one assertion that no publishing shape
+    holds a value key (#114 point 5).
+  - **v1.md (B5w1, B5w2):** the publishing section gains the plan, the `planId` and confirm rule, the action route
+    with its per-action validation, Publish now's 202 and its `request.progress`, the acknowledgement and "no route
+    takes a value"; the Errors table their codes; the status table a 202 row; the 405 row the acknowledgement's shape;
+    the sub-resource sentence and router KDoc 30 → 31 (B5w1, `ha-publishing-plan`) → 32 (B5w2,
+    `ha-publishing/publish-now`).
 
 ### B6a / B6b — the phone, publishing: status block, sheet and HA screen (B6a), date block and tombstones (B6b) (C36; app JVM)
 
@@ -1302,8 +1573,8 @@ sealed interface CallOutcome {
     **Stop publishing** (P113-13) with its confirm (P113-14 status / P114-35 date); pending and undeliverable
     tombstones (P114-36…38); the delivery limit line (P113-26).
   - **The setup sheet** (a new `LinkPublishSheet` reusing `LinkSeasonSyncSheet`'s browser, `A/ui/asset/LinkSeasonSyncSheet.kt:215`,
-    with an `EntityScope` parameter; `EntityScope` gains `INPUT_SELECTS("input_select")` and
-    `INPUT_DATETIMES("input_datetime")`): pick or type the exact id (and, for the date kind on a `MANUAL` asset with an enabled
+    with an `EntityScope` parameter; `EntityScope`'s `INPUT_SELECTS("input_select")` and
+    `INPUT_DATETIMES("input_datetime")`, which A4w adds, C29b): pick or type the exact id (and, for the date kind on a `MANUAL` asset with an enabled
     #16 binding — only then, D — the season-ended helper, P114-47), a fresh read through `validate` (C30), the validation answer, then the confirm naming the exact
     destination and the mapping (P113-5 / P114-33), Enable — every control through `PublishControls` (C32).
   - **The Home Assistant screen** (`A/ui/homeassistant/HomeAssistantScreen.kt`, `HomeAssistantViewModel.kt`): the
@@ -1414,35 +1685,41 @@ recorded pair, and every row below that moves `rev` or `dRev` clears it in the s
 | I23 | `needsDelivery` is set before any POST and by any contradicting read, and only a verified read-back clears it (A05) | 38a |
 | I24 | an event is `imported` exactly when a Transfer Pack import inserted it (or it came back carrying that local value); an `imported` event never qualifies; no edit, role change or backup merge clears the marker (B) | 3b, 21a, 49b, 49c |
 | I25 | the boundary is decided per asset: a `CALENDAR` window is never overridden by HA; HA's `season_ended` only for a `MANUAL` asset with an enabled #16 binding and a named boundary helper, and only while fresh; otherwise unverified (the later of cached and phone END), reported as such (D) | 3a, 3c, 98–101b |
-| I26 | no command but Enable (and Change target with its confirm) stamps `activatedInstallationId` (A08) | 69 |
+| I26 | no command but Enable (and Change target with its confirm) stamps `activatedInstallationId` (A08), whether the phone's sheet or a destination-confirmed API call runs it (O-21(c)) | 69, 117 |
 | I27 | `Refused` only before transmission or for an explicit 4xx refusal; everything else after transmission started is `Unknown` (A10) | 54, 54a |
 | I28 | the projector observes only work-arrived inputs; no delivery write and no tombstone state or error write triggers a projection or a drain (C) | 57c |
 | I29 | `reconcilePending` is set before a reconcile's GET and cleared only by a completed read, in the same write that hands any difference to `needsDelivery` (C) | 57d |
 | I30 | readiness and the projections read no equipment type, category, template, title or name; each asset's season, cutoff and readiness are its own (G22) | 102–106 |
 | I31 | a returning asset keeps its local role, `roleSinceOn` and each of its own events' marker; only rows new to it take the insert rules (A) | 49c |
 | I32 | `configGeneration` moves by one on every connection save; a `ValidationResult` from before any save is `STALE_READ` (F) | 60a, 87 |
+| I33 | no API route or MCP tool takes a value, a date to publish or READY, or reaches the token, the connection's save, test or address, Forget or the #16 link; readiness and published values are derived only (G17, O-21(d)) | 114, 117, 121, R6 |
+| I34 | an API Enable or Change target commits only its plan step's validation, with the `planId` echoed and the destination confirmed; a plan whose asset, kind, action, connection, generation, binding revision or helper shape moved writes nothing (`STALE_PLAN`, C25a) | 116, 117 |
+| I35 | Publish now over the API answers before any Home Assistant call and never holds the API connection; its progress is read from the delivery's pairs and its request stamp (C35b) | 119, 122 |
 
 ### Interfaces between briefs (consumes → produces)
 
 | brief | consumes | produces (the boundary later briefs code against) |
 |---|---|---|
-| S1 | — | the v22 entities and DAOs (C4, C5), including `observeControls()` and `observeObligations()` and the `imported`, `config_generation` and `reconcile_pending` columns; `MIGRATION_21_22`; `22.json` |
+| S1 | — | the v22 entities and DAOs (C4, C5), including `observeControls()` and `observeObligations()` and the `imported`, `config_generation`, `reconcile_pending` and (rev 5) `last_request_id` / `last_request_at` columns; `MIGRATION_21_22`; `22.json` |
 | A1 | `SeasonContext`, `AssetTree`, the model | `ScheduleRole`, the two role fields, `AssetEvent.imported`; `lastSeasonEndOnOrBefore`; `HaBoundary`, `BoundarySource`, `ReadinessBoundary`; `seasonReadiness(…, haBoundary) : Readiness` with the `!imported` rule |
 | B1 | `ConditionHistory`, `Readiness` (A1), `HaStateMapper`'s public helpers | `PublishKind`, `PublishBinding`, `PublishDelivery`, `DecommissionTombstone`, `ValidationResult`, **`HaServiceAction` + `actionOf`** (C14a, A11), `PublishErrorKind` + retry class, `PublishState`, `equipmentStatusOf`, `seasonDateOf`, `desiredValueOf`, `RemoteEntity` + mapper, validators, `boundaryDateOf`, **`haBoundaryOf`** (C9a, D), `DeliverySteps` with `reconcilePending` |
-| A2 | A1's model; S1's columns | `SetScheduleRole`, `SeasonStartRefused`, `SeasonStartStrands`, the role mapping, the two API codes |
+| A2 | A1's model; S1's columns | `SetScheduleRole`, `SeasonStartRefused`, `SeasonStartStrands`, the role mapping, the two API codes; rev 5: `quickElected` and `QUICK_NOT_ELECTED` (C10a) |
 | A3 | A1's model | format 21 (the role fields, the event marker); `FIRST_SCHEDULE_ROLE_FORMAT`; the two `MergeReason`s; `ImportContext` through preview, plan, fingerprint and apply (A01); `ReturnCarry` from `ReturnScope` into the planner (A); the marker on pack inserts (B) |
 | B2 | B1's kinds, mapper and `HaServiceAction`; #16's gate | `HaRequestGate`; `HomeAssistantPublishClient.read/call`; `CallOutcome` |
-| B3 | S1's DAOs; B1's model and validators; `InstallationIdentity`; ratified P113-42/43 | the three ports and Room adapters; the three new `when` arms; `EnablePublishing`, `ChangePublishTarget`, `DisablePublishing`, `RevalidatePublishing`, `DismissDecommission`; the C26/C28 refusals; the in-memory doubles |
-| A4 | A1's rule; A2's mapping; A3's format 21 (the HA boundary argument arrives with B5) | `GET …/season-readiness`; the schedule `role` keys; `get_season_readiness`; the documented `imported` marker (G-R3); the "#113/#114 codes" Errors table and the four strand docstrings (D4); `import_merge` at format 1–21 (D5) |
+| B3 | S1's DAOs; B1's model and validators; `InstallationIdentity`; ratified P113-42/43 | the three ports and Room adapters; the three new `when` arms; `EnablePublishing`, `ChangePublishTarget`, `DisablePublishing`, `RevalidatePublishing`, `DismissDecommission`; the C26/C28 refusals; the in-memory doubles; rev 5 (C25a): `PublishRefusal.STALE_PLAN`, `planIdOf`, `expectedPlanId`, `DismissDecommission`'s two refusals, `stampRequest` |
+| A4 | A1's rule; A2's mapping; A3's format 21 (the HA boundary argument arrives with B5) | `GET …/season-readiness`; the schedule `role` keys; `get_season_readiness`; the documented `imported` marker (G-R3); the "#113/#114 codes" Errors table with `SEASON_START_STRANDED` and the four strand docstrings (D4); `import_merge` at format 1–21 (D5) |
 | B4a | B2's client; B3's ports; `SecretStore` | `PublishRunner.publishNow/drain/drainBeforeForget/validate` (`Validated(target, boundary)`, F); the boundary step; the write-ahead and reconcile write-ahead records; **`DesiredStateReconciler`** (declared; the runner's only edge to the projector); `PublishDatabaseFailed` |
 | B4b1 | B4a's runner and `DesiredStateReconciler`; the source repositories' flows, `observeControls()`, `observeObligations()` — **never a delivery flow** | `PublishProjector` implementing `DesiredStateReconciler`; **`PublishInputs.workArrived()`** and **`DeliveryRequester`** (declared; an in-process implementation); the observer; the midnight tick; the start and resume read-back reconcile |
-| B4b2 | B4b1's `DeliveryRequester`; B4a's `drain()` | `PublishDispatch` implementing `DeliveryRequester` (in-process drain, else `enqueueOnce`, never self-triggered); `PublishWorker`, `PublishWork` (both unique works), `HaPublishDispatch`, `PublishControls` (command, then `requestDelivery()`) |
+| B4b2 | B4b1's `DeliveryRequester`; B4a's `drain()` | `PublishDispatch` implementing `DeliveryRequester` (in-process drain, else `enqueueOnce`, never self-triggered); `PublishWorker`, `PublishWork` (both unique works), `HaPublishDispatch`, `PublishControls` (command, then `requestDelivery()`); rev 5: `requestPublishNow` and the `expectedPlanId` pass-through |
 | A5a | A1; B1's `haBoundaryOf`; B3's ports (read) | the readiness line, the source and cutoff lines (F), the completion line; `ReadinessStrings`; two glossary terms |
-| A5b | A2, A5a | the role action and dialogs, the refusal and strand sentences, the editor's QUICK election |
-| B5 | B4a, B4b1, B4b2, B3; B1's `haBoundaryOf` | the readiness route's `HaBoundary` argument (C29); the decommission paths; `GET …/ha-publishing` with rev 4.1's keys (G-R1); `get_ha_publishing`; the Forget orchestration |
+| A5b | A2, A5a | the role action and dialogs, the refusal and strand sentences, the editor's QUICK election; rev 5: `quickElected = true` from the confirm and the `QUICK_NOT_ELECTED` arm |
+| A4w | A2's `setScheduleRole` with `quickElected`; A4's block and Errors table; B3's `PublishRefused` and `STALE_PLAN`; B1's `publishKindOf`; #105's `listHaEntities` and `pickerRows` | `POST /v1/schedules/{id}/role`; the PATCH flag; `GET /v1/ha-connection/entities/{scope}`; `EntityScope`'s two scopes and `HaEntityCandidate.attributes`; the `HA_PUBLISH_REFUSED` / `STALE_PLAN`, `HA_HELPER_READ_FAILED` and `SEASON_START_DATE_INVALID` arms; `set_schedule_role`, `list_ha_entities`; `command-shapes.json`'s `scheduleRole` and flag |
+| B5 | B4a, B4b1, B4b2, B3; B1's `haBoundaryOf` | the readiness route's `HaBoundary` argument (C29); the decommission paths; `GET …/ha-publishing` with rev 4.1's keys (G-R1); `get_ha_publishing`; the Forget orchestration; rev 5: the binding's `request` key and `RequestProgress` |
 | B5r | B5's route, DTO file and tool block; D1's v1.md | `GET /v1/ha-publishing`; `list_ha_publishing`; the G-R6 sentences; the write-nothing snapshot over the HA tables (D2) |
-| B6a | B3's commands, B4a's runner, B5's read model and `drainBeforeForget`, A5a's strings | the status block, the blocks' frame, the setup sheet, the scopes, the HA screen lines, two glossary terms |
-| B6b | B6a, B5 | the date block, the tombstone lines and the F-16 rule |
+| B5w1 | B5r's block; B4a's `validate`; B4b2's `PublishControls`; B3's `planIdOf` and `expectedPlanId`; A4w's arms | `POST …/ha-publishing-plan` and its store; the action route's ENABLE and CHANGE_TARGET; `HA_PUBLISH_CONFIRMATION_REQUIRED`; `enable_ha_publishing`, `change_ha_publishing_target`; `_POSTS_THAT_WRITE_NOTHING` as shapes |
+| B5w2 | B5w1's route and request file; B4b2's `requestPublishNow`; B5's `request` key; B3's `DismissDecommission` refusals | DISABLE and CHECK_HELPER; `POST …/ha-publishing/publish-now` (202); the acknowledgement route; `NO_SUCH_DECOMMISSION`, `DECOMMISSION_STILL_PENDING`; `disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now`, `acknowledge_ha_decommission` |
+| B6a | B3's commands, B4a's runner, B5's read model and `drainBeforeForget`, A5a's strings, A4w's two scopes | the status block, the blocks' frame, the setup sheet, the scopes, the HA screen lines, two glossary terms; the `STALE_PLAN` arm (P113-44) |
+| B6b | B6a, B5 | the date block, the tombstone lines and the F-16 rule; the two `DismissDecommission` refusals re-read (no sentence) |
 | B7 | everything drawn; B2, B4b2 | two androidTest classes |
 | D1 | everything | the documents and the R7 paragraph |
 
@@ -1481,11 +1758,11 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | # | layer | class · cases | proves | fails without |
 |---|---|---|---|---|
 | 12 | JVM | `T/backup/SeasonSyncNeverTravelsTest` (+4) · `anExportCarriesNoPublishBindingDeliveryTombstoneOrEntityByte`; `aMergeLeavesThemAndTheirRevisions`; `aTransferPackCarriesNone`; `aReplaceRestoreLeavesThemForTheProjector` | G5, G7, AC113-8 | none: tripwires (row 22's RED covers the shape) |
-| 22 | JVM | `Migration21To22Test` · `theRoleColumnsDefaultToNoneAndNull`; `theEventMarkerAndTheConnectionGenerationDefaultToZero` (B, F); `theThreeTablesExistEmptyWithTheirIndicesAndKeys`; `everyOtherV21TableIsUnchanged` (the #47 snapshot shape; `maintenance_schedule`, `asset_event` and `ha_connection` differ by their added columns only); `theMigratedSchemaEqualsAFreshVersion22` | C4 | the binding's `asset_id` written with a CASCADE key (the schema compare fails) |
+| 22 | JVM | `Migration21To22Test` · `theRoleColumnsDefaultToNoneAndNull`; `theEventMarkerAndTheConnectionGenerationDefaultToZero` (B, F); `theRequestColumnsDefaultToNull` (rev 5); `theThreeTablesExistEmptyWithTheirIndicesAndKeys`; `everyOtherV21TableIsUnchanged` (the #47 snapshot shape; `maintenance_schedule`, `asset_event` and `ha_connection` differ by their added columns only); `theMigratedSchemaEqualsAFreshVersion22` | C4 | the binding's `asset_id` written with a CASCADE key (the schema compare fails) |
 | 23 | JVM | `HaPublishDaoTest` · `oneBindingPerAssetAndKind`; `twoEnabledBindingsCannotClaimOneEntity` (`claim_entity_id`); `disabledBindingsMayShareATarget` (claims null, A11/F-9); `deletingTheConnectionTakesItsBindingsButNoTombstone`; `deletingTheAssetLeavesTheBinding` | C4, G1 | `UNIQUE(connection_id, claim_entity_id)` dropped **and**, separately, the index put on `entity_id` (disabled reuse refused) — two counted |
 | 24 | JVM | same · `aStaleRevisionUpdateAnswersFalse`; `aDeliveryRecordAtAMovedDesiredRevisionAnswersFalse`; `aPairMovingWriteClearsTheErrorAndItsPair` (A04); `observeControlsIgnoresBookkeepingWrites` (a cleared `validatedRevision` emits nothing new, C); `anObligationsRevisionMovesOnlyOnInsertOrMerge` (C) | C5 CAS, C5 clearing, C5 flows | the delivery CAS reads only the binding revision |
 
-### A2 — the role command and hooks (rows 13–21, 21a; `CT/usecase/SetScheduleRoleTest`, `SeasonStartStrandsTest`, new)
+### A2 — the role command and hooks (rows 13–21, 21a, 112; `CT/usecase/SetScheduleRoleTest`, `SeasonStartStrandsTest`, new)
 
 | # | layer | class · cases | proves | fails without |
 |---|---|---|---|---|
@@ -1499,6 +1776,7 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 20 | JVM | same · `retargetingARoleScheduleIsRefused` (O-6); `addingAnIneligibleOrCoveredMemberToARoleGroupIsRefused`; `anIndirectBreakIsReadNotRefused` (delete the only child → `ROLE_NOT_ALLOWED`); `aFormToQuickEditOfARoleScheduleNeedsTheElection` (refused without `seasonStartQuickElected`, accepted with it; F-22) | C11 retarget, group, indirect | the `SaveSchedule` hook compares `title` instead of `target` |
 | 21 | JVM | `CT/usecase/ScheduleRoleSurvivesTest` · `aFullReplaceSaveKeepsTheRole` (K11); `aReplaceAssetCopyHasNoRole` (C12); `theRoleChangesNoComputedDue` (recompute before/after equal) | C7, C12 | `candidate` built without `existing.role` (the save wipes it) |
 | 21a | JVM | same · `anEditOfAnImportedEventKeepsTheMarker` (`UpdateEvent` through `buildEvent`); `clearingAndSettingTheRoleAgainNeverReAdmitsAnImportedService` (NONE → SEASON_START: still `INHERITED_SERVICE_ONLY`); `aNewCompletionIsNotImported` | B, C10, C12, I24 | `buildEvent` without `existing?.imported` (the edit clears the marker and the seller's service counts) |
+| 112 | JVM | `SetScheduleRoleTest` (+2; rev 5) · `aQuickScheduleNeedsTheElection` (refused `QUICK_NOT_ELECTED`, nothing written; accepted with `quickElected`); `aFormScheduleIgnoresTheFlag` (and `NONE` clears whatever it says) | C10a, O-2 over the API | the `QUICK_NOT_ELECTED` check removed (a QUICK role set with no election) |
 
 ### B1 — the outbound core (rows 25–45; `CT/hapublish/*Test`, new)
 
@@ -1555,7 +1833,7 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 55 | JVM | same · `tlsFailureIsTlsFailed`; `a200BodyIsCappedAndDiscarded` | C22 caps | the cap removed (a 65 KiB body read whole) |
 | 56 | JVM | same · `noLogNoMessageNoToStringCarriesUrlEntityBodyOrToken` (a captured log seam; every exception message) | G4 | an exception message with the URL |
 
-### B3 — commands (rows 60, 60a, 63, 64, 69, 86, 87, 93–97; `CT/hapublish/PublishCommandsTest`, `CT/seasonsync/CrossCheckTest`, new)
+### B3 — commands (rows 60, 60a, 63, 64, 69, 86, 87, 93–97, 116; `CT/hapublish/PublishCommandsTest`, `CT/seasonsync/CrossCheckTest`, new)
 
 | # | layer | class · cases | proves | fails without |
 |---|---|---|---|---|
@@ -1571,8 +1849,9 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 97 | JVM | same · `disablingADisabledBindingWritesNothing` (no revision bump, no tombstone) | R-1 | the tombstone inserted unconditionally |
 | 86 | JVM | `CrossCheckTest` · `linkAndEditRefuseAnOutboundTarget`; `enableAndChangeTargetRefuseAnInboundSource`; `aPendingTombstonesEntityIsOutboundToo` | C26, G9, K6 | the inbound refusal checks enabled bindings only |
 | 87 | JVM | `ConnectionHooksTest` · `anAddressChangeIsRefusedWhileADateBindingOrPendingTombstoneExists` (O-12); `aTokenChangeBumpsEveryPublishRevision`; `forgetTurnsUndeliveredDateObligationsIntoUndeliverableTombstones` (O-11); `aTokenChangeKeepsBindingsValidatedAndDeliversPendingInvalidations` (F-2); `everySaveAddsOneToConfigGeneration` (F) | C28, K9, I32 | the reauthorised branch bumps only season bindings; **and** `validatedRevision` left behind (pending invalidations park in NEEDS_VALIDATION) — two counted |
+| 116 | JVM | `CT/hapublish/PublishPlanTest` (new; B3; rev 5) · `planIdOf` is stable and each field moves it (asset, kind, action, target, boundary, connection id, `configGeneration`, binding revision, an option added, `hasTime` flipped) while a state change does not; Enable and Change target with a matching `expectedPlanId` commit; a connection save, Forget + recreate at the same generation, or a phone-side Change target between plan and commit → `STALE_PLAN`, nothing written; `expectedPlanId = null` (the phone) unchanged; `DismissDecommission` refuses an unknown id and a PENDING row and deletes an UNDELIVERABLE one | C25a, I34 | the connection id left out of the fingerprint (Forget + recreate at the same generation commits a stale plan) |
 
-### B4a/B4b1/B4b2 — runner, projector, worker (rows 57–59, 57a–57d, 61–62, 65–68, 98–101b, 105; `T/hapublish/PublishRunnerTest`, `PublishProjectorTest`, `PublishWorkerBodyTest`, `PublishScenarioTest`, `ReconcilePendingTest`, new)
+### B4a/B4b1/B4b2 — runner, projector, worker (rows 57–59, 57a–57d, 61–62, 65–68, 98–101b, 105, 122; `T/hapublish/PublishRunnerTest`, `PublishProjectorTest`, `PublishWorkerBodyTest`, `PublishScenarioTest`, `ReconcilePendingTest`, new)
 
 | # | layer | class · cases | proves | fails without |
 |---|---|---|---|---|
@@ -1600,8 +1879,9 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 101a | JVM | `PublishRunnerTest` · `validateReturnsTheTargetAndBoundaryResultsFromOneSnapshot` (both carry one connection id, `configGeneration` and binding revision, even with a connection save racing between the two GETs); `aStatusValidationHasNoBoundaryResult` | F, C30 | the boundary result built from a second snapshot (mixed provenance passes) |
 | 101b | JVM | `CT/hapublish/BoundaryFreshnessTest` (B1) · `freshWithinSevenDays`; `aLongerCadenceWidensTheWindow` (MONTHLY 30 d); `anOlderRevisionIsUnverified`; `aNewerActivationIsUnverified`; `neverReadIsUnverifiedSinceValidation`; `calendarNoInboundOrNoHelperIsNotUsed` | D, C9a | the cadence term dropped (MONTHLY reads `Unverified` at day 8) |
 | 105 | JVM | `PublishScenarioTest` (B4b2; story 4) · a fictional `YEAR_ROUND` indoor pool: `SetScheduleRole` refused `YEAR_ROUND`; its status binding enabled, DOWN then UP recorded → the scripted HA receives `DOWN` then `UP`; no date binding is offered a boundary | G22, G8 | the status projection gated on a season (a year-round asset publishes nothing) |
+| 122 | JVM | `T/hapublish/ControlDispatchTest` (+1; B4b2; rev 5) · `requestPublishNowStampsTheCoveredBindingsAndNeverAwaits` (only enabled bindings past C17's gate are stamped; the call returns while the scripted HA is held; the pass is the runner's single flight; the stamp moves no revision, desired value or error and triggers no projection, I28) | C32, C35b, I35 | the facade awaiting `publishNow` (the call blocks on the held HA) |
 
-### A4, B5, B5r — API and MCP (rows 80–84, 107–111; contract)
+### A4, A4w, B5, B5r, B5w1, B5w2 — API and MCP (rows 80–84, 107–111, 113–115, 117–121; contract, one JVM)
 
 | # | layer | class · cases | proves | fails without |
 |---|---|---|---|---|
@@ -1610,11 +1890,19 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | 82 | contract | `T/api/HaPublishingRoutesTest` (new) · `bindingsAndTombstonesAsKeys`; `noAddressTokenWifiOrInstallationId` (byte scan) | C35, G4 | the connection's base URL added |
 | 83 | contract | `T/api/ApiReadsWriteNothingTest` (+2 routes: A4 the readiness route, B5 the per-asset publishing route) | read-only | A4's: a handler writing any of the fifteen shipped tables (a `schedule_state` recompute); B5's: none counted here — the snapshot holds no HA table until row 108 makes it real (D2, rev 4.1) |
 | 84 | contract | `M/tests/test_ha_publishing_tools.py` (new) · the two tools' shapes; the schema gate below 22; `update_schedule_keeps_the_role` | C29, C35, K11 | the tool forwarding `role` in the PATCH body (400) |
-| 107 | contract | `T/api/HaPublishingRoutesTest` (+3) · `deliveryFlagsPairsAndBoundaryAsKeys` (B5); `theCollectionListsOrphanTombstonesWithIds` (B5r); `noAddressTokenWifiOrInstallationId` extended to the collection (byte scan; B5r) | G-R1, G-R2, G4 | the projection reading `state` only |
-| 108 | contract | `T/api/ApiReadsWriteNothingTest` (B5r) · the snapshot gains `ha_publish_binding`, `ha_publish_delivery`, `ha_publish_decommission`, `ha_connection`, `season_sync_binding`; +1 route (the collection); the three #113/#114 reads re-run | D2: row 83 made real | a read handler calling `reconcileDesired` or a boundary CAS |
+| 107 | contract | `T/api/HaPublishingRoutesTest` (+3) · `deliveryFlagsPairsAndBoundaryAsKeys` (B5); `theCollectionListsOrphanTombstonesWithIds` (B5r); `noAddressTokenWifiOrInstallationId` extended to the collection (byte scan; B5r); `theRequestProgressFollowsTheExistingPairs` (B5, rev 5) | G-R1, G-R2, G4 | the projection reading `state` only |
+| 108 | contract | `T/api/ApiReadsWriteNothingTest` (B5r) · the snapshot gains `ha_publish_binding`, `ha_publish_delivery`, `ha_publish_decommission`, `ha_connection`, `season_sync_binding`; +1 route (the collection); the three #113/#114 reads and A4w's discovery re-run (rev 5) | D2: row 83 made real | a read handler calling `reconcileDesired` or a boundary CAS |
 | 109 | contract | `T/api/MaintenanceCommandShapeTest` (+2; A4) · `everyEventReadCarriesImported` (list, log, update, complete); `anEventBodyCarryingImportedIs400` | G-R3, B | the event row mapped without the marker |
 | 110 | contract | `T/api/SeasonStartStrandRoutesTest` (new; A4) · one case per hooked route and cause — `PATCH /v1/schedules/{id}` retarget and FORM → QUICK, `POST /v1/assets/{id}/season-mode` to `YEAR_ROUND`, `PATCH /v1/assets/{id}` re-parent and legacy pair, `PATCH /v1/groups/{id}` member → 409 with `cause` and `schedules`, nothing written | D4, C2, C11 | the `is` arm (a 500 through `else`) |
 | 111 | contract | `M/tests/test_ha_publishing_tools.py` (+) · `list_ha_publishing`'s shape and gate (B5r); `import_merge` and the README say 1–21 and name the two reasons, `test_tools.py:980-998` moved (A4); the four docstrings name `SEASON_START_STRANDED` (A4); the eleven G-R6 sentences (B5r); D1's pins at each brief's count and the block's tail pin (pins, no RED) | G-R2, D4, D5, G-R6, D1 | stale text |
+| 113 | contract | `T/api/ScheduleRoleRoutesTest` (new; A4w) · set and clear as keys (`role`, `roleSinceOn` in the answer); each `SeasonStartRefusal` as `reason` with nothing written, `QUICK_NOT_ELECTED` included; `aBadSinceOnIs422`; `noSuchScheduleIs404`; `anotherVerbIs404`; `aPatchWithSeasonStartQuickElectedPassesTheElection` (FORM → QUICK accepted with the flag, 409 `QUICK_NEEDS_ELECTION` without it); `ApiReadsWriteNothingTest.eachWriteRouteWritesOnlyItsUseCasesTables` +1 (the role route: `maintenance_schedule` only); `CommandShapesGoldenTest` (`scheduleRole`, the two flags) | C10a, C29b, O-7 | the handler defaulting `seasonStartQuickElected` to true (a QUICK role set with no election) |
+| 114 | contract | `T/api/HaEntityRoutesTest` (new; A4w; a scripted list collaborator) · each scope lists only its domain, sorted, at most 2,000 with `truncated`; `options` only on `input_select` rows and `hasDate` / `hasTime` only on `input_datetime` rows (byte scan: no state, URL, Wi-Fi name or token); no stored connection → 409 `HA_PUBLISH_REFUSED` `NO_CONNECTION`; `NEEDS_TOKEN` and `NOT_ON_LOCAL_NETWORK` → 409 `HA_HELPER_READ_FAILED` with the kind; `twoCallsAreTwoReads` (the scripted list counts two; a connection saved between them answers the new connection's list); an unknown scope is a 404, another verb a 405; `ApiReadsWriteNothingTest` +1 read (the snapshot as it stands at wave 7; row 108 re-runs it over the HA tables) | C29b, I33 | a cached list (the second call answers without a read) |
+| 115 | JVM | `CT/hapublish/HelperAttributesTest` (new; A4w) · `mapHaStatesAnswer` keeps `options` (C16's bounds) on an `input_select` row and `hasDate` / `hasTime` on an `input_datetime` row, none on an `input_boolean` or `switch` row; a 65-option or non-string list is `options: null`; `pickerRows` over the two new scopes; `HaStatesMapperTest`, `EntityPickerTest`, `HomeAssistantStateClientTest`, `LinkSeasonSyncViewModelTest` green unchanged (pins, G3) | C29b, G3 | the attributes read for every domain (an `input_boolean` row gains `options`) |
+| 117 | contract | `T/api/HaPublishingWriteRoutesTest` (new; B5w1; `ScriptedPublishTransport`) · `thePlanWritesNothingAndPostsNothing` (also `ApiReadsWriteNothingTest` +1 POST read); a plan carries `planId` only without `refusal`, and `boundaryRequired` per C25; ENABLE without `planId` or `confirmDestination`, or with a confirm unequal to the plan's `entityId` → 422, nothing written; `anUnknownExpiredConsumedOrForeignPlanIsStale` (another asset, kind or action; past `expiresAt`; used twice) → 409 `STALE_PLAN`; `aConnectionSaveBetweenPlanAndActionIsStale` (409 `STALE_PLAN`, nothing written); `theActionReadsNothing` (no GET in the scripted log between the plan's and the commit; the drain's reads follow `requestDelivery()`); each C25 refusal as `HA_PUBLISH_REFUSED` `reason`; `anApiEnableOfACopiedRowActivatesItHere` (O-21(c)); `noRequestBodyTakesAValue` (a `value` key → 400) | C35b, C25a, I34 | the action handler skipping the plan-id compare (a connection saved after the plan still enables) |
+| 118 | contract | same (B5w2) · `disableWhileHaIsUnreachableSucceeds` (200, the binding `NOT_ENABLED`, the date kind's tombstone PENDING, no request reaches the scripted HA during the call; HA reachable again → `1970-01-01` read back and the tombstone deleted); `disablingADisabledBindingIsANoOp`; `checkHelperReadsTheStoredDestination` (the scripted log names the stored target and boundary) and `checkHelperNeverActivatesACopiedRow` (A08); DISABLE or CHECK_HELPER carrying `planId` or `confirmDestination` → 422 | C25a (correction 2) | Disable routed through `validate` (refused while HA is unreachable) |
+| 119 | contract | same (B5w2, with B5's key and B4b2's facade) · `publishNowAnswers202BeforeAnyHaCall` (the scripted HA held on a latch: the 202 arrives, and a `GET /v1/status` is answered, while the latch is closed); `theReadShowsAcceptedThenPublishedVerifiedOrFailed` (a POST and read-back → `PUBLISHED`; a matching read → `VERIFIED`; an error after the request → `FAILED`); `aGateSkippedBindingIsNotCovered` (absent from `bindings`, nothing stamped); `aSecondRequestIsSafe` (a new `requestId`, one pass, one POST); `theRequestSurvivesAGraphRebuild` | C35b, I35 | the handler awaiting `publishNow` (the status call waits on the latch) |
+| 120 | contract | same (B5w2) · `theAcknowledgementNeedsTheCallersAttestation` (the key missing, `false`, a string, or a `decommissionId` other than the path's → 422, nothing deleted); `anUnknownIdIs404`; `aPendingTombstoneIs409AndKept`; `anUndeliverableOneIsDeletedWith204` (the collection no longer lists it); `eachWriteRouteWritesOnlyItsUseCasesTables` +4 (the controls write only `ha_publish_*` tables, the acknowledgement only `ha_publish_decommission`) | C35b, O-21(b) | the handler defaulting `acknowledgedClearedInHa` (a body without it deletes) |
+| 121 | contract | `M/tests/test_ha_publishing_write_tools.py` (new; A4w, B5w1, B5w2) · each tool's route and body; `set_schedule_role` and `update_schedule` send the election only when true; `list_ha_entities` refuses a scope outside the three before any request; `enable_ha_publishing` / `change_ha_publishing_target` without `plan_id` and `confirm_destination` POST only the plan and write nothing, with both send exactly `{kind, action, planId, confirmDestination}`, with one of them or a `confirm_destination` unequal to `entity_id` send nothing; `publish_ha_now` returns the 202 body; `acknowledge_ha_decommission` sends nothing unless its argument `is True`; gate 22 on each; `retry_on_connect=False` on each write; the 120 s read budget on discovery, the plan and Check helper; `_writes_nothing` matches the plan shape and the two shipped literals; the block's tail pin at 11 and every D1 site at 101 (pins) | C29b, C35b, D1 | the tool filling `confirmDestination` from `entity_id` |
 
 ### B5 — decommission (rows 70–74; `CT/hapublish/DecommissionTest`, `T/hapublish/DecommissionScenarioTest`, new)
 
@@ -1631,7 +1919,7 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | # | layer | class · cases | proves | fails without |
 |---|---|---|---|---|
 | 75 | JVM | `T/ui/asset/ReadinessLineTest` (new) · each state's sentence id; `noLineWithoutARoleOrDateBinding` (R-N1); `theLineRecomputesOnResume` | C33, AC114-4 | the line cached in a `val` at construction |
-| 76 | JVM | `T/ui/maintenance/ScheduleRoleViewModelTest` (new) · `theActionIsNotInTheEditorsSave`; `confirmCarriesTheDateAndQuickNote`; `eachRefusalHasItsSentence` | C33, K11, O-2 | the QUICK note shown on FORM |
+| 76 | JVM | `T/ui/maintenance/ScheduleRoleViewModelTest` (new) · `theActionIsNotInTheEditorsSave`; `confirmCarriesTheDateAndQuickNote`; `eachRefusalHasItsSentence` (rev 5: `QUICK_NOT_ELECTED` → P114-5); `aQuickConfirmPassesTheElection` (rev 5, C10a) | C33, K11, O-2 | the QUICK note shown on FORM |
 | 77 | JVM | `T/ui/maintenance/CompletionFlowTest` (+2) · `aRoleScheduleShowsTheLine`; `anOrdinaryScheduleDoesNot` | the completion line | the line keyed on `servicePolicy` instead of `role` |
 | 78 | JVM | `T/ui/asset/AssetEditViewModelTest` (+2), `ScheduleEditViewModelTest` (+1), `GroupEditViewModelTest` (+1) · each strand cause's sentence | C11 drawn | an `else` arm (UiLiteralGuard / the exhaustive-when check) |
 | 79 | JVM | `LocalizationCoverageTest`, `UiLiteralGuardTest` pins with the new resources | G12 | none: pins |
@@ -1676,34 +1964,40 @@ names are the implementer's; what each proves is not. "pin" = a shipped assertio
 | K18 | a failure triggering the next attempt; a lost first reconcile read (C) | 57c, 57d |
 | K19 | HA's date overriding a `CALENDAR` season; a stale boundary passing as fresh (D) | 99a, 99b, 101b |
 | K20 | seasonality inferred from type, template or name (G22) | 102–106 |
+| K21 | a stale, invented or misdirected confirmation over the API: a plan outliving a connection change, a confirm or attestation a tool fills itself (rev 5) | 116, 117, 120, 121 |
+| K22 | a delivery holding the one-request-at-a-time API (rev 5) | 119, 122 |
 
 ## 4. Files, fences, order and the gate budget
 
 | brief | wave · lane | touches | never touches |
 |---|---|---|---|
-| **S1** schema 22 | 1 · L1 | `A/data/room/entities/MaintenanceEntities.kt` (two columns, the entity `:95-155`), `JournalEntities.kt` (`imported`, `:198-215`), `HaConnectionEntity.kt` (`config_generation`); `A/data/room/entities/{HaPublishBindingEntity,HaPublishDeliveryEntity,HaPublishDecommissionEntity}.kt`, `A/data/room/dao/{HaPublishBindingDao,HaPublishDeliveryDao,HaPublishDecommissionDao}.kt` (new); `A/data/room/{Migrations,AppDatabase}.kt` (`MIGRATION_21_22`, version 22); `A/di/AppGraph.kt` (`SCHEMA_VERSION`, the migration list **only**); `T/testing/FakeGraph.kt`, `MigrationTestSupport` (twins); `app/schemas/…/22.json` (generated); `T/data/room/{Migration21To22Test,HaPublishDaoTest}.kt` (new); `T/backup/SeasonSyncNeverTravelsTest.kt` (+4); `T/VersionAgreementTest.kt` (schema only: `:87`, `:158`) — rows 12, 22–24 (the error pair, `needs_delivery`, `reconcile_pending`, `boundary_*`, `imported` and `config_generation` columns and the `observeControls` / `observeObligations` queries included) | `C/**`, `A/api`, `A/ui`, `A/seasonsync`, `21.json`, `docs`, `tools` |
+| **S1** schema 22 | 1 · L1 | `A/data/room/entities/MaintenanceEntities.kt` (two columns, the entity `:95-155`), `JournalEntities.kt` (`imported`, `:198-215`), `HaConnectionEntity.kt` (`config_generation`); `A/data/room/entities/{HaPublishBindingEntity,HaPublishDeliveryEntity,HaPublishDecommissionEntity}.kt`, `A/data/room/dao/{HaPublishBindingDao,HaPublishDeliveryDao,HaPublishDecommissionDao}.kt` (new); `A/data/room/{Migrations,AppDatabase}.kt` (`MIGRATION_21_22`, version 22); `A/di/AppGraph.kt` (`SCHEMA_VERSION`, the migration list **only**); `T/testing/FakeGraph.kt`, `MigrationTestSupport` (twins); `app/schemas/…/22.json` (generated); `T/data/room/{Migration21To22Test,HaPublishDaoTest}.kt` (new); `T/backup/SeasonSyncNeverTravelsTest.kt` (+4); `T/VersionAgreementTest.kt` (schema only: `:87`, `:158`) — rows 12, 22–24 (the error pair, `needs_delivery`, `reconcile_pending`, `boundary_*`, `imported`, `config_generation` and (rev 5) `last_request_id` / `last_request_at` columns and the `observeControls` / `observeObligations` queries included) | `C/**`, `A/api`, `A/ui`, `A/seasonsync`, `21.json`, `docs`, `tools` |
 | **A1** rule | 1 · L2 | `C/model/Maintenance.kt` (`ScheduleRole`, two fields); `C/model/Journal.kt` (`AssetEvent.imported`, appended and defaulted); `C/schedule/SeasonContext.kt` (`lastSeasonEndOnOrBefore`, `YearlyWindow` made class-visible); `C/season/SeasonReadiness.kt` (new); `CT/season/{SeasonReadinessTest,SeasonStoriesTest}.kt`, `CT/schedule/SeasonContextLastEndTest.kt` (new) — rows 1–11, 3a–3c, 102–104, 106 | `A/**`, `C/usecase`, `C/backup`, `C/merge`, `C/transfer`, every other `C/schedule` line, `docs`, `tools` |
-| **A2** role command | 2 · L2 | `C/usecase/SetScheduleRole.kt` (new); `C/usecase/{SeasonCommands,SetSeasonMode,UpdateAsset,SaveAssetSettings,SaveSchedule,SaveGroup}.kt` (the exceptions, the helper, one call each, `candidate`'s two fields, the QUICK-election parameter); `C/usecase/EventCommands.kt` (`buildEvent`'s one `imported` line, B); `A/data/room/MaintenanceMappers.kt` (role mapping) and `A/data/room/JournalMappers.kt` (`imported`, B); `A/api/ApiJson.kt` (the two `is` arms only); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (`setScheduleRole`, constructor arguments); `CT/usecase/{SetScheduleRoleTest,SeasonStartStrandsTest,ScheduleRoleSurvivesTest}.kt` (new) — rows 13–21, 21a | `C/backup`, `C/merge`, `C/transfer`, `C/schedule`, `C/hapublish`, `A/ui`, `A/hapublish`, every other `A/api` file, `docs`, `tools` |
+| **A2** role command | 2 · L2 | `C/usecase/SetScheduleRole.kt` (new); `C/usecase/{SeasonCommands,SetSeasonMode,UpdateAsset,SaveAssetSettings,SaveSchedule,SaveGroup}.kt` (the exceptions, the helper, one call each, `candidate`'s two fields, the QUICK-election parameter); `C/usecase/EventCommands.kt` (`buildEvent`'s one `imported` line, B); `A/data/room/MaintenanceMappers.kt` (role mapping) and `A/data/room/JournalMappers.kt` (`imported`, B); `A/api/ApiJson.kt` (the two `is` arms only); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (`setScheduleRole`, constructor arguments); `CT/usecase/{SetScheduleRoleTest,SeasonStartStrandsTest,ScheduleRoleSurvivesTest}.kt` (new) — rows 13–21, 21a; rev 5 (C10a): `quickElected` and `QUICK_NOT_ELECTED` in `SetScheduleRole.kt`, row 112, +10 min | `C/backup`, `C/merge`, `C/transfer`, `C/schedule`, `C/hapublish`, `A/ui`, `A/hapublish`, every other `A/api` file, `docs`, `tools` |
 | **B1** outbound core | 2 · L1 | `C/hapublish/{PublishModel,HaServiceAction,Projections,RemoteEntityMapper,Validators,DeliverySteps,BoundaryFreshness}.kt` (new; `HaServiceAction` and `ValidationResult` are B1's, A11, A09); `CT/hapublish/*Test.kt` (new) — rows 25–45, 42a, 45a, 101b | every shipped file; `A/**`; `C/seasonsync` (read-only use of its public helpers) |
 | **A3** format 21 | 3 · L2 | `C/backup/{BackupFormat,BackupCodec}.kt`; `C/merge/{MergePlanner,MergePlan}.kt` (the compare, the claim, two `MergeReason`s, `ImportContext`, the plan's `context` and the fingerprint line); **`C/usecase/BuildBackupMergePlan.kt` (the `context` parameter and `ReturnScope`'s carry passed through, only) and `C/usecase/ApplyBackupMergePlan.kt` (`ReturnScope` builds `ReturnCarry` from the rows it already removes, and `:181`'s replan passes `plan.context` and `scope.carry`, only)** (A01 and rev 4's A, controller rulings); `C/usecase/ImportTransferPack.kt` (the context captured once in `preview`, a trailing `today: Today`); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (`ImportTransferPack`'s `today` argument); `T/VersionAgreementTest.kt` (format: `:88`, `:159`); `docs/api/v1.md` (the merge tables' two reasons, the format line); `CT/backup/BackupFormat21Test.kt`, `CT/merge/ScheduleRoleMergeTest.kt`, `CT/usecase/{TransferPackRoleTest,TransferRoundTripRoleTest}.kt` (new); the twins `git grep -n 'FORMAT_VERSION\|formatVersion = 20'` names, read first — rows 46–49, 49a–49c | every other line of `ApplyBackupMergePlan.kt` and `BuildBackupMergePlan.kt`, `C/transfer/**`, `A/ui`, `A/hapublish`, `A/seasonsync`, `tools` (but a format pin twin in `B/` if one exists) |
 | **B2** client + gate | 3 · L1 | `A/seasonsync/HaRequestGate.kt` (new, the moved checks, no timeout); `A/seasonsync/HomeAssistantStateClient.kt` (calls the gate inside its own unchanged `withTimeoutOrNull`; nothing else); `A/hapublish/HomeAssistantPublishClient.kt` (new; consumes B1's `HaServiceAction`); `T/seasonsync/HaRequestGateTest.kt`, `T/hapublish/HomeAssistantPublishClientTest.kt` (new) — rows 50–56, 54a (its client half) | `A/di`, `FakeGraph`, every shipped test file, `C/**`, `A/fetch`, the manifest, `docs`, `tools` |
-| **B3** commands | 4 · L1 | `C/hapublish/{PublishPorts,PublishCommands}.kt` (new); `C/seasonsync/{LinkSeasonSync,SeasonSyncCommands,SeasonSyncModel}.kt` (C26's refusal; C28's bump, refusal, tombstones and `configGeneration` increment; the model's one appended, defaulted field, F; each new collaborator a **trailing defaulted** parameter, F-6); `A/data/room/SeasonSyncRepositories.kt` (`:71`, `:82`: that field mapped, only); `A/data/room/HaPublishRepositories.kt` (new); **the three exhaustive `when`s the two new enum members reach (F-4):** `A/ui/asset/SeasonSyncStrings.kt:161-166` (`OUTBOUND_TARGET`), `A/ui/asset/LinkSeasonSyncViewModel.kt:290-296` (`OUTBOUND_TARGET` → P113-43 on the entity line), `A/ui/homeassistant/HomeAssistantViewModel.kt:458-462` (`PUBLISHING_BLOCKS_ADDRESS_CHANGE` → P113-42) — those arms only, with P113-42/43 in all ten packs; `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (repositories, commands, `DismissDecommission`); `CT/testing/InMemoryHaPublish.kt` (new); `CT/hapublish/PublishCommandsTest.kt`, `CT/hapublish/{CrossCheckTest,ConnectionHooksTest}.kt`, `T/hapublish/{InstallationFenceTest,ErrorPairRoomTest}.kt` (new; **not** in `CT/seasonsync`) — rows 24's A04 case with S1's DAO, 42b, 60, 60a, 63, 64, 69, 86, 87 | every shipped `CT/seasonsync` test file (byte-identical, G3); every other `A/ui` line; `A/api`; `C/usecase`, `C/backup`, `C/merge`, `docs`, `tools` |
+| **B3** commands | 4 · L1 | `C/hapublish/{PublishPorts,PublishCommands}.kt` (new); `C/seasonsync/{LinkSeasonSync,SeasonSyncCommands,SeasonSyncModel}.kt` (C26's refusal; C28's bump, refusal, tombstones and `configGeneration` increment; the model's one appended, defaulted field, F; each new collaborator a **trailing defaulted** parameter, F-6); `A/data/room/SeasonSyncRepositories.kt` (`:71`, `:82`: that field mapped, only); `A/data/room/HaPublishRepositories.kt` (new); **the three exhaustive `when`s the two new enum members reach (F-4):** `A/ui/asset/SeasonSyncStrings.kt:161-166` (`OUTBOUND_TARGET`), `A/ui/asset/LinkSeasonSyncViewModel.kt:290-296` (`OUTBOUND_TARGET` → P113-43 on the entity line), `A/ui/homeassistant/HomeAssistantViewModel.kt:458-462` (`PUBLISHING_BLOCKS_ADDRESS_CHANGE` → P113-42) — those arms only, with P113-42/43 in all ten packs; `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (repositories, commands, `DismissDecommission`); `CT/testing/InMemoryHaPublish.kt` (new); `CT/hapublish/PublishCommandsTest.kt`, `CT/hapublish/{CrossCheckTest,ConnectionHooksTest}.kt`, `T/hapublish/{InstallationFenceTest,ErrorPairRoomTest}.kt` (new; **not** in `CT/seasonsync`) — rows 24's A04 case with S1's DAO, 42b, 60, 60a, 63, 64, 69, 86, 87; rev 5 (C25a): `C/hapublish/PublishPlan.kt` (new, `planIdOf`), `PublishRefusal.STALE_PLAN`, `expectedPlanId` on Enable and Change target, `DismissDecommission`'s two refusals, `stampRequest` with its Room adapter and double, `CT/hapublish/PublishPlanTest.kt` (new) — row 116, +15 min | every shipped `CT/seasonsync` test file (byte-identical, G3); every other `A/ui` line; `A/api`; `C/usecase`, `C/backup`, `C/merge`, `docs`, `tools` |
 | **A4** API/MCP read | 4 · L2 | `A/api/{ApiRouter,SeasonHealthHandlers,ScheduleRowResponse,SeasonReadinessDtos}.kt` (the route, the handler, the keys, a new DTO file); `docs/api/v1.md` (the route, the keys, the counts; rev 4.1: the events rows and **Bodies** note, the "#113/#114 codes" Errors table, the no-endpoint role half); `M/src/servicetag_mcp/server.py` (the tool; rev 4.1: the four strand docstrings, `list_events`'s and `import_merge`'s), `M/README.md` (the tool, `:115`, `import_merge` at `:459`); `T/api/{SeasonReadinessRoutesTest (new),SeasonStartStrandRoutesTest (new),MaintenanceCommandShapeTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_tools.py` (new, the readiness half) and **D1's count-pin sites** (C29a: `test_tools.py`, `test_argument_guard.py`, `test_reference_tools.py`, the four history docstrings, the three tail pins; 90 → 91) — rows 80, 81, 83, 84 (half), 109, 110, 111 (its half); rev 4.1 adds ~25 min | `A/di`, `FakeGraph`, `C/**`, `A/ui`, `A/hapublish`, `S/`, `B/` |
 | **B4a** runner | 5 · L1 | `A/hapublish/{PublishRunner,PublishSeams}.kt` (new: `validate` with both results, the boundary step, the write-ahead and reconcile write-ahead records, per-send eligibility; `DesiredStateReconciler`); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (client, runner); `T/hapublish/{PublishRunnerTest,RepairStaysVisibleTest}.kt` (new) — rows 38a, 54a (its runner half), 57, 57b, 101, 101a | `A/ui`, `A/api`, `C/**`, `ServiceTagApp.kt`, `ServiceTagRoot.kt` |
 | **A5a** readiness + completion lines | 5 · L2 | `A/ui/asset/{AssetDetailScreen,ReadinessStrings}.kt` (the line, the source line and the cutoff line; `ReadinessStrings.kt` new), the readiness view-model state beside the season card, `A/ui/maintenance/CompletionFlow.kt` (the line); `docs/localization-glossary.md` (**Season Start service**, **ready for the season**, in every shipped language, first); `app/src/main/res/values*/strings_season_start.xml` (new, ten files: P114-7…15, P114-29, P114-40, P114-44…46, P114-50…53) — rows 75, 77, 79 (its half) | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/api`, `A/ui/homeassistant`, `SeasonSyncBlock.kt`, `A/ui/maintenance` but `CompletionFlow.kt` |
 | **B4b1** projector + triggers | 6 · L1 | `A/hapublish/{PublishProjector,PublishInputs,MidnightTick}.kt` (new; `PublishInputs`, `DeliveryRequester` and its in-process implementation); `A/ServiceTagApp.kt` (the start reconcile); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (projector, the resume lambda at `AppGraph.kt:901`, the tick); `T/hapublish/PublishProjectorTest.kt` (new; the single-transaction projector, the work-arrived inputs only, the delivery-work signal) — rows 57a, 57c, 61, 62, 65, 66, 68 | `A/ui/**` (`ServiceTagRoot.kt` untouched), `A/api`, `C/**`, the manifest |
-| **A5b** the role on the phone | 6 · L2 | `A/ui/maintenance/{SchedulesSection,ScheduleDetailScreen,ScheduleDetailViewModel,ScheduleEditViewModel,GroupEditViewModel}.kt`, `A/ui/asset/AssetViewModels.kt` (the editor's strand causes), `A/ui/asset/ReadinessStrings.kt` (its rows); `strings_season_start.xml` ×10 (P114-1…6, P114-16…28, P114-41…43) — rows 76, 78, 79 (its half) | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/api`, `AssetDetailScreen.kt`, `CompletionFlow.kt` |
-| **B4b2** worker + wiring | 7 · L1 | `A/hapublish/{PublishWorker,PublishWork,HaPublishDispatch,PublishDispatch,PublishControls}.kt` (new; `requestDelivery()` and the facade, A03); `A/ServiceTagApp.kt` (the dispatch beside `:55`); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (work seam, dispatch, facade); `T/hapublish/{PublishWorkerBodyTest,PublishScenarioTest,ControlDispatchTest,BoundaryScenarioTest,ReconcilePendingTest}.kt` (new) — rows 57d, 58, 59, 67, 70a, 98–100, 99a, 99b, 100a, 105 | `A/ui/**`, `A/api`, `C/**`, the manifest |
-| **B5** decommission + read | 8 · L1 | `C/hapublish/Decommission.kt` (new); `A/hapublish/{PublishRunner,PublishProjector}.kt` (drain, `drainBeforeForget`, orphan retirement); `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt`, `A/api/SeasonHealthHandlers.kt` (the readiness handler's `HaBoundary` argument only, C29); `docs/api/v1.md` (the route, rev 4.1's keys); `M/src/servicetag_mcp/server.py`, `M/README.md`, `M/tests/test_ha_publishing_tools.py` (the publishing half) and D1's count-pin sites (C29a; 91 → 92); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the Forget orchestration, the tombstone read model) — **the last edit of either**; `CT/hapublish/DecommissionTest.kt`, `T/hapublish/DecommissionScenarioTest.kt`, `T/api/HaPublishingRoutesTest.kt` (new) — rows 70–74, 82, 84 (half), 107 (its case), 111 (its pins); rev 4.1 adds ~10 min | `A/ui/**`, `C/usecase`, `C/backup`, `C/merge`, `S/`, `B/` |
-| **B6a** status block, sheet, HA screen | 9 · L1 | `A/ui/asset/{PublishBlock,PublishBlockViewModel,LinkPublishSheet,LinkPublishViewModel,PublishStrings}.kt` (new; the block's frame for **both** kinds, the sheet with its scope parameter); `A/ui/asset/AssetDetailScreen.kt` (the two blocks' slots); `A/ui/asset/LinkSeasonSyncSheet.kt` (the browser's scope parameter only); `C/seasonsync/EntityPicker.kt` (two scopes); `A/ui/homeassistant/{HomeAssistantScreen,HomeAssistantViewModel,HomeAssistantStrings}.kt` (P113-40, the P113-41 plural, orphan tombstones); `docs/localization-glossary.md` (**helper**, **publish**); `app/src/main/res/values*/strings_ha_publishing.xml` and `values*/plurals.xml` (ten files each); every control call through B4b2's `PublishControls`, and `HomeAssistantViewModel`'s save followed by `requestDelivery()` (A03) — rows 88 (status half), 89, 90 | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**` but `EntityPicker.kt`, `ReadinessStrings.kt`, the three B3 arms |
+| **A5b** the role on the phone | 6 · L2 | `A/ui/maintenance/{SchedulesSection,ScheduleDetailScreen,ScheduleDetailViewModel,ScheduleEditViewModel,GroupEditViewModel}.kt`, `A/ui/asset/AssetViewModels.kt` (the editor's strand causes), `A/ui/asset/ReadinessStrings.kt` (its rows); `strings_season_start.xml` ×10 (P114-1…6, P114-16…28, P114-41…43) — rows 76, 78, 79 (its half); rev 5 (C10a): the confirm passes `quickElected = true` on a QUICK schedule and the `QUICK_NOT_ELECTED` arm reuses P114-5, +5 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/api`, `AssetDetailScreen.kt`, `CompletionFlow.kt` |
+| **B4b2** worker + wiring | 7 · L1 | `A/hapublish/{PublishWorker,PublishWork,HaPublishDispatch,PublishDispatch,PublishControls}.kt` (new; `requestDelivery()` and the facade, A03); `A/ServiceTagApp.kt` (the dispatch beside `:55`); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (work seam, dispatch, facade); `T/hapublish/{PublishWorkerBodyTest,PublishScenarioTest,ControlDispatchTest,BoundaryScenarioTest,ReconcilePendingTest}.kt` (new) — rows 57d, 58, 59, 67, 70a, 98–100, 99a, 99b, 100a, 105; rev 5: `PublishControls.requestPublishNow` and the `expectedPlanId` pass-through (C32, C35b) — row 122, +10 min | `A/ui/**`, `A/api`, `C/**`, the manifest |
+| **A4w** role write + helper discovery (rev 5) | 7 · L2 | `A/api/{ApiRouter,MaintenanceHandlers,MaintenanceDtos,HaEntityHandlers,ApiJson,ApiHandlers}.kt` (the role route and `ScheduleRoleRequest`, the PATCH flag, discovery in its own handler class — new — as a trailing defaulted handler group, and the `SEASON_START_DATE_INVALID`, `HA_PUBLISH_REFUSED` / `STALE_PLAN` and `HA_HELPER_READ_FAILED` arms); `C/seasonsync/EntityPicker.kt` (two scopes) and `C/seasonsync/HaEntityList.kt` (`HaEntityCandidate`'s defaulted `attributes`, filled for the two domains only); `docs/api/command-shapes.json` (`:8`, `scheduleRole`) with `T/api/CommandShapesGoldenTest.kt` (`:44-58`, `:118-120`), `M/src/servicetag_mcp/command_shapes.py` (`:44`, `:108`), `M/tests/test_command_shapes.py` (`:65-76`); `docs/api/v1.md` (C29b's part); `M/src/servicetag_mcp/server.py` (`set_schedule_role`, `list_ha_entities`, `update_schedule`'s flag), `M/README.md`; `T/api/{ScheduleRoleRoutesTest,HaEntityRoutesTest}.kt` (new), `T/api/{MaintenanceFixtures,ApiReadsWriteNothingTest}.kt`; `CT/hapublish/HelperAttributesTest.kt` (new); `M/tests/test_ha_publishing_write_tools.py` (new, its half) and D1's count-pin sites (C29a; 91 → 93) — rows 113, 114, 115, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/usecase`, `C/hapublish`, `A/hapublish`, `A/ui`, `res/`, every shipped `CT/seasonsync` and `T/seasonsync` test file, `S/`, `B/` |
+| **B5** decommission + read | 8 · L1 | `C/hapublish/Decommission.kt` (new); `A/hapublish/{PublishRunner,PublishProjector}.kt` (drain, `drainBeforeForget`, orphan retirement); `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt`, `A/api/SeasonHealthHandlers.kt` (the readiness handler's `HaBoundary` argument only, C29); `docs/api/v1.md` (the route, rev 4.1's keys); `M/src/servicetag_mcp/server.py`, `M/README.md`, `M/tests/test_ha_publishing_tools.py` (the publishing half) and D1's count-pin sites (C29a; 93 → 94); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the Forget orchestration, the tombstone read model) — **the last edit of either**; `CT/hapublish/DecommissionTest.kt`, `T/hapublish/DecommissionScenarioTest.kt`, `T/api/HaPublishingRoutesTest.kt` (new) — rows 70–74, 82, 84 (half), 107 (its cases, rev 5's `request` key and `RequestProgress` included), 111 (its pins); rev 4.1 adds ~10 min, rev 5 ~5 | `A/ui/**`, `C/usecase`, `C/backup`, `C/merge`, `S/`, `B/` |
+| **B6a** status block, sheet, HA screen | 9 · L1 | `A/ui/asset/{PublishBlock,PublishBlockViewModel,LinkPublishSheet,LinkPublishViewModel,PublishStrings}.kt` (new; the block's frame for **both** kinds, the sheet with its scope parameter); `A/ui/asset/AssetDetailScreen.kt` (the two blocks' slots); `A/ui/asset/LinkSeasonSyncSheet.kt` (the browser's scope parameter only); `A/ui/homeassistant/{HomeAssistantScreen,HomeAssistantViewModel,HomeAssistantStrings}.kt` (P113-40, the P113-41 plural, orphan tombstones); `docs/localization-glossary.md` (**helper**, **publish**); `app/src/main/res/values*/strings_ha_publishing.xml` and `values*/plurals.xml` (ten files each); every control call through B4b2's `PublishControls`, and `HomeAssistantViewModel`'s save followed by `requestDelivery()` (A03); rev 5: the `PublishRefusal.STALE_PLAN` arm with P113-44, and A4w's two scopes consumed — rows 88 (status half), 89, 90 | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `ReadinessStrings.kt`, the three B3 arms |
 | **D1** documents | 9 · L2 | C38's list, including the **one KDoc-only edit** in `A/fetch/UrlConnectionTransport.kt:20-22` (A11) | any other `.kt`, any `.py`, any `.xml` but the manifest comment at `:12`; any code line of `UrlConnectionTransport.kt`; `docs/versioning.md`, `docs/releases` |
-| **B6b** date block and tombstones | 10 · L1 | `A/ui/asset/{PublishDateBlock,PublishDateStrings}.kt` (new), `PublishBlockViewModel.kt` (the date states and the P114-36/37 rule), the date sheet's boundary-helper field, offered only for a `MANUAL` asset with an enabled #16 binding (P114-47/48, D); `app/src/main/res/values*/strings_ha_publishing_date.xml` (new, ten files: P114-30…39, P114-47, P114-48) — row 88 (date half) | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `AssetDetailScreen.kt`, `LinkPublishSheet.kt` |
-| **B5r** publishing collection + MCP parity (rev 4.1) | 10 · L2 | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt` (the collection's route, handler and DTOs); `docs/api/v1.md` (C35a's rows, the 405 path list, the no-endpoint publishing half); `M/src/servicetag_mcp/server.py` (`list_ha_publishing`; the eleven G-R6 sentences, nothing else in those tools), `M/README.md`; `T/api/{HaPublishingRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_tools.py` (the collection, the sentences) and D1's count-pin sites (C29a; 92 → 93) — rows 107 (its cases), 108, 111 (its half); ~40 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/`; any tool's request or arguments |
+| **B6b** date block and tombstones | 10 · L1 | `A/ui/asset/{PublishDateBlock,PublishDateStrings}.kt` (new), `PublishBlockViewModel.kt` (the date states and the P114-36/37 rule), the date sheet's boundary-helper field, offered only for a `MANUAL` asset with an enabled #16 binding (P114-47/48, D); `app/src/main/res/values*/strings_ha_publishing_date.xml` (new, ten files: P114-30…39, P114-47, P114-48); rev 5: `NoSuchDecommission` / `DecommissionStillPending` from P114-38's tap re-read the block, no sentence (C25a) — row 88 (date half) | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `AssetDetailScreen.kt`, `LinkPublishSheet.kt` |
+| **B5r** publishing collection + MCP parity (rev 4.1) | 10 · L2 | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt` (the collection's route, handler and DTOs); `docs/api/v1.md` (C35a's rows, the 405 path list, the no-endpoint publishing half); `M/src/servicetag_mcp/server.py` (`list_ha_publishing`; the eleven G-R6 sentences, nothing else in those tools), `M/README.md`; `T/api/{HaPublishingRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_tools.py` (the collection, the sentences) and D1's count-pin sites (C29a; 94 → 95) — rows 107 (its cases), 108, 111 (its half); ~40 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/`; any tool's request or arguments |
 | **B7** drawn + platform | 11 · L1 | `AT/hapublish/{HaPublishScreensTest,HaPublishPlatformProofTest}.kt` (new) — rows 91, 92 | every main file; every shipped `AT/` file |
+| **B5w1** plan + Enable / Change target (rev 5) | 11 · L2 | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingPlans,HaPublishingRequests,ApiJson}.kt` (the plan route and its store — new — the action route's ENABLE and CHANGE_TARGET, the request classes in their own file — new — and the `HA_PUBLISH_CONFIRMATION_REQUIRED` arm); `docs/api/command-shapes.json` (`haPublishingPlan`, `haPublishingAction`) with `CommandShapesGoldenTest.kt`; `docs/api/v1.md` (C35b's plan, action and `STALE_PLAN` parts; the sub-resource count 30 → 31); `M/src/servicetag_mcp/server.py` (`enable_ha_publishing`, `change_ha_publishing_target`, `_POSTS_THAT_WRITE_NOTHING` as shapes with `_writes_nothing`, the long read budget), `M/README.md`; `T/api/{HaPublishingWriteRoutesTest (new),ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_write_tools.py` (its half) and D1's count-pin sites (C29a; 95 → 97) — rows 117, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/` |
+| **B5w2** Disable, Check helper, Publish now, acknowledgement (rev 5) | 12 · L2 | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingRequests,ApiJson}.kt` (DISABLE and CHECK_HELPER on the action route, the publish-now route and its 202 body, the acknowledgement route, the `NO_SUCH_DECOMMISSION` and `DECOMMISSION_STILL_PENDING` arms); `docs/api/command-shapes.json` (`haPublishingAcknowledgement`) with `CommandShapesGoldenTest.kt`; `docs/api/v1.md` (C35b's rest, the 202 status row, the 405 row's acknowledgement shape, the sub-resource count 31 → 32); `M/src/servicetag_mcp/server.py` (`disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now`, `acknowledge_ha_decommission`), `M/README.md`; `T/api/{HaPublishingWriteRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_write_tools.py` (its half) and D1's count-pin sites (C29a; 97 → 101, the README's "One hundred and one:") — rows 118, 119, 120, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/` |
 
 **Waves and lanes (two lanes at most, owner ruling 2026-09-17; no shared emulator, no gate on the device inside a
 brief).** Rev 2 splits B4b, B6 and A5 (F-17) and runs B6 after B5 (F-5): **eighteen dispatches in eleven waves.** Rev 4.1
-adds B5r beside B6b (the surface audit's Part R): **nineteen dispatches in eleven waves.**
+adds B5r beside B6b (the surface audit's Part R): **nineteen dispatches in eleven waves.** Rev 5 adds A4w (wave 7,
+lane 2), B5w1 (wave 11, lane 2) and B5w2 (a new wave 12, lane 2): **twenty-two dispatches in twelve waves.**
 
 | wave | lane 1 | lane 2 | why concurrent is safe |
 |---|---|---|---|
@@ -1713,17 +2007,20 @@ adds B5r beside B6b (the surface audit's Part R): **nineteen dispatches in eleve
 | 4 | B3 | A4 | B3 owns the graph and the three `when` arms; A4 builds its read inside the handler |
 | 5 | B4a | A5a | lane 1 owns the graph; A5a is UI (season card, completion sheet) |
 | 6 | B4b1 | A5b | lane 1 owns the graph; A5b is UI (schedule, editors) — no file shared with A5a's but `ReadinessStrings.kt`, sequential by wave |
-| 7 | B4b2 | — | the graph |
+| 7 | B4b2 | A4w | lane 1 owns the graph; A4w is `A/api`, `M/`, `docs/api` and two `C/seasonsync` main files no lane-1 brief touches, and edits neither graph |
 | 8 | B5 | — | the graph, last edit |
 | 9 | B6a | D1 | UI versus docs |
 | 10 | B6b | B5r | UI over B6a's frame; B5r is `A/api`, `M/` and `docs/api/v1.md`, no file shared with B6b, and D1's v1.md edit landed in wave 9 |
-| 11 | B7 | — | test sources over everything drawn |
+| 11 | B7 | B5w1 | B7 is `AT/` only; B5w1 is `A/api`, `M/` and `docs/api`, no file B7 touches |
+| 12 | — | B5w2 | after B5w1: the same handler, request and tool files |
 
 **Dispatch order and dependencies:** S1 ∥ A1 → B1 ∥ A2 (A1's model, S1's columns) → B2 (B1's kinds and mapper) ∥ A3
 (A1's model) → B3 (S1's DAOs, B1's model and validators; ratified P113-42/43) ∥ A4 (A1's rule, A2's mapper) → B4a
-(B2's client, B3's repositories) ∥ A5a (A1) → B4b1 (B4a) ∥ A5b (A2, A5a's strings file) → B4b2 (B4b1) → B5 (B4b2;
+(B2's client, B3's repositories) ∥ A5a (A1) → B4b1 (B4a) ∥ A5b (A2, A5a's strings file) → B4b2 (B4b1) ∥ A4w (A2's `quickElected`, A4's block, B3's `PublishRefused`,
+B1's `publishKindOf`) → B5 (B4b2;
 B3's `DismissDecommission`) → B6a (B3's commands, B4a's runner, **B5's** `pendingDecommissions` read model and
-`drainBeforeForget`, A5a's strings) ∥ D1 → B6b (B6a's frame and sheet, B5) ∥ B5r (B5's route, DTO file and tool block; D1's v1.md) → B7 (everything drawn). Each brief is
+`drainBeforeForget`, A5a's strings) ∥ D1 → B6b (B6a's frame and sheet, B5) ∥ B5r (B5's route, DTO file and tool block; D1's v1.md) → B7 (everything drawn) ∥ B5w1 (B5r's block, B4a's `validate`, B4b2's `PublishControls`, B3's
+`planIdOf`, A4w's arms) → B5w2 (B5w1; B4b2's `requestPublishNow`; B5's `request` key). Each brief is
 ≤ 1 h by estimate. **AppGraph/FakeGraph edits:** S1, A2, A3 (`ImportTransferPack`'s `today`), B3, B4a, B4b1, B4b2, B5 — never two in one
 wave, B5 last (G20).
 
@@ -1732,7 +2029,12 @@ writer and `config_generation` stays 0 until B3 maps it; A2 → A5b, the role is
 in a test has no projector (rows script the desired value); B4a → B4b1, the runner's `DesiredStateReconciler` is a
 placeholder, so a boundary read re-projects nothing until B4b1 wires the projector; B4b1 → B4b2, no background work (in-process drains only);
 A3 → B5, the format moves while publishing has no read route; B5 → B5r, the per-asset read stands without its
-collection, and the publishing routes' write-nothing proof waits for row 108's snapshot (D2).
+collection, and the publishing routes' write-nothing proof waits for row 108's snapshot (D2). Rev 5: A2 → A4w,
+`quickElected` and `QUICK_NOT_ELECTED` are reachable only from tests and A5b's confirm; B3 → B5w1, `expectedPlanId`
+and `STALE_PLAN` only from tests; A4w → B5w1, discovery lists helpers but nothing over the API can enable one; B4b2
+→ B5w2, `requestPublishNow` exists and nothing calls it, so B5's `request` key reads null; B5w1 → B5w2, Enable and
+Change target travel over the API while Disable, Check helper, Publish now and the acknowledgement are still the
+phone's.
 
 **What stays untouched (R6 checks each):** `HomeAssistantStateClient.kt` but the gate call; every shipped
 `seasonsync` test in `T/` **and** `CT/` (F-6); `SeasonSyncRunner`, `SeasonSyncWorker`, `SeasonSyncWork`,
@@ -1745,7 +2047,8 @@ the gitlink.
 **The connected-suite budget (reporting only, 2026-09-29 ruling).** Today 78 classes / 430 tests / ~16 min under
 software rendering. New: `HaPublishScreensTest` (~14 cases, ~1 min) and `HaPublishPlatformProofTest` (~6 cases,
 ~0.5 min) → **80 classes / ~450 tests / ~17.5 min**; `SeasonSyncPlatformProofTest` and `SeasonSyncScreensTest`
-unchanged. **JVM:** core +~160, app +~190, MCP +~16 (rev 4.1: rows 107–111).
+unchanged. **JVM:** core +~170, app +~215, MCP +~45 (rev 4.1: rows 107–111; rev 5: rows 112–122). Rev 5 adds no connected
+class: the API controls draw nothing.
 
 ## 5. Strings
 
@@ -1842,6 +2145,7 @@ all PENDING.
 | P113-30 | "Check the helper again before ServiceTag publishes to it." | `NEEDS_VALIDATION` (F-16) |
 | P113-31 | "The helper changed while it was being checked. Check it again." | `PublishRefusal.STALE_READ` |
 | P113-32 | "%s is archived, retired or transferred out, so it cannot publish to Home Assistant." | `PublishRefusal.NOT_MAINTAINED_HERE` |
+| P113-44 | "Something changed since this helper was checked. Check it again." | `PublishRefusal.STALE_PLAN` (rev 5, C25a: the API's plan identity; the sheet passes no plan, so the arm keeps the `when` exhaustive) |
 | P113-40 | "When an asset publishes to Home Assistant, this phone also sets that helper with this token. Give the token's user only the rights it needs." | HA screen disclosure |
 | P113-41 | **plurals** `ha_publish_forget_date_helpers` in `values/plurals.xml` (F-15): one — "%d date helper in Home Assistant still holds a Season Start date. Disconnecting first sets it to 1970-01-01 if it can; if it cannot, it keeps its date until you clear it in Home Assistant."; other — "%d date helpers in Home Assistant still hold a Season Start date. Disconnecting first sets them to 1970-01-01 where it can; any it cannot reach keep their date until you clear them in Home Assistant." (every form shows `%d`) | the Forget warning (O-11), before P16-9; `localizedPlural` |
 | P113-42 (B3) |  "Stop publishing Season Start dates before changing the address: the old Home Assistant has to be told first." | `PUBLISHING_BLOCKS_ADDRESS_CHANGE` (O-12) |
@@ -1867,8 +2171,8 @@ all PENDING.
 **Reused, ratified (#16):** P16-12 (`ENDPOINT_REFUSED`), P16-13 (`UNREACHABLE`), P16-14 (`TIMED_OUT`), P16-15
 (`DENIED`), P16-16 (`AUTH_REFUSED`), P16-10 (`PublishRefusal.NO_CONNECTION`), P16-17 (`ENTITY_NOT_FOUND`), P16-11 (`NEEDS_TOKEN`), P16-50 and P16-68…81
 (`NOT_ON_LOCAL_NETWORK` by cause), the `REDIRECTED`, `MALFORMED`, `NAME_NOT_LOCAL` and `TLS_FAILED` sentences, P16-9
-(the Forget confirm, unchanged). **Count (rev 4):** 41 (A5a/A5b) + 35 strings and one plural (#113 and the HA screen;
-P113-42/43 are B3's) + 12 (date) = **88 new strings and one plural**, ~890 entries; above the audit's ~60 by the split
+(the Forget confirm, unchanged). **Count (rev 5):** 41 (A5a/A5b) + 36 strings and one plural (#113 and the HA screen;
+P113-42/43 are B3's; P113-44 rev 5's) + 12 (date) = **89 new strings and one plural**, ~900 entries; above the audit's ~60 by the split
 reasons, the strand causes, the HA-screen lines and the boundary, cutoff and inheritance lines of revs 3 and 4.
 
 **Rule (F-16):** every `PublishState`, `PublishErrorKind`, `PublishRefusal`, `NotReadyReason`, `BoundarySource`,
@@ -1889,12 +2193,15 @@ owner's word**. Each such row reads "the plan's position, **recommended to the o
 gate decides every row marked **owner**. **Rev 4** changes no row's status: the controller's rulings on the external
 review of rev 3 move the plan's positions in O-8 (A, B), O-17 (E) and O-19 (D) and add O-20 (B); every row the advisor
 recommended still reads "pending the owner's word". **Rev 4.1** moves O-7 to the owner and adds **O-21**, both answered
-by Appendix W (the surface audit's Part W, out of scope until ruled); the audit's Part R and D1–D5 ride R-0's
-approval, with no product question.
+by the surface audit's Part W; the audit's Part R and D1–D5 ride R-0's
+approval, with no product question. **Rev 5** records O-7 and O-21 as **RULED by the owner's instruction
+2026-10-23: full MCP parity** (the controller's rulings on the forwarded external review,
+`external-review-rev4.1-mcp.md`; the gate may still amend), dissolves Appendix W into the body (C10a, C25a, C29b,
+C35b; A4w, B5w1, B5w2 — twenty-two dispatches in twelve waves, §4; rows 112–122) and adds P113-44.
 
 | ruling | status | the plan's position · the alternative | lands |
 |---|---|---|---|
-| **R-0** | **owner — PENDING** (approval of the plan recommended 2026-10-22) | The scope sentence of §1, exactly, with the per-asset boundary read inside it (rev 4, D: "…and, for a date binding on a `MANUAL` asset whose season HA drives, one read of HA's season-ended helper"); the fence (G17) binding on every brief; **rev 4.1:** the surface audit's Part R and D1–D5 ride this approval (no product question). *Alt.:* the same scope without C1 (asset-schedule roles only; the fallback below). | header, §1 |
+| **R-0** | **owner — PENDING** (approval of the plan recommended 2026-10-22) | The scope sentence of §1, exactly, with the per-asset boundary read inside it (rev 4, D: "…and, for a date binding on a `MANUAL` asset whose season HA drives, one read of HA's season-ended helper"); the fence (G17) binding on every brief; **rev 4.1:** the surface audit's Part R and D1–D5 ride this approval (no product question). **rev 5:** API/MCP parity is in scope by the owner's instruction (O-7, O-21). *Alt.:* the same scope without C1 (asset-schedule roles only; the fallback below). | header, §1 |
 | **C2** | **owner — DECIDED 2026-10-22** | "In season shouldn't be the same as initial pre-season maintenance complete readiness": an HA-owned in-season boolean (inbound, #16) and a ServiceTag-owned date publication (outbound, #114); the heater re-binds through the shipped `EditSeasonSyncEntity` before date publishing is enabled; the exact-id cross-check both ways (C26). | C26, §7, §8 |
 | **C1** | **owner — PENDING**; yes **recommended to the owner 2026-10-22, pending the owner's word** | `SEASON_START` may sit on a **group** schedule; readiness is derived per open member from that member's own completion event (C9); every open member must qualify at assignment (C10); one coverage per asset across asset and group roles. *Alternative:* asset schedules only (#114 §1 as written) — the fallback paragraph below. | C9, C10, C11, rows 11, 15, 16, 20 |
 | **Q2 (F-12)** | **owner — PENDING** | **Voice/Assist starts and the HA gate.** *The plan's position, **recommended to the owner 2026-10-22, pending the owner's word**: (b)* — #114 §5 as written: an ordinary voice or Assist ON passes the same readiness check as an automatic start and is refused with its reason while not released; `stove_check`'s person-class exemption from the serviced check is removed **for ON**; the explicit freeze override (§8) stays the **only** waiver; the appliance's own panel stays outside HA. *Alt. (a), rev 2's position:* a person's start stays outside the check and keeps its spoken caveat; only automatic starts are gated. D1 documents whichever is ruled. | §8, C38 |
@@ -1904,7 +2211,7 @@ approval, with no product question.
 | O-4 | plan | The boundary is stored `roleSinceOn`, default today, the owner may choose any date ≤ today (shown in the confirm); one boundary for all group members. *Alt.:* per member, `max(roleSinceOn, addedAt's day)`. | C10, row 13 |
 | O-5 | plan | "Parent asset" = at least one child row, whatever its lifecycle. *Alt.:* only maintained-here children. | C9, C10, row 10 |
 | O-6 | plan | Retargeting a role schedule is refused; clear the role first. *Alt.:* retarget clears the role in the same write. | C11, row 20 |
-| **O-7 (rev 4.1)** | **owner — PENDING** (the surface audit recommends reversal, 2026-10-23) | *The plan's position:* no API or MCP write for the role in V1; read projections only (G17). *Alt. (Appendix W, the audit's recommendation):* reverse — `POST /v1/schedules/{id}/role` with `seasonStartQuickElected` (W1) and the same flag on the schedule PATCH (W2), because the API's own `SEASON_START_STRANDED` remedies say "clear the role first", which only the phone can do. | C10, C29, Appendix W |
+| **O-7** | **RULED by the owner's instruction 2026-10-23: full MCP parity** (the controller's ruling on the forwarded review, `external-review-rev4.1-mcp.md`; the gate may still amend) | The Season Start role is a canonical command over `/v1` and MCP — assign with its boundary date, clear, and the QUICK election flag: `POST /v1/schedules/{id}/role` and `set_schedule_role`, and `seasonStartQuickElected` on the schedule PATCH and `update_schedule` (C10a, C29b) — because the API's own `SEASON_START_STRANDED` remedies say "clear the role first". Rev 4.1's phone-only position is withdrawn. | C10, C10a, C11, C29b, rows 112, 113, 121 |
 | O-8 | plan (rev 3: A01, A06; rev 4: A, B) | Transfer Pack: the role travels; an inserted role schedule's `roleSinceOn` becomes the recipient's import day, fixed once by the preview's `ImportContext` (A01); **a returning asset keeps its local role, `roleSinceOn` and its own events' markers** (A, `ReturnCarry`, C20). **Evidence policy (B):** every event a Transfer Pack import inserts is marked `imported` and never qualifies for the recipient's readiness — the recipient records its own service (scenario 8 now reads: imported on the day of the seller's service, the recipient is `INHERITED_SERVICE_ONLY` until it records its own); the marker is durable, travels in format 21, and no edit, role change or merge clears it; no clock decides it. *Alt. 1:* accept same-day inherited evidence and state the limitation in scenario 8. *Alt. 2:* strip the role at pack creation. | C9, C20, rows 3b, 21a, 49, 49a–49c |
 | O-9 | plan | A merge bringing a second coverage for an asset is a **conflict** (two new reasons). *Alt.:* `SKIPPED` like the health-subject precedent, or insert with the role dropped (silent; not recommended). | C19, row 48 |
 | O-10 | plan | One Room step (22) by S1 and one format step (21) by A3. *Alt.:* one step per issue (Room 22 for #114, Room 23 for #113). | C4, C18 |
@@ -1918,14 +2225,14 @@ approval, with no product question.
 | **O-18 (F-14)** | **owner — PENDING** | **The second appliance's season.** An asset that is year-round today needs a season before a role can cover it (`YEAR_ROUND`, P114-17 inside P114-21); the owner's real state is in the private ledger. *The plan's position, **recommended to the owner 2026-10-22, pending the owner's word**:* "Example Boiler" takes a `MANUAL` season bound (Follow) to the **same, shared** HA in-season boolean as "Example Heater"; each appliance keeps **separate completion evidence** (its own completion of the group schedule, C9) and **separate outbound date helpers — two date bindings, two helpers** (`input_datetime.example_heater_service_done`, `input_datetime.example_boiler_service_done`); both may read one season-ended helper (C9a: a read is not a claim). #16 allows two assets to bind one inbound helper (`SeasonSyncLinkRefusal`, `C/seasonsync/LinkSeasonSync.kt:23-38`, has no entity-uniqueness member; `season_sync_binding` is keyed by `asset_id` with only a `connection_id` index, `A/data/room/entities/SeasonSyncBindingEntity.kt:35`). *Alt. 1:* its own HA in-season helper (when the boiler's gate of §8 is built). *Alt. 2:* a `CALENDAR` season (no HA link). | §7 step 2b, row 16 |
 | **O-19 (A07; rev 4: D)** | **owner — PENDING** | **The readiness boundary, per asset.** *Plan position (controller rulings for revs 3 and 4):* C9a — a `CALENDAR` asset's window is its boundary and HA's date never overrides it; a `MANUAL` asset with an enabled #16 binding and a boundary helper named on its date binding uses HA's `season_ended`, **fresh** while read at the binding's current revision within max(7 days, the cadence) and not before its newest activation, otherwise **unverified** — the later of the cached date and the phone's END, "unverified since" on the card (P114-45) and the API (`boundaryUnverifiedSince`), publication proceeding with HA's own comparison as the backstop; every other `MANUAL` asset uses the phone's END. *Alt.:* no boundary read; document the limitation (a late observation moves the phone's boundary later, a missed cycle leaves none) and give the owner a reconciliation workflow — backdate the END on the phone to HA's `season_ended` by hand; the phone's readiness may then disagree with HA's release until the owner does. | C9, C9a, C25, C29, C30, rows 3a, 3c, 98–101b |
 | **O-20 (B)** | **owner** | **Which imports mark an event `imported`.** *Plan position:* only a Transfer Pack import (another owner's, or a borrower's, record); a backup Replace or Merge of the owner's own archives marks nothing and writes each event's marker verbatim — the same owner's history counts as recorded. *Alt.:* also mark every event a merge inserts from another installation; archives carry no installation id today (§10), so this needs a format-21 manifest key naming the exporting installation and a rule for archives older than it. | C9, C20, row 49b |
-| **O-21 (rev 4.1)** | **owner — PENDING** | **Publishing controls over `/v1` and MCP** (Appendix W's W3–W5 and their tools), reversing R16-9's spirit for #113/#114 only (the #16 link and the connection stay phone-only). *The plan's position:* phone-only (G17) until ruled. *The surface audit's recommendations (2026-10-23):* the owner's call; if yes, W4's five actions together with W3 (the audit's W-c…W-f). **(a)** May a parameter stand in for the phone's confirms — `seasonStartQuickElected` for P114-5 / P114-42, `confirmDestination` plus plan-first for P113-5 / P114-33, nothing extra for Disable (P113-14 / P114-35)? Yes, for those three. **(b)** The dismiss attestation `clearedInHomeAssistant` (W5)? Keep phone-only. **(c)** Does an API Enable count as "Enable on this phone" for a `COPIED_INSTALLATION` row (C27)? Yes — the handler runs on this installation behind the owner's open screen; *alt.:* refuse it with `HA_PUBLISH_REFUSED` `COPIED_INSTALLATION` (a new `PublishRefusal` member and a §5 string). **(d)** Forget and the connection: stay phone-only (R16-9). | Appendix W |
+| **O-21** | **RULED by the owner's instruction 2026-10-23: full MCP parity** (the controller's ruling on the forwarded review; the gate may still amend) | **The publishing controls — enable, change target, disable, check helper, Publish now — over `/v1` and MCP** (C25a, C35b), narrowing #16's R16-9 for #113/#114 only. **(a)** Parameters confirm, accepted: `seasonStartQuickElected` for P114-5 / P114-42; the plan's `planId` echoed with `confirmDestination` for P113-5 / P114-33; nothing extra for Disable (P113-14 / P114-35). **(b)** **Tombstone acknowledgement is in scope (O-21(b)):** `POST /v1/ha-publishing/decommissions/{id}/acknowledge` and MCP `acknowledge_ha_decommission` acknowledge an UNDELIVERABLE tombstone as cleared in Home Assistant by hand only when the body carries the tombstone id (`decommissionId`, equal to the path's) and `acknowledgedClearedInHa: true`, both set by the caller — the tool never invents either — and the sentence the phone shows (P114-38) is unchanged. **(c)** An explicit, destination-confirmed API Enable (or Change target) counts as activation on the serving phone (I26); Check helper never activates a copied installation (A08). **(d)** The token, the address, the Wi-Fi capture, the location asks, Forget and saving the connection stay phone-only; readiness and published values stay derived from canonical records — no "set READY", no route takes a value (G17, I33). | C25a, C27, C35b, rows 116–122 |
 | **Vehicle** | **owner — PENDING** | *The plan's position, **recommended to the owner 2026-10-22, pending the owner's word**:* the next unallocated MINOR after the intelligence train (1.10.0 if free per #104). **No release, version bump or tag is authorized by this plan** (G14). | G14, §7 |
 | R-N1 | plan | The card's readiness line is drawn only when a role covers the asset or a date binding exists (`NO_ROLE` is otherwise silent). *Alt.:* on every seasonal top-level or parent asset. | C33, row 75 |
 | R-N2 | plan | `ha_publish_binding.asset_id` is a soft link (no FK), so asset delete and replace restore leave the obligation for the projector — no shipped use case is touched. *Alt.:* hook `DeleteAsset` and `ImportBackupReplace`. | C4, C34, row 71 |
 | R-N3 | plan | 403 on a write is its own kind and sentence (`WRITE_FORBIDDEN`, P113-18); 404 on a service call is `HTTP_ERROR`; a missing entity is found by the readback. *Alt.:* the audit's 401/403 → `AUTH_REFUSED`, 404 → `ENTITY_NOT_FOUND`. | C23, row 53 |
 | R-N4 | plan | A periodic `"ha-publish-reconcile"` at the connection's cadence repairs HA resets while the app is closed (#113's "periodic reconciliation"); no expedited work. *Alt.:* reconcile only at start, resume and Publish now. | C32 |
 | R-N5 | plan | An enabled status binding on an asset that stops being maintained here resumes on its own when it returns (#16's R16-18 shape). *Alt.:* disable it. | C25, row 74 |
-| R-N6 | **owner — PENDING** | The strings of §5 as proposed (88 and one plural); approved **recommended to the owner 2026-10-22, pending the owner's word** except P114-4/4g ("Services dated on or after %3$s count.") and P114-9 ("Not ready: no qualifying service dated on or after %s."), which §5 now carries; P114-44…48 (new in rev 3) and P114-44/45/46 as reworded and P114-50…53 (rev 4) are not covered by that recommendation. *Alt.:* the owner rewrites them one by one. | §5 |
+| R-N6 | **owner — PENDING** | The strings of §5 as proposed (89 and one plural; P113-44 is rev 5's and not covered by the recommendation); approved **recommended to the owner 2026-10-22, pending the owner's word** except P114-4/4g ("Services dated on or after %3$s count.") and P114-9 ("Not ready: no qualifying service dated on or after %s."), which §5 now carries; P114-44…48 (new in rev 3) and P114-44/45/46 as reworded and P114-50…53 (rev 4) are not covered by that recommendation. *Alt.:* the owner rewrites them one by one. | §5 |
 | **R-N7 (F-18)** | plan, recorded | **"Publication not verified" is not a card reason** (#114 §3 lists it): the season card shows only readiness reasons; the date block carries verification and the "may still allow starts" lines. *Alt.:* the card line gains a "not yet confirmed in Home Assistant" suffix while the date binding's state is not PUBLISHED or MATCHES. | C29, C33, C36 |
 | **R-N8 (Q5)** | plan | **D1 rewrites "reads, and only reads" and the outbound inventory texts in this same branch:** the docs ship with the code that makes them true; #113's "only when it ships" forbids changing them before the feature exists in the tree, which on this branch it does. *Alt.:* hold the wording for the release that carries the feature. | C38, D1 |
 
@@ -1947,7 +2254,7 @@ covered by that recommendation).
 ## 7. Proofs
 
 - **Per brief:** `./gradlew :core:test :app:testDebugUnitTest --rerun` green with zero failures and skips, and
-  `:app:compileDebugAndroidTestKotlin`; A4, B5 and B5r also `uv run --frozen pytest` in `M/`; A3 also in `S/` and `B/`
+  `:app:compileDebugAndroidTestKotlin`; A4, A4w, B5, B5r, B5w1 and B5w2 also `uv run --frozen pytest` in `M/`; A3 also in `S/` and `B/`
   (unchanged, green). No device run inside a brief.
 - **The merged-tip gate, once (`docs/release-proofs.md`):**
   - **R1** JVM from scratch, including every row above, `VersionAgreementTest` (22/21), `LocalizationCoverageTest`,
@@ -1995,16 +2302,29 @@ covered by that recommendation).
     - `'setExpedited|ForegroundInfo|foregroundServiceType|registerReceiver|registerNetworkCallback'` in `A/hapublish` → 0;
         - **every** `'else ->'` in the files the range adds or modifies is listed and read: none may sit in a `when` over a
       closed set this plan adds or extends (F-20);
-    - `'"SEASON_START_STRANDED"'` and `'"SEASON_START_REFUSED"'` in `ApiJson.kt` → 1 each; `'^.mcp\.tool\('` (the
-      tool decorator) in `server.py` → **93** (rev 4.1: B5r's `list_ha_publishing`); `'^_MIN_HA_PUBLISHING_SCHEMA_VERSION = 22$'` → 1;
-    - **the count pins (D1, rev 4.1):** `'== 93$'` in `M/tests/{test_tools,test_argument_guard,test_reference_tools}.py`
-      → 12 (the asserts among C29a's sites); `'== 9[0-2]$|_is_90\b|_ninety\b|"Ninety:'` in `M/tests` and `'^Ninety:'`
-      in `M/README.md` → 0; the history docstrings C29a lists read;
-    - **while O-7 and O-21 hold (D3, rev 4.1):** `'setScheduleRole|SetScheduleRole|EnablePublishing|ChangePublishTarget|DisablePublishing|RevalidatePublishing|DismissDecommission|publishNow\(|drainBeforeForget'`
-      in `app/src/main/kotlin/com/loosecannon/servicetag/api` → 0; `'"(POST|PATCH|PUT|DELETE)",[^)]*(season-readiness|ha-publishing)'`
-      in `M/src/servicetag_mcp/server.py` → 0; `_POSTS_THAT_WRITE_NOTHING` (`server.py:269-271`) unchanged:
-      `'^    \{"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"\}$'` → 1 (W.8 replaces these three if
-      Appendix W is ruled in);
+    - in `ApiJson.kt`, one `is` arm each (rev 5): `'"SEASON_START_STRANDED"'`, `'"SEASON_START_REFUSED"'`,
+      `'"SEASON_START_DATE_INVALID"'`, `'"HA_PUBLISH_REFUSED"'`, `'"STALE_PLAN"'`, `'"HA_HELPER_READ_FAILED"'`,
+      `'"HA_PUBLISH_CONFIRMATION_REQUIRED"'`, `'"NO_SUCH_DECOMMISSION"'` and `'"DECOMMISSION_STILL_PENDING"'` → 1 each;
+      `'^.mcp\.tool\('` (the tool decorator) in `server.py` → **101** (C29a's ladder); `'^_MIN_HA_PUBLISHING_SCHEMA_VERSION = 22$'` → 1;
+    - **the count pins (D1; rev 5):** `'== 101$'` in `M/tests/{test_tools,test_argument_guard,test_reference_tools}.py`
+      → 12 (the asserts among C29a's sites); `'== (9[0-9]|100)$|_is_90\b|_ninety\b|"Ninety:'` in `M/tests` and
+      `'^Ninety:'` in `M/README.md` → 0; `'^One hundred and one:'` in `M/README.md` → 1; the history docstrings C29a
+      lists read;
+    - **parity and its fence (rev 5; replaces rev 4.1's D3 greps), in `app/src/main/kotlin/com/loosecannon/servicetag/api`:**
+      `'drainBeforeForget|ForgetHaConnection|SaveHaConnection|testConnection|secretStore\.get|secrets\.get|SecretStore\.get'`
+      → 0 (O-21(d); the shipped #16 read asks `SecretStore.has` only, `SeasonHealthHandlers.kt:126`, and discovery
+      reaches the token only inside `AppGraph.listHaEntities`);
+      `'EnablePublishing|ChangePublishTarget|DisablePublishing|RevalidatePublishing|DismissDecommission|publishNow\('`
+      → 0 (every control through `PublishControls`, C32); `'publishControls\.'` → the enable, change-target, disable,
+      revalidate, publish-now and acknowledgement calls only, each read; `'setScheduleRole'` → the role handler's collaborator
+      and its one call, each read; `'\b(value|desiredValue|serviceOn|readyForSeason)\b'` in `A/api/HaPublishingRequests.kt` → 0 (no
+      route takes a value, #114 point 5); `'acknowledgedClearedInHa: Boolean ='` → 0 (no default);
+    - **parity in `M/src/servicetag_mcp/server.py` (rev 5):** `'"(POST|PATCH|PUT|DELETE)",[^)]*(season-readiness|ha-connection)'`
+      → 0; `'"POST",[^)]*ha-publishing'` → the plan, action, publish-now and acknowledgement calls only, each read;
+      `'"acknowledgedClearedInHa": True|"confirmDestination": entity_id'` → 0 (the caller's argument, never a literal
+      or a copy); `'"/v1/import-merge/plan"'` and `'"/v1/repairs/schedule-providers/plan"'` → 2 each, as at the base
+      (the set and the tool's own call), and `'"/v1/assets/\{id\}/ha-publishing-plan"'` → 1 (the set's new shape; the
+      tools build the concrete path) — `_POSTS_THAT_WRITE_NOTHING`'s three shapes;
     - `git diff <base> --diff-filter=M -- app/src/test/kotlin/com/loosecannon/servicetag/seasonsync core/src/test/kotlin/com/loosecannon/servicetag/core/seasonsync`
       → empty (F-6: the defaulted collaborators keep `CT/seasonsync` byte-identical; no new file lands there either);
     - `git diff <base> -- app/src/main/AndroidManifest.xml` → the `:12` comment only (read it);
@@ -2164,7 +2484,9 @@ and `oil_zone_owner`. ServiceTag ships none of this; D1's guide carries a generi
   network identity (C32), the runner's schedule rule (C21–C22), the revision CAS (C11, C13), never-travels (row 20),
   the real-HA proof (§7), R16-17's tool-block convention and R16-18's resume rule. Untouched: its applier, guard,
   cadence and GET contract.
-- **#105:** the browser and `pickerRows`; `EntityScope` widened by two members.
+- **#105:** the browser and `pickerRows`; `EntityScope` widened by two members; its list read exposed read-only over
+  `/v1` and MCP as helper discovery (C29b). **#16's R16-9** (Home Assistant configuration phone-only) is narrowed for
+  #113/#114 by O-21: the publishing controls travel; the connection, the token and Forget stay phone-only.
 - **#69, #47:** the format-step precedents (`FIRST_RESOURCE_OWNER_FORMAT = 20`, `FIRST_INSTALLED_COMPONENT_FORMAT =
   19`, `C/backup/BackupCodec.kt:241-247`; the older-archive refusal and compare-without exception, `:462-469`,
   `C/merge/MergePlanner.kt:1062-1067`); #47 E-18 (no `else` → 500).
@@ -2279,124 +2601,3 @@ assertion is `:88` (A3's row; `:87` is the schema); `candidate` is `C/usecase/Sa
 arms are `A/ui/asset/SeasonSyncStrings.kt:161-166` and `A/ui/asset/LinkSeasonSyncViewModel.kt:290-296` (not
 `LinkSeasonSyncSheet.kt`) and the `SaveHaConnectionRefusal` arm is `A/ui/homeassistant/HomeAssistantViewModel.kt:458-462`
 (C26, C28, §4 B3); and c13 above.
-
-## Appendix W — writes over `/v1` and MCP, pending O-7's reversal and O-21 (NOT in scope until ruled)
-
-> **NOT IN SCOPE.** Nothing here binds a brief, a row, a grep or a count until the owner reverses O-7 and rules O-21
-> (§6). Until then G17, C2's "unreachable", C10's "no API or MCP route reaches it", C11's "`PATCH /v1/schedules` and
-> the MCP's `update_schedule` cannot", §4's nineteen dispatches and §7's greps stand exactly as written. This is the
-> surface audit's Part W (`mcp-surface-audit.md` §3b, §4), self-contained: a ruling admits the parts below that name
-> it, and the body's counts become W.8's. Every API call still needs the owner holding the phone with the Developer
-> API screen open and a fresh pairing (v1.md `:23-27`); the token never leaves the phone — a write uses the stored
-> one, as the phone's own buttons do; entity ids are non-secret (#16 returns `entityId`).
-
-### W.1 What each ruling admits, and the case each way
-
-| ruling | admits | for | against | reverses in the body |
-|---|---|---|---|---|
-| **O-7** reversed | W1, W2 | the #79 warranty-reminder precedent (a field with its own command); the API's own `SEASON_START_STRANDED` remedies say "clear the role first", which only the phone can do; a merge already lands roles as data, yet the dev-phone loader cannot set one on an existing schedule (a merge reads a role change as a conflict); W2 is `unlinkHealthSubject`'s exact precedent, and without it a role schedule's completion mode cannot change over the API at all | a backdated `sinceOn` can make an existing completion qualify at once, and the date then publishes within seconds; no human reads P114-4's confirm; an agent elects the lower-evidence QUICK model | G17's "or the role"; C2's "unreachable"; C10's last sentence; C11's QUICK-election "cannot"; D3's `setScheduleRole`/`SetScheduleRole` terms |
-| **O-21** yes | W3 and W4 — all five actions together (the audit's W-c…W-f) | scripted commissioning and §7's real-HA proof from the workstation; the plan read returns the destination, mapping and validation answer, and the apply echoes the destination; Check helper only reads and never activates (A08); Disable is the safe direction (`1970-01-01` first, C34); Publish now sends only the projected value, reads first and repairs an HA reset | R16-9 (owner) kept all HA configuration phone-only; #113 assumes a human sees "the exact destination and mapping"; a wrong date helper could open an HA-gated start; C27 says only an explicit Enable on this phone re-stamps a copied row; an outbound call triggered over loopback (today only Save as document makes one) | G17's "for publishing"; C35a's no-endpoint publishing half; D3's command terms and `publishNow\(` |
-| **O-21(b)** yes | W5 | an agent with its own HA access can clear the helper, then attest | an attestation of a fact in HA: a false one removes the last "may still allow starts" line (P114-37) | C34's "the owner taps P114-38" as the only exit; D3's `DismissDecommission` term |
-
-### W.2 Phone-only, whatever is ruled (audit §3c)
-
-The token and `SecretStore`; the base URL, the home Wi-Fi name, its capture, and the location and background
-permission asks; Test connection, connection save and address change (`PUBLISHING_BLOCKS_ADDRESS_CHANGE`, C28);
-Forget, with its drain-first and P113-41 warning (O-11, O-21(d), #16 R16-9) — so `drainBeforeForget` stays out of
-`A/api` under every ruling; the #16 link, Follow/Force and the `OUTBOUND_TARGET` refusal (C26); the value of
-`activatedInstallationId`; the #105 entity browser (it lists HA entities through the token); and **any route that
-takes a value, a date to publish or READY** (#114 point 5): the desired value is always computed (C15).
-
-### W.3 Routes (`ignoreUnknownKeys = false` stays; the keys named are the only ones a body may carry)
-
-| route | body | success | refusals |
-|---|---|---|---|
-| **W1** `POST /v1/schedules/{id}/role` (a `/v1/schedules/{id}/…` sub-resource: another verb is a 404) | `role` (`"SEASON_START"` \| `"NONE"`, required); `sinceOn` (`"YYYY-MM-DD"` \| null = today); `seasonStartQuickElected` (bool, default false) | 200 `{schedule}` with the role keys; clearing a `NONE` writes nothing | 404 `NO_SUCH_SCHEDULE` (`ApiJson.kt:290`); 409 `SEASON_START_REFUSED` `{reason, assetId?, scheduleId?, title?}`, `reason` a `SeasonStartRefusal` name, **plus the new member `QUICK_NOT_ELECTED`** (a QUICK target without the flag); 422 `SEASON_START_DATE_INVALID` (`field` `sinceOn`; C10's `BadDate`) |
-| **W2** `PATCH /v1/schedules/{id}` | `ScheduleActionFlags` (`MaintenanceDtos.kt:443`) gains `seasonStartQuickElected` beside `unlinkHealthSubject`; `role` in the body stays the 400 (K11) | as shipped | 409 `SEASON_START_STRANDED` `cause: QUICK_NEEDS_ELECTION`, its message naming the flag (`ApiJson.kt:497-501`'s precedent) |
-| **W3** `POST /v1/assets/{id}/ha-publishing-plan` — **writes nothing** (the `replace-plan` precedent), added to `_POSTS_THAT_WRITE_NOTHING` | `kind` (`EQUIPMENT_STATUS` \| `SEASON_SERVICE_DATE`), `entityId`, `boundaryEntityId?` | 200 `{kind, entityId, boundaryEntityId, boundaryRequired, eligible, refusal: null \| {reason, field}, remote: {options? \| hasDate?, hasTime?}, boundary: null \| {value, readAt}, mapping \| invalidDate: "1970-01-01"}` | 404 `no_such_asset`; a failed read is a 200 with `refusal` (the replace-plan `problems` precedent) |
-| **W4** `POST /v1/assets/{id}/ha-publishing` (the `POST …/season {action}` precedent; C35's path) | `kind`; `action` (`ENABLE` \| `CHANGE_TARGET` \| `DISABLE` \| `CHECK_HELPER` \| `PUBLISH_NOW`; `kind` optional for `PUBLISH_NOW`); `entityId`, `boundaryEntityId?`; **`confirmDestination`** (ENABLE and CHANGE_TARGET; must equal `entityId`). The handler runs C30's `validate`, then the command through `PublishControls` (C32) — the phone's own path, ending in `requestDelivery()`. **No `value` key exists** | 200 `{binding}` (C35's shape with rev 4.1's keys); `PUBLISH_NOW` 200 `{bindings}` after the pass | 409 `HA_PUBLISH_REFUSED` `{reason: PublishRefusal name, field, holderAssetId?}`; 409 `HA_HELPER_READ_FAILED` `{errorKind: PublishErrorKind name}`; 422 `HA_PUBLISH_CONFIRMATION_REQUIRED` (missing or mismatched `confirmDestination`); a `COPIED_INSTALLATION` row as O-21(c) rules |
-| **W5** `POST /v1/ha-publishing/decommissions/{id}/dismiss` (only if O-21(b) admits it; a new path shape) | `clearedInHomeAssistant: true` | 204 | 404 `NO_SUCH_DECOMMISSION`; 422 `HA_PUBLISH_CONFIRMATION_REQUIRED` |
-
-### W.4 Refusals, reusing the plan's enums and sentence ids
-
-Each code is its own `is` arm in `ApiJson` (G11, #47 E-18), never the mapper's `else`; the API adds codes, never
-sentences (G18).
-
-| wire | enum (owner) | the phone's sentence |
-|---|---|---|
-| `SEASON_START_REFUSED` `reason` | `SeasonStartRefusal` (C10): `SCHEDULE_ARCHIVED`, `NOT_MAINTAINED_HERE`, `YEAR_ROUND`, `LEAF_CHILD`, `ALREADY_COVERED`, `GROUP_ARCHIVED`, `GROUP_HAS_NO_MEMBERS`, `DATE_IN_FUTURE` | P114-16…23 (P114-21 wraps a member's) |
-| `SEASON_START_REFUSED` `QUICK_NOT_ELECTED` | the new member (A2 +) | none drawn: the phone's confirm is the election (P114-5), so it passes `true`; A5b's exhaustive arm reuses P114-5, no new string |
-| `SEASON_START_DATE_INVALID` | C10's `BadDate` | P114-28 |
-| `SEASON_START_STRANDED` `QUICK_NEEDS_ELECTION` | `SeasonStartStrandCause` (C11) | P114-43 |
-| `HA_PUBLISH_REFUSED` `reason` | `PublishRefusal` (C25): `BAD_ENTITY_ID`, `WRONG_DOMAIN`, `OPTIONS_MISMATCH`, `NOT_DATE_ONLY`, `NO_CONNECTION`, `NOT_MAINTAINED_HERE`, `TARGET_IN_USE` (`holderAssetId`), `INBOUND_SOURCE`, `STALE_READ`, `BOUNDARY_IS_TARGET` | C25's: P113-29, P113-16/P114-34, P113-15, P114-32, P16-10, P113-32, P113-22, P113-23, P113-31, P114-48 |
-| `HA_HELPER_READ_FAILED` `errorKind` | `PublishErrorKind` (C14) | C23's sentences |
-| `HA_PUBLISH_CONFIRMATION_REQUIRED` | — (wire only; the phone's confirm is P113-5 / P114-33) | none |
-| `NO_SUCH_DECOMMISSION` | — (W5 only) | none |
-
-### W.5 MCP tools (one "#113/#114 writes" block after the read block, one tail pin, each gated at schema 22)
-
-| tool | arguments | notes |
-|---|---|---|
-| `set_schedule_role` | `schedule_id, role, since_on=None, season_start_quick_elected=None` | — |
-| `update_schedule` (changed, not new) | `+ season_start_quick_elected=None` | sent only when true, like `unlink_health_subject` |
-| `enable_ha_publishing` | `asset_id, kind, entity_id, boundary_entity_id=None, confirm_destination=None` | **without `confirm_destination` it only plans** (W3) and writes nothing; with it, the destination must repeat `entity_id` exactly; the tool never fills it |
-| `change_ha_publishing_target` | as `enable_ha_publishing` | as `enable_ha_publishing` |
-| `disable_ha_publishing` | `asset_id, kind` | — |
-| `check_ha_publishing_helper` | `asset_id, kind` | — |
-| `publish_ha_now` | `asset_id` | — |
-| `dismiss_ha_decommission` | `decommission_id, cleared_in_home_assistant` | W5 only; refused client-side, nothing sent, unless true |
-
-The plan, enable, change-target, check and publish-now tools take a 120 s read timeout: their worst case is two to
-three HA calls at C22's 30 s each (the #92 long-write precedent, `_IMPORT_TIMEOUT`, `server.py:187`). Seven new tools:
-**100** with W5, **99** without. No name carries `sync` or `home_assistant`, so `test_season_sync_tools.py:89-92`
-stays green.
-
-### W.6 Briefs, waves and time
-
-| brief | scope | wave · lane | est. |
-|---|---|---|---|
-| A2 (+), with W1 | `SetScheduleRole.run` gains `quickElected: Boolean = false`; `QUICK_NOT_ELECTED` refuses a QUICK target without it; row 112 | 2 · L2 | +10 min |
-| A5b (+), with W1 | the phone passes the election from its P114-5 confirm; one exhaustive arm (P114-5 reused) | 6 · L2 | +5 min |
-| **A4w** (new), with W1/W2 | W1, W2; `set_schedule_role` and the `update_schedule` flag; `docs/api/command-shapes.json:8` with its pins (`CommandShapesGoldenTest`, `M/src/servicetag_mcp/command_shapes.py`, `test_command_shapes.py`, read first); v1.md's role section and Errors rows; D1's sites; rows 113, 115 (its half) | 7 · L2 (free: B4b2 owns the graph; A4w edits neither graph) | ~60 min |
-| **B5w1** (new), with O-21 | W3, W4 `ENABLE`/`CHANGE_TARGET`; two tools; `_POSTS_THAT_WRITE_NOTHING`; `connectionGeneration` (the `config_generation` counter, not a secret) on C35a's collection as W4's staleness check (G-R7); v1.md; D1's sites; rows 114, 115 (their halves) | 11 · L2 (beside B7) | ~60 min |
-| **B5w2** (new), with O-21 | W4 `DISABLE`/`CHECK_HELPER`/`PUBLISH_NOW`, W5 if ruled; three or four tools; D1's sites; rows 114, 115 (their halves) | 12 · L1 (a new wave) | ~50 min |
-
-No W brief edits `AppGraph` or `FakeGraph` (G20: B5 stays the last); each reaches `setScheduleRole` (A2),
-`PublishRunner.validate` (B4a) and `PublishControls` (B4b2) through the graph as they stand, and stops and reports if a
-seam is missing. A ruling that lands after A2 or A5b is accepted folds its (+) into A4w. **Totals with Part W:**
-**22 dispatches / 12 waves** (Part R's 19 / 11 + A4w, B5w1, B5w2), +4 reviews and ≈ +4.3 h over rev 4 (Part R's
-≈ +80 min included); each new brief is within the 1 h target.
-
-### W.7 Rows (numbered after Part R's 111; each only with its ruling)
-
-| # | layer | class · cases | proves | fails without |
-|---|---|---|---|---|
-| 112 | JVM | `CT/usecase/SetScheduleRoleTest` (+2; A2) · `aQuickScheduleNeedsTheElection`; `aFormScheduleIgnoresTheFlag` | O-2 over the API | the role set on QUICK with no election |
-| 113 | contract | `T/api/ScheduleRoleRoutesTest` (new; A4w) · set and clear as keys; each `SeasonStartRefusal` as `reason` with nothing written; `aBadSinceOnIs422`; `noSuchScheduleIs404`; `aPatchWithSeasonStartQuickElectedPassesTheElection`; `ApiReadsWriteNothingTest.eachWriteRouteWritesOnlyItsUseCasesTables` +1 (only `maintenance_schedule`) | W1, W2 | the handler defaulting the flag to true |
-| 114 | contract | `T/api/HaPublishingWriteRoutesTest` (new; `ScriptedPublishTransport`; B5w1, B5w2) · `thePlanWritesNothingAndPostsNothing`; `enableWithoutOrWithAMismatchedConfirmIsRefusedAndWritesNothing`; each `PublishRefusal` as `reason`; `disableDateKindWritesATombstone`; `checkHelperNeverStampsInstallation` (A08); `publishNowSendsOnlyTheProjectedValue`; `noPublishingRouteAcceptsAValueKey` (400; #114 point 5); `dismissNeedsTheAttestation`; the C27 copied-row case as O-21(c) rules | W3–W5 | a handler bypassing `PublishControls` (no `requestDelivery()`) or C30's `validate` |
-| 115 | contract | `M/tests/test_ha_publishing_write_tools.py` (new; A4w, B5w1, B5w2) · each body; `enable_ha_publishing` plans unless `confirm_destination` is given and sends no write; the flag sent only when true; dismiss refused before any request; gate 22 on each; the 120 s timeout | the tools | the tool filling `confirmDestination` itself |
-
-### W.8 v1.md, R6 and the counts with Part W
-
-- **v1.md:** "Season readiness and the Season Start role (#114)" gains W1 and W2 (A4w); "Home Assistant publishing
-  (#113, #114)" gains W3–W5, the confirm rule and "no route takes a value" (B5w1, B5w2); "The #113/#114 codes" gains
-  `SEASON_START_DATE_INVALID`, `HA_PUBLISH_REFUSED`, `HA_HELPER_READ_FAILED`, `HA_PUBLISH_CONFIRMATION_REQUIRED` and,
-  with W5, `NO_SUCH_DECOMMISSION`, and `SEASON_START_REFUSED` loses "unreachable"; "What has no endpoint" keeps W.2's
-  list only; the sub-resource sentence and router KDoc 30 → 31 with W3; the 405 list gains W5's path shape.
-- **R6, replacing D3's three greps:** the `A/api` grep → exactly the W1, W3, W4 (and W5) handler sites, each read
-  (`drainBeforeForget` still 0, W.2); `'"value"|desiredValue'` in the request DTOs of `A/api/HaPublishing*` → 0;
-  `_POSTS_THAT_WRITE_NOTHING` includes the plan route; the MCP verb grep → exactly the W tools' calls, each read.
-- **Counts:** `'^.mcp\.tool\('` → **100** (W5 in) or **99** (W5 out), the same number at every D1 site (A4w 94,
-  B5w1 96, B5w2 99 or 100); the tail offsets of C29a shift by the write block's length (7, or 6 without W5), the read
-  block's own pin moves off the tail, and `test_ha_publishing_write_tools.py` holds the new tail pin.
-
-### W.9 The owner's questions (§6 states them; the audit's recommendations)
-
-| id | question | recommendation |
-|---|---|---|
-| O-7 | the role write (W1) and the FORM → QUICK flag (W2) | reverse: a canonical command; the API's own strand refusals need it |
-| O-21 | the publishing controls over `/v1` and MCP, reversing R16-9's spirit for #113/#114 only | the owner's call; if yes, W3 and all five W4 actions together |
-| O-21(a) | parameters for the phone's confirms: `seasonStartQuickElected` (P114-5 / P114-42), `confirmDestination` plus plan-first (P113-5 / P114-33), nothing extra for Disable (P113-14 / P114-35) | yes, for those three |
-| O-21(b) | the dismiss attestation `clearedInHomeAssistant` (W5) | keep phone-only |
-| O-21(c) | an API Enable for a `COPIED_INSTALLATION` row (C27) | yes (the handler runs on this installation behind the owner's open screen; no code beyond W4, I26 holds); or refuse with `HA_PUBLISH_REFUSED` `COPIED_INSTALLATION` (a new member and a §5 string) |
-| O-21(d) | Forget and the connection | stay phone-only (R16-9) |
