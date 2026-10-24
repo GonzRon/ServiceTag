@@ -374,7 +374,9 @@ class CompletionFlowTest {
         val sweep = sweep(CancellationException("the screen left"))
         val flow = graph.completionFlow
         val offered = mutableListOf<Any>()
-        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { flow.offer.filterNotNull().collect { offered += it } }
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) {
+            flow.offer.filterNotNull().collect { offered += it; flow.declineOffer() }
+        }
 
         val outcome = async { runCatching { flow.complete(schedule) { sweep.runAfterWrite("CompletionFlowTest") } } }
         flow.prompt.first { it != null }

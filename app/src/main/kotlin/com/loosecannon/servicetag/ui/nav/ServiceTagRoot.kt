@@ -195,7 +195,8 @@ fun ServiceTagRoot(
                                 logging = false
                                 backStack.add(Route.ScheduleDetail(it))
                             },
-                            // #123: a QUICK completion here clears its reminder, as every other way in does.
+                            // #123: a QUICK completion here runs the reminder sweep after its write, as the scan
+                            // sheet and the detail screens do.
                             reconcile = graph.reminderReconcile,
                         )
                     }
