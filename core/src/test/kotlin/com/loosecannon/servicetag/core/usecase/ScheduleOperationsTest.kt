@@ -851,18 +851,22 @@ class ScheduleOperationsTest {
         assertEquals(emptyList(), events.all())
     }
 
-    /** #119 C7: a profile that already requires the meter gets one measurement for it, never two. */
+    /**
+     * #119 C7: a profile that already requires the meter gets one measurement for it, never two, and at the profile
+     * field's place: the meter first, then the profile's next field, not behind it.
+     */
     @Test
     fun aMeterTheProfileRequiresIsMeasuredOnce() = runTest {
         val assetId = seedAsset()
         val meterId = seedReading(assetId, "m", sortOrder = 0, isMeter = true)
-        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, meterId to true))
+        val edgeId = seedReading(assetId, "e", sortOrder = 1)
+        val schedule = meteredSchedule(assetId, meterId, seedProfileWith(assetId, meterId to true, edgeId to true))
 
         today = LocalDate.parse("2026-03-20")
-        val event = complete.run(schedule.id, viaForm("2026-03-20", mapOf(meterId to "120")))
+        val event = complete.run(schedule.id, viaForm("2026-03-20", mapOf(edgeId to "3", meterId to "120")))
 
-        assertEquals(listOf(meterId), event.measurements.map { it.definitionId })
-        assertEquals(120.0, event.measurements.single().valueNum)
+        assertEquals(listOf(meterId, edgeId), event.measurements.map { it.definitionId })
+        assertEquals(120.0, event.measurements.single { it.definitionId == meterId }.valueNum)
     }
 
     /**

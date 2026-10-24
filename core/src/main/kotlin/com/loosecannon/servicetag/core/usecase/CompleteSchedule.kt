@@ -106,7 +106,7 @@ class CompleteSchedule(
             )
             val profile = resolveOwnedProfile(eventCmd, definitions, profiles)
             // #119: the form stands where the quick prompt would have asked for the reading, so it owes it too. Only a
-            // meter that still resolves is owed, as `CompletionFlow.ask` decides; buildEvent excuses an archived one.
+            // meter that still resolves is owed, as the quick prompt decides; buildEvent excuses an archived one.
             val owedMeter = schedule.meterDefinitionId
                 ?.takeIf { cmd.viaForm && definitions.get(it) != null }
             val event = buildEvent(
