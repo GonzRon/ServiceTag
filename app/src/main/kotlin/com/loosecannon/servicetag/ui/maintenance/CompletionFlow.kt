@@ -197,7 +197,8 @@ class CompletionFlow(
                 // A `FORM` schedule collects its details in its profile form. Asking "when was this
                 // done" here and writing a minimal completion would mark the event `details_pending`
                 // from a surface that had the owner's whole attention — the one place the quick path
-                // is not wanted (spec §2.1, D-18b).
+                // is not wanted (spec §2.1, D-18b). The form also collects the schedule's meter reading,
+                // which this prompt would otherwise have asked for (#119).
                 if (schedule.completionMode == CompletionMode.FORM) {
                     CompletionOutcome.NeedsForm(scheduleId, target.assetId, schedule.profileId)
                 } else {

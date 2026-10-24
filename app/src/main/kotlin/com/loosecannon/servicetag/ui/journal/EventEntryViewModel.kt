@@ -231,7 +231,7 @@ class EventEntryViewModel(
      */
     private val scheduleId: ScheduleId? = null,
     private val completeSchedule: CompleteSchedule? = null,
-    /** #117 (D3): read once, for the title a profile-less schedule form opens with. */
+    /** #117 (D3), #119: read once, for the title a profile-less schedule form opens with and the meter it owes. */
     private val schedules: ScheduleRepository? = null,
     /** #117 (D8): the reminder sweep run once after a schedule-opened write, before any offer. */
     private val reconcile: ReminderReconcile? = null,
@@ -315,14 +315,16 @@ class EventEntryViewModel(
             commandProfileId = profile?.id
             kind = if (pending != null) EventKind.INCIDENT else existing?.kind ?: profile?.eventKind ?: presetKind ?: EventKind.NOTE
             val draft = pending?.let { incidentDraft(it.reason) }
-            // #117 (D3): a profile-less form opened from a schedule opens its Entry field with the schedule's title.
-            val scheduleTitle = scheduleId?.takeIf { profile == null }?.let { checkNotNull(schedules).get(it)?.title }
+            // A schedule's form reads its schedule once: for the meter reading it owes (#119) and, when profile-less,
+            // the title its Entry field opens with (#117, D3).
+            val schedule = scheduleId?.let { checkNotNull(schedules).get(it) }
+            val scheduleTitle = schedule?.takeIf { profile == null }?.title
             val all = definitions.forAsset(assetId)
             sources = all.associateBy(MeasurementDefinition::id)
             derivedDefinitions = all
                 .filter { it.kind == DefinitionKind.DERIVED && it.archivedAt == null }
                 .sortedBy { it.sortOrder }
-            val fields = rows(profile, existing)
+            val fields = rows(profile, existing).owingMeter(schedule?.meterDefinitionId)
             _state.update { current ->
                 current.copy(
                     assetName = assetName,
@@ -398,6 +400,23 @@ class EventEntryViewModel(
             val measurement = existing?.measurements?.firstOrNull { it.definitionId == id }
             if (definition.archivedAt != null && measurement == null) return@mapNotNull null
             FieldRow(definition, required, measurement.asText(definition), problem = null)
+        }
+    }
+
+    /**
+     * #119: the meter a schedule's form owes. When the schedule it completes counts a meter, the form collects that
+     * reading as the quick prompt would: its row is required, and appended after the profile's rows — where the
+     * completion stores an extra measurement — when the profile does not carry it, so the owner is asked once and the
+     * reading travels once, under the meter's own definition. A meter whose definition has gone, is archived or (never
+     * for a meter) is DERIVED draws no row, as core then demands nothing. Null [meterId]: the rows as they are.
+     */
+    private suspend fun List<FieldRow>.owingMeter(meterId: DefinitionId?): List<FieldRow> {
+        val meter = meterId?.let { definitions.get(it) } ?: return this
+        if (meter.archivedAt != null || meter.kind == DefinitionKind.DERIVED) return this
+        return if (any { it.definition.id == meter.id }) {
+            map { row -> if (row.definition.id == meter.id) row.copy(required = true) else row }
+        } else {
+            this + FieldRow(meter, required = true, text = "", problem = null)
         }
     }
 
