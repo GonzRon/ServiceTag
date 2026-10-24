@@ -11,15 +11,16 @@ import org.junit.Test
  * insets to their `Scaffold` (K2); nothing else adds a keyboard inset of its own (K3); the bottom sheets keep
  * Material 3's handling (K4); the dialogs keep the platform's (K5).
  *
- * Paths are relative to `app/src/main/kotlin/com/loosecannon/servicetag/`. Patterns anchored with `^\s*` match a
- * line's code from its first non-blank character, so a comment naming them never matches; argument lists are
- * walked on the code alone, with comments and the contents of literals blanked (see [codeOnly]).
+ * Paths are relative to `app/src/main/kotlin/com/loosecannon/servicetag/`. Every pattern is matched on the code
+ * alone, with comments and the contents of literals blanked (see [codeOnly]), so a comment or a string can neither
+ * satisfy nor trip a check; a pattern that ends a line (`,$`, `($`) is matched on the code line with its trailing
+ * blanks trimmed.
  */
 class InsetsContractTest {
 
     /** K1: `NavDisplay`'s modifier pads with the outer `Scaffold`'s padding and consumes exactly that. */
     @Test fun theRootConsumesThePaddingItAppliesToNavDisplay() {
-        val lines = source(ROOT).lines
+        val lines = source(ROOT).code.map { it.trimEnd() }
         val consuming = lines.indices.filter { ROOT_MODIFIER.matches(lines[it]) }
         assertEquals("one `modifier = Modifier.padding(padding).consumeWindowInsets(padding),` line in $ROOT", 1, consuming.size)
         val navDisplay = lines.indices.filter { Regex("""^\s*NavDisplay\($""").matches(lines[it]) }
@@ -38,7 +39,7 @@ class InsetsContractTest {
             "the outer Scaffold's arguments close on `) { padding ->`: ${root.lines[call.closeLine].trim()}",
             root.code[call.closeLine].substring(call.closeColumn).startsWith(") { padding ->"),
         )
-        val overriding = (call.openLine..call.closeLine).filter { Regex("""^\s*contentWindowInsets =""").containsMatchIn(root.lines[it]) }
+        val overriding = (call.openLine..call.closeLine).filter { Regex("""^\s*contentWindowInsets =""").containsMatchIn(root.code[it]) }
         assertTrue("no `contentWindowInsets =` in the outer Scaffold (lines ${overriding.map { it + 1 }})", overriding.isEmpty())
     }
 
@@ -49,7 +50,7 @@ class InsetsContractTest {
         assertTrue("group B and group C overlap: ${GROUP_B intersect GROUP_C_SCAFFOLDS}", (GROUP_B intersect GROUP_C_SCAFFOLDS).isEmpty())
         assertTrue("the root is in neither group", ROOT !in GROUP_B && ROOT !in GROUP_C_SCAFFOLDS)
 
-        val scaffoldFiles = mainSources().filter { it.lines.any { line -> SCAFFOLD.containsMatchIn(line) } }.map { it.path }.toSet()
+        val scaffoldFiles = mainSources().filter { it.code.any { line -> SCAFFOLD.containsMatchIn(line) } }.map { it.path }.toSet()
         assertEquals(
             "the files with an anchored `Scaffold(` are group B, group C and the root; classify a new screen here",
             (GROUP_B + GROUP_C_SCAFFOLDS + ROOT).sorted(),
@@ -76,7 +77,7 @@ class InsetsContractTest {
                 )
                 if (path !in FORM_SCREENS) continue
                 val passed = (call.openLine + 1 until call.closeLine)
-                    .filter { FORM_INSETS_ARGUMENT.matches(file.lines[it]) && call.depthAtLineStart(it) == 1 }
+                    .filter { FORM_INSETS_ARGUMENT.matches(file.code[it].trimEnd()) && call.depthAtLineStart(it) == 1 }
                 assertEquals(
                     "$path:${call.openLine + 1}: one `contentWindowInsets = formContentInsets,` among the Scaffold's own arguments",
                     1,
@@ -88,16 +89,16 @@ class InsetsContractTest {
 
     /** K2: `formContentInsets` is named by the form screens and its own file, and by no other file. */
     @Test fun onlyTheFormScreensNameFormContentInsets() {
-        val naming = mainSources().filter { FORM_INSETS_NAME.containsMatchIn(it.text) }.map { it.path }.toSet() - FORM_INSETS_FILE
+        val naming = mainSources().filter { FORM_INSETS_NAME.containsMatchIn(it.codeText) }.map { it.path }.toSet() - FORM_INSETS_FILE
         assertEquals("the files naming `formContentInsets`, besides $FORM_INSETS_FILE", FORM_SCREENS.sorted(), naming.sorted())
-        val inGroupC = (GROUP_C_SCAFFOLDS + GROUP_C_WITHOUT_SCAFFOLD).filter { FORM_INSETS_NAME.containsMatchIn(source(it).text) }
+        val inGroupC = (GROUP_C_SCAFFOLDS + GROUP_C_WITHOUT_SCAFFOLD).filter { FORM_INSETS_NAME.containsMatchIn(source(it).codeText) }
         assertTrue("no group C file names `formContentInsets`: $inGroupC", inGroupC.isEmpty())
     }
 
     /** K3: `formContentInsets` is defined once, in `ui/components/FormInsets.kt`. */
     @Test fun formContentInsetsIsDefinedOnceInFormInsets() {
         val definitions = mainSources().flatMap { file ->
-            file.lines.indices.filter { FORM_INSETS_DEFINITION.containsMatchIn(file.lines[it]) }.map { "${file.path}:${it + 1}" }
+            file.code.indices.filter { FORM_INSETS_DEFINITION.containsMatchIn(file.code[it]) }.map { "${file.path}:${it + 1}" }
         }
         assertEquals("one definition of `formContentInsets`", 1, definitions.size)
         assertTrue("it is in $FORM_INSETS_FILE: $definitions", definitions.single().startsWith("$FORM_INSETS_FILE:"))
@@ -111,14 +112,18 @@ class InsetsContractTest {
 
     /** K3 (F-16): `WindowInsets.ime` is read in `FormInsets.kt` and nowhere else. */
     @Test fun theKeyboardInsetIsReadOnlyInFormInsets() {
-        val files = mainSources().filter { Regex("""WindowInsets\.ime""").containsMatchIn(it.text) }.map { it.path }.toSet()
+        val files = mainSources().filter { Regex("""WindowInsets\.ime""").containsMatchIn(it.codeText) }.map { it.path }.toSet()
         assertTrue("`WindowInsets.ime` outside $FORM_INSETS_FILE: ${files - FORM_INSETS_FILE}", (files - FORM_INSETS_FILE).isEmpty())
     }
 
-    /** K3 (F-16): `windowInsetsPadding(` only in the share intake, whose exact sites K6 counts. */
+    /**
+     * K3 (F-16): `windowInsetsPadding(` and the built-in inset paddings (`safeDrawingPadding()` and
+     * `safeContentPadding()`, which add the keyboard, and the bar and cutout paddings) only in the share intake, whose
+     * exact sites K6 counts.
+     */
     @Test fun rawInsetPaddingOnlyInTheShareIntake() {
-        val files = mainSources().filter { Regex("""windowInsetsPadding\(""").containsMatchIn(it.text) }.map { it.path }.toSet()
-        assertTrue("`windowInsetsPadding(` outside the share intake: ${files - SHARE_INTAKE}", (files - SHARE_INTAKE).isEmpty())
+        val files = mainSources().filter { RAW_INSET_PADDING.containsMatchIn(it.codeText) }.map { it.path }.toSet()
+        assertTrue("raw inset padding outside the share intake: ${files - SHARE_INTAKE}", (files - SHARE_INTAKE).isEmpty())
     }
 
     /**
@@ -160,10 +165,11 @@ class InsetsContractTest {
     private class Source(val path: String, val text: String) {
         val lines: List<String> = text.lines()
         val code: List<String> = codeOnly(lines)
+        val codeText: String = code.joinToString("\n")
 
         /** Every call whose line matches [opening]; the call's `(` is the first one at or after the match's end − 1. */
-        fun calls(opening: Regex): List<Call> = lines.indices.mapNotNull { index ->
-            val match = opening.find(lines[index]) ?: return@mapNotNull null
+        fun calls(opening: Regex): List<Call> = code.indices.mapNotNull { index ->
+            val match = opening.find(code[index]) ?: return@mapNotNull null
             val open = code[index].indexOf('(', match.range.last)
             check(open >= 0) { "$path:${index + 1}: no `(` after ${opening.pattern}" }
             call(index, open)
@@ -217,6 +223,8 @@ class InsetsContractTest {
         val FORM_INSETS_NAME = Regex("""\bformContentInsets\b""")
         val FORM_INSETS_DEFINITION = Regex("""^\s*(internal |public |private )?val formContentInsets\b""")
         val IME_PADDING = listOf(Regex("""\.imePadding\(\)"""), Regex("""^\s*imePadding\(\)"""))
+        val RAW_INSET_PADDING =
+            Regex("""windowInsetsPadding\(|\b(safeDrawing|safeContent|systemBars|navigationBars|statusBars|displayCutout)Padding\(""")
 
         /** Group B (§4.2): the `Scaffold` screens that take typed input in their own content. */
         val GROUP_B = setOf(
@@ -311,9 +319,9 @@ class InsetsContractTest {
         /** Every Kotlin file under app/src/main/kotlin/com/loosecannon/servicetag, read once per run. */
         fun mainSources(): List<Source> = sources
 
-        /** `path:line` of every line under app/src/main/kotlin that [matches]. */
+        /** `path:line` of every line under app/src/main/kotlin whose code [matches]. */
         fun mainLines(matches: (String) -> Boolean): List<String> = mainSources().flatMap { file ->
-            file.lines.indices.filter { matches(file.lines[it]) }.map { "${file.path}:${it + 1}" }
+            file.code.indices.filter { matches(file.code[it]) }.map { "${file.path}:${it + 1}" }
         }
     }
 }
