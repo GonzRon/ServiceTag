@@ -1710,4 +1710,17 @@ class EventEntryViewModelTest {
         assertEquals(listOf(mower.edge.id to true, mower.hours.id to false), fields.drawn())
         assertEquals(listOf("3", "120"), fields.map { it.text })
     }
+
+    /** M9 (pin): an archived meter is off the form, as every archived definition is, even when its schedule counts it. */
+    @Test fun anArchivedMeterTheProfileLacksDrawsNoRow() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower)
+        val schedule = bladeSharpen(mower, profile.id)
+        graph.definitions.upsert(mower.hours.copy(archivedAt = 9_000L))
+
+        val fields = formModel(mower.id, profile.id, schedule.id).state.first { it.loaded }.fields
+
+        assertEquals(listOf(mower.edge.id to true), fields.drawn())
+    }
 }
