@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.nav
 
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -141,7 +142,9 @@ fun ServiceTagRoot(
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
-            modifier = Modifier.padding(padding),
+            // #121: the bars (and the bottom bar on a top-level route) are applied here once and consumed,
+            // so no screen's Scaffold or TopAppBar applies them again.
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
             entryDecorators = listOf(
                 rememberSaveableStateHolderNavEntryDecorator(),
                 rememberViewModelStoreNavEntryDecorator(),

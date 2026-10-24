@@ -302,6 +302,17 @@ class ManifestContractTest {
 
         assertEquals(expected, actual)
     }
+
+    /**
+     * #121 MF1 (1.8.2 plan §3.2): the two activities that draw resize for the keyboard instead of panning, exactly
+     * `adjustResize` with no `state…` flag. Under edge to edge the keyboard then reaches Compose as an inset and
+     * nothing moves the window; on API 26-29 it is what makes that inset reach Compose at all. The NFC trampoline
+     * draws nothing and declares no mode.
+     */
+    @Test
+    fun bothDrawingActivitiesResizeForTheKeyboard() {
+        assertEquals(KEYBOARD_MODES, manifest.softInputModes())
+    }
 }
 
 /**
@@ -379,6 +390,13 @@ class MergedManifestContractTest {
         )
     }
 
+    /** #121 MF2 (1.8.2 plan §3.2): MF1's modes survive the merge, so no library and no source set overrides them. */
+    @Test
+    fun theMergedManifestKeepsAdjustResize() {
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(mergedManifestFile)
+        assertEquals(KEYBOARD_MODES, doc.softInputModes())
+    }
+
     private fun mergedManifestCandidates() = listOf(
         "build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
         "build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml",
@@ -389,6 +407,18 @@ private fun org.w3c.dom.Document.elements(tag: String): List<Element> {
     val nodes = getElementsByTagName(tag)
     return (0 until nodes.length).map { nodes.item(it) as Element }
 }
+
+/** #121: each of the three activities MF1 and MF2 name, mapped to its `android:windowSoftInputMode` (null: none). */
+private val KEYBOARD_MODES = mapOf(
+    "com.loosecannon.servicetag.MainActivity" to "adjustResize",
+    "com.loosecannon.servicetag.share.ShareIntakeActivity" to "adjustResize",
+    "com.loosecannon.servicetag.nfc.NfcDispatchActivity" to null,
+)
+
+private fun org.w3c.dom.Document.softInputModes(): Map<String, String?> =
+    KEYBOARD_MODES.keys.associateWith { name ->
+        elements("activity").single { it.androidAttr("name") == name }.androidAttr("windowSoftInputMode")
+    }
 
 /** File-scoped (not a class member): both `ManifestContractTest` and `MergedManifestContractTest` read it. */
 private fun Element.androidAttr(name: String): String? {
