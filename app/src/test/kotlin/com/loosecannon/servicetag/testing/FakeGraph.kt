@@ -222,7 +222,10 @@ import com.loosecannon.servicetag.hapublish.DesiredStateReconciler
 import com.loosecannon.servicetag.hapublish.HaPublishTransport
 import com.loosecannon.servicetag.hapublish.PublishRunner
 import com.loosecannon.servicetag.hapublish.DeliveryRequester
-import com.loosecannon.servicetag.hapublish.InProcessDeliveryRequester
+import com.loosecannon.servicetag.hapublish.PublishControls
+import com.loosecannon.servicetag.hapublish.PublishDispatch
+import com.loosecannon.servicetag.hapublish.PublishReconcileRequest
+import com.loosecannon.servicetag.hapublish.PublishWork
 import com.loosecannon.servicetag.hapublish.MidnightTick
 import com.loosecannon.servicetag.hapublish.PublishInputs
 import com.loosecannon.servicetag.hapublish.PublishProjector
@@ -542,10 +545,38 @@ class FakeGraph(
     private val publishJobs = SupervisorJob()
     val publishScope: CoroutineScope = CoroutineScope(publishJobs + queryContext)
     val deliveryRequests: java.util.concurrent.atomic.AtomicInteger = java.util.concurrent.atomic.AtomicInteger()
-    private val inProcessRequester = InProcessDeliveryRequester(publishScope) { publishRunner.drain() }
+
+    /**
+     * #113/#114 (C32) — the dispatch as `AppGraph` wires it, over [publishWork]'s record, the scripted network
+     * ([currentNetwork]) and grant ([backgroundAllowed]); its GH2 lines land in [publishLogged]. [deliveryRequester]
+     * counts each request in [deliveryRequests] before handing it on; [publishControls] asks it after each commit.
+     */
+    val publishWork: RecordingPublishWork = RecordingPublishWork()
+    val publishLogged: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+    private val dispatchJobs = SupervisorJob(publishJobs)
+    private val dispatchScope: CoroutineScope = CoroutineScope(dispatchJobs + queryContext)
+    val publishDispatch: PublishDispatch = PublishDispatch(
+        publishRunner, desiredStateReconciler, publishWork, haConnections, CurrentNetworkReader { currentNetwork },
+        seasonSyncBackgroundAllowed, todayPort, dispatchScope, io = queryContext, log = { publishLogged += it },
+    )
     val deliveryRequester: DeliveryRequester = DeliveryRequester {
         deliveryRequests.incrementAndGet()
-        inProcessRequester.requestDelivery()
+        publishDispatch.requestDelivery()
+    }
+    val publishControls: PublishControls = PublishControls(
+        enablePublishing, changePublishTarget, disablePublishing, revalidatePublishing, dismissDecommission,
+        saveHaConnection, publishBindings, publishDeliveries, haConnections, secretStore, assets, transferRecords,
+        installationIdentity::id, publishRunner, deliveryRequester, uow, ids, clock, dispatchScope,
+        log = { publishLogged += it },
+    )
+
+    /** Waits until every delivery request and Publish now launched so far has finished (none launches another). */
+    suspend fun awaitDispatched() {
+        while (true) {
+            val active = dispatchJobs.children.filter { it.isActive }.toList()
+            if (active.isEmpty()) return
+            active.forEach { it.join() }
+        }
     }
     @Volatile var elapsedMillis: Long = 0L
     val midnightSleeps: ScriptedSleeper = ScriptedSleeper()
@@ -555,7 +586,7 @@ class FakeGraph(
         db.haPublishDecommissionDao().observeObligations(),
     )
     val publishTriggers: PublishTriggers = PublishTriggers(
-        desiredStateReconciler, publishProjector::deliveryWorkPending, publishRunner, publishInputs, deliveryRequester,
+        desiredStateReconciler, publishProjector::deliveryWorkPending, publishDispatch, publishInputs, deliveryRequester,
         todayPort, publishScope, { elapsedMillis }, MidnightTick(clock, { ZoneOffset.UTC }, midnightSleeps::sleep),
     )
 
@@ -1003,6 +1034,42 @@ class ScriptedHaPublish(private val openTransactions: () -> Int = { 0 }) : HaPub
         val call = Call(action, entityId, value)
         calls += call
         return onCall(call)
+    }
+}
+
+/**
+ * #113/#114 (C32) — the two publish works as a record: each call in [calls], what is queued now in [onceQueued] (each
+ * one-time enqueue appends, as APPEND_OR_REPLACE does) and [reconcile] (the periodic request, null when cancelled).
+ */
+class RecordingPublishWork : PublishWork {
+    sealed interface Call {
+        data object EnqueueOnce : Call
+
+        data class EnsureReconcile(val request: PublishReconcileRequest) : Call
+
+        data object Cancel : Call
+    }
+
+    val calls: MutableList<Call> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var onceQueued: Int = 0
+
+    @Volatile var reconcile: PublishReconcileRequest? = null
+
+    override fun enqueueOnce() {
+        calls += Call.EnqueueOnce
+        onceQueued += 1
+    }
+
+    override fun ensureReconcile(request: PublishReconcileRequest) {
+        calls += Call.EnsureReconcile(request)
+        reconcile = request
+    }
+
+    override fun cancel() {
+        calls += Call.Cancel
+        onceQueued = 0
+        reconcile = null
     }
 }
 

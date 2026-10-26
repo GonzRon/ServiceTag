@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.os.LocaleList
 import android.util.Log
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.hapublish.HaPublishDispatch
 import com.loosecannon.servicetag.l10n.AndroidLocalizedText
 import com.loosecannon.servicetag.l10n.AppText
 import com.loosecannon.servicetag.reminders.BackstopWorker
@@ -53,6 +54,8 @@ class ServiceTagApp : Application() {
         ReminderHealthDispatch.run = graph.reminderHealth
         // #16 (C22): and the season sync worker's runner, for the same reason — WorkManager builds that worker too.
         SeasonSyncDispatch.runner = graph.seasonSyncRunner
+        // #113/#114 (C32): and the publish workers' dispatch, for the same reason.
+        HaPublishDispatch.dispatch = graph.publishDispatch
         // Unique periodic work with KEEP, so every process start is safe and none of them restarts
         // the period (spec §5.3). The alarm is armed by the run itself, not from here: the four
         // platform receivers, the digest fire and this worker all arm it, and an arm on the launch
@@ -93,6 +96,9 @@ class ServiceTagApp : Application() {
         // #113/#114 (C31, F-3): the publish start pass — the projection, then every enabled helper read back — and,
         // for the life of the process, the projector's observer and the midnight tick; each guarded inside.
         graph.publishTriggers.start()
+        // #113/#114 (C32): the two publish works from the stored connection — the periodic reconcile ensured while C30's
+        // rule answers PERIODIC, both cancelled otherwise; off this thread and guarded inside.
+        graph.publishDispatch.start()
         graph.appScope.launch {
             // Guarded, because `appScope` carries no exception handler: an unguarded throw from a
             // Room read or WorkManager's future would reach the thread's uncaught handler and take

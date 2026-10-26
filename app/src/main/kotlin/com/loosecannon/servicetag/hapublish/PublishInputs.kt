@@ -1,6 +1,5 @@
 package com.loosecannon.servicetag.hapublish
 
-import android.util.Log
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -13,7 +12,6 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.data.room.dao.HaPublishControlRow
 import com.loosecannon.servicetag.data.room.dao.HaPublishObligationRow
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -21,8 +19,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.launch
-import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * #113/#114 (A03, C32) — the one call that asks for delivery after a commit: idempotent, cheap, never awaited. The
@@ -30,31 +26,6 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 fun interface DeliveryRequester {
     fun requestDelivery()
-}
-
-/**
- * B4b1's in-process [DeliveryRequester]: launches [drain] (the runner's, single flight behind its lock) on [scope] and
- * returns at once. Guarded, because the graph's scope carries no handler. B4b2 replaces it with `PublishDispatch`.
- */
-class InProcessDeliveryRequester(
-    private val scope: CoroutineScope,
-    private val drain: suspend () -> Unit,
-) : DeliveryRequester {
-    override fun requestDelivery() {
-        scope.launch {
-            try {
-                drain()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                Log.w(TAG, "ha publish could not run; it will retry on the next resume, scheduled run, or app start") // l10n-ok
-            }
-        }
-    }
-
-    private companion object {
-        const val TAG = "HaPublish"
-    }
 }
 
 /**

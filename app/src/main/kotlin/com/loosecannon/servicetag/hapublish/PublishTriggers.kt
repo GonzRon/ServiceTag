@@ -11,18 +11,21 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * #113/#114 (C31, F-3, K14) — every trigger of the projection, on [scope] (the graph's `appScope`):
+ * #113/#114 (C31, F-3, K14) — every trigger of the projection, on [scope] (the graph's `appScope`). Every pass that
+ * may reach Home Assistant goes through [dispatch], so C30's network and schedule rule applies to each (C32): a
+ * read-back or drain runs in process only while the connection's network rule allows a request now, and otherwise its
+ * work goes to the one-time work while the rule answers PERIODIC.
  *
  * - **the observer** — [inputs]' work arrived, debounced [debounceMillis] → a projection, then, computed apart from
  *   its answer, the delivery-work signal ([workPending]) → [requester]. A source change, a generation move and a new
  *   obligation are each enough; the runner's bookkeeping is never an input (I28), so nothing a drain writes asks for
  *   another drain.
- * - **start** (`ServiceTagApp.onCreate`) — a projection, then **reconcile mode** (`publishNow`: every enabled helper
- *   read back, FOREGROUND_ONLY included); it also starts the observer and the midnight [tick].
+ * - **start** (`ServiceTagApp.onCreate`) — a projection, then **reconcile mode** ([PublishDispatch.readBack]: every
+ *   enabled helper read back, FOREGROUND_ONLY included); it also starts the observer and the midnight [tick].
  * - **resume** ([onResume], the nav shell's hook) — a projection, then reconcile mode at most once per
  *   [RESUME_WINDOW_MILLIS] of process time ([elapsed]) since the last **completed** read-back (N-1: a pass the gate
  *   refused starts no window); inside the window, an ordinary drain of what the projection left.
- * - **local midnight** — a projection, then a scheduled drain (`drain(SCHEDULED)`).
+ * - **local midnight** — a projection, then a scheduled drain ([PublishDispatch.drainNow] with `SCHEDULED`).
  *
  * The runner's lock makes every pass single flight. Each pass is guarded: a failure is logged without its cause and
  * the next trigger repeats it.
@@ -30,7 +33,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class PublishTriggers(
     private val reconciler: DesiredStateReconciler,
     private val workPending: suspend () -> Boolean,
-    private val runner: PublishRunner,
+    private val dispatch: PublishDispatch,
     private val inputs: PublishInputs,
     private val requester: DeliveryRequester,
     private val today: Today,
@@ -63,7 +66,7 @@ class PublishTriggers(
         reconciler.reconcileDesired(today.localDate())
         val last = lastReadBackAt
         if (last != null && elapsed() - last < RESUME_WINDOW_MILLIS) {
-            runner.drain()
+            dispatch.drainNow(DeliveryTrigger.CHANGE)
         } else {
             readBack()
         }
@@ -71,7 +74,7 @@ class PublishTriggers(
 
     internal suspend fun midnightPass() {
         reconciler.reconcileDesired(today.localDate())
-        runner.drain(DeliveryTrigger.SCHEDULED)
+        dispatch.drainNow(DeliveryTrigger.SCHEDULED)
     }
 
     @OptIn(FlowPreview::class)
@@ -85,7 +88,7 @@ class PublishTriggers(
     }
 
     private suspend fun readBack() {
-        if (runner.publishNow(null).readCompleted) lastReadBackAt = elapsed()
+        if (dispatch.readBack()?.readCompleted == true) lastReadBackAt = elapsed()
     }
 
     private suspend fun guarded(pass: suspend () -> Unit) {

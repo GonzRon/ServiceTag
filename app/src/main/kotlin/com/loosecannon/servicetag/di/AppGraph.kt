@@ -274,7 +274,10 @@ import com.loosecannon.servicetag.seasonsync.storedHaConnection
 import com.loosecannon.servicetag.hapublish.BoundaryCacheWriter
 import com.loosecannon.servicetag.hapublish.ClientTransport
 import com.loosecannon.servicetag.hapublish.DeliveryRequester
-import com.loosecannon.servicetag.hapublish.InProcessDeliveryRequester
+import com.loosecannon.servicetag.hapublish.PublishControls
+import com.loosecannon.servicetag.hapublish.PublishDispatch
+import com.loosecannon.servicetag.hapublish.PublishWork
+import com.loosecannon.servicetag.hapublish.WorkManagerPublishWork
 import com.loosecannon.servicetag.hapublish.MidnightTick
 import com.loosecannon.servicetag.hapublish.PublishInputs
 import com.loosecannon.servicetag.hapublish.PublishProjector
@@ -979,7 +982,7 @@ class AppGraph(private val context: Context) {
      * runner that drives every delivery through it: one lock, so one request at a time. Its projector edge is
      * [publishProjector]: one write per projection, no HTTP inside. [publishTriggers] are its other callers — the start
      * pass (`ServiceTagApp`), the resume pass ([resumeRefresh]), the observer of [publishInputs] and the midnight tick
-     * — on [appScope]; a projection that leaves delivery work asks [deliveryRequester] (in-process until B4b2).
+     * — on [appScope]; a projection that leaves delivery work asks [deliveryRequester], the dispatch.
      */
     val publishProjector: PublishProjector = PublishProjector(
         publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
@@ -996,14 +999,31 @@ class AppGraph(private val context: Context) {
         transferRecords, seasonActivations, installationIdentity::id, ClientTransport(haPublishClient),
         BoundaryCacheWriter(db.haPublishDeliveryDao()::recordBoundary), publishProjector, uow, clock, today,
     )
-    val deliveryRequester: DeliveryRequester = InProcessDeliveryRequester(appScope) { publishRunner.drain() }
+
+    /**
+     * #113/#114 (A03, C32) — [publishDispatch] is the app's [deliveryRequester]: an in-process drain when the
+     * connection's network rule allows a request now, else the one-time work while C30's rule answers PERIODIC; and the
+     * two unique works' rule ([publishWork]). `ServiceTagApp` assigns it to the workers' dispatch. [publishControls] is
+     * the one facade every publishing control runs through: the command, then [deliveryRequester].
+     */
+    val publishWork: PublishWork = WorkManagerPublishWork(context.applicationContext)
+    val publishDispatch: PublishDispatch = PublishDispatch(
+        publishRunner, publishProjector, publishWork, haConnections, currentNetworkReader, seasonSyncBackgroundAllowed,
+        today, appScope,
+    )
+    val deliveryRequester: DeliveryRequester = publishDispatch
+    val publishControls: PublishControls = PublishControls(
+        enablePublishing, changePublishTarget, disablePublishing, revalidatePublishing, dismissDecommission,
+        saveHaConnection, publishBindings, publishDeliveries, haConnections, secretStore, assets, transferRecords,
+        installationIdentity::id, publishRunner, deliveryRequester, uow, ids, clock, appScope,
+    )
     val publishInputs: PublishInputs = PublishInputs(
         conditions, assets, schedules, groups, transferRecords, events, seasonActivations,
         db.haPublishBindingDao().observeControls(), seasonSyncBindings, haConnections,
         db.haPublishDecommissionDao().observeObligations(),
     )
     val publishTriggers: PublishTriggers = PublishTriggers(
-        publishProjector, publishProjector::deliveryWorkPending, publishRunner, publishInputs, deliveryRequester, today,
+        publishProjector, publishProjector::deliveryWorkPending, publishDispatch, publishInputs, deliveryRequester, today,
         appScope, { System.nanoTime() / 1_000_000 }, MidnightTick(clock, { ZoneId.systemDefault() }),
     )
 
