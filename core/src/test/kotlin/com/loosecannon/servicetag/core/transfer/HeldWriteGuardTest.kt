@@ -448,7 +448,7 @@ class HeldWriteGuardTest {
         seed()
         recompute.all()
         val save = SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, subjects)
-        val archiveGroup = ArchiveGroup(groups, uow, clock)
+        val archiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, install.transfers)
         refused(
             heater,
             "SaveSchedule (create)" to { save.run(null, monthlyCommand(heater, null)) },
@@ -456,7 +456,7 @@ class HeldWriteGuardTest {
             "PauseSchedule" to { PauseSchedule(schedules, uow, recompute).run(ScheduleId("s1"), paused = true) },
             "PostponeSchedule" to { PostponeSchedule(schedules, uow, recompute).run(ScheduleId("s1"), "2026-12-01") },
             "ArchiveSchedule" to {
-                ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock).run(ScheduleId("s1"), archived = true)
+                ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock, groups, install.transfers).run(ScheduleId("s1"), archived = true)
             },
             "CompleteSchedule" to {
                 CompleteSchedule(schedules, events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today)

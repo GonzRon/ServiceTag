@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.season.NotReadyReason
@@ -285,5 +286,89 @@ class SeasonStartStrandsTest {
 
         val saved = h.saveSchedule.run(ScheduleId("s1"), h.commandOf(s1).copy(completionMode = CompletionMode.QUICK))
         assertEquals(CompletionMode.QUICK, saved.completionMode)
+    }
+
+    // ---- Concern 8 — a hook judges the change, never a break already stored ------------------------------------------
+
+    @Test fun anAlreadyBrokenRowBlocksNoUnrelatedEdit() = runTest {
+        val heater = h.asset("heater", mode = SeasonMode.YEAR_ROUND)
+        h.schedule("s1", role = ScheduleRole.SEASON_START)
+        val renamed = h.updateAsset.run(AssetId("heater"), h.assetCommandOf(heater).copy(name = "Example heater, renamed"))
+        assertEquals("Example heater, renamed", renamed.name, "a covered YEAR_ROUND asset is renamed; C9 reads the break")
+
+        h.asset("pump", mode = SeasonMode.YEAR_ROUND)
+        h.group("g1", Triple("pump", "2026-01-01", null))
+        h.schedule("sg", groupId = "g1", role = ScheduleRole.SEASON_START)
+        val group = h.saveGroup.run(
+            GroupId("g1"),
+            GroupCommand("Example group renamed", members = listOf(GroupMemberInput(AssetId("pump"), id = "g1-m1"))),
+        )
+        assertEquals("Example group renamed", group.name, "a role group with a YEAR_ROUND open member is renamed")
+    }
+
+    // ---- M-4 (C11 erratum) — a restore from the archive runs the same rules -----------------------------------------
+
+    @Test fun restoringARoleScheduleThatWouldBeASecondRoleIsRefused() = runTest {
+        h.asset("heater")
+        h.schedule("s1", title = "Annual service", role = ScheduleRole.SEASON_START)
+        h.schedule("s2", title = "Burner check")
+        h.archiveSchedule.run(ScheduleId("s1"), archived = true)
+        h.setScheduleRole.run(ScheduleId("s2"), ScheduleRole.SEASON_START)
+
+        assertEquals(
+            strand("heater", SeasonStartStrandCause.RESTORE_ALREADY_COVERED, "s1" to "Annual service", "s2" to "Burner check"),
+            stranded { h.archiveSchedule.run(ScheduleId("s1"), archived = false) },
+            "C9 would read TWO_ROLES",
+        )
+    }
+
+    @Test fun restoringARoleScheduleOverAnIneligibleAssetIsRefused() = runTest {
+        h.asset("heater", mode = SeasonMode.CALENDAR, start = "10-01", end = "04-30")
+        h.schedule("s1", title = "Annual service", role = ScheduleRole.SEASON_START)
+        h.archiveSchedule.run(ScheduleId("s1"), archived = true)
+        h.setSeasonMode.run(AssetId("heater"), SeasonModeCommand(SeasonMode.YEAR_ROUND))
+
+        assertEquals(
+            strand("heater", SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE, "s1" to "Annual service"),
+            stranded { h.archiveSchedule.run(ScheduleId("s1"), archived = false) },
+        )
+
+        h.asset("boiler")
+        h.schedule("s-boiler", assetId = "boiler", role = ScheduleRole.SEASON_START, status = ScheduleStatus.ARCHIVED)
+        assertEquals(ScheduleStatus.ACTIVE, h.archiveSchedule.run(ScheduleId("s-boiler"), archived = false).status, "the control")
+    }
+
+    @Test fun restoringARoleGroupWhoseMemberHasAnotherRoleIsRefused() = runTest {
+        h.asset("heater")
+        h.asset("boiler")
+        h.group("g1", Triple("heater", "2026-01-01", null), Triple("boiler", "2026-01-01", null))
+        h.schedule("sg", groupId = "g1", title = "Pre-season check")
+        h.schedule("s-boiler", assetId = "boiler", title = "Boiler service")
+        h.setScheduleRole.run(ScheduleId("sg"), ScheduleRole.SEASON_START, quickElected = true)
+        h.archiveGroup.run(GroupId("g1"), archived = true)
+        h.setScheduleRole.run(ScheduleId("s-boiler"), ScheduleRole.SEASON_START)
+
+        assertEquals(
+            strand("boiler", SeasonStartStrandCause.RESTORE_ALREADY_COVERED, "s-boiler" to "Boiler service", "sg" to "Pre-season check"),
+            stranded { h.archiveGroup.run(GroupId("g1"), archived = false) },
+        )
+    }
+
+    @Test fun restoringARoleGroupWithAnIneligibleMemberIsRefused() = runTest {
+        h.asset("heater")
+        h.asset("pump", mode = SeasonMode.CALENDAR, start = "10-01", end = "04-30")
+        h.group("g1", Triple("heater", "2026-01-01", null), Triple("pump", "2026-01-01", null))
+        h.schedule("sg", groupId = "g1", title = "Pre-season check")
+        h.setScheduleRole.run(ScheduleId("sg"), ScheduleRole.SEASON_START, quickElected = true)
+        h.archiveGroup.run(GroupId("g1"), archived = true)
+        h.setSeasonMode.run(AssetId("pump"), SeasonModeCommand(SeasonMode.YEAR_ROUND))
+
+        assertEquals(
+            strand("pump", SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE, "sg" to "Pre-season check"),
+            stranded { h.archiveGroup.run(GroupId("g1"), archived = false) },
+        )
+
+        h.group("g2", Triple("pump", "2026-01-01", null), archivedAt = 1L)
+        assertEquals(null, h.archiveGroup.run(GroupId("g2"), archived = false).archivedAt, "the control: no role, no rule")
     }
 }

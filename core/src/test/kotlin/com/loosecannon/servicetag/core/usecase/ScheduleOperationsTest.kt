@@ -120,7 +120,8 @@ class ScheduleOperationsTest {
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val pause = PauseSchedule(countedSchedules, uow, recompute)
     private val archive = ArchiveSchedule(
-        countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock,
+        countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock, groups,
+        InMemoryTransferRecordRepository(),
     )
     private val logEvent = LogEvent(events, defs, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
     private val updateEvent = UpdateEvent(events, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute, todayPort)

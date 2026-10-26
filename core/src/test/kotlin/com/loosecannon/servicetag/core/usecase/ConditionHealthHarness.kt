@@ -109,7 +109,7 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
     val setWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
     val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, healthSubjects)
-    val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, healthSubjects, assets, clock)
+    val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, healthSubjects, assets, clock, groups, InMemoryTransferRecordRepository())
     val saveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, InMemoryTransferRecordRepository())
     val applyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val promoteCategory = PromoteCategory(categories)

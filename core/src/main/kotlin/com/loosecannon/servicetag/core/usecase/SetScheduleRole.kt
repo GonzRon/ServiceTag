@@ -2,7 +2,6 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -18,6 +17,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.season.isLeafChild
 
 /**
  * #114 (C10, C10a) — why [SetScheduleRole] refused `SEASON_START`: a code the phone maps to one sentence (§5), never a
@@ -153,7 +153,7 @@ internal fun seasonStartAssetRefusal(asset: Asset, assets: Collection<Asset>, he
         SeasonStartRefusal.NotMaintainedHere(asset.id)
     } else if (asset.seasonMode == SeasonMode.YEAR_ROUND) {
         SeasonStartRefusal.YearRound(asset.id)
-    } else if (asset.parentAssetId != null && AssetTree.children(assets, asset.id).isEmpty()) {
+    } else if (isLeafChild(asset, assets)) {
         SeasonStartRefusal.LeafChild(asset.id)
     } else {
         null

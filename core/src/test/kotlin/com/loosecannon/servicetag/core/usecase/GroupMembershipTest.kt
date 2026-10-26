@@ -72,7 +72,7 @@ class GroupMembershipTest {
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
     private val saveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, InMemoryTransferRecordRepository())
-    private val archiveGroup = ArchiveGroup(groups, uow, clock)
+    private val archiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, InMemoryTransferRecordRepository())
     private val saveSchedule =
         SaveSchedule(
             schedules, assets, groups, defs, profiles, uow, ids, clock, recompute,

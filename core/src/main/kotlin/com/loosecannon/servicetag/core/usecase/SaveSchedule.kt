@@ -68,6 +68,8 @@ import com.loosecannon.servicetag.core.schedule.BoundaryKind
  * **The Season Start role** (#114, C11, C12). The form carries no role, so a save keeps the stored role and its
  * boundary and a create has none. An edit of a role schedule that changes its target, or its completion mode from
  * FORM to QUICK without [run]'s `seasonStartQuickElected`, is 409 [SeasonStartStrands], after the PRE_SERVICE 409.
+ * Both read the row as stored **inside** the write, so a role set after [run]'s first read is kept and judged, never
+ * wiped.
  *
  * One `uow.write`: the guard's read of the subjects, the row, any unlinked subject and the recompute
  * commit together or not at all.
@@ -210,7 +212,10 @@ class SaveSchedule(
     ): MaintenanceSchedule {
         val existing = prepared.existing
         val targetAsset = prepared.targetAsset
-        val saved = prepared.saved
+        // The role is the stored row's as of this write (M-3): a role set since `prepare` read is neither wiped nor
+        // left unjudged.
+        val stored = existing?.let { schedules.get(it.id) }
+        val saved = prepared.saved.copy(role = stored?.role ?: ScheduleRole.NONE, roleSinceOn = stored?.roleSinceOn)
         // The guard's 422: its remedy is the flag in this very body.
         val driven = if (existing != null && breaksHealthLink(existing, saved)) {
             guardDriven(existing.id, unlinkHealthSubject, healthSubjects)
@@ -224,7 +229,7 @@ class SaveSchedule(
         ) {
             throw PreServiceNeedsDates(targetAsset.id)
         }
-        if (existing != null) seasonStartStrandOf(existing, saved, seasonStartQuickElected)?.let { throw it }
+        if (stored != null) seasonStartStrandOf(stored, saved, seasonStartQuickElected)?.let { throw it }
         unlinkDriven(driven, assets, healthSubjects, prepared.now)
         schedules.upsert(saved)
         recompute.forSchedule(saved.id)

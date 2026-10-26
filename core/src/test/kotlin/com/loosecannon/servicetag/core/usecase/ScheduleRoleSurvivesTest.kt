@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.season.NotReadyReason
 import com.loosecannon.servicetag.core.season.Readiness
 import com.loosecannon.servicetag.core.testing.completionOf
@@ -13,6 +14,7 @@ import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -38,6 +40,42 @@ class ScheduleRoleSurvivesTest {
         assertEquals(ScheduleRole.SEASON_START, saved.role, "K11: the form carries no role, and the save keeps it")
         assertEquals("2026-09-01", saved.roleSinceOn)
         assertEquals(saved, h.stored("s1"))
+    }
+
+    /** Concern 10 (M-3): a role set between the save's read and its write is kept, and the hook judges that row. */
+    @Test fun aRoleSetWhileTheSaveWasPreparedIsKept() = runTest {
+        h.asset("heater")
+        h.asset("boiler")
+        h.asset("stove")
+        val s1 = h.schedule("s1", title = "Annual service")
+        val s2 = h.schedule("s2", assetId = "boiler", title = "Boiler service")
+
+        val saved = racingSave { h.setScheduleRole.run(ScheduleId("s1"), ScheduleRole.SEASON_START, sinceOn = "2026-09-01") }
+            .run(ScheduleId("s1"), h.commandOf(s1).copy(title = "Annual service and clean"))
+        assertEquals(ScheduleRole.SEASON_START, saved.role, "never silently wiped")
+        assertEquals("2026-09-01", saved.roleSinceOn)
+        assertEquals(saved, h.stored("s1"))
+
+        assertFailsWith<SeasonStartStrands>("O-6 holds against the role set meanwhile") {
+            racingSave { h.setScheduleRole.run(ScheduleId("s2"), ScheduleRole.SEASON_START) }
+                .run(ScheduleId("s2"), h.commandOf(s2).copy(targetAssetId = AssetId("stove")))
+        }
+        assertEquals(s2.target, h.stored("s2").target)
+    }
+
+    /** A `SaveSchedule` whose one write first lets [meanwhile] commit, as a concurrent command would. */
+    private fun racingSave(meanwhile: suspend () -> Unit): SaveSchedule {
+        var pending: (suspend () -> Unit)? = meanwhile
+        val racing = object : UnitOfWork by h.raw.uow {
+            override suspend fun <T> write(block: suspend () -> T): T {
+                pending?.also { pending = null }?.invoke()
+                return h.raw.uow.write(block)
+            }
+        }
+        return SaveSchedule(
+            h.schedules, h.assets, h.groups, h.raw.definitions, h.raw.profiles, racing, h.ids, h.clock, h.recompute,
+            h.raw.subjects,
+        )
     }
 
     @Test fun aReplaceAssetCopyHasNoRole() = runTest {

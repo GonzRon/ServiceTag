@@ -36,6 +36,9 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * Validation is collected rather than fail-fast, so an editor can mark every bad row at once, and it
  * runs entirely before the single `uow.write`. Two groups may share a `name`: a name is descriptive,
  * never identity (invariant 7), and nothing here or anywhere else looks a group up by one.
+ *
+ * #114 (C11): inside the write, 409 [SeasonStartStrands] for a member added to a group a role schedule targets
+ * ([seasonStartStrandOf]); [saveInTransaction] (Replace asset) is not hooked.
  */
 class SaveGroup(
     private val groups: GroupRepository,

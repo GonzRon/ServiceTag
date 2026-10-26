@@ -103,6 +103,8 @@ internal class SeasonStartHarness(today: String = ROLE_TODAY) {
     val saveSchedule =
         SaveSchedule(schedules, assets, groups, raw.definitions, raw.profiles, raw.uow, ids, clock, recompute, raw.subjects)
     val saveGroup = SaveGroup(groups, assets, raw.uow, ids, clock, schedules, raw.transfers)
+    val archiveSchedule = ArchiveSchedule(schedules, raw.uow, recompute, raw.subjects, assets, clock, groups, raw.transfers)
+    val archiveGroup = ArchiveGroup(groups, raw.uow, clock, schedules, assets, raw.transfers)
     val updateEvent =
         UpdateEvent(raw.events, raw.definitions, raw.profiles, raw.supplyItems, raw.uow, ids, clock, recompute, todayPort)
     val logEvent = LogEvent(raw.events, raw.definitions, raw.profiles, assets, raw.supplyItems, raw.uow, ids, clock, recompute)
@@ -392,22 +394,23 @@ class SetScheduleRoleTest {
     }
 
     @Test fun anIneligibleOpenMemberIsNamed() = runTest {
-        h.asset("zeta", name = "Zeta boiler", mode = SeasonMode.YEAR_ROUND)
+        // By name, Alpha heater fails first; by id, a-yr would.
+        h.asset("a-yr", name = "Zeta boiler", mode = SeasonMode.YEAR_ROUND)
         h.asset("house")
-        h.asset("alpha", name = "Alpha heater", parent = "house")
+        h.asset("z-leaf", name = "Alpha heater", parent = "house")
         h.asset("mid", name = "Middle heater")
         h.group(
             "g1",
-            Triple("zeta", "2026-01-01", null),
+            Triple("a-yr", "2026-01-01", null),
             Triple("mid", "2026-01-01", null),
-            Triple("alpha", "2026-01-01", null),
+            Triple("z-leaf", "2026-01-01", null),
         )
         h.schedule("sg", groupId = "g1")
 
         assertEquals(
-            SeasonStartRefusal.LeafChild(AssetId("alpha")),
+            SeasonStartRefusal.LeafChild(AssetId("z-leaf")),
             refused("sg", quickElected = true),
-            "the first failing member by name, not by sort order",
+            "the first failing member by name, not by id",
         )
     }
 

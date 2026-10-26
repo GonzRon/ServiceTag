@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.season
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -99,20 +100,13 @@ fun seasonReadiness(
     zone: ZoneId,
     haBoundary: HaBoundary = HaBoundary.NotUsed,
 ): Readiness {
-    // Open membership is the stored window still running (`removedAt == null`, GroupCommands' openMembers).
-    val memberOf = groups.filter { group -> group.members.any { it.assetId == asset.id && it.removedAt == null } }
-        .associateBy { it.id }
-    val targeting = schedules.filter { it.role == ScheduleRole.SEASON_START && targets(it.target, asset, memberOf) }
-    val covering = targeting.filter { schedule ->
-        schedule.status != ScheduleStatus.ARCHIVED && isLiveTarget(schedule.target, memberOf)
-    }
+    val (targeting, covering) = roleCoverageOf(asset.id, schedules, groups)
     if (covering.isEmpty() && targeting.isNotEmpty()) {
         return Readiness.NotReady(NotReadyReason.SCHEDULE_ARCHIVED, targeting.minBy { it.id.value }.id, null)
     }
     val s = covering.singleOrNull()
         ?: return Readiness.NotReady(if (covering.isEmpty()) NotReadyReason.NO_ROLE else NotReadyReason.TWO_ROLES, null, null)
-    val leafChild = asset.parentAssetId != null && assets.none { it.parentAssetId == asset.id }
-    if (asset.seasonMode == SeasonMode.YEAR_ROUND || leafChild) {
+    if (asset.seasonMode == SeasonMode.YEAR_ROUND || isLeafChild(asset, assets)) {
         return Readiness.NotReady(NotReadyReason.ROLE_NOT_ALLOWED, s.id, null)
     }
     // R1 says a role always carries its boundary; a row that breaks it reads as no role, defensively.
@@ -145,9 +139,36 @@ fun seasonReadiness(
     return Readiness.NotReady(reason, s.id, boundary)
 }
 
-/** Whether [target] names [asset] itself or a group it is an open member of (archived or not). */
-private fun targets(target: ScheduleTarget, asset: Asset, memberOf: Map<GroupId, MaintenanceGroup>): Boolean = when (target) {
-    is ScheduleTarget.AssetTarget -> target.assetId == asset.id
+/**
+ * #114 (C9) — the one coverage rule, which readiness and the commands both read. [targeting]: every `SEASON_START`
+ * schedule aimed at the asset or at a group it is an open member of, whatever their lifecycle. [covering]: those of
+ * them that are live — not ARCHIVED (PAUSED is live), and an asset target or a group that is not archived.
+ */
+internal data class RoleCoverage(val targeting: List<MaintenanceSchedule>, val covering: List<MaintenanceSchedule>)
+
+/** [RoleCoverage] of [assetId] over every stored schedule and group, in [schedules]' order. Reads no label (G22). */
+internal fun roleCoverageOf(
+    assetId: AssetId,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+): RoleCoverage {
+    // Open membership is the stored window still running (`removedAt == null`, GroupCommands' openMembers).
+    val memberOf = groups.filter { group -> group.members.any { it.assetId == assetId && it.removedAt == null } }
+        .associateBy { it.id }
+    val targeting = schedules.filter { it.role == ScheduleRole.SEASON_START && targets(it.target, assetId, memberOf) }
+    val covering = targeting.filter { schedule ->
+        schedule.status != ScheduleStatus.ARCHIVED && isLiveTarget(schedule.target, memberOf)
+    }
+    return RoleCoverage(targeting, covering)
+}
+
+/** O-5 — [asset] has a parent and no child row among [assets] (any child row counts, whatever its lifecycle). */
+internal fun isLeafChild(asset: Asset, assets: Collection<Asset>): Boolean =
+    asset.parentAssetId != null && assets.none { it.parentAssetId == asset.id }
+
+/** Whether [target] names [assetId] itself or a group it is an open member of (archived or not). */
+private fun targets(target: ScheduleTarget, assetId: AssetId, memberOf: Map<GroupId, MaintenanceGroup>): Boolean = when (target) {
+    is ScheduleTarget.AssetTarget -> target.assetId == assetId
     is ScheduleTarget.GroupTarget -> target.groupId in memberOf
 }
 

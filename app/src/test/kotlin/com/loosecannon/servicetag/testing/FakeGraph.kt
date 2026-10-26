@@ -655,7 +655,7 @@ class FakeGraph(
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
     val archiveSchedule: ArchiveSchedule =
-        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock)
+        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock, groups, transferRecords)
     val setScheduleRole: SetScheduleRole =
         SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, todayPort)
     val closeRound: CloseRound =
@@ -673,7 +673,7 @@ class FakeGraph(
         assets, schedules, groups, tags, definitions, profiles, loans, transferRecords, assetSuccessions,
         uow, ids, clock, todayPort, retireAsset, saveAssetSettings, saveSchedule, saveGroup, bindTag,
     )
-    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
+    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, transferRecords)
 
     /** #15 (C15–C17): the SupplyItem and applicability use cases, from exactly the members `AppGraph` builds them from. */
     val saveSupplyItem: SaveSupplyItem = SaveSupplyItem(supplyItems, uow, ids, clock)

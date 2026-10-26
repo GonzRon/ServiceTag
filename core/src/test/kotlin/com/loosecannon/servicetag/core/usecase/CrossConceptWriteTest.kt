@@ -280,7 +280,7 @@ class CrossConceptWriteTest {
     private val archiveHealthSubject = ArchiveHealthSubject(subjects, assets, schedules, uow, clock)
     private val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, subjects)
-    private val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock)
+    private val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock, groups, InMemoryTransferRecordRepository())
     private val promoteCategory = PromoteCategory(categories)
     private val saveAssetSettings = SaveAssetSettings(
         assets, schedules, subjects, activations, uow, ids, clock, today, recompute,

@@ -2,11 +2,14 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -33,6 +36,10 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * decision 14). Restoring a schedule is never guarded and restores no subject; the flag with nothing
  * to unlink changes nothing.
  *
+ * **The Season Start role** (#114, C11 erratum): restoring an archived role schedule is 409 [SeasonStartStrands] when
+ * it would cover an asset that may not have a role, or one another live role covers ([seasonStartRestoreStrandOf]).
+ * The row is read inside the write, so the rule judges the role as it is stored then.
+ *
  * One `uow.write`.
  */
 class ArchiveSchedule(
@@ -42,20 +49,26 @@ class ArchiveSchedule(
     private val healthSubjects: HealthSubjectRepository,
     private val assets: AssetRepository,
     private val clock: Clock,
+    private val groups: GroupRepository,
+    private val transfers: TransferRecordRepository,
 ) {
-    suspend fun run(id: ScheduleId, archived: Boolean, unlinkHealthSubject: Boolean = false): MaintenanceSchedule {
-        val existing = schedules.get(id) ?: throw NoSuchSchedule(id)
-        val saved = existing.copy(
-            status = if (archived) ScheduleStatus.ARCHIVED else ScheduleStatus.ACTIVE,
-        )
-        return uow.write {
+    suspend fun run(id: ScheduleId, archived: Boolean, unlinkHealthSubject: Boolean = false): MaintenanceSchedule =
+        uow.write {
+            val existing = schedules.get(id) ?: throw NoSuchSchedule(id)
+            val saved = existing.copy(
+                status = if (archived) ScheduleStatus.ARCHIVED else ScheduleStatus.ACTIVE,
+            )
             if (archived && existing.status != ScheduleStatus.ARCHIVED) {
                 val driven = guardDriven(id, unlinkHealthSubject, healthSubjects)
                 unlinkDriven(driven, assets, healthSubjects, clock.nowMillis())
+            }
+            if (!archived && existing.status == ScheduleStatus.ARCHIVED && existing.role == ScheduleRole.SEASON_START) {
+                val after = schedules.all().map { if (it.id == id) saved else it }
+                seasonStartRestoreStrandOf(setOf(id), assets.all(), transfers.heldIds(), after, groups.all())
+                    ?.let { throw it }
             }
             schedules.upsert(saved)
             recompute.forSchedule(id)
             saved
         }
-    }
 }

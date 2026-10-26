@@ -2,12 +2,10 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
-import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season
@@ -20,6 +18,8 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.schedule.BoundaryKind
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.season.isLeafChild
+import com.loosecannon.servicetag.core.season.roleCoverageOf
 import java.time.LocalDate
 import java.time.Year
 
@@ -122,6 +122,12 @@ enum class SeasonStartStrandCause {
 
     /** A member added to a role group is already covered by another role. */
     MEMBER_ALREADY_COVERED,
+
+    /** A restore from the archive (a role schedule, or a role group) would cover an asset that fails C10's asset rule. */
+    RESTORE_NOT_ELIGIBLE,
+
+    /** A restore from the archive would cover an asset another live role already covers (C9's `TWO_ROLES`). */
+    RESTORE_ALREADY_COVERED,
 }
 
 /**
@@ -338,36 +344,62 @@ internal fun seasonStartStrandedBy(
     val tree = assets.filter { it.id != after.id } + after
     val oldParent = before.parentAssetId?.let { id -> tree.firstOrNull { it.id == id } }
     return listOfNotNull(after, oldParent)
-        .filter { it.parentAssetId != null && AssetTree.children(tree, it.id).isEmpty() }
+        .filter { isLeafChild(it, tree) }
         .firstNotNullOfOrNull { strands(it, SeasonStartStrandCause.WOULD_BE_LEAF_CHILD) }
 }
 
 /**
- * #114 — C9's coverage, for the commands: the live `SEASON_START` schedules covering [assetId] — not ARCHIVED (PAUSED
- * is live), aimed at it or at a non-archived group it is an open member of — by title then id, [excluding] left out.
- * The same rule `seasonReadiness` reads, so a command never admits a second role that readiness would read as
- * `TWO_ROLES`.
+ * #114 (C11 erratum, M-4) — **the restore rule**, for `ArchiveSchedule` and `ArchiveGroup` bringing a row back from the
+ * archive. Null unless a role schedule among [restored] would cover again an asset that fails C10's asset rule
+ * ([SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE]) or that another live role covers too
+ * ([SeasonStartStrandCause.RESTORE_ALREADY_COVERED], C9's `TWO_ROLES`): the first such asset by name then id, with
+ * every role that would cover it. [schedules] and [groups] are every row **as the restore leaves them**, [assets] the
+ * stored tree and [held] the transferred-out ids. Pure: it reads no store and throws nothing.
+ */
+internal fun seasonStartRestoreStrandOf(
+    restored: Set<ScheduleId>,
+    assets: Collection<Asset>,
+    held: Set<AssetId>,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+): SeasonStartStrands? {
+    val aimedAt = schedules.filter { it.id in restored }.flatMapTo(mutableSetOf()) { schedule ->
+        when (val target = schedule.target) {
+            is ScheduleTarget.AssetTarget -> listOf(target.assetId)
+            is ScheduleTarget.GroupTarget -> groups.firstOrNull { it.id == target.groupId }
+                ?.openMembers().orEmpty().map { it.assetId }
+        }
+    }
+    return assets.filter { it.id in aimedAt }
+        .sortedWith(compareBy({ it.name }, { it.id.value }))
+        .firstNotNullOfOrNull { asset ->
+            val covering = seasonStartRolesCovering(asset.id, schedules, groups)
+            val cause = if (covering.none { it.id in restored }) {
+                return@firstNotNullOfOrNull null
+            } else if (seasonStartAssetRefusal(asset, assets, held) != null) {
+                SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE
+            } else if (covering.size > 1) {
+                SeasonStartStrandCause.RESTORE_ALREADY_COVERED
+            } else {
+                return@firstNotNullOfOrNull null
+            }
+            SeasonStartStrands(asset.id, cause, covering.map { StrandedSchedule(it.id, it.title) })
+        }
+}
+
+/**
+ * #114 — C9's coverage ([roleCoverageOf]) for the commands: the live `SEASON_START` schedules covering [assetId],
+ * [excluding] left out, by title then id. One rule with `seasonReadiness`, so a command never admits a second role
+ * that readiness would read as `TWO_ROLES`.
  */
 internal fun seasonStartRolesCovering(
     assetId: AssetId,
     schedules: Collection<MaintenanceSchedule>,
     groups: Collection<MaintenanceGroup>,
     excluding: ScheduleId? = null,
-): List<MaintenanceSchedule> {
-    val liveGroups = groups
-        .filter { group -> group.archivedAt == null && group.members.any { it.assetId == assetId && it.removedAt == null } }
-        .map { it.id }
-        .toSet()
-    return schedules
-        .filter { it.role == ScheduleRole.SEASON_START && it.status != ScheduleStatus.ARCHIVED && it.id != excluding }
-        .filter { schedule ->
-            when (val target = schedule.target) {
-                is ScheduleTarget.AssetTarget -> target.assetId == assetId
-                is ScheduleTarget.GroupTarget -> target.groupId in liveGroups
-            }
-        }
-        .sortedWith(compareBy({ it.title }, { it.id.value }))
-}
+): List<MaintenanceSchedule> = roleCoverageOf(assetId, schedules, groups).covering
+    .filter { it.id != excluding }
+    .sortedWith(compareBy({ it.title }, { it.id.value }))
 
 /** The order every activation list is read in: `(occurredOn, createdAt, id)` (spec §3.3). */
 internal val ACTIVATION_ORDER: Comparator<SeasonActivation> =

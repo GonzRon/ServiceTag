@@ -487,7 +487,8 @@ class GroupCompletionTest {
         val a1 = seedAsset("a1")
         val schedule = seedSchedule(seedGroup(listOf(a1)))
         val archive = ArchiveSchedule(
-            countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock,
+            countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock, groups,
+        InMemoryTransferRecordRepository(),
         )
         archive.run(schedule.id, archived = true)
 

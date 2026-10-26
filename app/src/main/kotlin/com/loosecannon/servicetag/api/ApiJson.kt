@@ -673,6 +673,10 @@ private fun seasonStartStrandMessage(cause: SeasonStartStrandCause): String = wh
         "the group's Season Start service would cover this asset, which cannot have one"
     SeasonStartStrandCause.MEMBER_ALREADY_COVERED ->
         "the group's Season Start service would cover this asset, which already has one"
+    SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE ->
+        "restoring this would give a Season Start service to an asset that cannot have one"
+    SeasonStartStrandCause.RESTORE_ALREADY_COVERED ->
+        "restoring this would give a second Season Start service to an asset that already has one"
 }
 
 /**

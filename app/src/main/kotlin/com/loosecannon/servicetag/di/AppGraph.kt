@@ -1015,7 +1015,7 @@ class AppGraph(private val context: Context) {
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
     val archiveSchedule: ArchiveSchedule =
-        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock)
+        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock, groups, transferRecords)
 
     // #114 (C10, C10a) — the passive Season Start role: its own command, never a schedule-form field (K11).
     val setScheduleRole: SetScheduleRole =
@@ -1033,7 +1033,7 @@ class AppGraph(private val context: Context) {
         assets, schedules, groups, tags, definitions, profiles, loans, transferRecords, assetSuccessions,
         uow, ids, clock, today, retireAsset, saveAssetSettings, saveSchedule, saveGroup, bindTag,
     )
-    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
+    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, transferRecords)
     val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
         schedules, groups, events, closures, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules,
         today,
