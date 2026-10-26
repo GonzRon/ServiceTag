@@ -13,4 +13,9 @@
         <item quantity="one">Dans le délai de grâce de %1$d jour</item>
         <item quantity="other">Dans le délai de grâce de %1$d jours</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="one">%1$d entrée de date dans Home Assistant contient encore une date de début de saison. La déconnexion la règle d\'abord sur %2$s si possible ; sinon, elle garde sa date jusqu\'à ce que vous l\'effaciez dans Home Assistant.</item>
+        <item quantity="many">%1$d entrées de date dans Home Assistant contiennent encore une date de début de saison. La déconnexion les règle d\'abord sur %2$s lorsque c\'est possible ; celles qu\'elle ne peut pas atteindre gardent leur date jusqu\'à ce que vous les effaciez dans Home Assistant.</item>
+        <item quantity="other">%1$d entrées de date dans Home Assistant contiennent encore une date de début de saison. La déconnexion les règle d\'abord sur %2$s lorsque c\'est possible ; celles qu\'elle ne peut pas atteindre gardent leur date jusqu\'à ce que vous les effaciez dans Home Assistant.</item>
+    </plurals>
 </resources>

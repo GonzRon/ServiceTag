@@ -13,4 +13,9 @@
         <item quantity="one">Dentro do período de carência de %1$d dia</item>
         <item quantity="other">Dentro do período de carência de %1$d dias</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="one">%1$d auxiliar de data no Home Assistant ainda guarda uma data de início da temporada. Ao desconectar, ele é definido primeiro como %2$s se possível; se não for, mantém a data até você limpá-lo no Home Assistant.</item>
+        <item quantity="many">%1$d auxiliares de data no Home Assistant ainda guardam uma data de início da temporada. Ao desconectar, eles são definidos primeiro como %2$s onde possível; os que não puderem ser alcançados mantêm a data até você limpá-los no Home Assistant.</item>
+        <item quantity="other">%1$d auxiliares de data no Home Assistant ainda guardam uma data de início da temporada. Ao desconectar, eles são definidos primeiro como %2$s onde possível; os que não puderem ser alcançados mantêm a data até você limpá-los no Home Assistant.</item>
+    </plurals>
 </resources>

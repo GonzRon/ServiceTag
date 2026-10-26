@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese (Brazil) translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">Publicar o status do equipamento no Home Assistant</string>
+    <string name="ha_publish_helper_field">Auxiliar do Home Assistant</string>
+    <string name="ha_publish_choose_helper">Escolher auxiliar</string>
+    <string name="ha_publish_scope_selects">Auxiliares de lista suspensa (input_select)</string>
+    <string name="ha_publish_status_confirm">Publicar o status do equipamento de %1$s em %2$s? O ServiceTag define este auxiliar sempre que a condição registrada muda: Operacional → UP, Degradado → DEGRADED, Parado → DOWN. As automações do Home Assistant devem lê-lo e nunca defini-lo.</string>
+    <string name="ha_publish_confirm_button">Publicar</string>
+    <string name="ha_publish_waiting_for_status">Aguardando: nenhum status do equipamento está registrado, então nada é enviado.</string>
+    <string name="ha_publish_not_published_yet">Ainda não publicado.</string>
+    <string name="ha_publish_sending">Enviando %s…</string>
+    <string name="ha_publish_published">Publicado %1$s · %2$s</string>
+    <string name="ha_publish_matches">O Home Assistant mostra %1$s, que corresponde ao ServiceTag · verificado %2$s</string>
+    <string name="ha_publish_now">Publicar agora</string>
+    <string name="ha_publish_stop">Parar de publicar</string>
+    <string name="ha_publish_stop_status_confirm">Parar de publicar em %s? O Home Assistant mantém o valor que tem agora.</string>
+    <string name="ha_publish_options_mismatch">%s precisa ser um auxiliar de lista suspensa cujas opções sejam exatamente UP, DOWN e DEGRADED.</string>
+    <string name="ha_publish_not_a_dropdown">%s não é um auxiliar de lista suspensa (input_select).</string>
+    <string name="ha_publish_service_refused">O Home Assistant recusou o valor %1$s para %2$s.</string>
+    <string name="ha_publish_write_forbidden">O Home Assistant recusou esta alteração para o usuário do token de acesso. Esse usuário precisa de permissão para alterar auxiliares.</string>
+    <string name="ha_publish_outcome_unknown">O Home Assistant não confirmou a alteração. O ServiceTag vai verificar o auxiliar antes de enviar de novo.</string>
+    <string name="ha_publish_remote_differs">O Home Assistant mostra %1$s após a alteração; outra coisa pode estar definindo %2$s.</string>
+    <string name="ha_publish_copied_installation">Esta configuração veio do backup de outro telefone, então este telefone não publica. Verifique o auxiliar e ative a publicação de novo aqui.</string>
+    <string name="ha_publish_target_in_use">%s já é definido por outro equipamento neste telefone.</string>
+    <string name="ha_publish_inbound_source">%s é o auxiliar que a temporada deste equipamento segue. Escolha outro: o ServiceTag nunca define um auxiliar que lê.</string>
+    <string name="ha_publish_status_not_maintained">Nada é enviado: o equipamento está arquivado, desativado ou transferido. O Home Assistant mantém seu último valor.</string>
+    <string name="ha_publish_check_helper">Verificar auxiliar</string>
+    <string name="ha_publish_delivery_limit">Enviado quando o telefone pode: ao abrir, em “Publicar agora” ou em segundo plano onde for permitido. Não é instantâneo.</string>
+    <string name="ha_publish_http_error">O Home Assistant respondeu %s.</string>
+    <string name="ha_publish_checking">Verificando o auxiliar…</string>
+    <string name="ha_publish_choose_helper_first">Escolha um auxiliar primeiro.</string>
+    <string name="ha_publish_needs_validation">Verifique o auxiliar de novo antes que o ServiceTag publique nele.</string>
+    <string name="ha_publish_stale_read">O auxiliar mudou enquanto era verificado. Verifique-o de novo.</string>
+    <string name="ha_publish_asset_not_maintained">%s está arquivado, desativado ou transferido, então não pode publicar no Home Assistant.</string>
+    <string name="ha_publish_stale_plan">Algo mudou desde que este auxiliar foi verificado. Verifique-o de novo.</string>
+    <string name="ha_publish_write_disclosure">Quando um equipamento publica no Home Assistant, este telefone também define esse auxiliar com este token. Dê ao usuário do token apenas os direitos de que ele precisa.</string>
+</resources>

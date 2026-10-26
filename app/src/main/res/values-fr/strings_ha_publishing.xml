@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">Publier l\'état de l\'équipement dans Home Assistant</string>
+    <string name="ha_publish_helper_field">Entrée Home Assistant</string>
+    <string name="ha_publish_choose_helper">Choisir une entrée</string>
+    <string name="ha_publish_scope_selects">Entrées de liste déroulante (input_select)</string>
+    <string name="ha_publish_status_confirm">Publier l\'état de l\'équipement %1$s dans %2$s ? ServiceTag définit cette entrée chaque fois que l\'état enregistré change : Opérationnel → UP, Dégradé → DEGRADED, En panne → DOWN. Les automatisations de Home Assistant doivent la lire et ne jamais la définir.</string>
+    <string name="ha_publish_confirm_button">Publier</string>
+    <string name="ha_publish_waiting_for_status">En attente : aucun état de l\'équipement n\'est enregistré, donc rien n\'est envoyé.</string>
+    <string name="ha_publish_not_published_yet">Pas encore publié.</string>
+    <string name="ha_publish_sending">Envoi de %s…</string>
+    <string name="ha_publish_published">Publié %1$s · %2$s</string>
+    <string name="ha_publish_matches">Home Assistant affiche %1$s, ce qui correspond à ServiceTag · vérifié %2$s</string>
+    <string name="ha_publish_now">Publier maintenant</string>
+    <string name="ha_publish_stop">Arrêter la publication</string>
+    <string name="ha_publish_stop_status_confirm">Arrêter la publication vers %s ? Home Assistant conserve sa valeur actuelle.</string>
+    <string name="ha_publish_options_mismatch">%s doit être une entrée de liste déroulante dont les options sont exactement UP, DOWN et DEGRADED.</string>
+    <string name="ha_publish_not_a_dropdown">%s n\'est pas une entrée de liste déroulante (input_select).</string>
+    <string name="ha_publish_service_refused">Home Assistant a refusé la valeur %1$s pour %2$s.</string>
+    <string name="ha_publish_write_forbidden">Home Assistant a refusé cette modification pour l\'utilisateur du jeton d\'accès. Cet utilisateur doit avoir l\'autorisation de modifier les entrées.</string>
+    <string name="ha_publish_outcome_unknown">Home Assistant n\'a pas confirmé la modification. ServiceTag vérifiera l\'entrée avant de renvoyer.</string>
+    <string name="ha_publish_remote_differs">Home Assistant affiche %1$s après la modification ; autre chose définit peut-être %2$s.</string>
+    <string name="ha_publish_copied_installation">Cette configuration provient de la sauvegarde d\'un autre téléphone, donc ce téléphone ne publie pas. Vérifiez l\'entrée et réactivez la publication ici.</string>
+    <string name="ha_publish_target_in_use">%s est déjà défini par un autre équipement sur ce téléphone.</string>
+    <string name="ha_publish_inbound_source">%s est l\'entrée que suit la saison de cet équipement. Choisissez-en une autre : ServiceTag ne définit jamais une entrée qu\'il lit.</string>
+    <string name="ha_publish_status_not_maintained">Aucun envoi : l\'équipement est archivé, retiré du service ou transféré. Home Assistant conserve sa dernière valeur.</string>
+    <string name="ha_publish_check_helper">Vérifier l\'entrée</string>
+    <string name="ha_publish_delivery_limit">Envoyé quand le téléphone le peut : à l\'ouverture, avec « Publier maintenant » ou en arrière-plan là où c\'est autorisé. Ce n\'est pas instantané.</string>
+    <string name="ha_publish_http_error">Home Assistant a répondu %s.</string>
+    <string name="ha_publish_checking">Vérification de l\'entrée…</string>
+    <string name="ha_publish_choose_helper_first">Choisissez d\'abord une entrée.</string>
+    <string name="ha_publish_needs_validation">Vérifiez à nouveau l\'entrée avant que ServiceTag y publie.</string>
+    <string name="ha_publish_stale_read">L\'entrée a changé pendant sa vérification. Vérifiez-la à nouveau.</string>
+    <string name="ha_publish_asset_not_maintained">%s est archivé, retiré du service ou transféré, il ne peut donc pas publier dans Home Assistant.</string>
+    <string name="ha_publish_stale_plan">Quelque chose a changé depuis la vérification de cette entrée. Vérifiez-la à nouveau.</string>
+    <string name="ha_publish_write_disclosure">Quand un équipement publie dans Home Assistant, ce téléphone définit aussi cette entrée avec ce jeton. Ne donnez à l\'utilisateur du jeton que les droits dont il a besoin.</string>
+</resources>

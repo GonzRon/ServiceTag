@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #113: publishing to Home Assistant — English source. Comments carry the ratification ids (P113-xx, the plan's §5,
+  RATIFIED 2026-10-26) and what each string and placeholder is for. Entity ids, the values UP, DEGRADED and DOWN, and
+  asset names are passed in or written exactly as Home Assistant and the owner have them. The date kind's sentences
+  (P114-30…39, P114-47/48) are in their own file.
+-->
+<resources>
+
+    <!-- ===================================================== the equipment status block (C36) -->
+
+    <!-- P113-1: the block's title on asset detail and its switch's label. -->
+    <string name="ha_publish_status_title">Publish equipment status to Home Assistant</string>
+    <!-- P113-2: the setup sheet's helper field, and the block's destination label. -->
+    <string name="ha_publish_helper_field">Home Assistant helper</string>
+    <!-- P113-3: the setup sheet's browser button and the browser's title. -->
+    <string name="ha_publish_choose_helper">Choose helper</string>
+    <!-- P113-4: the browser's scope line for the status kind; input_select is Home Assistant's own domain name. -->
+    <string name="ha_publish_scope_selects">Dropdown helpers (input_select)</string>
+    <!-- P113-5: the enable confirm. %1$s: the asset's name; %2$s: the exact entity id. UP, DEGRADED and DOWN are the
+         helper's option values, never translated; the condition words are the app's own. -->
+    <string name="ha_publish_status_confirm">Publish %1$s\'s equipment status to %2$s? ServiceTag sets this helper whenever the recorded condition changes: Operational → UP, Degraded → DEGRADED, Down → DOWN. Home Assistant automations should read it and never set it.</string>
+    <!-- P113-6: the confirm's button. -->
+    <string name="ha_publish_confirm_button">Publish</string>
+    <!-- P113-7: WAITING_FOR_SOURCE, the status kind with no recorded condition. -->
+    <string name="ha_publish_waiting_for_status">Waiting: no equipment status is recorded, so nothing is sent.</string>
+    <!-- P113-8: PENDING before any success. -->
+    <string name="ha_publish_not_published_yet">Not published yet.</string>
+    <!-- P113-9: PENDING. %s: the value being sent (UP, DEGRADED or DOWN, or a date). -->
+    <string name="ha_publish_sending">Sending %s…</string>
+    <!-- P113-10: the last published line. %1$s: the value; %2$s: when, in the phone's date and time. -->
+    <string name="ha_publish_published">Published %1$s · %2$s</string>
+    <!-- P113-11: MATCHES, the last verified line, never "published". %1$s: the value Home Assistant shows; %2$s: when it
+         was checked, in the phone's date and time. -->
+    <string name="ha_publish_matches">Home Assistant shows %1$s, which matches ServiceTag · checked %2$s</string>
+    <!-- P113-12: the action that reads the helper back now. -->
+    <string name="ha_publish_now">Publish now</string>
+    <!-- P113-13: the action, and its confirm's button. -->
+    <string name="ha_publish_stop">Stop publishing</string>
+    <!-- P113-14: the status kind's stop confirm. %s: the exact entity id. -->
+    <string name="ha_publish_stop_status_confirm">Stop publishing to %s? Home Assistant keeps the value it has now.</string>
+    <!-- P113-15: OPTIONS_MISMATCH. %s: the entity id. UP, DOWN and DEGRADED are option values, never translated. -->
+    <string name="ha_publish_options_mismatch">%s must be a dropdown helper whose options are exactly UP, DOWN and DEGRADED.</string>
+    <!-- P113-16: WRONG_DOMAIN for the status kind. %s: the entity id. -->
+    <string name="ha_publish_not_a_dropdown">%s is not a dropdown helper (input_select).</string>
+    <!-- P113-17: SERVICE_REFUSED. %1$s: the value refused; %2$s: the entity id. -->
+    <string name="ha_publish_service_refused">Home Assistant refused the value %1$s for %2$s.</string>
+    <!-- P113-18: WRITE_FORBIDDEN (403 on the service call). -->
+    <string name="ha_publish_write_forbidden">Home Assistant refused this change for the access token\'s user. That user needs permission to change helpers.</string>
+    <!-- P113-19: OUTCOME_UNKNOWN. -->
+    <string name="ha_publish_outcome_unknown">Home Assistant did not confirm the change. ServiceTag will check the helper before sending again.</string>
+    <!-- P113-20: REMOTE_DIFFERS. %1$s: the value Home Assistant shows; %2$s: the entity id. -->
+    <string name="ha_publish_remote_differs">Home Assistant shows %1$s after the change; something else may be setting %2$s.</string>
+    <!-- P113-21: COPIED_INSTALLATION. -->
+    <string name="ha_publish_copied_installation">This setup came from another phone\'s backup, so this phone does not publish. Check the helper and turn publishing on again here.</string>
+    <!-- P113-22: TARGET_IN_USE. %s: the entity id. -->
+    <string name="ha_publish_target_in_use">%s is already set by another asset on this phone.</string>
+    <!-- P113-23: INBOUND_SOURCE. %s: the entity id. -->
+    <string name="ha_publish_inbound_source">%s is the helper this asset\'s season follows. Choose another: ServiceTag never sets a helper it reads.</string>
+    <!-- P113-24: NOT_MAINTAINED_HERE for the status kind. -->
+    <string name="ha_publish_status_not_maintained">Not sending: the asset is archived, retired or transferred out. Home Assistant keeps its last value.</string>
+    <!-- P113-25: the action that checks the stored helper again (and the sheet's fresh read). -->
+    <string name="ha_publish_check_helper">Check helper</string>
+    <!-- P113-26: the delivery limit line. -->
+    <string name="ha_publish_delivery_limit">Sent when the phone can: on opening, on Publish now, or in the background where allowed. It is not instant.</string>
+    <!-- P113-27: HTTP_ERROR. %s: the HTTP status code. -->
+    <string name="ha_publish_http_error">Home Assistant answered %s.</string>
+    <!-- P113-28: the sheet's fresh read, while it runs. -->
+    <string name="ha_publish_checking">Checking the helper…</string>
+    <!-- P113-29: BAD_ENTITY_ID, or nothing chosen. -->
+    <string name="ha_publish_choose_helper_first">Choose a helper first.</string>
+    <!-- P113-30: NEEDS_VALIDATION. -->
+    <string name="ha_publish_needs_validation">Check the helper again before ServiceTag publishes to it.</string>
+    <!-- P113-31: the refusal STALE_READ. -->
+    <string name="ha_publish_stale_read">The helper changed while it was being checked. Check it again.</string>
+    <!-- P113-32: the refusal NOT_MAINTAINED_HERE. %s: the asset's name. -->
+    <string name="ha_publish_asset_not_maintained">%s is archived, retired or transferred out, so it cannot publish to Home Assistant.</string>
+    <!-- P113-44: the refusal STALE_PLAN (the API's plan identity). -->
+    <string name="ha_publish_stale_plan">Something changed since this helper was checked. Check it again.</string>
+
+    <!-- ===================================================== the Home Assistant screen -->
+
+    <!-- P113-40: the write disclosure, while any asset has a publish binding. -->
+    <string name="ha_publish_write_disclosure">When an asset publishes to Home Assistant, this phone also sets that helper with this token. Give the token\'s user only the rights it needs.</string>
+
+</resources>

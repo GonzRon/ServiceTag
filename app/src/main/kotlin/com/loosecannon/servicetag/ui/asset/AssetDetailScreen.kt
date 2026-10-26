@@ -75,6 +75,7 @@ import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.journal.classify
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -271,6 +272,28 @@ fun AssetDetailScreen(
         readinessModel.onResumed()
         onPauseOrDispose {}
     }
+    // #113/#114 (C36): the two publishing blocks, each its own model, read again on every resume; the date kind's block
+    // draws once its words are there (B6b).
+    val statusPublishModel: PublishBlockViewModel = viewModel(key = "publish:$assetId:${PublishKind.EQUIPMENT_STATUS}") {
+        PublishBlockViewModel(graph, AssetId(assetId), PublishKind.EQUIPMENT_STATUS)
+    }
+    val statusPublish by statusPublishModel.state.collectAsStateWithLifecycle()
+    val datePublishModel: PublishBlockViewModel = viewModel(key = "publish:$assetId:${PublishKind.SEASON_SERVICE_DATE}") {
+        PublishBlockViewModel(graph, AssetId(assetId), PublishKind.SEASON_SERVICE_DATE)
+    }
+    val datePublish by datePublishModel.state.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(statusPublishModel, datePublishModel) {
+        statusPublishModel.onResumed()
+        datePublishModel.onResumed()
+        onPauseOrDispose {}
+    }
+    // #113/#114 (C36): the publishing setup sheet for one kind; each opening a fresh model.
+    var publishSheet by rememberSaveable { mutableStateOf<PublishKind?>(null) }
+    var publishSheetOpening by rememberSaveable { mutableIntStateOf(0) }
+    val openPublishSheet: (PublishKind) -> Unit = { kind ->
+        publishSheetOpening += 1
+        publishSheet = kind
+    }
     // #16 (C27): the setup sheet, for Link or for Resume on an asset no longer MANUAL; each opening a fresh model.
     var syncSheet by rememberSaveable { mutableStateOf<SeasonSyncSheetPurpose?>(null) }
     var syncSheetOpening by rememberSaveable { mutableIntStateOf(0) }
@@ -404,6 +427,11 @@ fun AssetDetailScreen(
                 onDone = { syncSheet = null },
             )
         }
+        publishSheet?.let { kind ->
+            LinkPublishSheet(graph = graph, assetId = assetId, kind = kind, opening = publishSheetOpening) {
+                publishSheet = null
+            }
+        }
         // The screen's 16dp gutter is applied per block rather than to the whole scroll, because
         // 1.2's two maintenance sections draw their **own** gutter: they reuse the Maintenance
         // destination's heading and its due row verbatim, so a group's work reads the same on this
@@ -475,6 +503,8 @@ fun AssetDetailScreen(
                     onLogIncident = { onLogOutcome(assetId, EventKind.INCIDENT.name) },
                     onOpenEvent = onOpenEvent,
                 )
+                // #113 (C36): the recorded condition, published to Home Assistant, beside the condition it mirrors.
+                PublishBlock(statusPublishModel, statusPublish) { openPublishSheet(PublishKind.EQUIPMENT_STATUS) }
                 // #79 (C20, R79-17): the asset's service cases, right after Condition.
                 ServiceCasesSection(
                     rows = current.cases,
@@ -500,6 +530,8 @@ fun AssetDetailScreen(
                         )
                     },
                 )
+                // #114 (C36): the Season Start date, published to Home Assistant, beside the season it is read against.
+                PublishBlock(datePublishModel, datePublish) { openPublishSheet(PublishKind.SEASON_SERVICE_DATE) }
             }
             // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).
             //

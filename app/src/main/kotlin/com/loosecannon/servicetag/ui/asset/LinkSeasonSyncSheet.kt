@@ -35,7 +35,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.seasonsync.EntityScope
 import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.MAX_LISTED_ENTITIES
 import com.loosecannon.servicetag.di.AppGraph
@@ -209,16 +211,18 @@ private fun ChosenEntityRow(chosen: HaEntityCandidate?, entityLine: String?, onC
  * line (P105-6), the loading line (P105-5) while a read runs, the latest read's ratified failure sentences over the
  * last good rows, P105-10 over a bounded list, P105-8 for an empty scope, P105-9 for a query that matches nothing,
  * then the rows — friendly name over id, a tap the pick — and Enter entity ID manually, Cancel (back to the form,
- * keeping what was chosen) and Refresh.
+ * keeping what was chosen) and Refresh. #113/#114 (C36): [scope] names the domain the rows are from (the model filters
+ * them), so the publishing sheet reuses this browser with its title and scope line.
  */
 @Composable
-private fun EntityBrowser(
+internal fun EntityBrowser(
     browse: EntityBrowseState,
     onQuery: (String) -> Unit,
     onPick: (HaEntityCandidate) -> Unit,
     onRefresh: () -> Unit,
     onEnterManually: () -> Unit,
     onBack: () -> Unit,
+    scope: EntityScope = EntityScope.INPUT_BOOLEANS,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -227,7 +231,7 @@ private fun EntityBrowser(
             .padding(horizontal = 16.dp)
             .padding(bottom = 24.dp),
     ) {
-        Text(SEASON_SYNC_CHOOSE_ENTITY, style = MaterialTheme.typography.titleMedium)
+        Text(browserTitle(scope), style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             value = browse.query,
             onValueChange = onQuery,
@@ -237,7 +241,7 @@ private fun EntityBrowser(
             shape = ControlShape,
             modifier = Modifier.fillMaxWidth(),
         )
-        QuietLine(SEASON_SYNC_SCOPE_LINE)
+        browserScopeLine(scope)?.let { QuietLine(it) }
         if (browse.loading) QuietLine(SEASON_SYNC_READING_ENTITIES)
         browse.failure.forEach { RefusalLine(it.text) }
         if (browse.truncatedList) QuietLine(seasonSyncOnlyFirstShown(MAX_LISTED_ENTITIES))
@@ -257,6 +261,19 @@ private fun EntityBrowser(
             TextButton(onClick = onRefresh, enabled = !browse.loading) { Text(SEASON_SYNC_REFRESH) }
         }
     }
+}
+
+/** The browser's title: #16's Choose entity for its on/off helpers, P113-3 for a publication's helpers. */
+private fun browserTitle(scope: EntityScope): String = when (scope) {
+    EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_CHOOSE_ENTITY
+    EntityScope.INPUT_SELECTS, EntityScope.INPUT_DATETIMES -> HA_PUBLISH_CHOOSE_HELPER
+}
+
+/** The scope line (P105-6, P113-4, P114-31): the date kind's is B6b's, read through its words. */
+private fun browserScopeLine(scope: EntityScope): String? = when (scope) {
+    EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_SCOPE_LINE
+    EntityScope.INPUT_SELECTS -> publishWordsOf(PublishKind.EQUIPMENT_STATUS)?.scopeLine
+    EntityScope.INPUT_DATETIMES -> publishWordsOf(PublishKind.SEASON_SERVICE_DATE)?.scopeLine
 }
 
 /** One candidate: its friendly name over its exact id, or the id alone; the whole row is the pick. */

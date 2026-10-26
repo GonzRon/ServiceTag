@@ -13,4 +13,8 @@
         <item quantity="one">%1$d दिन की छूट अवधि के भीतर</item>
         <item quantity="other">%1$d दिन की छूट अवधि के भीतर</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="one">Home Assistant में %1$d तारीख हेल्पर में अभी भी मौसम-आरंभ की तारीख है। डिस्कनेक्ट करने पर पहले संभव हो तो उसे %2$s पर सेट किया जाता है; न हो सके तो वह अपनी तारीख तब तक रखता है जब तक आप उसे Home Assistant में साफ़ नहीं करते।</item>
+        <item quantity="other">Home Assistant में %1$d तारीख हेल्परों में अभी भी मौसम-आरंभ की तारीख है। डिस्कनेक्ट करने पर पहले जहाँ संभव हो उन्हें %2$s पर सेट किया जाता है; जिन तक पहुँचा नहीं जा सकता, वे अपनी तारीख तब तक रखते हैं जब तक आप उन्हें Home Assistant में साफ़ नहीं करते।</item>
+    </plurals>
 </resources>

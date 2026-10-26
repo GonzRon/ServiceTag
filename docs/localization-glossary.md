@@ -94,6 +94,8 @@ are capitals in languages that have them and plain in those that do not (zh-Hans
 | pairing code | the code a workstation enters | código de emparejamiento | código de pareamento | 配对码 | code d'appairage | ペアリングコード | код сопряжения | Kopplungscode | codice di associazione | पेयरिंग कोड |
 | sync | read Home Assistant's state | sincronizar | sincronizar | 同步 | synchroniser | 同期 | синхронизировать | synchronisieren | sincronizzare | सिंक करें |
 | access token | Home Assistant's long-lived token | token de acceso | token de acesso | 访问令牌 | jeton d'accès | アクセストークン | токен доступа | Zugriffstoken | token di accesso | एक्सेस टोकन |
+| helper | a Home Assistant helper entity, in Home Assistant's own word for it (#113) | ayudante | auxiliar | 辅助元素 | entrée | ヘルパー | вспомогательный объект | Helfer | aiutante | हेल्पर |
+| publish | ServiceTag setting a Home Assistant helper to a fact it records (#113, #114); never "sync", which reads | publicar | publicar | 发布 | publier | 公開する | публиковать | veröffentlichen | pubblicare | प्रकाशित करना |
 
 ## Android's own words
 

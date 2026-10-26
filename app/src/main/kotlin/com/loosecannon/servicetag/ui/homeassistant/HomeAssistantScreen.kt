@@ -129,6 +129,12 @@ internal fun HomeAssistantScreen(graph: AppGraph, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
             if (state.tokenPresent) QuietLine(HA_TOKEN_SAVED)
+            // #113 (C36): P113-40 while any asset publishes, then each helper still owed 1970-01-01 whose asset is gone,
+            // by its exact id (B6b draws each one's sentence and acknowledgement).
+            state.writeDisclosure?.let { QuietLine(it) }
+            state.publishing.orphanTombstones.forEach { entityId ->
+                Text(entityId, style = MaterialTheme.typography.bodyMedium)
+            }
 
             SectionHeader(title = HA_HOW_OFTEN)
             Column(Modifier.selectableGroup()) {
@@ -181,7 +187,13 @@ internal fun HomeAssistantScreen(graph: AppGraph, onBack: () -> Unit) {
     state.disconnectAsk?.let { body ->
         AlertDialog(
             onDismissRequest = model::dismissDisconnect,
-            text = { Text(body) },
+            text = {
+                // P113-41 before P16-9 (O-11): what Forget does first for each date helper still holding a date.
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.forgetWarning?.let { Text(it) }
+                    Text(body)
+                }
+            },
             confirmButton = { TextButton(onClick = model::confirmDisconnect) { Text(HA_DISCONNECT) } },
             dismissButton = { TextButton(onClick = model::dismissDisconnect) { Text(CANCEL_BUTTON) } },
         )

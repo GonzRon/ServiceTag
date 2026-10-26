@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.asset
 
 import com.loosecannon.servicetag.core.hapublish.BoundaryCache
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
+import com.loosecannon.servicetag.core.hapublish.PublishDelivery
 import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
@@ -298,6 +299,34 @@ class ReadinessLineTest {
             ),
             lines(open()),
         )
+    }
+
+    /**
+     * A5a's carry (B6a): the card the graph builds reads the asset's stored date binding and the boundary cache on its
+     * delivery record, so the fresh Home Assistant season end above comes from the stores, not a test's seam.
+     */
+    @Test fun theCardReadsTheStoredDateBindingAndItsBoundaryCache() = runTest(scheduler) {
+        manualHeater()
+        linkedToHomeAssistant()
+        val stored = dateBindingRead("2025-05-10", readAt = dayMillis("2026-02-09"))
+        graph.uow.write {
+            graph.publishBindings.insert(stored.binding)
+            graph.publishDeliveries.upsert(
+                PublishDelivery(
+                    bindingId = stored.binding.id, desiredValue = null, desiredRevision = 0, desiredAt = null,
+                    boundaryValue = "2025-05-10", boundaryReadAt = dayMillis("2026-02-09"), boundaryBindingRevision = 3,
+                ),
+            )
+        }
+        role(sinceOn = "2025-04-01")
+        complete("2025-09-18")
+        val model = ReadinessLineViewModel(
+            heater, graph.assets, graph.schedules, graph.groups, graph.events, graph.seasonActivations,
+            graph.seasonSyncBindings, graph.haConnections, DateBindings.stored(graph.publishBindings, graph.publishDeliveries),
+            graph.uow, graph.todayPort, graph.clock,
+        ) { ZoneOffset.UTC }
+        advanceUntilIdle()
+        assertEquals("Season end from Home Assistant: 10 May 2025 · checked 9 Feb 2026", model.state.value.sourceLine)
     }
 
     @Test fun anUnverifiedHomeAssistantSeasonEndSaysSinceWhenAndWhatIsUsed() = runTest(scheduler) {

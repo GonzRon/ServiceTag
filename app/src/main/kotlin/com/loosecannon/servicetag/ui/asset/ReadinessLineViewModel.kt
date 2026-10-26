@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.hapublish.BoundaryCache
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
+import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
+import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.hapublish.boundaryCache
 import com.loosecannon.servicetag.core.hapublish.haBoundaryOf
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
@@ -56,10 +60,15 @@ internal fun interface DateBindings {
 
     companion object {
         /**
-         * No date binding. The graph passes this until B3's binding and delivery ports are wired to the card: no screen
-         * or route can enable a date binding before B6a, so it is every reachable answer until then.
+         * #114 (C9a; A5a's carry, B6a) — the asset's `SEASON_SERVICE_DATE` binding from [bindings] and the boundary cache
+         * its delivery record carries ([deliveries]); read inside the card's own `uow.read`.
          */
-        val NONE: DateBindings = DateBindings { null }
+        fun stored(bindings: PublishBindingRepository, deliveries: PublishDeliveryRepository): DateBindings =
+            DateBindings { assetId ->
+                bindings.forAsset(assetId).firstOrNull { it.kind == PublishKind.SEASON_SERVICE_DATE }?.let { binding ->
+                    DateBindingRead(binding, deliveries.get(binding.id)?.boundaryCache)
+                }
+            }
     }
 }
 
@@ -90,7 +99,8 @@ internal class ReadinessLineViewModel(
 
     constructor(graph: AppGraph, assetId: AssetId) : this(
         assetId, graph.assets, graph.schedules, graph.groups, graph.events, graph.seasonActivations,
-        graph.seasonSyncBindings, graph.haConnections, DateBindings.NONE, graph.uow, graph.today, graph.clock,
+        graph.seasonSyncBindings, graph.haConnections,
+        DateBindings.stored(graph.publishBindings, graph.publishDeliveries), graph.uow, graph.today, graph.clock,
     )
 
     private val refreshes = MutableStateFlow(0)

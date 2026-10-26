@@ -2,14 +2,21 @@ package com.loosecannon.servicetag.ui.homeassistant
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.core.hapublish.DecommissionRepository
+import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DeliverySteps
+import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
+import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
+import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
-import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.HaEndpointPolicy
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
-import com.loosecannon.servicetag.core.seasonsync.SaveHaConnection
 import com.loosecannon.servicetag.core.seasonsync.SaveHaConnectionRefusal
 import com.loosecannon.servicetag.core.seasonsync.SaveHaConnectionRefused
 import com.loosecannon.servicetag.core.seasonsync.Secret
@@ -17,6 +24,7 @@ import com.loosecannon.servicetag.core.seasonsync.SecretStore
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.hapublish.PublishControls
 import com.loosecannon.servicetag.seasonsync.ConnectionTestOutcome
 import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
 import com.loosecannon.servicetag.seasonsync.NetworkPlatform
@@ -27,6 +35,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -57,6 +66,56 @@ internal enum class NoticeAction { ALLOW_PRECISE_AGAIN, ALLOW_BACKGROUND_AGAIN, 
 internal data class Notice(val text: String, val action: NoticeAction? = null)
 
 /**
+ * #113/#114 (C36) — what the Home Assistant screen says about publishing: whether any asset has a publish binding
+ * ([anyBinding], P113-40), how many date helpers on the stored connection may still hold a Season Start date that a
+ * Forget would first try to clear ([dateHelpersOwed], P113-41: each enabled date binding not already read back at
+ * `1970-01-01`, and each PENDING obligation), and the helpers still owed `1970-01-01` whose asset is gone
+ * ([orphanTombstones], their entity ids; the asset page draws the others).
+ */
+internal data class HaScreenPublishing(
+    val anyBinding: Boolean = false,
+    val dateHelpersOwed: Int = 0,
+    val orphanTombstones: List<String> = emptyList(),
+)
+
+/** #113/#114 (C36) — the screen's reads of the device-local publishing tables, one snapshot each; nothing here writes. */
+internal class HaPublishingReads(
+    private val bindings: PublishBindingRepository,
+    private val deliveries: PublishDeliveryRepository,
+    private val decommissions: DecommissionRepository,
+    private val assets: AssetRepository,
+    private val connections: HaConnectionRepository,
+    private val uow: UnitOfWork,
+) {
+    constructor(graph: AppGraph) : this(
+        graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.assets, graph.haConnections,
+        graph.uow,
+    )
+
+    /** A change to the bindings or the obligations. */
+    fun changes(): Flow<Unit> = combine(bindings.observeAll(), decommissions.observeAll()) { _, _ -> }
+
+    suspend fun read(): HaScreenPublishing = uow.read {
+        val all = bindings.all()
+        val connectionId = connections.get()?.id
+        val owedDates = all.count { binding ->
+            binding.enabled && binding.kind == PublishKind.SEASON_SERVICE_DATE && binding.connectionId == connectionId &&
+                deliveries.get(binding.id)?.let { delivery ->
+                    // B3's ruling (6): a helper already read back at 1970-01-01 holds no date; Forget skips it.
+                    !(DeliverySteps.isCurrent(binding, delivery) && delivery.desiredValue == INVALID_SERVICE_DATE)
+                } != false
+        }
+        val tombstones = decommissions.all()
+        val owedTombstones = tombstones.count { it.state == DecommissionState.PENDING && it.connectionId == connectionId }
+        val orphans = tombstones
+            .filter { tombstone -> tombstone.assetId?.let { assets.get(it) } == null }
+            .sortedWith(compareBy({ it.requestedAt }, { it.id }))
+            .map { it.entityId }
+        HaScreenPublishing(all.isNotEmpty(), owedDates + owedTombstones, orphans)
+    }
+}
+
+/**
  * #16 (C26) — the Home Assistant screen as drawn. The form holds the stored connection's settings until the owner
  * changes them; the access token is never here: [tokenPresent] says only whether the store holds one (the typed text
  * lives in [HomeAssistantViewModel.tokenField] until Save stores it). The grants are read, never asked, on entry.
@@ -84,7 +143,14 @@ internal data class HomeAssistantState(
     val promptCapture: Boolean = false,
     /** The stored connection as last read (no token in it): what an empty token field may test. */
     val stored: HaConnection? = null,
+    /** #113/#114 (C36): the publishing facts the screen draws. */
+    val publishing: HaScreenPublishing = HaScreenPublishing(),
+    /** P113-41, above P16-9 while the Disconnect confirmation is open and a date helper may still hold a date. */
+    val forgetWarning: String? = null,
 ) {
+    /** P113-40 while any asset has a publish binding: this phone writes to Home Assistant with this token. */
+    val writeDisclosure: String? get() = HA_PUBLISH_WRITE_DISCLOSURE.takeIf { publishing.anyBinding }
+
     /**
      * The form still describes [stored] — its canonical address, its network choice and, under "Only on this home
      * Wi-Fi", its captured name — so Test connection with an empty token field may use the stored token for that one
@@ -146,9 +212,12 @@ internal data class HomeAssistantState(
 
 /**
  * #16 (C26; R16-13, R16-14, R16-Q-D, R16-20 as amended, R16-21) — the Home Assistant screen's model, the Developer
- * API screen's shape: the writes are [SaveHaConnection] and [ForgetHaConnection], the reads the stored connection,
- * whether the store holds its token, the network reader and the location grants. Nothing here re-checks a rule the
- * use case owns: a refusal comes back as a code and is drawn as its ratified sentence.
+ * API screen's shape: the writes are #16's Save and Forget, through [PublishControls] (#113/#114, A03, C34): Save then
+ * asks for delivery, so a token, network or cadence change reaches every publish binding at once; Forget first drains
+ * each date helper's `1970-01-01`, then forgets, then asks for delivery. The reads are the stored connection, whether
+ * the store holds its token, the network reader, the location grants and the publishing facts ([HaPublishingReads]).
+ * Nothing here re-checks a rule the use case owns: a refusal comes back as a code and is drawn as its ratified
+ * sentence.
  *
  * **Permissions are the owner's choice (C32):** precise location is asked only when the owner picks "Only on this
  * home Wi-Fi" (or taps Allow again under P16-78), after P16-65; background location only when Background checks is
@@ -164,24 +233,24 @@ internal data class HomeAssistantState(
 internal class HomeAssistantViewModel(
     private val connections: HaConnectionRepository,
     private val secrets: SecretStore,
-    private val saveConnection: SaveHaConnection,
-    private val forgetConnection: ForgetHaConnection,
+    private val controls: PublishControls,
     private val testConnection: suspend (HaConnection, Secret) -> ConnectionTestOutcome,
     private val currentNetwork: CurrentNetworkReader,
     private val platform: NetworkPlatform,
     /** Android's own label for the background option, asked on API 30+ only. */
     private val backgroundOptionLabel: () -> String,
+    private val publishing: HaPublishingReads,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, platform: NetworkPlatform, backgroundOptionLabel: () -> String) : this(
         graph.haConnections,
         graph.secretStore,
-        graph.saveHaConnection,
-        graph.forgetHaConnection,
+        graph.publishControls,
         graph.haStateClient::testConnection,
         graph.currentNetworkReader,
         platform,
         backgroundOptionLabel,
+        HaPublishingReads(graph),
     )
 
     private val mutableState = MutableStateFlow(HomeAssistantState())
@@ -197,8 +266,18 @@ internal class HomeAssistantViewModel(
 
     private var awaitingPrecise = false
 
+    /** The publishing facts as last read; every reload keeps them. */
+    private var seen = HaScreenPublishing()
+
     init {
         viewModelScope.launch { reload() }
+        viewModelScope.launch {
+            publishing.changes().collect {
+                val read = readPublishing() ?: return@collect
+                seen = read
+                mutableState.update { it.copy(publishing = read) }
+            }
+        }
     }
 
     fun onAddressChange(text: String) = mutableState.update { it.copy(address = text) }
@@ -301,7 +380,7 @@ internal class HomeAssistantViewModel(
         mutableState.update { it.copy(busy = true, notices = emptyList(), promptCapture = false) }
         viewModelScope.launch {
             try {
-                val saved = saveConnection.run(
+                val saved = controls.saveConnection(
                     baseUrl = form.address.trim(),
                     token = token.takeIf { it.isNotEmpty() }?.let(::Secret),
                     cadence = form.cadence,
@@ -370,17 +449,23 @@ internal class HomeAssistantViewModel(
         }
     }
 
-    /** Disconnect asks P16-9 first. */
-    fun askDisconnect() = mutableState.update { it.copy(disconnectAsk = HA_DISCONNECT_BODY) }
+    /** Disconnect asks P16-9 first, under P113-41 while a date helper may still hold a Season Start date (O-11). */
+    fun askDisconnect() = mutableState.update { state ->
+        val owed = state.publishing.dateHelpersOwed
+        state.copy(disconnectAsk = HA_DISCONNECT_BODY, forgetWarning = haPublishForgetDateHelpers(owed).takeIf { owed > 0 })
+    }
 
-    fun dismissDisconnect() = mutableState.update { it.copy(disconnectAsk = null) }
+    fun dismissDisconnect() = mutableState.update { it.copy(disconnectAsk = null, forgetWarning = null) }
 
-    /** Confirmed: [ForgetHaConnection] deletes the connection, its bindings and the token; the screen reloads. */
+    /**
+     * Confirmed: [PublishControls.forgetConnection] drains each date helper's `1970-01-01` once, then #16's Forget
+     * deletes the connection, its bindings and the token, then delivery is asked for; the screen reloads.
+     */
     fun confirmDisconnect() {
-        mutableState.update { it.copy(disconnectAsk = null, busy = true) }
+        mutableState.update { it.copy(disconnectAsk = null, forgetWarning = null, busy = true) }
         viewModelScope.launch {
             try {
-                forgetConnection.run()
+                controls.forgetConnection()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -412,7 +497,17 @@ internal class HomeAssistantViewModel(
 
     private suspend fun reload() {
         val stored = connections.get()
+        readPublishing()?.let { seen = it }
         mutableState.value = loaded(stored, stored != null && tokenHeld(stored.id))
+    }
+
+    /** The publishing facts, or null when a store failed: the screen keeps what it last read. */
+    private suspend fun readPublishing(): HaScreenPublishing? = try {
+        publishing.read()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
     }
 
     /** B4: the store passes a Keystore failure to its caller; here it reads as no token (P16-11), never a crash. */
@@ -426,7 +521,7 @@ internal class HomeAssistantViewModel(
 
     private fun loaded(stored: HaConnection?, tokenPresent: Boolean): HomeAssistantState = withGrants(
         if (stored == null) {
-            HomeAssistantState(loaded = true)
+            HomeAssistantState(loaded = true, publishing = seen)
         } else {
             HomeAssistantState(
                 loaded = true,
@@ -438,6 +533,7 @@ internal class HomeAssistantViewModel(
                 homeWifi = stored.homeNetworkSsid,
                 backgroundChecks = stored.backgroundChecks,
                 stored = stored,
+                publishing = seen,
             )
         },
     )

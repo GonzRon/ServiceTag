@@ -126,16 +126,16 @@ class InsetsContractTest {
     }
 
     /**
-     * K4 (F-5): the bottom sheets keep Material 3 1.4.0's own keyboard handling. Fourteen `ModalBottomSheet(` calls
-     * in eleven files, a sheet after `->` included; none passes `contentWindowInsets`, read inside the call's own
+     * K4 (F-5): the bottom sheets keep Material 3 1.4.0's own keyboard handling. Fifteen `ModalBottomSheet(` calls
+     * in twelve files, a sheet after `->` included; none passes `contentWindowInsets`, read inside the call's own
      * argument list (so a `Scaffold`'s argument in the same file is not the sheet's); every input sheet opens fully
      * expanded.
      */
     @Test fun theBottomSheetsKeepMaterialsInsets() {
         val calls = mainSources().flatMap { file -> file.calls(SHEET).map { file to it } }
-        assertEquals("`ModalBottomSheet(` calls in app/src/main/kotlin", 14, calls.size)
+        assertEquals("`ModalBottomSheet(` calls in app/src/main/kotlin", 15, calls.size)
         val sheetFiles = calls.map { (file, _) -> file.path }.toSet()
-        assertEquals("files with a `ModalBottomSheet(`", 11, sheetFiles.size)
+        assertEquals("files with a `ModalBottomSheet(`", 12, sheetFiles.size)
         assertEquals(
             "the sheet files are group E and the three without typed input; classify a new sheet here",
             (GROUP_E + SHEETS_WITHOUT_INPUT).sorted(),
@@ -357,6 +357,7 @@ class InsetsContractTest {
 
         /** Group E (§4.5): the files whose bottom sheets take typed input. */
         val GROUP_E = setOf(
+            "ui/asset/LinkPublishSheet.kt",
             "ui/asset/LinkSeasonSyncSheet.kt",
             "ui/attachments/AttachmentEditSheet.kt",
             "ui/condition/ChangeConditionSheet.kt",

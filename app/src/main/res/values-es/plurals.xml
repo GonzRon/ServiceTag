@@ -13,4 +13,9 @@
         <item quantity="one">Dentro del período de gracia de %1$d día</item>
         <item quantity="other">Dentro del período de gracia de %1$d días</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="one">%1$d ayudante de fecha de Home Assistant aún tiene una fecha de inicio de temporada. Al desconectar, primero se establece en %2$s si es posible; si no, conserva su fecha hasta que lo borres en Home Assistant.</item>
+        <item quantity="many">%1$d ayudantes de fecha de Home Assistant aún tienen una fecha de inicio de temporada. Al desconectar, primero se establecen en %2$s donde es posible; los que no se puedan alcanzar conservan su fecha hasta que los borres en Home Assistant.</item>
+        <item quantity="other">%1$d ayudantes de fecha de Home Assistant aún tienen una fecha de inicio de temporada. Al desconectar, primero se establecen en %2$s donde es posible; los que no se puedan alcanzar conservan su fecha hasta que los borres en Home Assistant.</item>
+    </plurals>
 </resources>
