@@ -23,6 +23,7 @@ from servicetag_mcp import server as server_module
 from conftest import schedule_row
 
 README = Path(__file__).resolve().parent.parent / "README.md"
+V1 = Path(__file__).resolve().parents[3] / "docs" / "api" / "v1.md"
 
 STATUS_22: dict = {
     "appVersion": "1.9.0", "apiVersion": 1, "schemaVersion": 22, "backupFormatVersion": 21, "counts": {},
@@ -168,6 +169,38 @@ def test_the_docstring_names_the_route_its_keys_reasons_and_sources() -> None:
     lowered = doc.lower()
     for word in NEVER_SAID:
         assert word not in lowered, word
+
+
+def section(text: str, heading: str) -> str:
+    """The Markdown section under [heading], up to the next heading of the same or a higher level."""
+    lines = text.splitlines()
+    start = lines.index(heading)
+    level = len(heading) - len(heading.lstrip("#"))
+    end = next(
+        (i for i in range(start + 1, len(lines))
+         if lines[i].startswith("#") and len(lines[i]) - len(lines[i].lstrip("#")) <= level),
+        len(lines),
+    )
+    return "\n".join(lines[start:end])
+
+
+def paragraph(text: str, opening: str) -> str:
+    """The paragraph of [text] that starts with [opening], up to the next blank line."""
+    start = text.index(opening)
+    end = text.find("\n\n", start)
+    return text[start:] if end < 0 else text[start:end]
+
+
+def test_the_never_said_words_stay_out_of_the_docs_too() -> None:
+    """C1's word rule, pinned where ServiceTag publishes it as well as on the tool: v1.md's readiness section and the
+    README's entry for the tool."""
+    v1 = section(V1.read_text(encoding="utf-8"), "### Season readiness and the Season Start role (#114)")
+    entry = paragraph(README.read_text(encoding="utf-8"), "**Season readiness (#114; needs schema 22)**")
+    for name, text in (("v1.md", v1), ("README", entry)):
+        assert "/v1/assets/{id}/season-readiness" in text, name
+        lowered = flat(text).lower()
+        for word in NEVER_SAID:
+            assert word not in lowered, (name, word)
 
 
 def test_the_readme_lists_the_tool_and_its_gate() -> None:

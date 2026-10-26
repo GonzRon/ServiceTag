@@ -4402,7 +4402,7 @@ def get_season_readiness(asset_id: str) -> dict[str, Any]:
     schedule has a qualifying completion **of this asset** dated on or after `cutoffOn`, the later of the role's
     commissioning boundary and the day the asset's season last ended. Qualifying: not `detailsPending`, not
     `imported` (a Transfer Pack brought it), dated from `cutoffOn` to today and written on or after the day it names.
-    It reports whether the service was recorded, nothing more; whether equipment may start is never decided here.
+    It reports whether the service was recorded, nothing more; when equipment starts is never decided here.
 
     `assetId` is the path's id; `readyForSeason` and `seasonServiceDoneOn` (`YYYY-MM-DD`, the latest qualifying day,
     `null` unless ready);
