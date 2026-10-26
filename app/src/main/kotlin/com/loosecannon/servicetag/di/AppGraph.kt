@@ -273,7 +273,12 @@ import com.loosecannon.servicetag.seasonsync.WorkManagerSeasonSync
 import com.loosecannon.servicetag.seasonsync.storedHaConnection
 import com.loosecannon.servicetag.hapublish.BoundaryCacheWriter
 import com.loosecannon.servicetag.hapublish.ClientTransport
-import com.loosecannon.servicetag.hapublish.DesiredStateReconciler
+import com.loosecannon.servicetag.hapublish.DeliveryRequester
+import com.loosecannon.servicetag.hapublish.InProcessDeliveryRequester
+import com.loosecannon.servicetag.hapublish.MidnightTick
+import com.loosecannon.servicetag.hapublish.PublishInputs
+import com.loosecannon.servicetag.hapublish.PublishProjector
+import com.loosecannon.servicetag.hapublish.PublishTriggers
 import com.loosecannon.servicetag.hapublish.HomeAssistantPublishClient
 import com.loosecannon.servicetag.hapublish.PublishRunner
 import com.loosecannon.servicetag.hapublish.storedPublishConnection
@@ -930,7 +935,11 @@ class AppGraph(private val context: Context) {
         seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateClient, recordSeasonSyncResult,
         seasonSyncWork, seasonSyncBackgroundAllowed, appScope, clock,
     )
-    val resumeRefresh: ResumeRefresh = ResumeRefresh { seasonSyncRunner.launchRefreshIfStale() }
+    val resumeRefresh: ResumeRefresh = ResumeRefresh {
+        seasonSyncRunner.launchRefreshIfStale()
+        // #113/#114 (C31, F-3): the publish reconcile, launched on its own scope and rate-limited inside.
+        publishTriggers.onResume()
+    }
     val linkSeasonSync: LinkSeasonSync = LinkSeasonSync(
         assets, seasonActivations, transferRecords, seasonSyncBindings, haConnections, secretStore, setSeasonMode,
         seasonSyncRunner, uow, clock, today, outboundTargets,
@@ -966,10 +975,16 @@ class AppGraph(private val context: Context) {
     val dismissDecommission: DismissDecommission = DismissDecommission(publishDecommissions, uow)
 
     /**
-     * #113/#114 (C22, C30) — the outbound client, at the stored connection and under #16's gate, and the one runner
-     * that drives every delivery through it: one lock, so one request at a time. The projector edge answers "nothing
-     * changed" until `PublishProjector` (B4b1) takes its place.
+     * #113/#114 (C22, C30, C31) — the outbound client, at the stored connection and under #16's gate, and the one
+     * runner that drives every delivery through it: one lock, so one request at a time. Its projector edge is
+     * [publishProjector]: one write per projection, no HTTP inside. [publishTriggers] are its other callers — the start
+     * pass (`ServiceTagApp`), the resume pass ([resumeRefresh]), the observer of [publishInputs] and the midnight tick
+     * — on [appScope]; a projection that leaves delivery work asks [deliveryRequester] (in-process until B4b2).
      */
+    val publishProjector: PublishProjector = PublishProjector(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
+        transferRecords, conditions, schedules, groups, events, seasonActivations, uow, ids, clock,
+    ) { ZoneId.systemDefault() }
     val haPublishClient: HomeAssistantPublishClient = HomeAssistantPublishClient(
         settings = storedPublishConnection(haConnections),
         networkPermissionGranted = networkPermissionGranted,
@@ -979,8 +994,17 @@ class AppGraph(private val context: Context) {
     val publishRunner: PublishRunner = PublishRunner(
         publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, secretStore, assets,
         transferRecords, seasonActivations, installationIdentity::id, ClientTransport(haPublishClient),
-        BoundaryCacheWriter(db.haPublishDeliveryDao()::recordBoundary), DesiredStateReconciler { false }, uow, clock,
-        today,
+        BoundaryCacheWriter(db.haPublishDeliveryDao()::recordBoundary), publishProjector, uow, clock, today,
+    )
+    val deliveryRequester: DeliveryRequester = InProcessDeliveryRequester(appScope) { publishRunner.drain() }
+    val publishInputs: PublishInputs = PublishInputs(
+        conditions, assets, schedules, groups, transferRecords, events, seasonActivations,
+        db.haPublishBindingDao().observeControls(), seasonSyncBindings, haConnections,
+        db.haPublishDecommissionDao().observeObligations(),
+    )
+    val publishTriggers: PublishTriggers = PublishTriggers(
+        publishProjector, publishProjector::deliveryWorkPending, publishRunner, publishInputs, deliveryRequester, today,
+        appScope, { System.nanoTime() / 1_000_000 }, MidnightTick(clock, { ZoneId.systemDefault() }),
     )
 
     // 1.4 — condition and health configuration (master plan §9, §10.1). A condition write inserts one
@@ -1206,6 +1230,8 @@ class AppGraph(private val context: Context) {
     val completionFlow: CompletionFlow = CompletionFlow(
         schedules, definitions, completeSchedule, completeGroupMembers, today,
         eventOffers,
+        // #114 (C33): the asset's name for a Season Start service's prompt line (P114-14).
+        assetNames = { assets.get(it)?.name },
     )
 
     /**

@@ -11,6 +11,9 @@ import java.time.LocalDate
  * [today] in one write, with no HTTP inside, and answer whether anything changed. The runner calls it after a valid
  * boundary read (C9a) and before a date kind's send that waits for a projection (C17's `Skip(PENDING, reproject)`);
  * `PublishProjector` implements it (B4b1).
+ *
+ * The runner calls it while holding its own lock, which is not re-entrant: an implementation never calls the
+ * runner's `drain`, `publishNow` or `validate`, nor `DeliveryRequester.requestDelivery`, from inside it.
  */
 fun interface DesiredStateReconciler {
     suspend fun reconcileDesired(today: LocalDate): Boolean

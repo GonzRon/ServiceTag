@@ -90,6 +90,9 @@ class ServiceTagApp : Application() {
                 Log.w("ServiceTagApp", it)
             }
         }
+        // #113/#114 (C31, F-3): the publish start pass — the projection, then every enabled helper read back — and,
+        // for the life of the process, the projector's observer and the midnight tick; each guarded inside.
+        graph.publishTriggers.start()
         graph.appScope.launch {
             // Guarded, because `appScope` carries no exception handler: an unguarded throw from a
             // Room read or WorkManager's future would reach the thread's uncaught handler and take

@@ -402,6 +402,11 @@ class PublishRunnerTest {
 internal class PublishRig(val graph: FakeGraph = FakeGraph()) {
     val heater = AssetId("asset-example-heater")
 
+    init {
+        // The runner's rows seed each desired value by hand, so the projector edge is scripted, not the real one.
+        graph.desiredStateReconciler.answer = { false }
+    }
+
     /** Runs [block] with this rig as its receiver, bounded so a lock or transaction held by mistake fails, not hangs. */
     fun run(block: suspend PublishRig.() -> Unit) = runBlocking<Unit> {
         withTimeout(20_000) { block() }

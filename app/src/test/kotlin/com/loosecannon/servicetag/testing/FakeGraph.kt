@@ -221,6 +221,12 @@ import com.loosecannon.servicetag.hapublish.CallOutcome
 import com.loosecannon.servicetag.hapublish.DesiredStateReconciler
 import com.loosecannon.servicetag.hapublish.HaPublishTransport
 import com.loosecannon.servicetag.hapublish.PublishRunner
+import com.loosecannon.servicetag.hapublish.DeliveryRequester
+import com.loosecannon.servicetag.hapublish.InProcessDeliveryRequester
+import com.loosecannon.servicetag.hapublish.MidnightTick
+import com.loosecannon.servicetag.hapublish.PublishInputs
+import com.loosecannon.servicetag.hapublish.PublishProjector
+import com.loosecannon.servicetag.hapublish.PublishTriggers
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.seasonsync.OutboundTargets
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
@@ -476,7 +482,10 @@ class FakeGraph(
         seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateReader, recordSeasonSyncResult,
         seasonSyncWork, seasonSyncBackgroundAllowed, seasonSyncScope, clock, io = queryContext,
     )
-    val resumeRefresh: ResumeRefresh = ResumeRefresh { seasonSyncRunner.launchRefreshIfStale() }
+    val resumeRefresh: ResumeRefresh = ResumeRefresh {
+        seasonSyncRunner.launchRefreshIfStale()
+        publishTriggers.onResume()
+    }
     val linkSeasonSync: LinkSeasonSync = LinkSeasonSync(
         assets, seasonActivations, transferRecords, seasonSyncBindings, haConnections, secretStore, setSeasonMode,
         seasonSyncRunner, uow, clock, todayPort, outboundTargets,
@@ -512,16 +521,42 @@ class FakeGraph(
     val dismissDecommission: DismissDecommission = DismissDecommission(publishDecommissions, uow)
 
     /**
-     * #113/#114 (C30) — the publish runner as `AppGraph` wires it, over the doubles: Home Assistant is [haPublish]'s
-     * script, and the projector edge is [desiredStateReconciler]'s, which by default changes nothing (B4b1's projector
-     * takes its place). The installation is [installationIdentity]'s.
+     * #113/#114 (C30, C31) — the publish runner, its projector and their triggers as `AppGraph` wires them, over the
+     * doubles: Home Assistant is [haPublish]'s script; the projector edge is [desiredStateReconciler]'s, which records
+     * each call and by default runs [publishProjector] (a test scripts it instead); the installation is
+     * [installationIdentity]'s. The triggers run on [publishScope] (on `queryContext`, cancelled by [close]), count
+     * each delivery request in [deliveryRequests], measure process time by [elapsedMillis] and sleep to midnight
+     * through [midnightSleeps]. Nothing starts until a test calls `publishTriggers.start()` or one of its passes.
      */
     val haPublish: ScriptedHaPublish = ScriptedHaPublish { countingUow.open }
-    val desiredStateReconciler: ScriptedReconciler = ScriptedReconciler()
+    val publishProjector: PublishProjector = PublishProjector(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
+        transferRecords, conditions, schedules, groups, events, seasonActivations, uow, ids, clock,
+    ) { ZoneOffset.UTC }
+    val desiredStateReconciler: ScriptedReconciler = ScriptedReconciler(publishProjector)
     val publishRunner: PublishRunner = PublishRunner(
         publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, secretStore, assets,
         transferRecords, seasonActivations, installationIdentity::id, haPublish,
         BoundaryCacheWriter(db.haPublishDeliveryDao()::recordBoundary), desiredStateReconciler, uow, clock, todayPort,
+    )
+    private val publishJobs = SupervisorJob()
+    val publishScope: CoroutineScope = CoroutineScope(publishJobs + queryContext)
+    val deliveryRequests: java.util.concurrent.atomic.AtomicInteger = java.util.concurrent.atomic.AtomicInteger()
+    private val inProcessRequester = InProcessDeliveryRequester(publishScope) { publishRunner.drain() }
+    val deliveryRequester: DeliveryRequester = DeliveryRequester {
+        deliveryRequests.incrementAndGet()
+        inProcessRequester.requestDelivery()
+    }
+    @Volatile var elapsedMillis: Long = 0L
+    val midnightSleeps: ScriptedSleeper = ScriptedSleeper()
+    val publishInputs: PublishInputs = PublishInputs(
+        conditions, assets, schedules, groups, transferRecords, events, seasonActivations,
+        db.haPublishBindingDao().observeControls(), seasonSyncBindings, haConnections,
+        db.haPublishDecommissionDao().observeObligations(),
+    )
+    val publishTriggers: PublishTriggers = PublishTriggers(
+        desiredStateReconciler, publishProjector::deliveryWorkPending, publishRunner, publishInputs, deliveryRequester,
+        todayPort, publishScope, { elapsedMillis }, MidnightTick(clock, { ZoneOffset.UTC }, midnightSleeps::sleep),
     )
 
     /** 1.4 — condition and health configuration, mirroring `AppGraph`'s six fields by name (master plan §1). */
@@ -782,6 +817,7 @@ class FakeGraph(
     val completionFlow: CompletionFlow = CompletionFlow(
         schedules, definitions, completeSchedule, completeGroupMembers, todayPort,
         eventOffers,
+        assetNames = { assets.get(it)?.name },
     ) { java.time.ZoneOffset.UTC }
 
     /**
@@ -810,6 +846,7 @@ class FakeGraph(
 
     fun close() {
         seasonSyncReads.cancel()
+        publishJobs.cancel()
         db.close()
     }
 
@@ -969,14 +1006,35 @@ class ScriptedHaPublish(private val openTransactions: () -> Int = { 0 }) : HaPub
     }
 }
 
-/** #113/#114 (C30) — the projector edge as a script: each call's day in [days], answered by [answer]. */
-class ScriptedReconciler : DesiredStateReconciler {
+/**
+ * #113/#114 (C30) — the projector edge as a script: each call's day in [days], answered by [answer], which runs the
+ * graph's real projector ([projector]) unless a test replaces it.
+ */
+class ScriptedReconciler(private val projector: DesiredStateReconciler) : DesiredStateReconciler {
     val days: MutableList<java.time.LocalDate> = java.util.Collections.synchronizedList(mutableListOf())
 
-    @Volatile var answer: suspend (java.time.LocalDate) -> Boolean = { false }
+    @Volatile var answer: suspend (java.time.LocalDate) -> Boolean = { projector.reconcileDesired(it) }
 
     override suspend fun reconcileDesired(today: java.time.LocalDate): Boolean {
         days += today
         return answer(today)
+    }
+}
+
+/**
+ * #113/#114 (C31) — the midnight tick's sleep as a script: each requested wait is recorded in [requested], and the
+ * sleeper wakes only when a test calls [wake].
+ */
+class ScriptedSleeper {
+    val requested: MutableList<Long> = java.util.Collections.synchronizedList(mutableListOf())
+    private val wakes = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+
+    suspend fun sleep(millis: Long) {
+        requested += millis
+        wakes.receive()
+    }
+
+    fun wake() {
+        wakes.trySend(Unit)
     }
 }
