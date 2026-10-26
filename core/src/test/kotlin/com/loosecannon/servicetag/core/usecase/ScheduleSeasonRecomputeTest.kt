@@ -68,6 +68,21 @@ class ScheduleSeasonRecomputeTest {
         assertEquals("2026-05-25" to PolicyReason.NONE, asset.actionableDueOn to asset.policyReason, "well before 11-01 less 14")
     }
 
+    /** H1 review M2 (hazard Z5): the break is a PRE_SERVICE schedule's boundary, so the link is written, not refused. */
+    @Test fun aPreServiceScheduleOnAnAssetWithABreakLinksAndCountsBackFromTheBreak() = runTest {
+        h.on("2026-04-15")
+        h.asset(breakStart = "06-01", breakEnd = "08-31")
+        h.connect()
+        h.schedule("s-pre", policy = ServicePolicy.PRE_SERVICE, offset = -14, anchorOn = "2026-05-25")
+
+        h.link.run(ScheduleId("s-pre"), SWITCH)
+
+        assertEquals(SWITCH, h.bindings.rows.getValue("s-pre").entityId, "the binding is stored")
+        assertEquals(ScheduleSeasonSource.OWN, h.stored("s-pre").seasonSource)
+        val state = h.states.rows.getValue("s-pre")
+        assertEquals("2026-05-18" to PolicyReason.BEFORE_BREAK, state.actionableDueOn to state.policyReason)
+    }
+
     @Test fun aPreServiceScheduleOnAnAssetWithNoBreakCannotLink() = runTest {
         h.asset()
         h.connect()

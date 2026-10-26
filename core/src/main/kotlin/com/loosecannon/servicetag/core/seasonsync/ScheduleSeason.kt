@@ -114,7 +114,7 @@ fun isScheduleSeasonEntity(entityId: String): Boolean =
  * **the asset's break** (the break is the equipment's, H-2), and the schedule's own [rows]. So `PRE_SERVICE` counts
  * back only from the break, and an in-service policy waits for a START that is never predicted.
  */
-fun Asset.ownSeasonInputs(rows: List<ScheduleSeasonActivation>): SeasonInputs = SeasonInputs(
+internal fun Asset.ownSeasonInputs(rows: List<ScheduleSeasonActivation>): SeasonInputs = SeasonInputs(
     mode = SeasonMode.MANUAL,
     seasonStartMmdd = null,
     seasonEndMmdd = null,

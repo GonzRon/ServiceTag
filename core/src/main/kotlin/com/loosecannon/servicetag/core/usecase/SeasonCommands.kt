@@ -327,7 +327,8 @@ internal fun Asset.boundaryKindFor(source: ScheduleSeasonSource): BoundaryKind =
  * reach (plan decision 7).
  *
  * #125 (U-C2): each schedule's kinds are read from its **effective** context ([boundaryKindFor]), so an `OWN`
- * schedule is stranded only when the change removes the asset's break; the asset's mode and window are not its boundary.
+ * schedule is stranded only when the change removes the asset's break; the asset's mode and window are not its
+ * boundary.
  */
 internal fun strandedBy(before: Asset, after: Asset, targeting: List<MaintenanceSchedule>): List<StrandedSchedule> =
     targeting

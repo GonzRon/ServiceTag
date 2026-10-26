@@ -55,6 +55,7 @@ import com.loosecannon.servicetag.core.season.seasonReadiness
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleSeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import com.loosecannon.servicetag.core.testing.activationOf
@@ -927,9 +928,15 @@ class ReplaceAssetTest {
     ).copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01")
 
     /** Both schedules ticked, and the season unless [carrySeason] is false; replaced 2026-09-15, five days before today. */
-    private fun bothTicked(r: ReplaceHarness = h, carrySeason: Boolean = true, parent: String? = null, groupIds: Set<String> = emptySet()) =
+    private fun bothTicked(
+        r: ReplaceHarness = h,
+        carrySeason: Boolean = true,
+        parent: String? = null,
+        groupIds: Set<String> = emptySet(),
+        scheduleStartOn: String = "2026-09-15",
+    ) =
         r.draft(
-            carrySeason = carrySeason, parent = parent, scheduleIds = setOf("s-open", "s-after"), scheduleStartOn = "2026-09-15",
+            carrySeason = carrySeason, parent = parent, scheduleIds = setOf("s-open", "s-after"), scheduleStartOn = scheduleStartOn,
             groupIds = groupIds,
         )
 
@@ -943,7 +950,8 @@ class ReplaceAssetTest {
     @Test fun aCopiedRoleScheduleKeepsTheRoleFromTheReplacementDayAndItsDependentIsCovered() = runTest {
         seasonalEstate()
 
-        val successor = h.replaceWith(bothTicked()).successor.id
+        // The schedules start on 09-18, three days after the replacement: the role counts from the replacement date.
+        val successor = h.replaceWith(bothTicked(scheduleStartOn = "2026-09-18")).successor.id
         val (check, opening) = h.copiesFor(successor)
 
         assertEquals(ScheduleRole.SEASON_START, opening.role, "ruling 1: the copy carries the role")
@@ -1093,8 +1101,11 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
     val successions = guard.successions(raw.successions)
     val uow: FakeUnitOfWork get() = raw.uow
 
+    /** #125: the schedule season table, empty: a predecessor's `OWN` schedule reads it on the retirement's rebuild. */
+    val scheduleSeasonRows = InMemoryScheduleSeasonActivationRepository()
     val recompute = RecomputeSchedules(
         schedules, states, events, closures, groups, assets, activations, todayPort, clock,
+        scheduleActivations = scheduleSeasonRows,
     ) { ZoneOffset.UTC }
     val replace = ReplaceAsset(
         assets, schedules, groups, tags, definitions, profiles, loans, raw.transfers, successions,

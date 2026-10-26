@@ -182,8 +182,9 @@ class ReplaceStale(val assetId: AssetId) :
  *   activation all carry the replacement date; one later than today is refused.
  * - **The Season Start role (#124, ruling 1 on N2b).** The copy of a schedule holding the role keeps it, counting from
  *   the replacement date (so a back-dated replacement counts the services done since then), when C10's rule lets the
- *   new asset hold it ([keepsRole]); no service is copied, so the new asset starts not ready. Otherwise the copy has no role, and a ticked schedule counting from the opening service is refused by its
- *   create (`SeasonStartRefused`), never left waiting on a role that is not there.
+ *   new asset hold it ([keepsRole]); no service is copied, so the new asset starts not ready. Otherwise the copy
+ *   has no role, and a ticked schedule counting from the opening service is refused by its create
+ *   (`SeasonStartRefused`), never left waiting on a role that is not there.
  */
 class ReplaceAsset(
     private val assets: AssetRepository,

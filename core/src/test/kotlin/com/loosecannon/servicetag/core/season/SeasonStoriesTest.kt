@@ -271,6 +271,11 @@ class SeasonStoriesTest {
             Triple(weekly.actionableDueOn, weekly.policyPhase, weekly.policyReason),
         )
         assertEquals(ScheduleSeasonSource.ASSET, h.stored("s-weekly").seasonSource, "the asset's other schedules untouched")
+
+        // The in-use season ends 03-31: from 04-01 the weekly checks stop again (H1 review N3).
+        h.on("2027-04-01")
+        h.recompute.forAsset(AssetId("heater"))
+        assertEquals(PolicyPhase.DORMANT, h.state("s-weekly").policyPhase, "weekly checks only in 11-01…03-31")
     }
 
     @Test

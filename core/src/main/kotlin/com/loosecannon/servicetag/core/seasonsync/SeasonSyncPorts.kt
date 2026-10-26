@@ -58,7 +58,11 @@ interface ScheduleSeasonBindingRepository {
     suspend fun anyEnabled(): Boolean
 
     companion object {
-        /** No table: no binding is ever stored. Shipped constructions only (F-6); production passes its own. */
+        /**
+         * No table: no binding is ever stored. Shipped constructions only (F-6); production passes its own. A write —
+         * the insert, or the delete only an `OWN` schedule's unlink or archive reaches — fails loudly, so a missed
+         * wiring is never a silent fallback (H1 review M3).
+         */
         val NONE: ScheduleSeasonBindingRepository = object : ScheduleSeasonBindingRepository {
             override suspend fun get(scheduleId: ScheduleId): ScheduleSeasonBinding? = null
 
@@ -72,7 +76,9 @@ interface ScheduleSeasonBindingRepository {
 
             override suspend fun update(binding: ScheduleSeasonBinding): Boolean = false
 
-            override suspend fun delete(scheduleId: ScheduleId) = Unit
+            override suspend fun delete(scheduleId: ScheduleId) {
+                error("no schedule season binding table in this construction")
+            }
 
             override suspend fun anyEnabled(): Boolean = false
         }
@@ -94,13 +100,18 @@ interface ScheduleSeasonActivationRepository {
     fun observeForSchedule(scheduleId: ScheduleId): Flow<List<ScheduleSeasonActivation>>
 
     companion object {
-        /** No table: every schedule's own history is empty. Shipped constructions only (F-6). */
+        /**
+         * No table. Shipped constructions only (F-6). The insert, and the read only an `OWN` schedule's season reaches
+         * (`RecomputeSchedules.seasonFor`), fail loudly, so a missed wiring never reads an empty own season in silence
+         * (H1 review M3).
+         */
         val NONE: ScheduleSeasonActivationRepository = object : ScheduleSeasonActivationRepository {
             override suspend fun insert(row: ScheduleSeasonActivation) {
                 error("no schedule season activation table in this construction")
             }
 
-            override suspend fun forSchedule(scheduleId: ScheduleId): List<ScheduleSeasonActivation> = emptyList()
+            override suspend fun forSchedule(scheduleId: ScheduleId): List<ScheduleSeasonActivation> =
+                error("no schedule season activation table in this construction")
 
             override suspend fun all(): List<ScheduleSeasonActivation> = emptyList()
 
