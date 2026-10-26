@@ -130,7 +130,20 @@ data class MaintenanceSchedule(
     /** The instant of the last rule change (or the create): the never-terminated pin's floor. */
     val ruleChangedAt: Long,
     val providers: List<ScheduleProviderRow>,
+    /**
+     * #114 (C7): the passive Season Start role. It changes no rule, due date, reminder or policy — the engine,
+     * the recompute and every evaluator ignore it; only readiness (`seasonReadiness`) reads it.
+     */
+    val role: ScheduleRole = ScheduleRole.NONE,
+    /** ISO `YYYY-MM-DD`, the commissioning boundary: non-null exactly when [role] is SEASON_START (R1). */
+    val roleSinceOn: String? = null,
 )
+
+/**
+ * #114 (C7): a schedule's role. `SEASON_START` marks the one schedule whose completion makes its asset ready
+ * for the season; `NONE` is every other schedule.
+ */
+enum class ScheduleRole { NONE, SEASON_START }
 
 /**
  * The D-8 closure fact: one append-only row per round the owner explicitly closed, sparse by

@@ -105,6 +105,23 @@ class SeasonContext private constructor(
         return if (w.contains(d)) w.earliestEndOnOrAfter(d) else null
     }
 
+    /**
+     * #114 (C8): the day the asset's season last ended, on or before [d] — what readiness counts a service from.
+     *
+     * - MANUAL: the `occurredOn` of the latest END dated on or before [d] (an END after an END still counts: the
+     *   later boundary is the conservative one); null when there is none.
+     * - CALENDAR (O-1): the **first out-of-season day** after the latest window end strictly before [d], symmetric
+     *   with MANUAL's "out of season from its own day"; null when the window is missing or malformed.
+     * - YEAR_ROUND: null.
+     *
+     * Activations are still read only in MANUAL (inv. 90): a CALENDAR asset's history never answers.
+     */
+    fun lastSeasonEndOnOrBefore(d: LocalDate): LocalDate? = when (mode) {
+        SeasonMode.YEAR_ROUND -> null
+        SeasonMode.CALENDAR -> window?.latestEndOnOrBefore(d.minusDays(1))?.plusDays(1)
+        SeasonMode.MANUAL -> activations.lastOrNull { it.on <= d && it.action == SeasonAction.END }?.on
+    }
+
     /** Whether [d] lies inside the maintenance break. */
     fun inBreak(d: LocalDate): Boolean = breakWindow?.contains(d) == true
 
