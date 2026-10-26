@@ -2,13 +2,17 @@ package com.loosecannon.servicetag.ui.asset
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.core.hapublish.FIELD_BOUNDARY_ENTITY_ID
 import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.hapublish.PublishRefused
+import com.loosecannon.servicetag.core.hapublish.validateDateTarget
 import com.loosecannon.servicetag.core.hapublish.validateTarget
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.isValidEntityId
 import com.loosecannon.servicetag.core.seasonsync.pickerRows
 import com.loosecannon.servicetag.di.AppGraph
@@ -44,9 +48,20 @@ internal data class LinkPublishState(
     val enabling: Boolean = false,
     val refusal: String? = null,
     val finished: Boolean = false,
+    /**
+     * #114 (C9a, D) — the season-ended helper's field (P114-47) is asked for exactly when the date kind publishes for a
+     * `MANUAL` asset whose season an enabled #16 binding drives; [boundaryEntityId] is its typed id and [boundaryLine]
+     * the refusal under it.
+     */
+    val boundaryAsked: Boolean = false,
+    val boundaryEntityId: String = "",
+    val boundaryLine: String? = null,
 ) {
     /** What Check helper reads and Publish names: the picked id, else the trimmed text. */
     val target: String get() = chosen?.entityId ?: entityId.trim()
+
+    /** The season-ended helper Check helper reads with [target], or null when it is not asked for. */
+    val boundary: String? get() = boundaryEntityId.trim().takeIf { boundaryAsked }
 
     val canCheck: Boolean get() = !checking && !enabling && !finished
 
@@ -65,6 +80,8 @@ internal class LinkPublishViewModel(
     private val assetId: AssetId,
     private val kind: PublishKind,
     private val assets: AssetRepository,
+    /** #16's inbound bindings: whether the asset's season follows Home Assistant (C9a). */
+    private val seasonSync: SeasonSyncRepository,
     private val controls: PublishControls,
     private val validate: suspend (AssetId, PublishKind, String, String?) -> Validation,
     /**
@@ -75,7 +92,8 @@ internal class LinkPublishViewModel(
 ) : ViewModel() {
 
     constructor(graph: AppGraph, assetId: AssetId, kind: PublishKind) : this(
-        assetId, kind, graph.assets, graph.publishControls, graph.publishRunner::validate, graph.listHaEntities,
+        assetId, kind, graph.assets, graph.seasonSyncBindings, graph.publishControls, graph.publishRunner::validate,
+        graph.listHaEntities,
     )
 
     private val words: PublishKindWords? = publishWordsOf(kind)
@@ -90,6 +108,27 @@ internal class LinkPublishViewModel(
     fun onEntityId(text: String) {
         validated = null
         _state.update { it.copy(entityId = text, chosen = null).cleared() }
+    }
+
+    init {
+        // C9a, D: whether this sheet asks for the season-ended helper, read once when it opens.
+        viewModelScope.launch {
+            val asked = try {
+                boundaryAsked(kind, assets.get(assetId)?.seasonMode, seasonSync.get(assetId)?.enabled == true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A store failed: the field stays hidden, and Enable's own refusal (P113-29) says so if it is needed.
+                false
+            }
+            _state.update { it.copy(boundaryAsked = asked) }
+        }
+    }
+
+    /** P114-47: a typed season-ended helper; like the helper itself, any change drops the read. */
+    fun onBoundaryEntityId(text: String) {
+        validated = null
+        _state.update { it.copy(boundaryEntityId = text).cleared() }
     }
 
     // --- the browser (#105's, scoped to the kind's domain) ------------------------------------------------------------
@@ -180,27 +219,46 @@ internal class LinkPublishViewModel(
 
     // --- the fresh read, the confirm, Publish --------------------------------------------------------------------------
 
-    /** Check helper (P113-25): P113-29 for nothing or a malformed id; else the fresh read and its answer. */
+    /**
+     * Check helper (P113-25): P113-29 for nothing or a malformed id, under the helper's field or the season-ended
+     * helper's; P114-48 for a season-ended helper that is the helper itself; else the fresh read of both and its answer,
+     * each sentence naming the helper it is about.
+     */
     fun check() {
         val asked = _state.value
         val words = words ?: return
         if (!asked.canCheck) return
         val target = asked.target
+        val boundary = asked.boundary
         validated = null
         if (target.isEmpty() || !isValidEntityId(target)) {
             _state.update { it.cleared().copy(entityLine = HA_PUBLISH_CHOOSE_HELPER_FIRST) }
             return
         }
+        if (boundary != null && (boundary.isEmpty() || !isValidEntityId(boundary))) {
+            _state.update { it.cleared().copy(boundaryLine = HA_PUBLISH_CHOOSE_HELPER_FIRST) }
+            return
+        }
+        if (boundary == target) {
+            _state.update { it.cleared().copy(boundaryLine = words.boundaryIsTarget(boundary)) }
+            return
+        }
         _state.update { it.cleared().copy(checking = true) }
         viewModelScope.launch {
             val next = try {
-                when (val read = validate(assetId, kind, target, null)) {
+                when (val read = validate(assetId, kind, target, boundary)) {
                     Validation.NoConnection -> Answer(listOf(HA_NOT_CONNECTED))
-                    is Validation.ReadFailed -> Answer(publishErrorLines(read.kind, read.detail, target, words))
+                    is Validation.ReadFailed -> {
+                        val named = if (read.field == FIELD_BOUNDARY_ENTITY_ID) boundary.orEmpty() else target
+                        Answer(publishErrorLines(read.kind, read.detail, named, words))
+                    }
                     is Validation.Validated -> {
                         val shape = validateTarget(kind, target, read.target.remote)
+                        val boundaryShape = read.boundary?.let { validateDateTarget(it.target, it.remote) }
                         if (shape != null) {
                             Answer(publishErrorLines(shape, null, target, words))
+                        } else if (boundaryShape != null) {
+                            Answer(publishErrorLines(boundaryShape, null, boundary.orEmpty(), words))
                         } else {
                             validated = read
                             val name = assets.get(assetId)?.name.orEmpty()
@@ -215,8 +273,12 @@ internal class LinkPublishViewModel(
                 Answer()
             }
             _state.update {
-                // The helper changed while the read ran: its answer is for another helper.
-                if (it.target != target) it.copy(checking = false) else it.copy(checking = false, answer = next.lines, confirm = next.confirm)
+                // A helper changed while the read ran: its answer is for another pair.
+                if (it.target != target || it.boundary != boundary) {
+                    it.copy(checking = false)
+                } else {
+                    it.copy(checking = false, answer = next.lines, confirm = next.confirm)
+                }
             }
         }
     }
@@ -226,7 +288,7 @@ internal class LinkPublishViewModel(
         val asked = _state.value
         val words = words ?: return
         val held = validated ?: return
-        if (!asked.canPublish || held.target.target != asked.target) return
+        if (!asked.canPublish || held.target.target != asked.target || held.boundary?.target != asked.boundary) return
         _state.update { it.copy(enabling = true, refusal = null) }
         viewModelScope.launch {
             val outcome = try {
@@ -235,7 +297,8 @@ internal class LinkPublishViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: PublishRefused) {
-                Enabled.Refused(publishRefusalLine(e.reason, asked.target, assets.get(assetId)?.name.orEmpty(), words))
+                val named = if (e.field == FIELD_BOUNDARY_ENTITY_ID) asked.boundary.orEmpty() else asked.target
+                Enabled.Refused(publishRefusalLine(e.reason, named, assets.get(assetId)?.name.orEmpty(), words))
             } catch (e: Exception) {
                 // A store failed: nothing was written and no sentence is ratified for it; the sheet stays as it was.
                 Enabled.Failed
@@ -265,5 +328,18 @@ internal class LinkPublishViewModel(
 
     /** A changed helper: no answer, confirm or refusal stands. */
     private fun LinkPublishState.cleared(): LinkPublishState =
-        copy(entityLine = null, answer = emptyList(), confirm = null, refusal = null)
+        copy(entityLine = null, boundaryLine = null, answer = emptyList(), confirm = null, refusal = null)
+}
+
+/**
+ * C9a, D — EnablePublishing's own rule (`boundaryOf`): the season-ended helper is asked for exactly when the date kind
+ * publishes for a `MANUAL` asset whose season an enabled #16 binding drives ([mode] null: the asset is gone). Seasonality
+ * is the asset's own setting (G22): nothing here reads a name or a type.
+ */
+internal fun boundaryAsked(kind: PublishKind, mode: SeasonMode?, inboundEnabled: Boolean): Boolean = when (kind) {
+    PublishKind.EQUIPMENT_STATUS -> false
+    PublishKind.SEASON_SERVICE_DATE -> when (mode) {
+        null, SeasonMode.YEAR_ROUND, SeasonMode.CALENDAR -> false
+        SeasonMode.MANUAL -> inboundEnabled
+    }
 }

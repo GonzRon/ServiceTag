@@ -27,8 +27,8 @@ import com.loosecannon.servicetag.ui.homeassistant.remedyFor
 // #113 (C36, §5) — the publishing blocks' and the setup sheet's sentences, P113-1…32 and P113-44, RATIFIED 2026-10-26,
 // each declared once here and read when drawn; the English is in res/values/strings_ha_publishing.xml under each id.
 // The #16 transport sentences (C23) are HomeAssistantStrings.kt's, imported and never copied; the Home Assistant
-// screen's P113-40/41 live there too. The date kind's own words (P114-30…39, P114-47/48) are B6b's, behind
-// [publishWordsOf].
+// screen's P113-40/41 live there too. The date kind's own words (P114-30…39, P114-47/48) are PublishDateStrings.kt's,
+// behind [publishWordsOf].
 
 /** P113-1 — the status block's title and its switch's label. */
 internal val HA_PUBLISH_STATUS_TITLE: String get() = localized(R.string.ha_publish_status_title)
@@ -202,12 +202,12 @@ internal object StatusWords : PublishKindWords {
 }
 
 /**
- * C36 — [kind]'s words, or null while that kind's block and sheet are not drawn: the date kind's (P114-30…35, 39, 48)
- * are B6b's `PublishDateStrings.kt`, which takes this arm.
+ * C36 — [kind]'s words: the status kind's here, the date kind's (P114-30…35, 39, 48) in `PublishDateStrings.kt`.
+ * Nullable so a kind can be withheld from the phone without touching its callers.
  */
 internal fun publishWordsOf(kind: PublishKind): PublishKindWords? = when (kind) {
     PublishKind.EQUIPMENT_STATUS -> StatusWords
-    PublishKind.SEASON_SERVICE_DATE -> null
+    PublishKind.SEASON_SERVICE_DATE -> DateWords
 }
 
 /**

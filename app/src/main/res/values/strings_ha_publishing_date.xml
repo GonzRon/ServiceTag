@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #114: publishing the Season Start date to Home Assistant — English source. Comments carry the ratification ids
+  (P114-xx, the plan's §5, RATIFIED 2026-10-26) and what each string and placeholder is for. Entity ids and asset names
+  are passed in exactly as Home Assistant and the owner have them. The invalid date ServiceTag publishes is passed in
+  too, from the one constant INVALID_SERVICE_DATE (always 1970-01-01), so the English reads verbatim.
+-->
+<resources>
+
+    <!-- ===================================================== the Season Start date block and its sheet (C36) -->
+
+    <!-- P114-30: the block's title on asset detail and its switch's label. -->
+    <string name="ha_publish_date_title">Publish Season Start date to Home Assistant</string>
+    <!-- P114-31: the browser's scope line for the date kind; input_datetime is Home Assistant's own domain name. -->
+    <string name="ha_publish_scope_datetimes">Date helpers (input_datetime)</string>
+    <!-- P114-32: NOT_DATE_ONLY, the helper's shape. %s: the exact entity id. -->
+    <string name="ha_publish_date_not_date_only">%s must be a date helper with a date and no time.</string>
+    <!-- P114-33: the enable confirm. %1$s: the asset's name (twice); %2$s: the exact entity id; %3$s: the invalid date,
+         always 1970-01-01. -->
+    <string name="ha_publish_date_confirm">Publish %1$s\'s Season Start date to %2$s? While %1$s is ready for the season, ServiceTag sets the service date; otherwise it sets %3$s, which means not ready. Home Assistant automations should read it and never set it.</string>
+    <!-- P114-34: WRONG_DOMAIN for the date kind. %s: the exact entity id. -->
+    <string name="ha_publish_date_not_a_date_helper">%s is not a date helper (input_datetime).</string>
+    <!-- P114-35: the stop confirm for the date kind. %1$s: the exact entity id; %2$s: the invalid date, 1970-01-01. -->
+    <string name="ha_publish_stop_date_confirm">Stop publishing to %1$s? ServiceTag first sets it to %2$s, so Home Assistant stops treating the old date as a service.</string>
+    <!-- P114-36: a PENDING obligation, or an enabled date binding whose 1970-01-01 is not yet read back (C34, F-16).
+         %1$s: the exact entity id; %2$s: the invalid date, 1970-01-01. -->
+    <string name="ha_publish_date_not_yet_cleared">Not yet cleared in Home Assistant: %1$s may still allow starts. ServiceTag keeps trying; if this phone cannot reach Home Assistant, set it to %2$s there.</string>
+    <!-- P114-37: an UNDELIVERABLE obligation, or an enabled date binding whose error needs the owner (C34, F-16).
+         %1$s: the exact entity id; %2$s: the invalid date, 1970-01-01. -->
+    <string name="ha_publish_date_cannot_reach">ServiceTag can no longer reach %1$s. It may still allow starts: set it to %2$s in Home Assistant.</string>
+    <!-- P114-38: the owner's acknowledgement of an UNDELIVERABLE obligation (DismissDecommission). -->
+    <string name="ha_publish_date_cleared_by_hand">I cleared it in Home Assistant</string>
+    <!-- P114-39: INVALIDATED_INELIGIBLE. %1$s: the exact entity id; %2$s: the invalid date, 1970-01-01. -->
+    <string name="ha_publish_date_cleared">Cleared in Home Assistant: %1$s is %2$s. Nothing more is sent while the asset is archived, retired or transferred out.</string>
+    <!-- P114-47: the sheet's season-ended helper field (C9a), only for a manual season Home Assistant drives. -->
+    <string name="ha_publish_boundary_field">Season-ended helper (the date Home Assistant records when the season ends)</string>
+    <!-- P114-48: PublishRefusal.BOUNDARY_IS_TARGET. %s: the season-ended helper as entered. -->
+    <string name="ha_publish_boundary_is_target">%s is the helper ServiceTag sets. Choose the date helper Home Assistant stamps when the season ends.</string>
+
+</resources>

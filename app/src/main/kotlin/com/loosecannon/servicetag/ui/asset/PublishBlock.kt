@@ -24,8 +24,8 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 /**
  * #113/#114 (C36) — one publishing block on asset detail, the frame for both kinds: the title and its switch (on: the
  * setup sheet, [onSetUp]; off: the stop confirm), the destination, the mapping, the state's line, the published and
- * verified lines apart, the current error as a fault or a fact, the delivery limit line, and Publish now, Check helper
- * and Stop publishing. Everything it says is [PublishBlockViewModel]'s state; nothing is drawn while
+ * verified lines apart, the current error as a fault or a fact, the date kind's own lines ([PublishDateLines]), the
+ * delivery limit line, and Publish now, Check helper and Stop publishing. Everything it says is [PublishBlockViewModel]'s state; nothing is drawn while
  * [PublishBlockState.drawn] is false.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -58,6 +58,8 @@ internal fun PublishBlock(model: PublishBlockViewModel, state: PublishBlockState
         }
         state.factLines.forEach { QuietLine(it) }
         state.faultLines.forEach { RefusalLine(it) }
+        // #114: the date kind's "may still allow starts" line and its obligations (P114-36…38).
+        PublishDateLines(model, state)
         state.limitLine?.let { QuietLine(it) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.offersPublishNow) {

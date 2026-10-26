@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">Publicar a data de início da temporada no Home Assistant</string>
+    <string name="ha_publish_scope_datetimes">Auxiliares de data (input_datetime)</string>
+    <string name="ha_publish_date_not_date_only">%s precisa ser um auxiliar de data com data e sem hora.</string>
+    <string name="ha_publish_date_confirm">Publicar a data de início da temporada de %1$s em %2$s? Enquanto %1$s estiver pronto para a temporada, o ServiceTag define a data da manutenção; caso contrário, define %3$s, que significa não pronto. As automações do Home Assistant devem lê-lo e nunca defini-lo.</string>
+    <string name="ha_publish_date_not_a_date_helper">%s não é um auxiliar de data (input_datetime).</string>
+    <string name="ha_publish_stop_date_confirm">Parar de publicar em %1$s? O ServiceTag primeiro o define como %2$s, para que o Home Assistant deixe de tratar a data antiga como uma manutenção.</string>
+    <string name="ha_publish_date_not_yet_cleared">Ainda não limpo no Home Assistant: %1$s ainda pode permitir acionamentos. O ServiceTag continua tentando; se este telefone não conseguir acessar o Home Assistant, defina-o como %2$s lá.</string>
+    <string name="ha_publish_date_cannot_reach">O ServiceTag não consegue mais acessar %1$s. Ele ainda pode permitir acionamentos: defina-o como %2$s no Home Assistant.</string>
+    <string name="ha_publish_date_cleared_by_hand">Eu o limpei no Home Assistant</string>
+    <string name="ha_publish_date_cleared">Limpo no Home Assistant: %1$s está em %2$s. Nada mais é enviado enquanto o equipamento estiver arquivado, desativado ou transferido.</string>
+    <string name="ha_publish_boundary_field">Auxiliar de fim da temporada (a data que o Home Assistant registra quando a temporada termina)</string>
+    <string name="ha_publish_boundary_is_target">%s é o auxiliar que o ServiceTag define. Escolha o auxiliar de data em que o Home Assistant registra o fim da temporada.</string>
+</resources>

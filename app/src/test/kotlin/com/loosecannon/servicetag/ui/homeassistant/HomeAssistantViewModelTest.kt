@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.seasonsync.UnconfirmedCause
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.ui.asset.PublishTombstoneLine
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -780,11 +781,16 @@ class HomeAssistantViewModelTest {
     private suspend fun enableDate(connection: HaConnection) =
         enable(connection, PublishKind.SEASON_SERVICE_DATE, DATE, RemoteEntity(DATE, "2025-11-15", null, true, false))
 
-    private suspend fun tombstone(connection: HaConnection, id: String, entityId: String, assetId: String) = graph.uow.write {
+    private suspend fun tombstone(
+        connection: HaConnection,
+        id: String,
+        entityId: String,
+        assetId: String,
+        state: DecommissionState = DecommissionState.PENDING,
+    ) = graph.uow.write {
         graph.publishDecommissions.upsertMerging(
             DecommissionTombstone(
-                id, connection.id, entityId, AssetId(assetId), graph.installationIdentity.id(), DecommissionState.PENDING,
-                graph.now, null, null, 1,
+                id, connection.id, entityId, AssetId(assetId), graph.installationIdentity.id(), state, graph.now, null, null, 1,
             ),
         )
     }
@@ -883,8 +889,50 @@ class HomeAssistantViewModelTest {
         tombstone(connection, "decommission-1", "input_datetime.example_gone_service_done", "example-gone")
         tombstone(connection, "decommission-2", DATE, HEATER.value)
         val screen = open()
-        // The heater's own obligation is drawn on its page; only the one whose asset is gone is listed here.
-        assertEquals(listOf("input_datetime.example_gone_service_done"), screen.state.publishing.orphanTombstones)
+        // The heater's own obligation is drawn on its page; only the one whose asset is gone is listed here, in its
+        // sentence (B6b: P114-36 while ServiceTag still tries, so nothing to acknowledge yet).
+        assertEquals(
+            listOf(
+                PublishTombstoneLine(
+                    "decommission-1",
+                    "Not yet cleared in Home Assistant: input_datetime.example_gone_service_done may still allow starts. " +
+                        "ServiceTag keeps trying; if this phone cannot reach Home Assistant, set it to 1970-01-01 there.",
+                    dismissible = false,
+                ),
+            ),
+            screen.state.publishing.orphanTombstones,
+        )
+    }
+
+    @Test fun anOrphanThatCannotBeReachedIsLetGoOnlyByTheOwnersWord() = runTest {
+        val connection = connected()
+        tombstone(connection, "decommission-1", "input_datetime.example_gone_service_done", "example-gone", DecommissionState.UNDELIVERABLE)
+        tombstone(connection, "decommission-2", "input_datetime.example_lost_service_done", "example-lost")
+        val screen = open()
+        assertEquals(
+            PublishTombstoneLine(
+                "decommission-1",
+                "ServiceTag can no longer reach input_datetime.example_gone_service_done. It may still allow starts: " +
+                    "set it to 1970-01-01 in Home Assistant.",
+                dismissible = true,
+            ),
+            screen.state.publishing.orphanTombstones.first(),
+        )
+        assertNotNull("nothing lets it go but the owner", graph.publishDecommissions.get("decommission-1"))
+
+        // A PENDING one (a race: P114-38 is never drawn on it) or one already gone: refused, re-read, no sentence.
+        screen.model.dismissTombstone("decommission-2")
+        screen.model.dismissTombstone("decommission-9")
+        advanceUntilIdle()
+        assertNotNull(graph.publishDecommissions.get("decommission-2"))
+        assertEquals(emptyList<Notice>(), screen.state.notices)
+        assertEquals(listOf("decommission-1", "decommission-2"), screen.state.publishing.orphanTombstones.map { it.id })
+
+        // P114-38: the owner's explicit acknowledgement, through the controls.
+        screen.model.dismissTombstone("decommission-1")
+        advanceUntilIdle()
+        assertNull(graph.publishDecommissions.get("decommission-1"))
+        assertFalse("decommission-1" in screen.state.publishing.orphanTombstones.map { it.id })
     }
 
     private fun failed(kind: SyncErrorKind, detail: String? = null) = ConnectionTestOutcome.Failed(kind, detail)

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">将使用季开始日期发布到 Home Assistant</string>
+    <string name="ha_publish_scope_datetimes">日期辅助元素（input_datetime）</string>
+    <string name="ha_publish_date_not_date_only">%s 必须是有日期、无时间的日期辅助元素。</string>
+    <string name="ha_publish_date_confirm">要将 %1$s 的使用季开始日期发布到 %2$s 吗？当 %1$s 已为使用季做好准备时，ServiceTag 设置保养日期；否则设置 %3$s，表示未就绪。Home Assistant 自动化应读取它，绝不要设置它。</string>
+    <string name="ha_publish_date_not_a_date_helper">%s 不是日期辅助元素（input_datetime）。</string>
+    <string name="ha_publish_stop_date_confirm">要停止发布到 %1$s 吗？ServiceTag 会先将其设为 %2$s，使 Home Assistant 不再把旧日期当作一次保养。</string>
+    <string name="ha_publish_date_not_yet_cleared">尚未在 Home Assistant 中清除：%1$s 可能仍允许启动。ServiceTag 会继续尝试；如果此手机无法连接 Home Assistant，请在那里将其设为 %2$s。</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTag 无法再连接 %1$s。它可能仍允许启动：请在 Home Assistant 中将其设为 %2$s。</string>
+    <string name="ha_publish_date_cleared_by_hand">我已在 Home Assistant 中清除</string>
+    <string name="ha_publish_date_cleared">已在 Home Assistant 中清除：%1$s 为 %2$s。在该设备已归档、已退役或已转出期间，不再发送任何内容。</string>
+    <string name="ha_publish_boundary_field">使用季结束辅助元素（使用季结束时 Home Assistant 记录的日期）</string>
+    <string name="ha_publish_boundary_is_target">%s 是 ServiceTag 设置的辅助元素。请选择 Home Assistant 在使用季结束时记录日期的日期辅助元素。</string>
+</resources>

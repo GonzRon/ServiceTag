@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Italian translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">Pubblica la data di inizio stagione in Home Assistant</string>
+    <string name="ha_publish_scope_datetimes">Aiutanti data (input_datetime)</string>
+    <string name="ha_publish_date_not_date_only">%s deve essere un aiutante data con la data e senza ora.</string>
+    <string name="ha_publish_date_confirm">Pubblicare la data di inizio stagione di %1$s in %2$s? Finché %1$s è pronta per la stagione, ServiceTag imposta la data della manutenzione; altrimenti imposta %3$s, che significa non pronta. Le automazioni di Home Assistant devono leggerlo e non impostarlo mai.</string>
+    <string name="ha_publish_date_not_a_date_helper">%s non è un aiutante data (input_datetime).</string>
+    <string name="ha_publish_stop_date_confirm">Interrompere la pubblicazione su %1$s? ServiceTag lo imposta prima su %2$s, così Home Assistant smette di considerare la vecchia data come una manutenzione.</string>
+    <string name="ha_publish_date_not_yet_cleared">Non ancora cancellato in Home Assistant: %1$s può ancora consentire avvii. ServiceTag continua a provare; se questo telefono non riesce a raggiungere Home Assistant, impostalo lì su %2$s.</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTag non riesce più a raggiungere %1$s. Può ancora consentire avvii: impostalo su %2$s in Home Assistant.</string>
+    <string name="ha_publish_date_cleared_by_hand">L\'ho cancellato in Home Assistant</string>
+    <string name="ha_publish_date_cleared">Cancellato in Home Assistant: %1$s è %2$s. Non viene inviato altro finché l\'attrezzatura è archiviata, dismessa o trasferita.</string>
+    <string name="ha_publish_boundary_field">Aiutante di fine stagione (la data che Home Assistant registra quando finisce la stagione)</string>
+    <string name="ha_publish_boundary_is_target">%s è l\'aiutante che imposta ServiceTag. Scegli l\'aiutante data in cui Home Assistant registra la fine della stagione.</string>
+</resources>

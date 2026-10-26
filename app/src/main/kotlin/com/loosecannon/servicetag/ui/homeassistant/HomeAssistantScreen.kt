@@ -44,6 +44,7 @@ import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.seasonsync.AndroidNetworkPlatform
 import com.loosecannon.servicetag.ui.asset.CANCEL_BUTTON
+import com.loosecannon.servicetag.ui.asset.PublishTombstoneRow
 import com.loosecannon.servicetag.ui.attachments.SAVE_LABEL
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
@@ -129,11 +130,11 @@ internal fun HomeAssistantScreen(graph: AppGraph, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
             if (state.tokenPresent) QuietLine(HA_TOKEN_SAVED)
-            // #113 (C36): P113-40 while any asset publishes, then each helper still owed 1970-01-01 whose asset is gone,
-            // by its exact id (B6b draws each one's sentence and acknowledgement).
+            // #113/#114 (C36, C34): P113-40 while any asset publishes, then each helper still owed 1970-01-01 whose asset
+            // is gone, in its sentence, with P114-38 once ServiceTag can no longer reach it.
             state.writeDisclosure?.let { QuietLine(it) }
-            state.publishing.orphanTombstones.forEach { entityId ->
-                Text(entityId, style = MaterialTheme.typography.bodyMedium)
+            state.publishing.orphanTombstones.forEach { line ->
+                PublishTombstoneRow(line, enabled = !state.busy, onDismiss = model::dismissTombstone)
             }
 
             SectionHeader(title = HA_HOW_OFTEN)

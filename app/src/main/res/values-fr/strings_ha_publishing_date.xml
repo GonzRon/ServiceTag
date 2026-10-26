@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">Publier la date de début de saison dans Home Assistant</string>
+    <string name="ha_publish_scope_datetimes">Entrées de date (input_datetime)</string>
+    <string name="ha_publish_date_not_date_only">%s doit être une entrée de date avec une date et sans heure.</string>
+    <string name="ha_publish_date_confirm">Publier la date de début de saison de %1$s dans %2$s ? Tant que %1$s est prêt pour la saison, ServiceTag y définit la date d\'entretien ; sinon, il y définit %3$s, ce qui signifie pas prêt. Les automatisations de Home Assistant doivent la lire et ne jamais la définir.</string>
+    <string name="ha_publish_date_not_a_date_helper">%s n\'est pas une entrée de date (input_datetime).</string>
+    <string name="ha_publish_stop_date_confirm">Arrêter la publication vers %1$s ? ServiceTag la règle d\'abord sur %2$s, pour que Home Assistant cesse de traiter l\'ancienne date comme un entretien.</string>
+    <string name="ha_publish_date_not_yet_cleared">Pas encore effacée dans Home Assistant : %1$s peut encore permettre des démarrages. ServiceTag continue d\'essayer ; si ce téléphone ne peut pas joindre Home Assistant, réglez-la sur %2$s dans Home Assistant.</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTag ne peut plus joindre %1$s. Elle peut encore permettre des démarrages : réglez-la sur %2$s dans Home Assistant.</string>
+    <string name="ha_publish_date_cleared_by_hand">Je l\'ai effacée dans Home Assistant</string>
+    <string name="ha_publish_date_cleared">Effacée dans Home Assistant : %1$s vaut %2$s. Plus rien n\'est envoyé tant que l\'équipement est archivé, retiré du service ou transféré.</string>
+    <string name="ha_publish_boundary_field">Entrée de fin de saison (la date que Home Assistant enregistre à la fin de la saison)</string>
+    <string name="ha_publish_boundary_is_target">%s est l\'entrée que ServiceTag définit. Choisissez l\'entrée de date où Home Assistant enregistre la fin de la saison.</string>
+</resources>

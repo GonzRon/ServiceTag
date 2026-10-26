@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
 import com.loosecannon.servicetag.core.hapublish.PublishDelivery
 import com.loosecannon.servicetag.core.hapublish.PublishErrorKind
@@ -300,8 +302,10 @@ class PublishBlockViewModelTest {
         assertTrue(none.drawn && none.offersSetUp && !none.enabled)
         val held = publishBlockOf(PublishKind.EQUIPMENT_STATUS, StatusWords, writable.copy(writable = false)) { "at $it" }
         assertFalse(held.drawn)
-        // The date kind's words are B6b's: until then its block draws nothing.
-        assertFalse(publishBlockOf(PublishKind.SEASON_SERVICE_DATE, publishWordsOf(PublishKind.SEASON_SERVICE_DATE), writable) { "at $it" }.drawn)
+        // The date kind has its own words (B6b): its block is offered where a binding could be set up.
+        val date = publishBlockOf(PublishKind.SEASON_SERVICE_DATE, publishWordsOf(PublishKind.SEASON_SERVICE_DATE), writable) { "at $it" }
+        assertTrue(date.drawn && date.offersSetUp)
+        assertEquals("Publish Season Start date to Home Assistant", date.title)
     }
 
     // --- the model over the graph: every control through PublishControls ----------------------------------------------
@@ -312,9 +316,10 @@ class PublishBlockViewModelTest {
 
     private fun TestScope.open(kind: PublishKind = PublishKind.EQUIPMENT_STATUS): Open {
         val model = PublishBlockViewModel(
-            heater, kind, graph.publishBindings, graph.publishDeliveries, graph.haConnections, graph.secretStore,
-            graph.assets, graph.transferRecords, graph.installationIdentity::id, graph.uow, graph.publishControls,
-            graph.publishRunner::validate, emptyFlow(),
+            heater, kind, graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.haConnections,
+            graph.secretStore, graph.assets, graph.transferRecords, graph.installationIdentity::id, graph.uow,
+            graph.publishControls, graph.publishRunner::validate,
+            DateMeaning.of(graph.openingServiceReader, graph.events, graph.todayPort) { ZoneOffset.UTC }, emptyFlow(),
         ) { ZoneOffset.UTC }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.state.collect {} }
         advanceUntilIdle()
@@ -391,14 +396,202 @@ class PublishBlockViewModelTest {
         assertEquals(listOf(COULD_NOT_REACH), block.state.notices)
     }
 
-    @Test fun theDateBlockDrawsNothingUntilItsWords() = runTest(scheduler) {
-        enabled()
-        assertFalse(open(PublishKind.SEASON_SERVICE_DATE).state.drawn)
-        assertTrue(open().state.drawn)
+    // --- #114, row 88's date half (B6b): the date words, the F-16 rule, the obligations and the owner's dismissal -------
+
+    private val dateBinding = binding.copy(id = "binding-2", kind = PublishKind.SEASON_SERVICE_DATE, entityId = DATE)
+
+    private fun dateBlock(state: PublishState, delivery: PublishDelivery, facts: PublishBlockFacts = writable) =
+        publishBlockOf(
+            PublishKind.SEASON_SERVICE_DATE, DateWords,
+            facts.copy(binding = dateBinding, delivery = delivery.copy(bindingId = dateBinding.id), state = state),
+        ) { "at $it" }
+
+    /** ServiceTag wants 1970-01-01 at the pair `(4, 7)`: nothing read back yet. */
+    private val invalidating = pending.copy(desiredValue = "1970-01-01")
+
+    @Test fun theDateKindHasItsOwnSentences() {
+        assertEquals(DateWords, publishWordsOf(PublishKind.SEASON_SERVICE_DATE))
+        assertEquals("Publish Season Start date to Home Assistant", DateWords.title)
+        assertEquals("Date helpers (input_datetime)", DateWords.scopeLine)
+        assertEquals(
+            "Publish Example Heater's Season Start date to $DATE? While Example Heater is ready for the season, " +
+                "ServiceTag sets the service date; otherwise it sets 1970-01-01, which means not ready. Home Assistant " +
+                "automations should read it and never set it.",
+            DateWords.confirm("Example Heater", DATE),
+        )
+        assertEquals(
+            "Stop publishing to $DATE? ServiceTag first sets it to 1970-01-01, so Home Assistant stops treating the old " +
+                "date as a service.",
+            DateWords.stopConfirm(DATE),
+        )
+        val refusals: Map<PublishRefusal, String?> = mapOf(
+            PublishRefusal.WRONG_DOMAIN to "$DATE is not a date helper (input_datetime).",
+            PublishRefusal.NOT_DATE_ONLY to "$DATE must be a date helper with a date and no time.",
+            PublishRefusal.BOUNDARY_IS_TARGET to
+                "$DATE is the helper ServiceTag sets. Choose the date helper Home Assistant stamps when the season ends.",
+        )
+        for ((reason, line) in refusals) assertEquals(reason.name, line, publishRefusalLine(reason, DATE, "Example Heater", DateWords))
+        // Every refusal has a date sentence (F-16), the boundary's included.
+        for (reason in PublishRefusal.entries) assertNotNull(reason.name, publishRefusalLine(reason, DATE, "Example Heater", DateWords))
+        assertEquals(
+            listOf("$DATE must be a date helper with a date and no time."),
+            publishErrorLines(PublishErrorKind.NOT_DATE_ONLY, null, DATE, DateWords),
+        )
+        // INVALIDATED_INELIGIBLE: 1970-01-01 read back, the quiet state's own sentence (P114-39).
+        val quiet = invalidating.copy(
+            lastVerifiedValue = "1970-01-01", lastVerifiedAt = 40L, verifiedBindingRevision = 4, verifiedDesiredRevision = 7,
+        )
+        assertEquals(
+            "Cleared in Home Assistant: $DATE is 1970-01-01. Nothing more is sent while the asset is archived, retired " +
+                "or transferred out.",
+            dateBlock(PublishState.INVALIDATED_INELIGIBLE, quiet).stateLine,
+        )
+        // Every state an enabled date binding reaches draws something.
+        val reached = PublishState.entries - PublishState.NOT_ENABLED - PublishState.WAITING_FOR_SOURCE -
+            PublishState.NOT_MAINTAINED_HERE
+        for (state in reached) {
+            val delivery = mapOf(
+                PublishState.ERROR to erred(PublishErrorKind.UNREACHABLE),
+                PublishState.PUBLISHED to published,
+                PublishState.MATCHES to matching,
+                PublishState.INVALIDATED_INELIGIBLE to quiet,
+            )[state] ?: pending
+            val shown = dateBlock(state, delivery)
+            assertTrue(state.name, listOfNotNull(shown.stateLine, shown.publishedLine, shown.verifiedLine).isNotEmpty() || shown.faultLines.isNotEmpty())
+        }
+    }
+
+    @Test fun anEnabledDateBindingFailingItsInvalidationDrawsMayStillAllowStarts() {
+        // Not yet read back, Home Assistant out of reach: P114-36 beside the error's own sentence.
+        val transient = dateBlock(PublishState.ERROR, invalidating.copy(errorKind = PublishErrorKind.UNREACHABLE, errorAt = 9L, errorBindingRevision = 4, errorDesiredRevision = 7))
+        assertEquals(listOf(COULD_NOT_REACH), transient.faultLines)
+        assertEquals(NOT_YET_CLEARED, transient.invalidationLine)
+        // Pending with no error yet: still not cleared, so still said.
+        assertEquals(NOT_YET_CLEARED, dateBlock(PublishState.PENDING, invalidating).invalidationLine)
+        // An error the owner must act on: P114-37.
+        val owner = dateBlock(PublishState.ERROR, invalidating.copy(errorKind = PublishErrorKind.AUTH_REFUSED, errorAt = 9L, errorBindingRevision = 4, errorDesiredRevision = 7))
+        assertEquals(CANNOT_REACH, owner.invalidationLine)
+        // Read back at the current pair: nothing more to say.
+        val cleared = invalidating.copy(
+            lastVerifiedValue = "1970-01-01", lastVerifiedAt = 40L, verifiedBindingRevision = 4, verifiedDesiredRevision = 7,
+        )
+        assertNull(dateBlock(PublishState.MATCHES, cleared).invalidationLine)
+        // A service date being sent is not an invalidation; a status binding never draws it.
+        assertNull(dateBlock(PublishState.PENDING, pending.copy(desiredValue = "2026-09-15")).invalidationLine)
+        assertNull(block(PublishState.PENDING, invalidating).invalidationLine)
+    }
+
+    /** The heater's date binding, enabled on this phone over the fictional connection. */
+    private suspend fun TestScope.enabledDate(): PublishBinding {
+        graph.assets.upsert(assetRow(heater.value, "Example Heater"))
+        val connection = graph.saveHaConnection.run(
+            ADDRESS, Secret("fictional-token-1"), null, NetworkEligibility.HOME_NETWORK_ONLY, HOME_WIFI, null,
+        )
+        advanceUntilIdle()
+        graph.haPublish.helpers[DATE] = RemoteEntity(DATE, "2025-11-15", null, true, false)
+        val fresh = ValidationResult(DATE, graph.haPublish.helpers.getValue(DATE), connection.id, connection.configGeneration, 0, graph.now)
+        return graph.enablePublishing.run(heater, PublishKind.SEASON_SERVICE_DATE, DATE, fresh, null, graph.installationIdentity.id())
+    }
+
+    private suspend fun owe(id: String, entityId: String, assetId: String?, state: DecommissionState, at: Long) = graph.uow.write {
+        graph.publishDecommissions.upsertMerging(
+            DecommissionTombstone(
+                id, graph.haConnections.get()?.id ?: "connection-gone", entityId, assetId?.let(::AssetId),
+                graph.installationIdentity.id(), state, at, null, null, 1,
+            ),
+        )
+    }
+
+    @Test fun theDateBlockDrawsItsDestinationAndTheInvalidDatesMeaning() = runTest(scheduler) {
+        enabledDate()
+        val block = open(PublishKind.SEASON_SERVICE_DATE)
+        assertTrue(block.state.drawn && block.state.enabled)
+        assertEquals("Publish Season Start date to Home Assistant", block.state.title)
+        assertEquals(DATE, block.state.destination)
+        // No Season Start service covers the heater: C9 says not ready, which publishes 1970-01-01 (read through the
+        // one readiness reader, in the card's own words).
+        assertEquals(listOf(PublishMappingRow("Not ready: no Season Start service", "1970-01-01")), block.state.mapping)
+    }
+
+    @Test fun aTombstoneIsDrawnOnItsAssetOrTheHaScreen() = runTest(scheduler) {
+        enabledDate()
+        graph.assets.upsert(assetRow("example-boiler", "Example Boiler"))
+        owe("decommission-1", "input_datetime.example_heater_old_done", heater.value, DecommissionState.PENDING, 10L)
+        owe("decommission-2", "input_datetime.example_heater_older_done", heater.value, DecommissionState.UNDELIVERABLE, 20L)
+        owe("decommission-3", "input_datetime.example_boiler_service_done", "example-boiler", DecommissionState.PENDING, 30L)
+        owe("decommission-4", "input_datetime.example_gone_service_done", "example-gone", DecommissionState.UNDELIVERABLE, 40L)
+        val block = open(PublishKind.SEASON_SERVICE_DATE)
+        assertEquals(
+            listOf(
+                PublishTombstoneLine(
+                    "decommission-1",
+                    "Not yet cleared in Home Assistant: input_datetime.example_heater_old_done may still allow starts. " +
+                        "ServiceTag keeps trying; if this phone cannot reach Home Assistant, set it to 1970-01-01 there.",
+                    dismissible = false,
+                ),
+                PublishTombstoneLine(
+                    "decommission-2",
+                    "ServiceTag can no longer reach input_datetime.example_heater_older_done. It may still allow starts: " +
+                        "set it to 1970-01-01 in Home Assistant.",
+                    dismissible = true,
+                ),
+            ),
+            block.state.tombstones,
+        )
+        // The status block draws no obligation; the orphan is the Home Assistant screen's.
+        assertTrue(open().state.tombstones.isEmpty())
+        val screen = com.loosecannon.servicetag.ui.homeassistant.HaPublishingReads(
+            graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.assets, graph.haConnections, graph.uow,
+        ).read()
+        assertEquals(listOf("decommission-4"), screen.orphanTombstones.map { it.id })
+
+        // Forget leaves the heater's obligations behind, its own helper's among them: the block still draws them with no
+        // connection and no binding.
+        graph.forgetHaConnection.run()
+        advanceUntilIdle()
+        block.model.onResumed()
+        advanceUntilIdle()
+        assertTrue(block.state.drawn)
+        assertEquals(
+            listOf("input_datetime.example_heater_old_done", "input_datetime.example_heater_older_done", DATE),
+            graph.publishDecommissions.all().filter { it.assetId == heater }.sortedBy { it.requestedAt }.map { it.entityId },
+        )
+        assertEquals(3, block.state.tombstones.size)
+        assertTrue(block.state.tombstones.all { it.dismissible })
+    }
+
+    @Test fun theOwnersDismissalClearsAnUndeliverableObligationAndARaceRedrawsWithNoSentence() = runTest(scheduler) {
+        enabledDate()
+        owe("decommission-1", "input_datetime.example_heater_old_done", heater.value, DecommissionState.UNDELIVERABLE, 10L)
+        owe("decommission-2", "input_datetime.example_heater_older_done", heater.value, DecommissionState.PENDING, 20L)
+        val block = open(PublishKind.SEASON_SERVICE_DATE)
+        assertEquals(listOf(true, false), block.state.tombstones.map { it.dismissible })
+
+        // A row that raced back to PENDING, or one already gone: refused, re-read, no sentence (C25a).
+        block.model.dismissTombstone("decommission-2")
+        advanceUntilIdle()
+        block.model.dismissTombstone("decommission-9")
+        advanceUntilIdle()
+        assertNotNull(graph.publishDecommissions.get("decommission-2"))
+        assertEquals(emptyList<String>(), block.state.notices)
+        assertEquals(listOf("decommission-1", "decommission-2"), block.state.tombstones.map { it.id })
+
+        // The owner's word lets the UNDELIVERABLE one go, through the controls.
+        val before = graph.deliveryRequests.get()
+        block.model.dismissTombstone("decommission-1")
+        advanceUntilIdle()
+        assertNull("the owner's word lets the obligation go", graph.publishDecommissions.get("decommission-1"))
+        assertFalse("decommission-1" in block.state.tombstones.map { it.id })
+        assertTrue("the control asked for delivery (A03)", graph.deliveryRequests.get() > before)
     }
 
     private companion object {
         const val STATUS = "input_select.example_heater_equipment_status"
+        const val DATE = "input_datetime.example_heater_service_done"
+        const val NOT_YET_CLEARED = "Not yet cleared in Home Assistant: $DATE may still allow starts. ServiceTag keeps " +
+            "trying; if this phone cannot reach Home Assistant, set it to 1970-01-01 there."
+        const val CANNOT_REACH =
+            "ServiceTag can no longer reach $DATE. It may still allow starts: set it to 1970-01-01 in Home Assistant."
         const val ADDRESS = "http://192.168.0.10:8123"
         const val HOME_WIFI = "ExampleHomeWifi"
 

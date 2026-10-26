@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">Saisonstart-Datum an Home Assistant veröffentlichen</string>
+    <string name="ha_publish_scope_datetimes">Datumshelfer (input_datetime)</string>
+    <string name="ha_publish_date_not_date_only">%s muss ein Datumshelfer mit Datum und ohne Uhrzeit sein.</string>
+    <string name="ha_publish_date_confirm">Das Saisonstart-Datum von %1$s in %2$s veröffentlichen? Solange %1$s bereit für die Saison ist, setzt ServiceTag das Wartungsdatum; andernfalls setzt es %3$s, das heißt nicht bereit. Automationen in Home Assistant sollten ihn lesen und nie setzen.</string>
+    <string name="ha_publish_date_not_a_date_helper">%s ist kein Datumshelfer (input_datetime).</string>
+    <string name="ha_publish_stop_date_confirm">Veröffentlichen in %1$s beenden? ServiceTag setzt ihn zuerst auf %2$s, damit Home Assistant das alte Datum nicht mehr als Wartung wertet.</string>
+    <string name="ha_publish_date_not_yet_cleared">In Home Assistant noch nicht geleert: %1$s kann weiterhin Starts zulassen. ServiceTag versucht es weiter; wenn dieses Telefon Home Assistant nicht erreicht, setze ihn dort auf %2$s.</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTag kann %1$s nicht mehr erreichen. Er kann weiterhin Starts zulassen: Setze ihn in Home Assistant auf %2$s.</string>
+    <string name="ha_publish_date_cleared_by_hand">Ich habe ihn in Home Assistant geleert</string>
+    <string name="ha_publish_date_cleared">In Home Assistant geleert: %1$s ist %2$s. Es wird nichts mehr gesendet, solange das Gerät archiviert, ausgemustert oder übergeben ist.</string>
+    <string name="ha_publish_boundary_field">Saisonende-Helfer (das Datum, das Home Assistant beim Saisonende festhält)</string>
+    <string name="ha_publish_boundary_is_target">%s ist der Helfer, den ServiceTag setzt. Wähle den Datumshelfer, in dem Home Assistant das Saisonende festhält.</string>
+</resources>

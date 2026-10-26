@@ -28,6 +28,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -71,7 +72,9 @@ class LinkPublishViewModelTest {
     }
 
     private fun TestScope.open(kind: PublishKind = PublishKind.EQUIPMENT_STATUS): LinkPublishViewModel {
-        val model = LinkPublishViewModel(heater, kind, graph.assets, graph.publishControls, graph.publishRunner::validate) {
+        val model = LinkPublishViewModel(
+            heater, kind, graph.assets, graph.seasonSyncBindings, graph.publishControls, graph.publishRunner::validate,
+        ) {
             listReads += 1
             listed
         }
@@ -186,7 +189,74 @@ class LinkPublishViewModelTest {
         assertTrue(graph.publishBindings.forAsset(heater).isEmpty())
     }
 
+    // --- #114 (B6b): the date kind's sheet and its season-ended helper (C9a, D; P114-47/48) ----------------------------
+
+    @Test fun theDateSheetAsksForTheSeasonEndedHelperOnlyWhenHomeAssistantDrivesTheSeason() = runTest(scheduler) {
+        val connection = connected()
+        graph.haPublish.helpers[DATE] = RemoteEntity(DATE, "2025-11-15", null, true, false)
+        graph.haPublish.helpers[SEASON_ENDED] = RemoteEntity(SEASON_ENDED, "2026-05-10", null, true, false)
+        // The heater's own season (year-round here): no season-ended helper is asked for, and the confirm is P114-33.
+        val own = open(PublishKind.SEASON_SERVICE_DATE)
+        assertFalse(own.state.value.boundaryAsked)
+        assertEquals(EntityScope.INPUT_DATETIMES, entityScopeOf(PublishKind.SEASON_SERVICE_DATE))
+        own.onEntityId(DATE)
+        own.check()
+        advanceUntilIdle()
+        assertEquals(
+            "Publish Example Heater's Season Start date to $DATE? While Example Heater is ready for the season, " +
+                "ServiceTag sets the service date; otherwise it sets 1970-01-01, which means not ready. Home Assistant " +
+                "automations should read it and never set it.",
+            own.state.value.confirm,
+        )
+        // The status kind never asks for it.
+        assertFalse(open().state.value.boundaryAsked)
+
+        // The heater's season now follows Home Assistant (#16, MANUAL): the field is asked for, and checked first.
+        graph.linkSeasonSync.run(heater, "input_boolean.example_heater_in_season")
+        graph.haPublish.log.clear()
+        val sheet = open(PublishKind.SEASON_SERVICE_DATE)
+        assertTrue(sheet.state.value.boundaryAsked)
+        sheet.onEntityId(DATE)
+        sheet.check()
+        advanceUntilIdle()
+        assertEquals("Choose a helper first.", sheet.state.value.boundaryLine)
+        sheet.onBoundaryEntityId(DATE)
+        sheet.check()
+        advanceUntilIdle()
+        assertEquals(
+            "$DATE is the helper ServiceTag sets. Choose the date helper Home Assistant stamps when the season ends.",
+            sheet.state.value.boundaryLine,
+        )
+        assertNull(sheet.state.value.confirm)
+        assertTrue("nothing is read for a refused pair", graph.haPublish.log.isEmpty())
+
+        // A season-ended helper with a time is refused by the date validator, naming it (P114-32).
+        graph.haPublish.helpers[SEASON_ENDED] = RemoteEntity(SEASON_ENDED, "2026-05-10 00:00:00", null, true, true)
+        sheet.onBoundaryEntityId(SEASON_ENDED)
+        assertNull(sheet.state.value.boundaryLine)
+        sheet.check()
+        advanceUntilIdle()
+        assertEquals(listOf("$SEASON_ENDED must be a date helper with a date and no time."), sheet.state.value.answer)
+        assertNull(sheet.state.value.confirm)
+
+        // A date-only one: the confirm, and Publish stores it as the binding's boundary helper.
+        graph.haPublish.helpers[SEASON_ENDED] = RemoteEntity(SEASON_ENDED, "2026-05-10", null, true, false)
+        sheet.onBoundaryEntityId(" $SEASON_ENDED ")
+        sheet.check()
+        advanceUntilIdle()
+        assertNotNull(sheet.state.value.confirm)
+        sheet.publish()
+        advanceUntilIdle()
+        val written = graph.publishBindings.forAsset(heater).single()
+        assertEquals(DATE, written.entityId)
+        assertEquals(SEASON_ENDED, written.boundaryEntityId)
+        assertEquals(connection.id, written.connectionId)
+        assertTrue(sheet.state.value.finished)
+    }
+
     private companion object {
+        const val DATE = "input_datetime.example_heater_service_done"
+        const val SEASON_ENDED = "input_datetime.example_heater_season_ended"
         const val STATUS = "input_select.example_heater_equipment_status"
         const val ADDRESS = "http://192.168.0.10:8123"
         const val HOME_WIFI = "ExampleHomeWifi"

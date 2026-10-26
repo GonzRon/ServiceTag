@@ -89,6 +89,7 @@ internal fun LinkPublishSheet(
                 title = words.title,
                 state = state,
                 onEntityId = model::onEntityId,
+                onBoundaryEntityId = model::onBoundaryEntityId,
                 onChooseHelper = model::chooseHelper,
                 onEnterManually = model::enterManually,
                 onCheck = model::check,
@@ -104,6 +105,7 @@ private fun LinkPublishForm(
     title: String,
     state: LinkPublishState,
     onEntityId: (String) -> Unit,
+    onBoundaryEntityId: (String) -> Unit,
     onChooseHelper: () -> Unit,
     onEnterManually: () -> Unit,
     onCheck: () -> Unit,
@@ -153,6 +155,24 @@ private fun LinkPublishForm(
                 state.entityLine?.let { RefusalLine(it) }
             }
             TextButton(onClick = onEnterManually) { Text(SEASON_SYNC_ENTER_MANUALLY) }
+        }
+        // #114 (C9a, D; B6b): the season-ended helper, typed, only for a manual season Home Assistant drives (P114-47).
+        if (state.boundaryAsked) {
+            OutlinedTextField(
+                value = state.boundaryEntityId,
+                onValueChange = onBoundaryEntityId,
+                label = { Text(HA_PUBLISH_BOUNDARY_FIELD) },
+                supportingText = state.boundaryLine?.let { line -> { Text(line) } },
+                isError = state.boundaryLine != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Ascii,
+                ),
+                shape = ControlShape,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         if (state.checking) QuietLine(HA_PUBLISH_CHECKING)
         state.answer.forEach { RefusalLine(it) }

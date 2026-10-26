@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.hapublish.DecommissionRepository
 import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionStillPending
 import com.loosecannon.servicetag.core.hapublish.DeliverySteps
 import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
+import com.loosecannon.servicetag.core.hapublish.NoSuchDecommission
 import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
 import com.loosecannon.servicetag.core.hapublish.PublishKind
@@ -26,6 +28,8 @@ import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.hapublish.PublishControls
 import com.loosecannon.servicetag.seasonsync.ConnectionTestOutcome
+import com.loosecannon.servicetag.ui.asset.PublishTombstoneLine
+import com.loosecannon.servicetag.ui.asset.tombstoneLinesOf
 import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
 import com.loosecannon.servicetag.seasonsync.NetworkPlatform
 import com.loosecannon.servicetag.seasonsync.UnconfirmedCause
@@ -70,12 +74,12 @@ internal data class Notice(val text: String, val action: NoticeAction? = null)
  * ([anyBinding], P113-40), how many date helpers on the stored connection may still hold a Season Start date that a
  * Forget would first try to clear ([dateHelpersOwed], P113-41: each enabled date binding not already read back at
  * `1970-01-01`, and each PENDING obligation), and the helpers still owed `1970-01-01` whose asset is gone
- * ([orphanTombstones], their entity ids; the asset page draws the others).
+ * ([orphanTombstones], each in its sentence, P114-36 or P114-37 with P114-38; the asset page draws the others).
  */
 internal data class HaScreenPublishing(
     val anyBinding: Boolean = false,
     val dateHelpersOwed: Int = 0,
-    val orphanTombstones: List<String> = emptyList(),
+    val orphanTombstones: List<PublishTombstoneLine> = emptyList(),
 )
 
 /** #113/#114 (C36) — the screen's reads of the device-local publishing tables, one snapshot each; nothing here writes. */
@@ -107,10 +111,7 @@ internal class HaPublishingReads(
         }
         val tombstones = decommissions.all()
         val owedTombstones = tombstones.count { it.state == DecommissionState.PENDING && it.connectionId == connectionId }
-        val orphans = tombstones
-            .filter { tombstone -> tombstone.assetId?.let { assets.get(it) } == null }
-            .sortedWith(compareBy({ it.requestedAt }, { it.id }))
-            .map { it.entityId }
+        val orphans = tombstoneLinesOf(tombstones.filter { tombstone -> tombstone.assetId?.let { assets.get(it) } == null })
         HaScreenPublishing(all.isNotEmpty(), owedDates + owedTombstones, orphans)
     }
 }
@@ -453,6 +454,31 @@ internal class HomeAssistantViewModel(
     fun askDisconnect() = mutableState.update { state ->
         val owed = state.publishing.dateHelpersOwed
         state.copy(disconnectAsk = HA_DISCONNECT_BODY, forgetWarning = haPublishForgetDateHelpers(owed).takeIf { owed > 0 })
+    }
+
+    /**
+     * P114-38 on an orphan obligation: the owner's own word that the helper is cleared in Home Assistant, through the
+     * controls (the only way an UNDELIVERABLE obligation is let go, never inferred). A row that raced back to PENDING
+     * or is already gone is refused (C25a): the screen re-reads, with no sentence.
+     */
+    fun dismissTombstone(id: String) {
+        viewModelScope.launch {
+            try {
+                controls.dismissDecommission(id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: NoSuchDecommission) {
+                // Already gone: the re-read below shows it.
+            } catch (_: DecommissionStillPending) {
+                // ServiceTag is still trying: the re-read below draws P114-36 again.
+            } catch (_: Exception) {
+                // A store failed: nothing was deleted; the re-read tells the truth.
+            }
+            readPublishing()?.let { read ->
+                seen = read
+                mutableState.update { it.copy(publishing = read) }
+            }
+        }
     }
 
     fun dismissDisconnect() = mutableState.update { it.copy(disconnectAsk = null, forgetWarning = null) }
