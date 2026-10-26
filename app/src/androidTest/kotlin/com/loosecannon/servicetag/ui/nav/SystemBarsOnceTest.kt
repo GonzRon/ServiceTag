@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.nav
 
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsNode
@@ -8,11 +9,14 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventKind
@@ -41,11 +45,12 @@ import org.junit.runner.RunWith
  * The root pads its `NavDisplay` with the outer `Scaffold`'s padding and consumes it, so a screen's own `Scaffold`
  * and app bar do not apply the bars a second time. Before that (1.8.1) a pushed screen's content began one status bar
  * too low (B1) and ended one navigation bar too high (B2), and a top-level screen's list stopped one navigation bar
- * above the bottom bar, which already holds it (B3). Each case reads the window's own insets from the activity's root
- * view, so the numbers are the emulator's, not this file's.
+ * above the bottom bar, which already holds it (B3). A form's own `Scaffold` adds the keyboard (`formContentInsets`), so
+ * with a field focused and the keyboard shown the form ends at the keyboard's top (B4). Each case reads the window's own
+ * insets from the activity's root view, so the numbers are the emulator's, not this file's.
  *
  * A column only reaches the bottom of the space it has when its content is taller than that space (F-1), so the two
- * fixtures overflow, and each case asserts so before it measures: B1 and B2 open the entry form of an asset "Bench"
+ * fixtures overflow, and each case asserts so before it measures: B1, B2 and B4 open the entry form of an asset "Bench"
  * whose profile carries [READINGS] readings; B3 lists [CRATES] assets "Crate 01" onward. Everything is fictional.
  * Emulator only — the suite wipes app data.
  */
@@ -86,6 +91,29 @@ class SystemBarsOnceTest {
             rootHeight() - navigation,
             column.boundsInRoot.bottom,
         )
+    }
+
+    /**
+     * B4 (F-15): the same form, a field focused and the keyboard shown, ends at the keyboard's top: the root's height
+     * less the keyboard's bottom inset. Without the form's `contentWindowInsets` nothing adds the keyboard, and the form
+     * still ends over the navigation bar (B2's line), under the keyboard. The keyboard not showing within
+     * [IME_TIMEOUT_MS] fails the case.
+     */
+    @Test fun aPushedFormEndsAtTheKeyboardsTop() {
+        openTheBenchForm()
+        theOverflowingScrollNode()
+        rule.onNodeWithTag(FIRST_VALUE).performClick()
+        rule.runOnUiThread {
+            val window = rule.activity.window
+            WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.ime())
+        }
+        rule.waitUntil("the keyboard's bottom inset above 0", IME_TIMEOUT_MS) {
+            windowInsets(WindowInsetsCompat.Type.ime()).bottom > 0
+        }
+        val bottom = settledBottom()
+        val keyboard = windowInsets(WindowInsetsCompat.Type.ime()).bottom
+
+        assertPx("the form's bottom: the root's height less the keyboard ($keyboard px)", rootHeight() - keyboard, bottom)
     }
 
     /**
@@ -130,6 +158,22 @@ class SystemBarsOnceTest {
         val max = node.config[SemanticsProperties.VerticalScrollAxisRange].maxValue()
         assertTrue("the fixture must overflow its viewport (F-1): verticalScrollAxisRange.maxValue = $max", max > 0f)
         return node
+    }
+
+    /**
+     * The overflowing scroll node's bottom once the keyboard's animation has landed: two reads [SETTLE_MS] apart
+     * agree, within [IME_TIMEOUT_MS].
+     */
+    private fun settledBottom(): Float {
+        val deadline = SystemClock.uptimeMillis() + IME_TIMEOUT_MS
+        var last = Float.NaN
+        while (true) {
+            val bottom = theOverflowingScrollNode().boundsInRoot.bottom
+            if (bottom == last) return bottom
+            check(SystemClock.uptimeMillis() < deadline) { "the form's bottom never settled: $last, then $bottom" }
+            last = bottom
+            Thread.sleep(SETTLE_MS)
+        }
     }
 
     /** The top edge of the bottom bar: the row that groups its destinations, each a tab. */
@@ -203,6 +247,13 @@ class SystemBarsOnceTest {
         val APP_BAR_HEIGHT = 64.dp
         const val BENCH = "Bench"
         const val RECORD_ENTRY = "Record entry"
+
+        /** The first reading's value field (`InstrumentEntryRow`'s `value-<key>` tag). */
+        const val FIRST_VALUE = "value-reading_1"
+
+        /** How long B4 waits for the keyboard's inset, and then for the form's bottom to settle. */
+        const val IME_TIMEOUT_MS = 5_000L
+        const val SETTLE_MS = 200L
 
         /** At least eight (F-1): the form overflows the viewport. */
         const val READINGS = 10
