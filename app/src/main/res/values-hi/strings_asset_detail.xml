@@ -119,6 +119,10 @@
     <string name="assets_both_hidden">मेल खाने वाले उपकरण छिपे हुए हैं। उन्हें देखने के लिए “उप-उपकरण” और “संग्रहित” चालू करें।</string>
     <string name="assets_only_child_assets">यहाँ सिर्फ़ उप-उपकरण हैं। उन्हें देखने के लिए “उप-उपकरण” चालू करें।</string>
     <string name="assets_type_hidden">मेल खाने वाले उपकरण किसी दूसरे प्रकार के हैं। “प्रकार” को “सभी” पर सेट करें।</string>
+    <string name="assets_ha_linked">Home Assistant से लिंक है</string>
+    <string name="assets_condition_hidden">मेल खाने वाले उपकरण किसी दूसरी स्थिति में हैं। “स्थिति” को “सभी” पर सेट करें।</string>
+    <string name="assets_in_season">मौसम में</string>
+    <string name="assets_filter_condition">स्थिति</string>
 
     <string name="assets_search_hint">उपकरण खोजें</string>
     <string name="assets_clear_search">खोज साफ़ करें</string>

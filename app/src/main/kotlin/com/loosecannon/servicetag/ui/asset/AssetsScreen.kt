@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
@@ -64,8 +66,8 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.condition.ConditionBadge
+import com.loosecannon.servicetag.ui.condition.conditionOption
 import com.loosecannon.servicetag.ui.health.HealthBadge
-import com.loosecannon.servicetag.ui.health.needsAttention
 import com.loosecannon.servicetag.ui.loan.LoanBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -82,8 +84,9 @@ import com.loosecannon.servicetag.ui.transfer.TransferredBadge
  * Dashboard's category and maintenance-status dropdowns now serve as its navigation aids, and the
  * quick filter belongs on the screen that lists every asset and component under its controls.
  *
- * Under it, #73's one row of controls — Type, Components, Archived ([AssetsFilterRow]) — narrows
- * what the box searches. An empty list always says why ([EmptyReason], the view model's decision).
+ * Under it, #73's one row of controls — Type, Components, Archived ([AssetsFilterRow]), and #116's
+ * Condition after Type — narrows what the box searches. An empty list always says why ([EmptyReason],
+ * the view model's decision).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,6 +139,7 @@ fun AssetsScreen(
                 onToggleComponents = model::toggleComponents,
                 onToggleArchived = model::toggleArchived,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                onPickCondition = model::pickCondition,
             )
             if (state.emptyReason == EmptyReason.NONE) {
                 LazyColumn {
@@ -180,6 +184,10 @@ private fun AssetsOverflow(onTransfer: () -> Unit) {
  * A `FlowRow` of compact chips, each as wide as its label: at 380dp of content width and font scale
  * 1.0 the three share one line, and a longer chosen type or a larger font wraps the row onto more
  * lines rather than cutting a label (the #68 rule). Internal so the layout tests can draw it alone.
+ *
+ * **#116 (U-C3, U-C4).** A host that passes [onPickCondition] gets the Condition menu after Type, in
+ * Type's shape; it is a fourth chip, so it may wrap on a narrow phone, and nothing else moves. A host
+ * that passes none draws the three as before.
  */
 @Composable
 internal fun AssetsFilterRow(
@@ -191,6 +199,7 @@ internal fun AssetsFilterRow(
     onToggleArchived: () -> Unit,
     modifier: Modifier = Modifier,
     archivedControl: Boolean = true,
+    onPickCondition: ((OperationalCondition?) -> Unit)? = null,
 ) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -198,6 +207,7 @@ internal fun AssetsFilterRow(
         modifier = modifier.fillMaxWidth(),
     ) {
         TypeChip(label = typeLabel, choices = typeChoices, onPick = onPickType)
+        if (onPickCondition != null) ConditionChip(chosen = filters.condition, onPick = onPickCondition)
         FilterChip(
             selected = filters.showComponents,
             onClick = onToggleComponents,
@@ -214,24 +224,48 @@ internal fun AssetsFilterRow(
 }
 
 /**
- * The Type control (C6, R73-3): an `AssistChip`, the one Material 3 chip with a trailing slot and no
+ * The Type control (C6, R73-3): the menu is All, then the catalog in its own order. Its accessible
+ * name is always [TYPE] and its state the choice ([MenuChip]).
+ */
+@Composable
+private fun TypeChip(label: String?, choices: List<CategoryChoice>, onPick: (String?) -> Unit) = MenuChip(
+    name = TYPE,
+    chosen = label,
+    rows = listOf(ALL to { onPick(null) }) + choices.map { choice -> choice.display to { onPick(choice.key) } },
+)
+
+/**
+ * #116 (U-C3, U-C4): the Condition control, in the Type control's shape. The menu is All (P73-2), then
+ * the Change condition sheet's option words in the conditions' order; the label is [CONDITION]
+ * (P116-4) while it is All and the chosen word after, and its accessible name is [CONDITION] always.
+ */
+@Composable
+private fun ConditionChip(chosen: OperationalCondition?, onPick: (OperationalCondition?) -> Unit) = MenuChip(
+    name = CONDITION,
+    chosen = chosen?.let(::conditionOption),
+    rows = listOf(ALL to { onPick(null) }) +
+        OperationalCondition.entries.map { choice -> conditionOption(choice) to { onPick(choice) } },
+)
+
+/**
+ * The list's menu controls (C6, R73-3): an `AssistChip`, the one Material 3 chip with a trailing slot and no
  * selection semantics — a `FilterChip` would read to TalkBack as a checkbox, checked or not, and
- * this opens a menu. Its accessible name is always [TYPE] and its state the choice, so the chosen
- * value is never hidden behind the name; the outer `role` overrides the chip's own `Role.Button`.
- * The menu is All, then the catalog in its own order, with no mark on the chosen row (the
- * dashboard's shape). A chosen type draws in the selected chips' container, with no outline.
+ * this opens a menu. Its accessible name is always [name] and its state the [chosen] row's word, or All
+ * while nothing is chosen, so the chosen value is never hidden behind the name; the outer `role`
+ * overrides the chip's own `Role.Button`. The menu is [rows] in order, with no mark on the chosen row
+ * (the dashboard's shape). A choice draws in the selected chips' container, with no outline.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TypeChip(label: String?, choices: List<CategoryChoice>, onPick: (String?) -> Unit) {
+private fun MenuChip(name: String, chosen: String?, rows: List<Pair<String, () -> Unit>>) {
     var open by remember { mutableStateOf(false) }
     Box {
         AssistChip(
             onClick = { open = true },
-            label = { Text(label ?: TYPE) },
+            label = { Text(chosen ?: name) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             shape = ControlShape,
-            colors = if (label != null) {
+            colors = if (chosen != null) {
                 AssistChipDefaults.assistChipColors(
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -240,31 +274,24 @@ private fun TypeChip(label: String?, choices: List<CategoryChoice>, onPick: (Str
             } else {
                 AssistChipDefaults.assistChipColors()
             },
-            border = if (label != null) {
+            border = if (chosen != null) {
                 AssistChipDefaults.assistChipBorder(enabled = true, borderColor = Color.Transparent)
             } else {
                 AssistChipDefaults.assistChipBorder(enabled = true)
             },
             modifier = Modifier.semantics {
                 role = Role.DropdownList
-                contentDescription = TYPE
-                stateDescription = label ?: ALL_TYPES
+                contentDescription = name
+                stateDescription = chosen ?: ALL
             },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(ALL_TYPES) },
-                onClick = {
-                    open = false
-                    onPick(null)
-                },
-            )
-            choices.forEach { choice ->
+            rows.forEach { (word, pick) ->
                 DropdownMenuItem(
-                    text = { Text(choice.display) },
+                    text = { Text(word) },
                     onClick = {
                         open = false
-                        onPick(choice.key)
+                        pick()
                     },
                 )
             }
@@ -295,6 +322,7 @@ internal fun EmptyList(
         EmptyReason.COMPONENTS_HIDDEN -> COMPONENTS_HIDDEN_LINE
         EmptyReason.ARCHIVED_HIDDEN -> ARCHIVED_HIDDEN_LINE
         EmptyReason.BOTH_HIDDEN -> BOTH_HIDDEN_LINE
+        EmptyReason.CONDITION_HIDDEN -> CONDITION_HIDDEN_LINE
     }
     if (reason != EmptyReason.NO_ASSETS && reason != EmptyReason.NO_ACTIVE_ASSETS) {
         QuietLine(text = line, modifier = Modifier.padding(16.dp))
@@ -331,11 +359,20 @@ internal fun EmptyList(
  * component (S27), in the detail's order and words. The NFC disc anchors the right edge; it is a
  * glyph with a description, never a control, so a tap on it opens the asset as a tap anywhere does.
  * No text here carries a line limit (the #68 rule). Internal so the layout tests can draw one row.
+ *
+ * **#116 (U-C4), amending R71-11 and E2 for the condition badge only.** Every row with a condition draws
+ * it — Operational too, and on rows that are not health surfaces — once, after the loan badge and before
+ * the health badge. Left of the disc, vertically centred, sit the in-season mark and then the Home
+ * Assistant mark, each a glyph in the disc's box with its accessible name and no tap of its own. An
+ * out-of-season asset keeps its badge and gets no mark, so a seasonal asset carries one season signifier.
  */
 @Composable
 internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val asset = row.asset
     val health = row.health
+    // #116 (U-C4): one condition badge per row, the row's own fact. A row built with only its health view
+    // (whose condition is read from the same current row) draws that; the health view never draws a second.
+    val condition = row.condition ?: health?.condition
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -368,7 +405,7 @@ internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier
             // #77 (C19): a held row says P77-31 instead of "Archived", whatever its status.
             val archived = if (row.transferred) null else statusLabel(asset.status)
             val loan = row.loan
-            if (asset.isRetired || row.outOfSeason || archived != null || row.transferred || loan != null || health != null) {
+            if (asset.isRetired || row.outOfSeason || archived != null || row.transferred || loan != null || condition != null || health != null) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -395,17 +432,50 @@ internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier
                     // #72 (C19): after the lifecycle badges, before condition and health — custody is
                     // no maintenance fact, so it never sits among them.
                     loan?.let { LoanBadge(it) }
-                    if (health != null) {
-                        // Condition before health: a DOWN asset's health is never drawn before its
-                        // condition (inv. 119), the detail's own rule.
-                        if (health.condition?.condition?.needsAttention == true) ConditionBadge(health.condition)
-                        health.result.aggregate?.let { HealthBadge(band = it.band, score = null) }
-                    }
+                    // Condition before health: a DOWN asset's health is never drawn before its
+                    // condition (inv. 119), the detail's own rule.
+                    condition?.let { ConditionBadge(it) }
+                    health?.result?.aggregate?.let { HealthBadge(band = it.band, score = null) }
                 }
             }
             health?.let { view -> rowHealthLines(view).forEach { line -> QuietLine(line) } }
         }
-        if (row.hasWrittenTag) NfcTagDisc()
+        if (row.inSeason || row.haLinked || row.hasWrittenTag) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (row.inSeason) {
+                    RowMark(
+                        name = IN_SEASON,
+                        glyph = ServiceTagIcons.InSeason,
+                        tint = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
+                    )
+                }
+                if (row.haLinked) {
+                    RowMark(name = HA_LINKED, glyph = ServiceTagIcons.HaLink, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (row.hasWrittenTag) NfcTagDisc()
+            }
+        }
+    }
+}
+
+/**
+ * #116 (U-C4): a trailing mark — its glyph in the NFC disc's 22dp box, with its accessible [name]. Informational,
+ * never a control: no tap of its own, so a tap on it opens the asset as a tap anywhere on the row does. Colour is
+ * never its only signifier: the glyph and the name say it. The in-season mark is in the OK family; the Home
+ * Assistant mark is neutral, a link and not a status.
+ */
+@Composable
+private fun RowMark(name: String, glyph: ImageVector, tint: Color) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(22.dp)
+            .semantics { contentDescription = name },
+    ) {
+        Icon(imageVector = glyph, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -452,8 +522,8 @@ internal val OUT_OF_SEASON: String get() = localized(R.string.assets_badge_out_o
 /** P73-1: the Type chip's label while it is All, and its accessible name always. */
 private val TYPE: String get() = localized(R.string.assets_filter_type)
 
-/** P73-2: the Type menu's first row, and the chip's state while it is All. */
-private val ALL_TYPES: String get() = localized(R.string.assets_filter_all)
+/** P73-2: the Type menu's first row, and the chip's state while it is All; #116 reads it for the Condition menu too. */
+private val ALL: String get() = localized(R.string.assets_filter_all)
 
 /** P73-3: the Components chip. */
 private val COMPONENTS: String get() = localized(R.string.assets_filter_child_assets)
@@ -475,3 +545,17 @@ private val ONLY_COMPONENTS_LINE: String get() = localized(R.string.assets_only_
 
 /** P73-10: the query has matches, all of another type. */
 private val TYPE_HIDDEN_LINE: String get() = localized(R.string.assets_type_hidden)
+
+// #116's words (plan §5, ratified 2026-10-26). Each literal sits on one line of its own.
+
+/** P116-1: the Home Assistant mark's accessible name. */
+private val HA_LINKED: String get() = localized(R.string.assets_ha_linked)
+
+/** P116-2: the other controls and the query admit rows, and the Condition choice alone hides every one. */
+private val CONDITION_HIDDEN_LINE: String get() = localized(R.string.assets_condition_hidden)
+
+/** P116-3: the in-season mark's accessible name. */
+private val IN_SEASON: String get() = localized(R.string.assets_in_season)
+
+/** P116-4: the Condition chip's label while it is All, and its accessible name always. */
+private val CONDITION: String get() = localized(R.string.assets_filter_condition)

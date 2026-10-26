@@ -125,6 +125,10 @@
     <string name="assets_both_hidden">Подходящие объекты скрыты. Включите «Дочерние объекты» и «В архиве», чтобы их увидеть.</string>
     <string name="assets_only_child_assets">Здесь только дочерние объекты. Включите «Дочерние объекты», чтобы их увидеть.</string>
     <string name="assets_type_hidden">Подходящие объекты другого типа. Выберите «Все» в фильтре «Тип».</string>
+    <string name="assets_ha_linked">Связан с Home Assistant</string>
+    <string name="assets_condition_hidden">Подходящие объекты в другом состоянии. Выберите «Все» в фильтре «Состояние».</string>
+    <string name="assets_in_season">В сезоне</string>
+    <string name="assets_filter_condition">Состояние</string>
 
     <string name="assets_search_hint">Поиск объектов</string>
     <string name="assets_clear_search">Очистить поиск</string>

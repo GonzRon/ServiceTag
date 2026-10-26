@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.condition.currentIncident
 import com.loosecannon.servicetag.core.condition.needsIncident
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
@@ -87,7 +88,6 @@ import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
-import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
@@ -307,6 +307,11 @@ enum class EmptyReason {
     ARCHIVED_HIDDEN,
     /** Every match of the chosen type is hidden, and both controls hide at least one of them. */
     BOTH_HIDDEN,
+    /**
+     * #116 (U-C4): the other controls, Type and the query admit at least one row, and the Condition choice alone
+     * removes every one. Decided last: in every other case the reasons above decide exactly as before.
+     */
+    CONDITION_HIDDEN,
 }
 
 data class AssetsState(
@@ -504,7 +509,7 @@ class AssetsViewModel(
             val matching = eligible.filter { controls.admits(it, held) && it.matches(query) }
             val items = matching
                 .sortedWith(compareBy({ lifecycleRank(it, held) }, { it.name.lowercase() }))
-                .map { row ->
+                .mapNotNull { row ->
                     val outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day)
                     // #116 (U-C1): the three facts, each from its own source, read by the row's own id.
                     val rowFacts = rowFactsOf(
@@ -515,6 +520,8 @@ class AssetsViewModel(
                         inboundEnabled = row.id in inboundIds,
                         publishingEnabled = row.id in publishingIds,
                     )
+                    // The Condition control reads the row's own fact, so a row it drops builds nothing more.
+                    if (!controls.admitsCondition(rowFacts)) return@mapNotNull null
                     AssetRow(
                         asset = row,
                         // The parent by name, from the rows already in hand: no second query,
@@ -532,7 +539,6 @@ class AssetsViewModel(
                         inSeason = rowFacts.inSeason,
                     )
                 }
-                .filter { controls.admitsCondition(it) }
             AssetsState(
                 items = items,
                 filters = controls,
@@ -541,8 +547,10 @@ class AssetsViewModel(
                 typeLabel = controls.type?.let { key -> choices.first { it.key == key }.display },
                 typeChoices = choices,
                 // The shipped reasons decide from what the other controls and the query admit: the
-                // condition takes no part in them (U-C4).
-                emptyReason = emptyReason(eligible, controls, query, listed = matching.isNotEmpty(), held = held),
+                // condition takes no part in them. CONDITION_HIDDEN is decided last (#116, U-C4): only
+                // when they admit a row and the Condition choice alone removes every one.
+                emptyReason = if (matching.isNotEmpty() && items.isEmpty()) EmptyReason.CONDITION_HIDDEN
+                else emptyReason(eligible, controls, query, listed = matching.isNotEmpty(), held = held),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
@@ -615,7 +623,7 @@ private fun AssetFilters.admits(asset: Asset, held: Set<AssetId>): Boolean =
  * #116 (U-C3): the Condition control's predicate — the row's own current condition equals the choice; All admits every
  * row. A row with no condition (none recorded, or an asset not maintained here) is admitted only by All.
  */
-private fun AssetFilters.admitsCondition(row: AssetRow): Boolean = condition == null || row.condition?.condition == condition
+private fun AssetFilters.admitsCondition(facts: RowFacts): Boolean = condition == null || facts.condition?.condition == condition
 
 /**
  * C5's ordered table. [listed] is whether the list has a row at all; `hits` are the rows the query

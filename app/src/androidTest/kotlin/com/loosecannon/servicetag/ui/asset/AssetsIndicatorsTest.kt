@@ -167,13 +167,19 @@ class AssetsIndicatorsTest {
         rule.onNodeWithText(CRITICAL_FAN, useUnmergedTree = true).assertExists()
     }
 
-    /** E2: an OPERATIONAL, NOMINAL row draws the health badge alone — no condition badge, no line. */
-    @Test fun anOkTrackedRowShowsOnlyTheHealthBadge() {
+    /**
+     * E2 as #116 amends it (U-C4: R71-11 for the condition badge only, by the issue's text): an OPERATIONAL, NOMINAL
+     * row draws its condition badge with its "since" line, once, then the health badge — and no other line.
+     */
+    @Test fun anOkTrackedRowShowsOperationalThenHealth() {
         draw(PHONE_412, 1.0f, listOf(row("Pool pump", health = view(HealthBand.NOMINAL, condition = OperationalCondition.OPERATIONAL))))
 
         rule.onNodeWithText("NOMINAL", useUnmergedTree = true).assertExists()
-        listOf("OPERATIONAL", "DOWN", "DEGRADED").forEach { rule.onAllNodesWithText(it, useUnmergedTree = true).assertCountEquals(0) }
-        rule.onAllNodesWithText("since", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        rule.onAllNodesWithText("OPERATIONAL", useUnmergedTree = true).assertCountEquals(1)
+        rule.onAllNodesWithText(SINCE, useUnmergedTree = true).assertCountEquals(1)
+        assertTrue("the condition is drawn before the health", before(pill("OPERATIONAL"), pill("NOMINAL")))
+        assertTrue("and read before it", order(hasText("OPERATIONAL")) < order(hasText("NOMINAL")))
+        listOf("DOWN", "DEGRADED").forEach { rule.onAllNodesWithText(it, useUnmergedTree = true).assertCountEquals(0) }
         rule.onAllNodesWithText("Critical:", substring = true, useUnmergedTree = true).assertCountEquals(0)
         rule.onAllNodesWithText(" — ", substring = true, useUnmergedTree = true).assertCountEquals(0)
     }

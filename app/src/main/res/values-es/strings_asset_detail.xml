@@ -119,6 +119,10 @@
     <string name="assets_both_hidden">Los equipos que coinciden están ocultos. Activa “Equipos incluidos” y “Archivado” para verlos.</string>
     <string name="assets_only_child_assets">Aquí solo hay equipos incluidos. Activa “Equipos incluidos” para verlos.</string>
     <string name="assets_type_hidden">Los equipos que coinciden son de otro tipo. Pon “Tipo” en “Todos”.</string>
+    <string name="assets_ha_linked">Vinculado con Home Assistant</string>
+    <string name="assets_condition_hidden">Los equipos que coinciden tienen otro estado. Pon “Estado” en “Todos”.</string>
+    <string name="assets_in_season">En temporada</string>
+    <string name="assets_filter_condition">Estado</string>
 
     <string name="assets_search_hint">Buscar equipos</string>
     <string name="assets_clear_search">Borrar búsqueda</string>

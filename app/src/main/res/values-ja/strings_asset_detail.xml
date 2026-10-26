@@ -116,6 +116,10 @@
     <string name="assets_both_hidden">一致する機器は非表示になっています。表示するには「子機器」と「アーカイブ済み」をオンにしてください。</string>
     <string name="assets_only_child_assets">ここには子機器しかありません。表示するには「子機器」をオンにしてください。</string>
     <string name="assets_type_hidden">一致する機器は別の種類です。「種類」を「すべて」にしてください。</string>
+    <string name="assets_ha_linked">Home Assistantと連携済み</string>
+    <string name="assets_condition_hidden">一致する機器は別の状態です。「状態」を「すべて」にしてください。</string>
+    <string name="assets_in_season">シーズン中</string>
+    <string name="assets_filter_condition">状態</string>
 
     <string name="assets_search_hint">機器を検索</string>
     <string name="assets_clear_search">検索をクリア</string>

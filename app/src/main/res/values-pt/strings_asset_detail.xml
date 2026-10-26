@@ -119,6 +119,10 @@
     <string name="assets_both_hidden">Os equipamentos encontrados estão ocultos. Ative “Equipamentos incluídos” e “Arquivado” para vê-los.</string>
     <string name="assets_only_child_assets">Aqui só há equipamentos incluídos. Ative “Equipamentos incluídos” para vê-los.</string>
     <string name="assets_type_hidden">Os equipamentos encontrados são de outro tipo. Defina “Tipo” como “Todos”.</string>
+    <string name="assets_ha_linked">Vinculado ao Home Assistant</string>
+    <string name="assets_condition_hidden">Os equipamentos encontrados estão em outra condição. Defina “Condição” como “Todos”.</string>
+    <string name="assets_in_season">Em temporada</string>
+    <string name="assets_filter_condition">Condição</string>
 
     <string name="assets_search_hint">Pesquisar equipamentos</string>
     <string name="assets_clear_search">Limpar pesquisa</string>

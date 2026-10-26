@@ -119,6 +119,10 @@
     <string name="assets_both_hidden">Le attrezzature trovate sono nascoste. Attiva “Collegate” e “In archivio” per vederle.</string>
     <string name="assets_only_child_assets">Qui ci sono solo attrezzature collegate. Attiva “Collegate” per vederle.</string>
     <string name="assets_type_hidden">Le attrezzature trovate sono di un altro tipo. Imposta “Tipo” su “Tutti”.</string>
+    <string name="assets_ha_linked">Collegata a Home Assistant</string>
+    <string name="assets_condition_hidden">Le attrezzature trovate sono in un\'altra condizione. Imposta “Condizione” su “Tutti”.</string>
+    <string name="assets_in_season">In stagione</string>
+    <string name="assets_filter_condition">Condizione</string>
 
     <string name="assets_search_hint">Cerca attrezzature</string>
     <string name="assets_clear_search">Cancella ricerca</string>

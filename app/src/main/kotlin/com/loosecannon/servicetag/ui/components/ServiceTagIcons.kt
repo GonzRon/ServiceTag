@@ -58,6 +58,12 @@ object ServiceTagIcons {
 
     /** #77 (R77-24): P77-31's glyph beside its word — an asset handed out of this phone. */
     val Handover: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_handover)
+
+    /** #116 (U-C4): the Assets row's in-season mark — a calendar with a tick, never a sun or a snowflake. */
+    val InSeason: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_in_season)
+
+    /** #116 (U-C4): the Assets row's Home Assistant mark — a house holding a link, never the Home Assistant logo. */
+    val HaLink: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_ha_link)
 }
 
 /**

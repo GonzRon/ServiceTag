@@ -1,35 +1,33 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.core.hapublish.PublishBinding
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
+import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.health.HealthBand
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
-import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
-import com.loosecannon.servicetag.core.hapublish.PublishBinding
-import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
-import com.loosecannon.servicetag.core.hapublish.PublishKind
-import com.loosecannon.servicetag.core.model.AssetCondition
-import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncMode
-import com.loosecannon.servicetag.testing.groupOf
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.onStart
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
@@ -95,8 +93,10 @@ import com.loosecannon.servicetag.ui.journal.formatValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -3692,6 +3692,85 @@ class AssetViewModelsTest {
         assertTrue(ended.row("heater")!!.outOfSeason)
         assertTrue("the twin is still in season", ended.row("tub")!!.inSeason)
         assertEquals("the condition stands", OperationalCondition.DOWN, ended.row("heater")!!.condition?.condition)
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // #116 (U2) — the empty state (plan U-C4; row u6): CONDITION_HIDDEN is decided last, and only
+    // when the Condition choice alone empties a list the other controls and the query fill.
+    // ------------------------------------------------------------------------------------------
+
+    /** Sets Type, the query and the Condition control, and reads the reason of the first built state showing all three. */
+    private suspend fun AssetsViewModel.reasonFor(type: String?, query: String, condition: OperationalCondition?): EmptyReason {
+        pickType(type)
+        onQueryChange(query)
+        pickCondition(condition)
+        return stateOnce("Type $type, \"$query\", Condition $condition") {
+            it.typeChoices.isNotEmpty() && it.filters == AssetFilters(type = type, condition = condition) && it.query == query
+        }.emptyReason
+    }
+
+    /**
+     * u6 (U-C4, U1's ruling 1): the other controls, Type and the query admit rows and the Condition choice alone
+     * removes every one — the list says so; a choice that leaves a row, or All, says nothing. A retired asset's DOWN
+     * row is no condition here (limit 2), so a DOWN choice over it alone reads condition-hidden too. The share picker
+     * decides it the same way, after its own drop.
+     */
+    @Test fun aConditionThatAloneEmptiesTheListSaysSo() = runTest {
+        conditionFleet()
+        val vm = factsModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        assertEquals("no HVAC root is DEGRADED", EmptyReason.CONDITION_HIDDEN, vm.reasonFor("hvac", "", OperationalCondition.DEGRADED))
+        assertEquals("the HVAC DOWN root is listed", EmptyReason.NONE, vm.reasonFor("hvac", "", OperationalCondition.DOWN))
+        assertEquals("All lists the HVAC roots", EmptyReason.NONE, vm.reasonFor("hvac", "", null))
+        assertEquals(
+            "one boiler OPERATIONAL, one retired",
+            EmptyReason.CONDITION_HIDDEN,
+            vm.reasonFor(null, "boiler", OperationalCondition.DOWN),
+        )
+        assertEquals(EmptyReason.NONE, vm.reasonFor(null, "boiler", OperationalCondition.OPERATIONAL))
+        assertEquals("the retired spare", EmptyReason.CONDITION_HIDDEN, vm.reasonFor(null, "spare", OperationalCondition.DOWN))
+        assertEquals(EmptyReason.NONE, vm.reasonFor(null, "spare", null))
+
+        val picker = factsModel(activeOnly = true)
+        backgroundScope.launch { picker.state.collect() }
+        assertEquals(EmptyReason.CONDITION_HIDDEN, picker.reasonFor("hvac", "", OperationalCondition.DEGRADED))
+        assertEquals(EmptyReason.NONE, picker.reasonFor("pump", "", OperationalCondition.DEGRADED))
+    }
+
+    /**
+     * u6 (U-C4): every shipped empty reason is re-derived unchanged with the Condition control at All and at each
+     * choice — the condition takes no part in them — so an archived-only match still names Archived, never the
+     * Condition control. Each case reads a list built over the stores as they then stand.
+     */
+    @Test fun theShippedEmptyReasonsStandWhateverTheCondition() = runTest {
+        val choices = listOf(null) + OperationalCondition.entries
+        suspend fun assertReason(expected: EmptyReason, type: String?, query: String) {
+            val vm = factsModel()
+            backgroundScope.launch { vm.state.collect() }
+            for (choice in choices) {
+                assertEquals("Type $type, \"$query\", Condition $choice", expected, vm.reasonFor(type, query, choice))
+            }
+        }
+
+        assertReason(EmptyReason.NO_ASSETS, type = null, query = "")
+        graph.assets.upsert(assetRow("old-pump", name = "Example Old Pump", status = AssetStatus.ARCHIVED).copy(category = "Pump"))
+        graph.conditions.insert(conditionRow("c-old-pump", "old-pump", OperationalCondition.DOWN, "2026-10-01"))
+        assertReason(EmptyReason.NO_ACTIVE_ASSETS, type = null, query = "")
+        graph.assets.upsert(assetRow("seal", name = "Example Pump Seal", parent = "old-pump").copy(category = "Pump"))
+        graph.conditions.insert(conditionRow("c-seal", "seal", OperationalCondition.DEGRADED, "2026-10-01"))
+        assertReason(EmptyReason.ONLY_COMPONENTS, type = null, query = "")
+
+        conditionFleet()
+        graph.assets.upsert(
+            assetRow("vent", name = "Example Backup Vent", parent = "heater", status = AssetStatus.ARCHIVED).copy(category = "HVAC"),
+        )
+        graph.conditions.insert(conditionRow("c-vent", "vent", OperationalCondition.DOWN, "2026-10-01"))
+        assertReason(EmptyReason.NOTHING_MATCHES, type = null, query = "zzz")
+        assertReason(EmptyReason.TYPE_HIDDEN, type = "pump", query = "heater")
+        assertReason(EmptyReason.COMPONENTS_HIDDEN, type = "hvac", query = "fan")
+        assertReason(EmptyReason.ARCHIVED_HIDDEN, type = null, query = "old heater")
+        assertReason(EmptyReason.BOTH_HIDDEN, type = null, query = "vent")
     }
 
     private companion object {
