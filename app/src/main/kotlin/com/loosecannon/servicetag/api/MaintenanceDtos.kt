@@ -438,9 +438,29 @@ internal data class PauseRequest(val paused: Boolean)
  * The action flags a schedule PATCH takes beside its command (spec §9.1): [unlinkHealthSubject]
  * archives, in the same write, every live health subject the edit would strand. Not a column, and
  * not a row field — `docs/api/command-shapes.json` lists it as the schedule's `actionFlags`.
+ * #114 (C11, C29b): [seasonStartQuickElected] is the owner's explicit election for a Season Start schedule's
+ * FORM → QUICK edit (O-2), passed to `SaveSchedule`; absent is false, never elected by default, so that edit without
+ * it is 409 `SEASON_START_STRANDED` `QUICK_NEEDS_ELECTION`.
  */
 @Serializable
-internal data class ScheduleActionFlags(val unlinkHealthSubject: Boolean = false)
+internal data class ScheduleActionFlags(
+    val unlinkHealthSubject: Boolean = false,
+    val seasonStartQuickElected: Boolean = false,
+)
+
+/**
+ * #114 (C10, C10a, C29b) — `POST /v1/schedules/{id}/role`: [role] `SEASON_START` or `NONE`, required; [sinceOn] the
+ * commissioning boundary, `YYYY-MM-DD`, absent or null for today; [seasonStartQuickElected] the owner's explicit
+ * election that a QUICK schedule's one-tap completions count (O-2), absent false — never defaulted true, so a QUICK
+ * schedule without it is 409 `SEASON_START_REFUSED` `QUICK_NOT_ELECTED`, and moving a QUICK role's date asks again.
+ * `NONE` ignores the other two. No key takes a value, a date to publish or READY (G17).
+ */
+@Serializable
+internal data class ScheduleRoleRequest(
+    val role: String,
+    val sinceOn: String? = null,
+    val seasonStartQuickElected: Boolean = false,
+)
 
 /**
  * `POST /v1/schedules/{id}/archive`: [archived] as every archive route takes it, plus the same

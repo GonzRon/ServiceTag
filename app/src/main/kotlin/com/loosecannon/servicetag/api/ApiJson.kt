@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.fetch.FetchProblem
+import com.loosecannon.servicetag.core.hapublish.PublishRefusal
+import com.loosecannon.servicetag.core.hapublish.PublishRefused
 import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
@@ -71,6 +73,7 @@ import com.loosecannon.servicetag.core.usecase.ScheduleValidation
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyEnded
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonStartBadDate
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefusal
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
@@ -553,6 +556,18 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
             "SeasonStartStrands(cause=${e.strandCause.name}" + (e.assetId?.let { ", assetId=${it.value}" } ?: "") + ")",
         ) + e.schedules.map(::strandedName),
     )
+    // #114 (C10, C29b): the role route's `sinceOn` is not an ISO `YYYY-MM-DD` date; nothing was written.
+    is SeasonStartBadDate -> errorResponse(
+        422, "Unprocessable Content", "SEASON_START_DATE_INVALID", "${e.field} must be an ISO YYYY-MM-DD date",
+        listOf("SeasonStartBadDate(field=${e.field})"), e.field,
+    )
+    // #113/#114 (C25, C25a, C29b): a publishing refusal by its `PublishRefusal` name — `STALE_PLAN` its own code.
+    is PublishRefused -> publishRefusedResponse(e)
+    // #113/#114 (C29b): a read of Home Assistant answered nothing to use; its kind under the outbound name.
+    is HelperReadFailed -> errorResponse(
+        409, "Conflict", "HA_HELPER_READ_FAILED", "Home Assistant could not be read: ${e.kind.name}",
+        listOf("HelperReadFailed(errorKind=${e.kind.name}" + (e.detail?.let { ", detail=$it" } ?: "") + ")"),
+    )
     is HealthScheduleTaken -> errorResponse(
         409, "Conflict", "HEALTH_SCHEDULE_TAKEN", "that schedule already drives another health subject",
         listOf("HealthScheduleTaken(scheduleId=${e.scheduleId.value}, heldBy=${e.heldBy.value})"),
@@ -657,6 +672,35 @@ private fun seasonStartRefusalMessage(reason: SeasonStartRefusal): String = when
     SeasonStartRefusal.GroupArchived -> "this group is archived, so it has no assets to mark ready"
     SeasonStartRefusal.GroupHasNoMembers -> "this group has no assets to mark ready"
     SeasonStartRefusal.DateInFuture -> "sinceOn may not be later than today"
+}
+
+/**
+ * #113/#114 (C25, C25a, C29b): [PublishRefused] on the wire. `STALE_PLAN` is its own 409 — the caller plans again —
+ * and every other reason 409 `HA_PUBLISH_REFUSED`, `problems` naming it as `PublishRefused(reason=…)`, with the
+ * holding asset for `TARGET_IN_USE`. `field` is the refused key, but `NO_CONNECTION`'s, which is about this phone and
+ * no body key, is null.
+ */
+private fun publishRefusedResponse(e: PublishRefused): ApiResponse {
+    val named = listOf(
+        "PublishRefused(reason=${e.reason.name}" + (e.holderAssetId?.let { ", holderAssetId=${it.value}" } ?: "") + ")",
+    )
+    fun refused(message: String, field: String? = e.field) =
+        errorResponse(409, "Conflict", "HA_PUBLISH_REFUSED", message, named, field)
+    return when (e.reason) {
+        PublishRefusal.STALE_PLAN -> errorResponse(
+            409, "Conflict", "STALE_PLAN", "the plan no longer holds; plan again", named, e.field,
+        )
+        PublishRefusal.NO_CONNECTION -> refused("no Home Assistant connection is saved on this phone", field = null)
+        PublishRefusal.BAD_ENTITY_ID -> refused("${e.field} is not a Home Assistant entity id")
+        PublishRefusal.WRONG_DOMAIN -> refused("${e.field} is not a helper of the kind this publication writes")
+        PublishRefusal.OPTIONS_MISMATCH -> refused("the helper's options are not exactly UP, DEGRADED and DOWN")
+        PublishRefusal.NOT_DATE_ONLY -> refused("${e.field} is not a date-only helper")
+        PublishRefusal.NOT_MAINTAINED_HERE -> refused("the asset is archived, retired or transferred out")
+        PublishRefusal.TARGET_IN_USE -> refused("another asset already publishes to that helper")
+        PublishRefusal.INBOUND_SOURCE -> refused("ServiceTag reads that helper, so it cannot write it")
+        PublishRefusal.STALE_READ -> refused("the helper's check is out of date; check it again")
+        PublishRefusal.BOUNDARY_IS_TARGET -> refused("the season-ended helper is one ServiceTag writes")
+    }
 }
 
 /** #114 (C2): one developer sentence per [SeasonStartStrandCause]; the remedy is always the role first. */

@@ -180,6 +180,7 @@ internal class ApiHandlers(
     internal val installedComponents: InstalledComponentHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
+    internal val haEntities: HaEntityHandlers = HaEntityHandlers { null },
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles, graph.events,
@@ -198,6 +199,7 @@ internal class ApiHandlers(
         SupplyHandlers(graph),
         InstalledComponentHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
+        HaEntityHandlers(graph),
     )
 
     // --- status ---------------------------------------------------------------------------

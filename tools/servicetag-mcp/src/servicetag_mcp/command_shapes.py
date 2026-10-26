@@ -41,8 +41,11 @@ SCHEDULE_LEGACY_KEYS: tuple[str, ...] = ("seasonBehavior", "seasonReentry", "sea
 """1.3's three season fields, still accepted as deprecated inputs — never in a body beside
 `servicePolicy`/`policyOffsetDays`."""
 
-SCHEDULE_ACTION_FLAGS: tuple[str, ...] = ("unlinkHealthSubject",)
-"""Actions, not fields: no row carries one."""
+SCHEDULE_ACTION_FLAGS: tuple[str, ...] = ("unlinkHealthSubject", "seasonStartQuickElected")
+"""Actions, not fields: no row carries one. #114's QUICK election is the PATCH's only; the archive takes the first."""
+
+SCHEDULE_ROLE_KEYS: tuple[str, ...] = ("role", "sinceOn", "seasonStartQuickElected")
+"""#114 (C29b): the Season Start role's own command, `POST /v1/schedules/{id}/role`."""
 
 SCHEDULE_ROW_TO_COMMAND: Mapping[str, str] = MappingProxyType(
     {"assetId": "targetAssetId", "groupId": "targetGroupId"}
@@ -99,7 +102,7 @@ season pair, which the replacement fills or ignores — each is a 400 there."""
 
 
 def vendored() -> dict[str, dict[str, Any]]:
-    """The ten entries in the golden file's own shape, for the equality test."""
+    """The eleven entries in the golden file's own shape, for the equality test."""
     return {
         "asset": {"keys": list(ASSET_KEYS)},
         "schedule": {
@@ -116,4 +119,5 @@ def vendored() -> dict[str, dict[str, Any]]:
         "materialize": {"keys": list(MATERIALIZE_KEYS)},
         "replaceDraft": {"keys": list(REPLACE_DRAFT_KEYS)},
         "replaceSuccessor": {"keys": list(REPLACE_SUCCESSOR_KEYS)},
+        "scheduleRole": {"keys": list(SCHEDULE_ROLE_KEYS)},
     }

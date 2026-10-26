@@ -72,7 +72,8 @@ the one body key it is about, then the `problems` in parentheses.
   below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
 - **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
   tools — refuses an app whose `schemaVersion` is below 22 the same way, from the same read, naming the feature
-  "season readiness and Home Assistant publishing".
+  "season readiness and Home Assistant publishing". So do `set_schedule_role` and `list_ha_entities`, the block's
+  next two.
 
 ## Using it
 
@@ -115,7 +116,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Ninety-one: `pair` plus one per API operation.
+Ninety-three: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -348,6 +349,22 @@ stored nowhere: no tool takes a value, a date to publish or a ready flag. Every 
 marker; and `set_season_mode`, `update_asset`, `update_schedule` and `update_group` can answer
 `SEASON_START_STRANDED` (409) while a Season Start role would be stranded. `docs/api/v1.md`'s **Season readiness and
 the Season Start role (#114)** section is the contract.
+
+**The Season Start role (#114; needs schema 22)** — `set_schedule_role`: `POST /v1/schedules/{id}/role`, `role`
+`SEASON_START` with its commissioning boundary `since_on` (today when omitted), or `NONE`. A `QUICK` schedule takes
+the role only with `season_start_quick_elected=True`, the owner's explicit election that its one-tap completions
+count, asked again on every set; `update_schedule` takes the same flag for a role schedule's `FORM` to `QUICK` edit.
+Neither tool ever sends the flag by default. Refusals are `SEASON_START_REFUSED` (409, by reason) and
+`SEASON_START_DATE_INVALID` (422); the write is never re-sent on a dropped connection.
+
+**Home Assistant helper discovery (#113/#114; needs schema 22)** — `list_ha_entities`:
+`GET /v1/ha-connection/entities/{scope}`, read only, `scope` one of `input_boolean`, `input_select` and
+`input_datetime` (any other is refused before a request). The phone reads its saved Home Assistant connection afresh
+on every call, under the same network and token rules as its own Test connection, and answers each helper's id,
+friendly name and shape — a dropdown's `options`, a date helper's `hasDate` and `hasTime` — never a state, the
+address, the Wi-Fi name or the token. A two-minute read budget; `HA_PUBLISH_REFUSED` (`NO_CONNECTION`) and
+`HA_HELPER_READ_FAILED` (409) name what stopped it. `docs/api/v1.md`'s **Home Assistant helper discovery (#113,
+#114)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 

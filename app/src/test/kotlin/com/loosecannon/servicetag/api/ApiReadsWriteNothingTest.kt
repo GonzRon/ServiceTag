@@ -2,6 +2,9 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
+import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import kotlinx.coroutines.runBlocking
@@ -26,7 +29,18 @@ class ApiReadsWriteNothingTest {
         now = dayMillis("2026-01-20")
         today = LocalDate.parse("2026-01-20")
     }
-    private val api = V1Client(graph)
+    /** #113/#114 (C29b): helper discovery's list read, scripted (no Home Assistant is called); two helpers. */
+    private val api = V1Client(
+        graph,
+        haEntities = {
+            HaListOutcome.Listed(
+                listOf(
+                    HaEntityCandidate("input_select.example_heater_equipment_status", "Status", HelperAttributes(listOf("UP", "DEGRADED", "DOWN"), null, null)),
+                    HaEntityCandidate("input_datetime.example_heater_service_done", "Done", HelperAttributes(null, true, false)),
+                ),
+            )
+        },
+    )
 
     @After fun close() = graph.close()
 
@@ -143,6 +157,11 @@ class ApiReadsWriteNothingTest {
             // #114 (C29): readiness, derived for today and stored nowhere — with no role, and with one.
             "/v1/assets/$generator/season-readiness",
             "/v1/assets/$tub/season-readiness",
+            // #113/#114 (C29b, row 114): helper discovery reads Home Assistant and writes nothing here; row 108 re-runs
+            // it over the publishing tables.
+            "/v1/ha-connection/entities/input_select",
+            "/v1/ha-connection/entities/input_datetime",
+            "/v1/ha-connection/entities/input_boolean",
         )) {
             val response = api.call("GET", path)
             assertEquals("$path: ${response.bodyText()}", 200, response.status)
@@ -278,6 +297,15 @@ class ApiReadsWriteNothingTest {
                     """{"title":"Oil change","targetAssetId":"$tub","timeInterval":1,"timeUnit":"MONTH","anchorOn":"2026-02-05","unlinkHealthSubject":true}""",
                 )
             },
+        )
+        // #114 (C10, C29b; row 113): the role route writes the schedule row alone — no state, no event, no recompute.
+        assertEquals(
+            setOf("maintenance_schedule"),
+            tablesWrittenBy { api.call("POST", "/v1/schedules/$oilChange/role", """{"role":"SEASON_START","seasonStartQuickElected":true}""") },
+        )
+        assertEquals(
+            setOf("maintenance_schedule"),
+            tablesWrittenBy { api.call("POST", "/v1/schedules/$oilChange/role", """{"role":"NONE"}""") },
         )
         val coolant = schedule(generator, "Coolant flush")
         api.ok(SubjectResponse.serializer(), "POST", "/v1/health-subjects", subjectBody(generator, "Coolant", "MAINTENANCE_OVERDUE", coolant), status = 201)

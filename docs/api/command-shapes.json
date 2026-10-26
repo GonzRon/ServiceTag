@@ -5,7 +5,7 @@
   "schedule": {
     "keys": ["targetAssetId", "targetGroupId", "title", "description", "timeInterval", "timeUnit", "timeBasis", "anchorOn", "leadDays", "meterDefinitionId", "meterInterval", "anchorMeter", "meterLead", "servicePolicy", "policyOffsetDays", "completionMode", "profileId", "remindersEnabled", "providers"],
     "legacyKeys": ["seasonBehavior", "seasonReentry", "seasonReentryOffsetDays"],
-    "actionFlags": ["unlinkHealthSubject"],
+    "actionFlags": ["unlinkHealthSubject", "seasonStartQuickElected"],
     "rowToCommand": {"assetId": "targetAssetId", "groupId": "targetGroupId"}
   },
   "healthSubject": {
@@ -55,5 +55,8 @@
   },
   "replaceSuccessor": {
     "keys": ["name", "category", "manufacturer", "model", "serialNumber", "purchaseOn", "inServiceOn", "purchasePriceMinor", "currency", "vendor", "location", "warrantyExpiresOn", "warrantyNotes", "parentAssetId"]
+  },
+  "scheduleRole": {
+    "keys": ["role", "sinceOn", "seasonStartQuickElected"]
   }
 }

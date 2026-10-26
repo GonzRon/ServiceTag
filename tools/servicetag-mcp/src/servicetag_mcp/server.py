@@ -183,6 +183,9 @@ TOOL_NAMES: tuple[str, ...] = (
     # #113/#114 — season readiness and Home Assistant publishing, each at a schema-22 minimum, appended last in C1's
     # order. A4's readiness read opens it: one, taking the total to 91.
     "get_season_readiness",
+    # A4w (C29b): the Season Start role write and helper discovery, taking the total to 93.
+    "set_schedule_role",
+    "list_ha_entities",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -191,6 +194,11 @@ _IMPORT_TIMEOUT = httpx.Timeout(30.0, read=120.0)
 """A full-phone merge plans and applies inside one Room transaction on the phone; 30s is a
 plausible ceiling to hit on a very full archive, so the two import calls get a longer read budget
 than everything else (finding 12)."""
+
+_HA_READ_TIMEOUT = httpx.Timeout(30.0, read=120.0)
+"""#113/#114 (C35b): a call the phone answers only after reading Home Assistant itself — helper discovery — gets
+`_IMPORT_TIMEOUT`'s shape: one or two Home Assistant reads at #16's 30 s each, inside the request. Every other
+"#113/#114" call keeps the default, since no Home Assistant call happens inside it."""
 
 
 _MIN_SCHEMA_VERSION = 8
@@ -1617,7 +1625,12 @@ def update_group(
 @mcp.tool()
 def archive_group(group_id: str, archived: bool = True) -> dict[str, Any]:
     """Archive or unarchive a group. Archive is not delete: the group and its schedules are hidden
-    and every membership window and past round is kept."""
+    and every membership window and past round is kept.
+
+    #114: restoring (`archived=False`) a group a Season Start schedule targets is refused as
+    `SEASON_START_STRANDED` (409), writing nothing, when the restored role would cover a member that may not have one
+    (cause `RESTORE_NOT_ELIGIBLE`) or one another live role already covers (cause `RESTORE_ALREADY_COVERED`); clear a
+    role first."""
     return _call(
         "POST",
         f"/v1/groups/{_path_id(group_id, field='group_id')}/archive",
@@ -1832,8 +1845,13 @@ offset on the other policies. `season_reentry` and `season_reentry_offset_days` 
 deprecated members: clearing one is a deprecated argument, so it sends the legacy form."""
 
 _UNLINK_HEALTH_SUBJECT = "unlinkHealthSubject"
-"""The schedule command's one action flag (`command_shapes.SCHEDULE_ACTION_FLAGS`): an action, not a
+"""The schedule command's first action flag (`command_shapes.SCHEDULE_ACTION_FLAGS`): an action, not a
 field, sent only when asked for."""
+
+_SEASON_START_QUICK_ELECTED = "seasonStartQuickElected"
+"""#114 (C11, C29b): the schedule PATCH's second action flag and the role command's election
+(`command_shapes.SCHEDULE_ACTION_FLAGS`, `SCHEDULE_ROLE_KEYS`): the owner's explicit election that a Season Start
+schedule's one-tap completions count, sent only when the caller passes `True` — never by default (O-2, O-7)."""
 
 
 def _schedule_command_keys(legacy: bool) -> tuple[str, ...]:
@@ -1875,6 +1893,7 @@ def update_schedule(
     providers: list[dict[str, Any]] | None = None,
     clear_fields: list[str] | None = None,
     unlink_health_subject: bool | None = None,
+    season_start_quick_elected: bool | None = None,
 ) -> dict[str, Any]:
     """Edit a schedule's rule.
 
@@ -1937,9 +1956,14 @@ def update_schedule(
     app refuses two edits as `SEASON_START_STRANDED` (409) and writes nothing: moving the schedule to another asset
     or group (cause `ROLE_SCHEDULE_RETARGET`; clear the role first), and changing it from `FORM` to `QUICK`
     (cause `QUICK_NEEDS_ELECTION`). The refusal's `problems` name the cause first, then the role schedule by id and
-    title.
+    title. **`season_start_quick_elected=True`** is the owner's explicit election for that `FORM` to `QUICK` edit
+    (O-2): it sends the action flag `seasonStartQuickElected: true`, and the edit is saved with the role kept. Pass it
+    only when the owner has said that one-tap completions of this schedule count as the season's service; `None` and
+    `False` send no flag, so the election is never made by default.
     """
-    arguments = _arguments(locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject"))
+    arguments = _arguments(
+        locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject", "season_start_quick_elected"),
+    )
     to_clear = _validate_clear_fields(clear_fields, _SCHEDULE_CLEARABLE_FIELDS, arguments)
     legacy = _refuse_mixed_forms(arguments, to_clear)
 
@@ -1959,6 +1983,8 @@ def update_schedule(
         ]
     if unlink_health_subject:
         body[_UNLINK_HEALTH_SUBJECT] = True
+    if season_start_quick_elected is True:
+        body[_SEASON_START_QUICK_ELECTED] = True
     return _call("PATCH", path, json_body=body, content_type="application/json")
 
 
@@ -1984,7 +2010,11 @@ def archive_schedule(
     1.4: archiving a schedule that drives a live health subject is refused as
     `SCHEDULE_DRIVES_HEALTH_SUBJECT` unless `unlink_health_subject=True`, which archives that subject
     in the same write (or is refused as `HEALTH_SUBJECT_IS_PRIMARY` when its asset's `TRACK_ONE`
-    health follows it). `None` and `False` send no flag."""
+    health follows it). `None` and `False` send no flag.
+
+    #114: restoring (`archived=False`) a Season Start schedule is refused as `SEASON_START_STRANDED` (409), writing
+    nothing, when its role would cover an asset that may not have one (cause `RESTORE_NOT_ELIGIBLE`) or one another
+    live role already covers (cause `RESTORE_ALREADY_COVERED`, both schedules named); clear a role first."""
     body: dict[str, Any] = {"archived": archived}
     if unlink_health_subject:
         body[_UNLINK_HEALTH_SUBJECT] = True
@@ -4422,6 +4452,78 @@ def get_season_readiness(asset_id: str) -> dict[str, Any]:
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-readiness"
     _require_ha_publishing_schema("get_season_readiness")
     return _call("GET", path)
+
+
+@mcp.tool()
+def set_schedule_role(
+    schedule_id: str,
+    role: str,
+    since_on: str | None = None,
+    season_start_quick_elected: bool | None = None,
+) -> dict[str, Any]:
+    """Set or clear a schedule's passive Season Start role: `POST /v1/schedules/{id}/role` → `{schedule}`, the row
+    with `role` and `roleSinceOn`. `role` is `SEASON_START` or `NONE`. The role marks the schedule whose completion
+    is the season's service, which `get_season_readiness` reads; it changes no rule, no due date and no history, and
+    no tool takes a value, a date to publish or a ready flag.
+
+    `SEASON_START` takes `since_on` (`YYYY-MM-DD`, not after today) as the role's commissioning boundary, today when
+    omitted: only completions dated on or after it can count. Setting the role a schedule already has with the same
+    day writes nothing; another day moves only the boundary. `NONE` clears the role and its boundary; clearing a
+    schedule that has none writes nothing.
+
+    **The QUICK election.** A `QUICK` (one-tap) schedule takes the role only with
+    `season_start_quick_elected=True`, the owner's explicit election that its one-tap completions count as the
+    season's service; it is asked again on every set, a boundary move included. Pass it only when the owner has said
+    so: `None` and `False` send no flag, and this tool never makes the election by default. A `FORM` schedule and
+    `NONE` ignore it.
+
+    Refusals, each writing nothing: an unknown schedule is `NO_SUCH_SCHEDULE` (404); `SEASON_START_REFUSED` (409)
+    names its reason in `problems` as `SeasonStartRefused(reason=…)` — `SCHEDULE_ARCHIVED`, `QUICK_NOT_ELECTED`,
+    `NOT_MAINTAINED_HERE`, `YEAR_ROUND` or `LEAF_CHILD` (with the `assetId`), `ALREADY_COVERED` (with the `assetId`
+    and the covering schedule's `scheduleId` and `title`; clear that role first), `GROUP_ARCHIVED`,
+    `GROUP_HAS_NO_MEMBERS` or `DATE_IN_FUTURE`; a `since_on` that is not a `YYYY-MM-DD` date is
+    `SEASON_START_DATE_INVALID` (422, `field` `sinceOn`); a `role` outside the two is the 400. A timeout or a closed
+    connection is not re-sent: read the schedule before running this again. Needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/role"
+    _require_ha_publishing_schema("set_schedule_role")
+    body: dict[str, Any] = {"role": role}
+    if since_on is not None:
+        body["sinceOn"] = since_on
+    if season_start_quick_elected is True:
+        body[_SEASON_START_QUICK_ELECTED] = True
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+
+_HA_ENTITY_SCOPES: tuple[str, ...] = ("input_boolean", "input_select", "input_datetime")
+"""#113/#114 (C29b): helper discovery's three scopes, each a Home Assistant domain spelled exactly."""
+
+
+@mcp.tool()
+def list_ha_entities(scope: str) -> dict[str, Any]:
+    """List the Home Assistant helpers of one kind, read only: `GET /v1/ha-connection/entities/{scope}` →
+    `{scope, entities: [{entityId, friendlyName, options, hasDate, hasTime}], truncated}`, answered as the phone
+    sends it. `scope` is `input_boolean` (on/off helpers), `input_select` (dropdowns) or `input_datetime` (date
+    helpers); any other is refused here with nothing sent.
+
+    The phone makes one fresh read of its saved Home Assistant connection, under the same network and token rules as
+    its own Test connection, so this call can take up to two minutes. Nothing is kept: every call reads again, never
+    cached. Rows are sorted by friendly name, at most 2,000, `truncated` when more matched. `options` (at most 64
+    strings) is set only on an `input_select` row and `hasDate` / `hasTime` only on an `input_datetime` row, `null`
+    elsewhere or when Home Assistant reported none. No row carries a state, and no answer the address, the Wi-Fi name
+    or the token. Use an `entityId` from here to name a helper exactly; this tool writes nothing.
+
+    No saved connection is `HA_PUBLISH_REFUSED` (409, reason `NO_CONNECTION`); a read that answered
+    no list is `HA_HELPER_READ_FAILED` (409, `HelperReadFailed(errorKind=…, detail=…)` — `NEEDS_TOKEN`,
+    `NOT_ON_LOCAL_NETWORK` with its cause, `AUTH_REFUSED`, `UNREACHABLE`, `TIMED_OUT` and the rest of the publishing
+    error kinds). Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing
+    is sent.
+    """
+    if scope not in _HA_ENTITY_SCOPES:
+        raise ToolError("scope must be input_boolean, input_select or input_datetime; nothing was sent")
+    _require_ha_publishing_schema("list_ha_entities")
+    return _call("GET", f"/v1/ha-connection/entities/{scope}", timeout=_HA_READ_TIMEOUT)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

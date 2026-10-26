@@ -53,9 +53,13 @@ class CommandShapesGoldenTest {
                 "loan", "loanReturn",
                 // #92 (C26): the attachment edit, the upload's header object, save as document, the replace draft.
                 "attachmentUpdate", "attachmentUpload", "materialize", "replaceDraft", "replaceSuccessor",
+                // #114 (C29b): the Season Start role's own command, never a key of the schedule's.
+                "scheduleRole",
             ),
             shapes.keys.toList(),
         )
+        assertEquals(keysOf("scheduleRole"), ScheduleRoleRequest.serializer().descriptor.names)
+        assertEquals(listOf("role", "sinceOn", "seasonStartQuickElected"), keysOf("scheduleRole"))
         assertEquals(keysOf("attachmentUpdate"), UpdateAttachmentRequest.serializer().descriptor.names)
         assertEquals(keysOf("attachmentUpload"), UploadMetadata.serializer().descriptor.names)
         assertEquals("operationKey", keysOf("attachmentUpload").first())
@@ -114,11 +118,15 @@ class CommandShapesGoldenTest {
         assertEquals(ScheduleForms.CURRENT_KEYS, keys.filter { it in ScheduleForms.CURRENT_KEYS })
         assertEquals(ScheduleForms.CURRENT_KEYS, listOf("servicePolicy", "policyOffsetDays"))
 
-        // The action flag: a PATCH's and an archive's, never a key of the command or a row field.
+        // The action flags: a PATCH's, never a key of the command or a row field. The archive takes the first
+        // only; #114's QUICK election (C11, C29b) is the PATCH's and the role command's.
         val flags = schedule.list("actionFlags")
+        assertEquals(listOf("unlinkHealthSubject", "seasonStartQuickElected"), flags)
         assertEquals(ScheduleForms.ACTION_FLAGS, flags)
         assertEquals(flags, ScheduleActionFlags.serializer().descriptor.names)
-        assertEquals(listOf("archived") + flags, ScheduleArchiveRequest.serializer().descriptor.names)
+        assertEquals(listOf("archived", "unlinkHealthSubject"), ScheduleArchiveRequest.serializer().descriptor.names)
+        assertTrue("seasonStartQuickElected" in keysOf("scheduleRole"))
+        assertTrue(keysOf("scheduleRole").none { it in command })
         val row = ScheduleRowResponse.serializer().descriptor.names
         assertTrue(flags.none { it in command || it in row })
 

@@ -30,9 +30,10 @@ STATUS_22: dict = {
 }
 STATUS_21: dict = dict(STATUS_22, schemaVersion=21, backupFormatVersion=20)
 
-HA_PUBLISHING_TOOLS = ("get_season_readiness",)
+HA_PUBLISHING_TOOLS = ("get_season_readiness", "set_schedule_role", "list_ha_entities")
 """The "#113/#114" block in C1's order, appended last after #16's (the R16-17 tail-pin precedent). A4 opens it with
-one tool, taking the registered total to **91**; each later brief appends its tools here and moves the pin."""
+one tool, taking the registered total to **91**, and A4w appends two, taking it to **93**; each later brief appends
+its tools here and moves the pin."""
 
 READINESS_KEYS = {
     "assetId", "readyForSeason", "seasonServiceDoneOn", "reason", "roleScheduleId", "roleTarget", "roleSinceOn",

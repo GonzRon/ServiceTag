@@ -993,6 +993,13 @@ fun seasonReadiness(
   - **Group membership** (cause `MEMBER_NOT_ELIGIBLE` / `MEMBER_ALREADY_COVERED`): `SaveGroup.run`
     (`C/usecase/SaveGroup.kt:43-106`) refuses an added member of a group a live role schedule targets when the member
     fails C10's asset rule or is covered by another role.
+  - **Restore (C11 erratum, A2's fix round, M-4)** (cause `RESTORE_NOT_ELIGIBLE` / `RESTORE_ALREADY_COVERED`):
+    `ArchiveSchedule`'s restore of a role schedule and `ArchiveGroup`'s restore of a group a role schedule targets
+    run C10's asset rule (`NotMaintainedHere` included) and the one-role coverage over every asset the restored role
+    would cover; a failure is `SeasonStartStrands` with that cause (409 `SEASON_START_STRANDED` on
+    `POST /v1/schedules/{id}/archive` and `POST /v1/groups/{id}/archive` with `"archived": false`, documented in
+    v1.md by A4w), never a silent restore. No new string: the phone maps `RESTORE_ALREADY_COVERED` to P114-20 and
+    `RESTORE_NOT_ELIGIBLE` to P114-16/17/18 by its reason, wrapped by P114-21 for a group.
   - **Not hooked (indirect, read as `ROLE_NOT_ALLOWED` / `TWO_ROLES` / `NO_ROLE` by C9):** asset delete, archive,
     retire, Replace asset, transfer out, a child deleted or replaced, a merge or replace restore bringing a second role.
 - **C12, the full-replace save keeps the role.** `SaveSchedule.prepare` builds `candidate` wholly from the command

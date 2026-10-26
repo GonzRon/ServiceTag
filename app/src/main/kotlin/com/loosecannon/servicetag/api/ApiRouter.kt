@@ -196,6 +196,12 @@ internal class ApiRouter(
      * #114 added one row over one shape: the twenty-ninth `/v1/assets/{id}/…` sub-resource, the asset's season
      * readiness, read only (C29): C9's answer, derived when it is read and stored nowhere. **No route writes readiness**:
      * nothing takes a value, a date to publish or READY (G17), so every other verb on the shape is a 404.
+     *
+     * #114 added a write and #113/#114 a read (C29b): `POST /v1/schedules/{id}/role`, the Season Start role through
+     * `SetScheduleRole` (another verb on it is a 404, as on every schedule sub-resource), and `GET
+     * /v1/ha-connection/entities/{scope}`, helper discovery over the shipped #105 read, one shape per scope —
+     * `input_boolean`, `input_select` or `input_datetime`; any other scope is a 404, another verb a 405. Neither takes
+     * a value, a date to publish or READY, and neither reaches the token, the address or the connection's save.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -394,6 +400,8 @@ internal class ApiRouter(
                 "complete" to "POST" -> handlers.maintenance.completeSchedule(rest[1], request)
                 "close-round" to "POST" -> handlers.maintenance.closeRound(rest[1], request)
                 "closures" to "GET" -> handlers.maintenance.listClosures(rest[1])
+                // #114 (C29b): the Season Start role, set or cleared through `SetScheduleRole`.
+                "role" to "POST" -> handlers.maintenance.setScheduleRole(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -499,6 +507,13 @@ internal class ApiRouter(
 
             rest == listOf("import-merge", "apply") ->
                 if (method == "POST") handlers.importMergeApply(request) else notAllowed(request)
+
+            // #113/#114 (C29b) — helper discovery, one shape per scope: an unknown scope is no shape at all (404), a
+            // known one a 405 for any verb but `GET`. The scope is a path segment, since the framing drops queries.
+            rest.size == 3 && rest[0] == "ha-connection" && rest[1] == "entities" -> {
+                val scope = HaEntityHandlers.scopeOf(rest[2]) ?: throw ApiFailure.notFound(request.path)
+                if (method == "GET") handlers.haEntities.listEntities(scope) else notAllowed(request)
+            }
 
             // 1.4.1 (#80) — the provider repair. Top-level, so no `/v1/schedules/{id}` segment can
             // ever read `repairs` as an id; the plan writes nothing, the apply re-plans inside its

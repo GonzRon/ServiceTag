@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.di.AppGraph
@@ -44,6 +45,7 @@ internal fun maintenanceHandlersFor(graph: FakeGraph): MaintenanceHandlers = Mai
     recompute = graph.recomputeSchedules,
     today = graph.todayPort,
     repairScheduleProviders = graph.repairScheduleProviders,
+    setScheduleRole = graph.setScheduleRole,
 )
 
 /**
@@ -189,7 +191,15 @@ internal fun installedComponentHandlersFor(graph: FakeGraph): InstalledComponent
  * production handlers (every collaborator above) and the production serializers, exactly as
  * `ApiRouterTest` builds them, written once rather than six times.
  */
-internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2345") {
+internal class V1Client(
+    val graph: FakeGraph,
+    private val token: String = "ABCD2345",
+    /**
+     * #113/#114 (C29b): helper discovery's list read, scripted — `AppGraph.listHaEntities` in production. No suite here
+     * reaches a Home Assistant; the default answers "no connection is saved".
+     */
+    private val haEntities: suspend () -> HaListOutcome? = { null },
+) {
 
     fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
@@ -210,6 +220,7 @@ internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2
             installedComponentHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
+            haEntities = HaEntityHandlers(haEntities),
         ),
         token,
     )

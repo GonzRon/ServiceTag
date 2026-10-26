@@ -38,9 +38,9 @@ import kotlinx.serialization.json.JsonObject
  * legacy body that omits `seasonReentry` on an `IN_SERVICE_RESUME_CLAMPED` schedule becomes
  * `IN_SERVICE_AT_START`, because the table reads an absent re-entry as AT_START.
  *
- * **The action flag** `unlinkHealthSubject` is an action parameter and not a column (spec §9.1): a
- * PATCH reads it beside the command, and a create, which has nothing to unlink, refuses it as the
- * unknown field it is there.
+ * **The action flags** `unlinkHealthSubject` and (#114) `seasonStartQuickElected` are action parameters and not
+ * columns (spec §9.1): a PATCH reads them beside the command, and a create, which has nothing to unlink and no role,
+ * refuses either as the unknown field it is there.
  */
 internal object ScheduleForms {
 
@@ -50,13 +50,18 @@ internal object ScheduleForms {
     /** 1.3's three season keys, the deprecated inputs. */
     val LEGACY_KEYS: List<String> = listOf("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays")
 
-    /** Action parameters a PATCH takes beside the command; never a row field. */
-    val ACTION_FLAGS: List<String> = listOf("unlinkHealthSubject")
+    /** Action parameters a PATCH takes beside the command; never a row field. #114 adds the QUICK election. */
+    val ACTION_FLAGS: List<String> = listOf("unlinkHealthSubject", "seasonStartQuickElected")
 
     enum class Form { CURRENT, LEGACY }
 
-    /** One schedule command as read off the wire: its form, its typed body, and a PATCH's flag. */
-    class Parsed(val form: Form, val body: ScheduleCommandRequest, val unlinkHealthSubject: Boolean)
+    /** One schedule command as read off the wire: its form, its typed body, and a PATCH's two flags. */
+    class Parsed(
+        val form: Form,
+        val body: ScheduleCommandRequest,
+        val unlinkHealthSubject: Boolean,
+        val seasonStartQuickElected: Boolean = false,
+    )
 
     /**
      * The form [raw] is in, by key presence alone. A body naming keys of both forms is refused here,
@@ -102,7 +107,7 @@ internal object ScheduleForms {
         val flags = strict(ScheduleActionFlags.serializer(), JsonObject(raw.filterKeys { it in flagKeys }))
         if (acceptsFlags) refuseNullProviders(raw)
         val body = strict(ScheduleCommandRequest.serializer(), JsonObject(raw.filterKeys { it !in flagKeys }))
-        return Parsed(form, body, flags.unlinkHealthSubject)
+        return Parsed(form, body, flags.unlinkHealthSubject, flags.seasonStartQuickElected)
     }
 
     /**
