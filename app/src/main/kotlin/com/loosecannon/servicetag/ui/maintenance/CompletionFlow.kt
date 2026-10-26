@@ -267,7 +267,7 @@ class CompletionFlow(
 
     /**
      * Answers the open prompt. **False means the answer was incomplete and the prompt stays open**
-     * — the one case being a schedule whose meter rule owes a reading, which cannot be completed
+     * — a schedule whose meter rule owes a reading not yet entered, or a date after the day the prompt was opened on (O-16, C39), which cannot be completed
      * until the reading is entered. Returning false rather than writing is what keeps the next
      * threshold right instead of derived from a baseline nobody measured.
      */
@@ -438,7 +438,7 @@ class CompletionFlow(
  *
  * Drawn wherever a [CompletionFlow] is driven, which is why it is a composable over the flow rather
  * than part of any one screen — the scan sheet and the quick action get the same dialog, by
- * construction. The confirm button stays disabled while a required reading is missing, so the meter
+ * construction. The confirm button stays disabled while a required reading is missing or while the date is after today, with S25 under the date field, so the meter
  * rule is unreachable through the UI as well as refused by [CompletionFlow.submit].
  */
 @Composable
@@ -449,7 +449,8 @@ fun CompletionFlowHost(flow: CompletionFlow) {
     offer?.let { EventOfferDialog(it, onAccept = { flow.acceptOffer() }, onDecline = flow::declineOffer) }
     val open = prompt ?: return
 
-    // Keyed on the schedule so a second prompt starts from today again rather than the last answer.
+    // Keyed on the schedule, so a new prompt starts from the prompt's own fields: today and blanks,
+    // or the owner's kept answer when a write refused its date.
     var occurredOn by remember(open.scheduleId.value) { mutableStateOf(open.occurredOn) }
     var occurredTime by remember(open.scheduleId.value) { mutableStateOf(open.occurredTime) }
     var reading by remember(open.scheduleId.value) { mutableStateOf(open.meterValue) }

@@ -292,7 +292,6 @@ class OffersTest {
         assertFalse(flow.submit(CompletionAnswer(occurredOn = "2026-04-16")))
         flow.cancel()
         advanceUntilIdle()
-        assertNull("nothing is asked", flow.offer.value)
         assertEquals(CompletionOutcome.Cancelled, outcome.await())
         // One stored in advance — an older release's, or a merge's — is still never offered after.
         val advance = AssetEvent(

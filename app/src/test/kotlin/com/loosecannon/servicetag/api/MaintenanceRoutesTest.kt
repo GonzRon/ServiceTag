@@ -919,18 +919,10 @@ class MaintenanceRoutesTest {
      * stored — never today, and never refused for being in the past. A malformed date is a 422
      * naming the field.
      *
-     * **A future date is accepted, and that is the contract as it stands.** D-25's principle is
-     * that "the API must not be unable to produce data the app can, nor able to produce data it
-     * cannot" (spec §2.9), and nothing in the completion path bounds `occurredOn` above: neither
-     * `LogEvent`'s validation nor `CompleteSchedule` nor `CompleteGroupMembers` looks at today, so
-     * the in-app completion flow accepts a future date too. Refusing one *here* would invent a rule
-     * no use case holds and make the two paths diverge — which is the half of D-25 that is easy to
-     * miss. `closedOn` **is** bounded, by `CloseRound`, and that bound is proved above.
-     *
-     * B12's brief reads this row as "a future one is refused"; the spec's sentence, D-25's own
-     * wording and the domain all say otherwise, so the contradiction is reported rather than
-     * resolved here. If a future bound is ever ruled, it belongs in the completion use cases and
-     * this assertion is what will fail and point at it.
+     * A future date is refused: O-16 as amended (C39) bounds a completion above by the phone's
+     * today, in the completion use cases where this paragraph said such a bound belongs, so it is
+     * 422 `COMPLETION_DATE_IN_FUTURE`. `closedOn` is bounded too, by `CloseRound`, and that bound is
+     * proved above.
      */
     @Test fun aBackdatedCompletionIsAcceptedWithTheDateItWasSent() {
         val asset = createAsset("Hot tub")
