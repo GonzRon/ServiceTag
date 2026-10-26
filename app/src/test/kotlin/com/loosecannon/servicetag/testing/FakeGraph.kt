@@ -211,6 +211,16 @@ import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
 import com.loosecannon.servicetag.core.hapublish.PublishOutboundTargets
 import com.loosecannon.servicetag.core.hapublish.RevalidatePublishing
+import com.loosecannon.servicetag.core.hapublish.HaServiceAction
+import com.loosecannon.servicetag.core.hapublish.PublishErrorKind
+import com.loosecannon.servicetag.core.hapublish.RemoteEntity
+import com.loosecannon.servicetag.core.hapublish.RemoteRead
+import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.hapublish.BoundaryCacheWriter
+import com.loosecannon.servicetag.hapublish.CallOutcome
+import com.loosecannon.servicetag.hapublish.DesiredStateReconciler
+import com.loosecannon.servicetag.hapublish.HaPublishTransport
+import com.loosecannon.servicetag.hapublish.PublishRunner
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.seasonsync.OutboundTargets
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
@@ -249,6 +259,11 @@ class FakeGraph(
      */
     val secretStore: KeystoreSecretStore =
         KeystoreSecretStore(kotlin.io.path.createTempDirectory("no-backup").toFile(), JdkAead()),
+    /**
+     * #113 (C27): the directory [installationIdentity] lives in. A test passes the previous graph's to model the same
+     * installation restarted (the id stays), and leaves the default to model another installation (a new id).
+     */
+    val installationDir: File = kotlin.io.path.createTempDirectory("installation").toFile(),
 ) {
 
     /** Move this before a call to give the write a timestamp the test can assert on. */
@@ -266,8 +281,7 @@ class FakeGraph(
     val commits: Int get() = countingUow.commits
 
     /** #92 (C5a): mirroring `AppGraph`'s field by name, over a fresh temporary directory in place of the no-backup one. */
-    val installationIdentity: InstallationIdentity =
-        InstallationIdentity(kotlin.io.path.createTempDirectory("installation").toFile())
+    val installationIdentity: InstallationIdentity = InstallationIdentity(installationDir)
 
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
     /** #77's transfer records, mirroring `AppGraph`'s field by name; before the ports, which its guard reads. */
@@ -496,6 +510,19 @@ class FakeGraph(
     val revalidatePublishing: RevalidatePublishing =
         RevalidatePublishing(publishBindings, publishDeliveries, haConnections, uow, clock)
     val dismissDecommission: DismissDecommission = DismissDecommission(publishDecommissions, uow)
+
+    /**
+     * #113/#114 (C30) — the publish runner as `AppGraph` wires it, over the doubles: Home Assistant is [haPublish]'s
+     * script, and the projector edge is [desiredStateReconciler]'s, which by default changes nothing (B4b1's projector
+     * takes its place). The installation is [installationIdentity]'s.
+     */
+    val haPublish: ScriptedHaPublish = ScriptedHaPublish { countingUow.open }
+    val desiredStateReconciler: ScriptedReconciler = ScriptedReconciler()
+    val publishRunner: PublishRunner = PublishRunner(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, secretStore, assets,
+        transferRecords, seasonActivations, installationIdentity::id, haPublish,
+        BoundaryCacheWriter(db.haPublishDeliveryDao()::recordBoundary), desiredStateReconciler, uow, clock, todayPort,
+    )
 
     /** 1.4 — condition and health configuration, mirroring `AppGraph`'s six fields by name (master plan §1). */
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
@@ -856,11 +883,100 @@ private class InMemoryKeyValueStore : KeyValueStore {
     override fun putString(key: String, value: String) { strings[key] = value }
 }
 
-/** #92: [delegate], counting each write transaction that committed. Reads are not counted. */
+/**
+ * #92: [delegate], counting each write transaction that committed. Reads are not counted. #113 (C30, G15): [open] is
+ * the number of read or write transactions running right now, so a scripted Home Assistant can say none spans a request.
+ */
 private class CountingUnitOfWork(private val delegate: UnitOfWork) : UnitOfWork {
     private val committed = java.util.concurrent.atomic.AtomicInteger()
+    private val running = java.util.concurrent.atomic.AtomicInteger()
     val commits: Int get() = committed.get()
+    val open: Int get() = running.get()
 
-    override suspend fun <T> write(block: suspend () -> T): T = delegate.write(block).also { committed.incrementAndGet() }
-    override suspend fun <T> read(block: suspend () -> T): T = delegate.read(block)
+    override suspend fun <T> write(block: suspend () -> T): T =
+        delegate.write { counted(block) }.also { committed.incrementAndGet() }
+
+    override suspend fun <T> read(block: suspend () -> T): T = delegate.read { counted(block) }
+
+    private suspend fun <T> counted(block: suspend () -> T): T {
+        running.incrementAndGet()
+        try {
+            return block()
+        } finally {
+            running.decrementAndGet()
+        }
+    }
+}
+
+/**
+ * #113/#114 (C22, C30) — Home Assistant's helpers as a script, behind the runner's transport: every read and every
+ * service call is recorded in [log] (`GET <entity>` / `POST <entity>=<value>`), in order. By default a read answers the
+ * helper in [helpers] (`ENTITY_NOT_FOUND` when absent) and a call sets the helper and answers `Accepted`, as HA acts on
+ * one; a test replaces [onRead] or [onCall] to fail, hold or race a request. [openTransactions] is the graph's count of
+ * running transactions, recorded at each request in [transactionsAtRequest].
+ */
+class ScriptedHaPublish(private val openTransactions: () -> Int = { 0 }) : HaPublishTransport {
+    data class Call(val action: HaServiceAction, val entityId: String, val value: String)
+
+    val helpers: MutableMap<String, RemoteEntity> = java.util.concurrent.ConcurrentHashMap()
+    val log: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+    val calls: MutableList<Call> = java.util.Collections.synchronizedList(mutableListOf())
+    val transactionsAtRequest: MutableList<Int> = java.util.Collections.synchronizedList(mutableListOf())
+
+    /** Whether the request reached the stored connection with a token: the address and token as passed. */
+    val connections: MutableList<HaConnection> = java.util.Collections.synchronizedList(mutableListOf())
+    val tokens: MutableList<Secret> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var onRead: suspend (entityId: String) -> RemoteRead = { answer(it) }
+    @Volatile var onCall: suspend (call: Call) -> CallOutcome = { act(it) }
+
+    /** The helper as HA holds it now. */
+    fun answer(entityId: String): RemoteRead =
+        helpers[entityId]?.let { RemoteRead.Answered(it) } ?: RemoteRead.Failed(PublishErrorKind.ENTITY_NOT_FOUND, null)
+
+    /** HA acting on [call]: the helper takes the value, and the call is accepted. */
+    fun act(call: Call): CallOutcome {
+        helpers.computeIfPresent(call.entityId) { _, helper -> helper.copy(state = call.value) }
+        return CallOutcome.Accepted
+    }
+
+    fun state(entityId: String): String? = helpers[entityId]?.state
+
+    val posts: List<Call> get() = calls.toList()
+
+    override suspend fun read(connection: HaConnection, entityId: String, token: Secret): RemoteRead {
+        transactionsAtRequest += openTransactions()
+        connections += connection
+        tokens += token
+        log += "GET $entityId"
+        return onRead(entityId)
+    }
+
+    override suspend fun call(
+        connection: HaConnection,
+        action: HaServiceAction,
+        entityId: String,
+        value: String,
+        token: Secret,
+    ): CallOutcome {
+        transactionsAtRequest += openTransactions()
+        connections += connection
+        tokens += token
+        log += "POST $entityId=$value"
+        val call = Call(action, entityId, value)
+        calls += call
+        return onCall(call)
+    }
+}
+
+/** #113/#114 (C30) — the projector edge as a script: each call's day in [days], answered by [answer]. */
+class ScriptedReconciler : DesiredStateReconciler {
+    val days: MutableList<java.time.LocalDate> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var answer: suspend (java.time.LocalDate) -> Boolean = { false }
+
+    override suspend fun reconcileDesired(today: java.time.LocalDate): Boolean {
+        days += today
+        return answer(today)
+    }
 }

@@ -271,6 +271,12 @@ import com.loosecannon.servicetag.seasonsync.SeasonSyncRunner
 import com.loosecannon.servicetag.seasonsync.SeasonSyncWork
 import com.loosecannon.servicetag.seasonsync.WorkManagerSeasonSync
 import com.loosecannon.servicetag.seasonsync.storedHaConnection
+import com.loosecannon.servicetag.hapublish.BoundaryCacheWriter
+import com.loosecannon.servicetag.hapublish.ClientTransport
+import com.loosecannon.servicetag.hapublish.DesiredStateReconciler
+import com.loosecannon.servicetag.hapublish.HomeAssistantPublishClient
+import com.loosecannon.servicetag.hapublish.PublishRunner
+import com.loosecannon.servicetag.hapublish.storedPublishConnection
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
@@ -958,6 +964,24 @@ class AppGraph(private val context: Context) {
     val revalidatePublishing: RevalidatePublishing =
         RevalidatePublishing(publishBindings, publishDeliveries, haConnections, uow, clock)
     val dismissDecommission: DismissDecommission = DismissDecommission(publishDecommissions, uow)
+
+    /**
+     * #113/#114 (C22, C30) — the outbound client, at the stored connection and under #16's gate, and the one runner
+     * that drives every delivery through it: one lock, so one request at a time. The projector edge answers "nothing
+     * changed" until `PublishProjector` (B4b1) takes its place.
+     */
+    val haPublishClient: HomeAssistantPublishClient = HomeAssistantPublishClient(
+        settings = storedPublishConnection(haConnections),
+        networkPermissionGranted = networkPermissionGranted,
+        currentNetwork = currentNetworkReader,
+        resolver = InetHostResolver(networkPermissionGranted),
+    )
+    val publishRunner: PublishRunner = PublishRunner(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, secretStore, assets,
+        transferRecords, seasonActivations, installationIdentity::id, ClientTransport(haPublishClient),
+        BoundaryCacheWriter(db.haPublishDeliveryDao()::recordBoundary), DesiredStateReconciler { false }, uow, clock,
+        today,
+    )
 
     // 1.4 — condition and health configuration (master plan §9, §10.1). A condition write inserts one
     // immutable row and nothing else; the offer writes only when accepted. The subject and policy

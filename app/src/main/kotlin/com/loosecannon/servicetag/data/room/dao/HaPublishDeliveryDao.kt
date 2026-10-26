@@ -9,7 +9,7 @@ import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 
 /**
  * #113/#114 (C5): the device-local delivery records, one per binding. **No flow is offered** — the projector never
- * observes delivery bookkeeping (C31, I28). Three compare-and-set writes, each one statement, beside a command's
+ * observes delivery bookkeeping (C31, I28). Four compare-and-set writes, each one statement, beside a command's
  * whole-row [upsert] (B3):
  *  - [writeDesired], the projector's: on the binding's revision **and** the `desired_revision` read in the same
  *    transaction (A02); it moves the desired revision, so it clears the error and its pair and restarts the attempt
@@ -17,7 +17,8 @@ import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
  *  - [record], the sender's: on the binding's revision **and** the desired revision as snapshotted (C17); it never
  *    writes the desired value, the boundary cache or the request stamp, and an error is written with the pair it was
  *    recorded at;
- *  - [stampRequest], the API's Publish now (rev 5, C35b): `last_request_id` and `last_request_at` only.
+ *  - [stampRequest], the API's Publish now (rev 5, C35b): `last_request_id` and `last_request_at` only;
+ *  - [recordBoundary], the runner's boundary step (C9a): the three `boundary_*` columns, on the binding's revision.
  * Nothing here is exported, merged or packed.
  */
 @Dao
@@ -128,4 +129,20 @@ interface HaPublishDeliveryDao {
             "WHERE binding_id IN (:bindingIds)",
     )
     suspend fun stampRequest(bindingIds: List<String>, requestId: String, at: Long): Int
+
+    /**
+     * The boundary cache (C9a, B4a): a valid season-ended date read at [readAt], written only while the binding is
+     * still at [bindingRevision], which the cache then names; the three boundary columns and nothing else. Answers
+     * whether it wrote.
+     */
+    suspend fun recordBoundary(bindingId: String, bindingRevision: Long, value: String, readAt: Long): Boolean =
+        recordBoundaryRow(bindingId, bindingRevision, value, readAt) == 1
+
+    @Query(
+        "UPDATE ha_publish_delivery SET boundary_value = :value, boundary_read_at = :readAt, " +
+            "boundary_binding_revision = :bindingRevision " +
+            "WHERE binding_id = :bindingId AND EXISTS " +
+            "(SELECT 1 FROM ha_publish_binding WHERE id = :bindingId AND revision = :bindingRevision)",
+    )
+    suspend fun recordBoundaryRow(bindingId: String, bindingRevision: Long, value: String, readAt: Long): Int
 }
