@@ -6,6 +6,7 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Update
 import com.loosecannon.servicetag.data.room.entities.HaConnectionEntity
+import kotlinx.coroutines.flow.Flow
 
 /** #16 (C9, C11): the device-local Home Assistant connection. Nothing here is exported, merged or packed. */
 @Dao
@@ -25,6 +26,10 @@ interface HaConnectionDao {
 
     @Query("SELECT * FROM ha_connection ORDER BY id")
     suspend fun all(): List<HaConnectionEntity>
+
+    /** #113/#114 (C24, rev 6): the rows, emitted again on each save and after a delete. */
+    @Query("SELECT * FROM ha_connection ORDER BY id")
+    fun observeAll(): Flow<List<HaConnectionEntity>>
 
     /** The schema's CASCADE takes every binding on the row (C9, R16-14). */
     @Query("DELETE FROM ha_connection WHERE id = :id")

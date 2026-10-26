@@ -41,6 +41,7 @@
     <string name="ha_precise_location_why">为了在发送访问令牌之前确认此手机连接的是家庭 Wi-Fi，ServiceTag 需要读取 Wi-Fi 网络的名称。Android 只有在授予精确位置信息权限时才允许这样做，因此请选择“精确”。ServiceTag 不会使用您的位置，但 Android 会将其列入使用过位置信息的应用中。</string>
     <string name="ha_precise_location_refused">没有精确位置信息权限，ServiceTag 无法判断这是哪个 Wi-Fi，因此“仅限此家庭 Wi-Fi”保持关闭。</string>
     <string name="ha_http_needs_home_wifi">http:// 地址需要选择“仅限此家庭 Wi-Fi”。请选择该选项，或使用 https:// 地址。</string>
+    <string name="ha_publishing_blocks_address_change">更改地址前，请先停止发布季节开始日期：必须先通知原来的 Home Assistant。</string>
     <string name="ha_turn_on_location">请开启位置信息，以便 ServiceTag 读取 Wi-Fi 网络的名称，然后重试。</string>
     <string name="ha_background_off">后台检查关闭时，如果已超过所选间隔，ServiceTag 会在您打开或返回应用时检查；您点按“立即同步”时也会检查。在使用应用期间，它仍需要精确位置信息权限。</string>
     <string name="ha_background_checks">在此家庭网络上进行后台检查</string>

@@ -157,6 +157,7 @@
     <string name="season_sync_link_manual">从现在起，由 Home Assistant 开始和结束此设备的使用季。其使用季历史保持不变。</string>
     <string name="season_sync_follows_ha">此设备的使用季跟随 Home Assistant。如需在此处更改，请先在设备页面上选择“停止同步”。</string>
     <string name="season_sync_bad_entity_id">请输入实体 ID，例如 input_boolean.example_heater_in_season：只能包含小写字母、数字和下划线，并带有一个点。</string>
+    <string name="season_sync_outbound_target">%s 是此手机设置的辅助元素。请选择由 Home Assistant 自身控制的辅助元素。</string>
     <string name="season_sync_choose_entity">选择实体</string>
     <string name="season_sync_change_entity">更改</string>
     <string name="season_sync_enter_manually">手动输入实体 ID</string>

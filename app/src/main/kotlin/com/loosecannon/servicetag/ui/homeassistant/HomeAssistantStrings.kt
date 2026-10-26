@@ -132,6 +132,9 @@ internal val HA_PRECISE_LOCATION_REFUSED: String get() = localized(R.string.ha_p
 /** P16-67 (amended 2026-10-03): saving an http address with "Any network". */
 internal val HA_HTTP_NEEDS_HOME_WIFI: String get() = localized(R.string.ha_http_needs_home_wifi)
 
+/** P113-42 (#113/#114, O-12): a new address while a date helper is still owed `1970-01-01`. */
+internal val HA_PUBLISHING_BLOCKS_ADDRESS_CHANGE: String get() = localized(R.string.ha_publishing_blocks_address_change)
+
 /** P16-68: at capture with Location off; after P16-77 when Location is off. */
 internal val HA_TURN_ON_LOCATION: String get() = localized(R.string.ha_turn_on_location)
 

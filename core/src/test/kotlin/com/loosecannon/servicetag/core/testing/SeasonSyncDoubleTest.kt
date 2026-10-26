@@ -5,11 +5,13 @@ import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome.NoDecision
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome.Observed
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
 import com.loosecannon.servicetag.core.seasonsync.Secret
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -39,6 +41,48 @@ class SeasonSyncDoubleTest {
         install.haConnections.upsert(haConnectionOf())
         bindings.insert(seasonSyncBindingOf("h1"))
         bindings.insert(seasonSyncBindingOf("x1", entityId = "input_boolean.example_cooler_in_season"))
+    }
+
+    /**
+     * #113/#114 (C24 rev 6; row 132) — the doubles agree with Room's two read flows: `observeAll()` emits again on a
+     * link, an entity change, a mode change and the connection's CASCADE, and `observe()` on a save and null after a
+     * delete, each seen by a collector started before the write.
+     */
+    @Test
+    fun theTwoReadFlowsEmitOnEachChange() = runTest {
+        install.assets.upsert(plainAssetOf("h1", "Example Heater"))
+        val links = mutableListOf<List<String>>()
+        val connections = mutableListOf<String?>()
+        backgroundScope.launch { bindings.observeAll().collect { rows -> links += rows.map { "${it.entityId}/${it.mode}" } } }
+        backgroundScope.launch { install.haConnections.observe().collect { connections += it?.cadence?.name } }
+        runCurrent()
+
+        install.haConnections.upsert(haConnectionOf())
+        runCurrent()
+        bindings.insert(seasonSyncBindingOf("h1"))
+        runCurrent()
+        bindings.update(seasonSyncBindingOf("h1", entityId = "input_boolean.example_heater_in_season_2", revision = 2))
+        runCurrent()
+        bindings.update(
+            seasonSyncBindingOf("h1", entityId = "input_boolean.example_heater_in_season_2", mode = SyncMode.FORCE_IN, revision = 3),
+        )
+        runCurrent()
+        install.haConnections.upsert(haConnectionOf(cadence = SyncCadence.WEEKLY))
+        runCurrent()
+        install.haConnections.delete("conn-1")
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                emptyList(),
+                listOf("input_boolean.example_heater_in_season/FOLLOW"),
+                listOf("input_boolean.example_heater_in_season_2/FOLLOW"),
+                listOf("input_boolean.example_heater_in_season_2/FORCE_IN"),
+                emptyList(),
+            ),
+            links,
+        )
+        assertEquals(listOf(null, "DAILY", "WEEKLY", null), connections)
     }
 
     @Test

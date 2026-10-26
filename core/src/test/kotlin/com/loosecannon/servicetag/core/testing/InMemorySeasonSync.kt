@@ -48,6 +48,8 @@ class InMemorySeasonSyncRepository : SeasonSyncRepository, Rollbackable, Witness
 
     override fun observeFor(assetId: AssetId): Flow<SeasonSyncBinding?> = version.map { rows[assetId.value] }
 
+    override fun observeAll(): Flow<List<SeasonSyncBinding>> = version.map { rows.values.sortedBy { it.assetId.value } }
+
     override suspend fun insert(binding: SeasonSyncBinding) {
         if (binding.assetId.value in rows) {
             throw RiggedFailure("season_sync_binding already holds a binding for ${binding.assetId.value}")
@@ -84,17 +86,27 @@ class InMemorySeasonSyncRepository : SeasonSyncRepository, Rollbackable, Witness
  * #16 (C7) — the one connection in memory. [get] fails loudly if a writer ever left two rows, which R16-10 rules
  * out. [upsert] refuses a row that breaks C4a's three invariants, which C17's writers keep: a home-network connection
  * exactly when a network is captured, an http address only on the home network, and a captured name never blank.
- * [delete] hands the id to [bindings], the schema's CASCADE from `ha_connection`.
+ * [delete] hands the id to [bindings], the schema's CASCADE from `ha_connection`, and to every table added by
+ * [cascadesTo] (#113/#114: the publish bindings).
  */
 class InMemoryHaConnectionRepository(
     private val bindings: InMemorySeasonSyncRepository,
 ) : HaConnectionRepository, Rollbackable {
     val rows = LinkedHashMap<String, HaConnection>()
+    private val version = MutableStateFlow(0)
+    private val cascades = mutableListOf<(String) -> Unit>()
+
+    /** Another table whose rows the schema deletes with their connection. */
+    fun cascadesTo(cascade: (String) -> Unit) {
+        cascades += cascade
+    }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
+
+    override fun observe(): Flow<HaConnection?> = version.map { rows.values.firstOrNull() }
 
     override suspend fun get(): HaConnection? {
         check(rows.size <= 1) { "ha_connection holds ${rows.size} rows; one installation has one connection" }
@@ -117,11 +129,14 @@ class InMemoryHaConnectionRepository(
             throw AssertionError("ha_connection: a blank home network name")
         }
         rows[connection.id] = connection
+        version.value += 1
     }
 
     override suspend fun delete(id: String) {
         rows.remove(id)
         bindings.cascadeFromConnection(id)
+        cascades.forEach { it(id) }
+        version.value += 1
     }
 }
 

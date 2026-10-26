@@ -41,6 +41,7 @@
     <string name="ha_precise_location_why">Per verificare che questo telefono sia connesso al Wi-Fi di casa prima di inviare il token di accesso, ServiceTag deve leggere il nome della rete Wi-Fi. Android lo consente solo con l\'autorizzazione Posizione precisa, quindi scegli “Precisa”. ServiceTag non usa la tua posizione, ma Android mostrerà ServiceTag tra le app che hanno usato la posizione.</string>
     <string name="ha_precise_location_refused">Senza l\'autorizzazione Posizione precisa, ServiceTag non può sapere quale Wi-Fi sia questo, quindi “Solo su questo Wi-Fi di casa” resta disattivato.</string>
     <string name="ha_http_needs_home_wifi">Un indirizzo http:// richiede “Solo su questo Wi-Fi di casa”. Sceglilo oppure usa un indirizzo https://.</string>
+    <string name="ha_publishing_blocks_address_change">Interrompi la pubblicazione delle date di inizio stagione prima di cambiare l\'indirizzo: il vecchio Home Assistant deve essere avvisato prima.</string>
     <string name="ha_turn_on_location">Attiva la Posizione per permettere a ServiceTag di leggere il nome della rete Wi-Fi, poi riprova.</string>
     <string name="ha_background_off">Con i controlli in background disattivati, ServiceTag controlla quando apri l\'app o ci torni dopo l\'intervallo scelto, e quando tocchi “Sincronizza ora”. Ha comunque bisogno della Posizione precisa mentre l\'app è in uso.</string>
     <string name="ha_background_checks">Controlli in background su questa rete di casa</string>

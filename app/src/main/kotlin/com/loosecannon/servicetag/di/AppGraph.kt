@@ -36,6 +36,15 @@ import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
 import com.loosecannon.servicetag.core.fetch.FetchDocument
 import com.loosecannon.servicetag.core.fetch.HopPolicy
+import com.loosecannon.servicetag.core.hapublish.ChangePublishTarget
+import com.loosecannon.servicetag.core.hapublish.DecommissionRepository
+import com.loosecannon.servicetag.core.hapublish.DisablePublishing
+import com.loosecannon.servicetag.core.hapublish.DismissDecommission
+import com.loosecannon.servicetag.core.hapublish.EnablePublishing
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
+import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
+import com.loosecannon.servicetag.core.hapublish.PublishOutboundTargets
+import com.loosecannon.servicetag.core.hapublish.RevalidatePublishing
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
 import com.loosecannon.servicetag.fetch.CacheStagingArea
 import com.loosecannon.servicetag.fetch.InetHostResolver
@@ -79,6 +88,7 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.OutboundTargets
 import com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult
 import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.SaveHaConnection
@@ -200,6 +210,7 @@ import com.loosecannon.servicetag.data.room.RoomCategoryRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDeadlineLocalDeliveryRepository
+import com.loosecannon.servicetag.data.room.RoomDecommissionRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
@@ -208,6 +219,8 @@ import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
 import com.loosecannon.servicetag.data.room.RoomInstalledComponentRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomPublishBindingRepository
+import com.loosecannon.servicetag.data.room.RoomPublishDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
@@ -475,6 +488,16 @@ class AppGraph(private val context: Context) {
      */
     val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
     val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
+
+    /**
+     * #113/#114 (C24): the outbound bindings, their delivery records and the decommission tombstones — device-local,
+     * never exported, merged or packed — and the publishing side the four #16 commands consult (C26, C28).
+     */
+    val publishBindings: PublishBindingRepository = RoomPublishBindingRepository(db.haPublishBindingDao())
+    val publishDeliveries: PublishDeliveryRepository = RoomPublishDeliveryRepository(db.haPublishDeliveryDao())
+    val publishDecommissions: DecommissionRepository = RoomDecommissionRepository(db.haPublishDecommissionDao())
+    val outboundTargets: OutboundTargets =
+        PublishOutboundTargets(publishBindings, publishDeliveries, publishDecommissions, ids, clock)
 
     /** #16 (C18, R16-5): the Home Assistant token, sealed by a Keystore key in a file the platform never copies. */
     val secretStore: KeystoreSecretStore = KeystoreSecretStore.onDevice(context)
@@ -904,19 +927,37 @@ class AppGraph(private val context: Context) {
     val resumeRefresh: ResumeRefresh = ResumeRefresh { seasonSyncRunner.launchRefreshIfStale() }
     val linkSeasonSync: LinkSeasonSync = LinkSeasonSync(
         assets, seasonActivations, transferRecords, seasonSyncBindings, haConnections, secretStore, setSeasonMode,
-        seasonSyncRunner, uow, clock, today,
+        seasonSyncRunner, uow, clock, today, outboundTargets,
     )
     val setSeasonSyncMode: SetSeasonSyncMode =
         SetSeasonSyncMode(seasonSyncBindings, assets, recordSeasonSyncResult, seasonSyncRunner, uow, clock)
     val editSeasonSyncEntity: EditSeasonSyncEntity =
-        EditSeasonSyncEntity(seasonSyncBindings, seasonSyncRunner, uow, clock)
+        EditSeasonSyncEntity(seasonSyncBindings, seasonSyncRunner, uow, clock, outboundTargets)
     val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
     val resumeSeasonSync: ResumeSeasonSync =
         ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
-    val saveHaConnection: SaveHaConnection =
-        SaveHaConnection(haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock)
+    val saveHaConnection: SaveHaConnection = SaveHaConnection(
+        haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock, outboundTargets,
+    )
     val forgetHaConnection: ForgetHaConnection =
-        ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow)
+        ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow, outboundTargets)
+
+    /**
+     * #113/#114 (C25, C25a) — the publishing controls, one write each and no HTTP inside: the app layer reads the helper
+     * first (C30) and asks for delivery after the commit (C32).
+     */
+    val enablePublishing: EnablePublishing = EnablePublishing(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
+        transferRecords, uow, ids, clock,
+    )
+    val changePublishTarget: ChangePublishTarget = ChangePublishTarget(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
+        transferRecords, uow, ids, clock,
+    )
+    val disablePublishing: DisablePublishing = DisablePublishing(publishBindings, publishDecommissions, uow, ids, clock)
+    val revalidatePublishing: RevalidatePublishing =
+        RevalidatePublishing(publishBindings, publishDeliveries, haConnections, uow, clock)
+    val dismissDecommission: DismissDecommission = DismissDecommission(publishDecommissions, uow)
 
     // 1.4 — condition and health configuration (master plan §9, §10.1). A condition write inserts one
     // immutable row and nothing else; the offer writes only when accepted. The subject and policy

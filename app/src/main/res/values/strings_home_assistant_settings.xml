@@ -97,6 +97,8 @@
     <string name="ha_precise_location_refused">Without precise Location permission, ServiceTag cannot tell which Wi-Fi this is, so ‘Only on this home Wi-Fi’ stays off.</string>
     <!-- P16-67 (amended 2026-10-03): saving an http address with "Any network". Quotes P16-60 (ha_home_wifi_only). -->
     <string name="ha_http_needs_home_wifi">An http:// address needs ‘Only on this home Wi-Fi’. Choose it, or use an https:// address.</string>
+    <!-- P113-42 (#113/#114, O-12): saving a new address while a date helper is still owed 1970-01-01. -->
+    <string name="ha_publishing_blocks_address_change">Stop publishing Season Start dates before changing the address: the old Home Assistant has to be told first.</string>
     <!-- P16-68: at capture with Location off; after P16-77 when Location is off. -->
     <string name="ha_turn_on_location">Turn on Location so ServiceTag can read the Wi-Fi network\'s name, then try again.</string>
     <!-- P16-69 (amended 2026-10-03): under P16-70 while background checks are off or paused. -->

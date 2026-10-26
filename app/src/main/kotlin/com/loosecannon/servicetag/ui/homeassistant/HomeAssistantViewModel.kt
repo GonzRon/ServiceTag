@@ -459,6 +459,7 @@ internal fun refusalNotices(reason: SaveHaConnectionRefusal): List<Notice> = whe
     SaveHaConnectionRefusal.ENDPOINT_REFUSED -> listOf(Notice(HA_ADDRESS_NOT_ALLOWED))
     SaveHaConnectionRefusal.HTTP_NEEDS_HOME_NETWORK -> listOf(Notice(HA_HTTP_NEEDS_HOME_WIFI))
     SaveHaConnectionRefusal.HOME_NETWORK_NOT_SET -> emptyList()
+    SaveHaConnectionRefusal.PUBLISHING_BLOCKS_ADDRESS_CHANGE -> listOf(Notice(HA_PUBLISHING_BLOCKS_ADDRESS_CHANGE))
 }
 
 /** C-3: the remedy for a Wi-Fi name the reader could not confirm, by its cause, at capture and after P16-77. */

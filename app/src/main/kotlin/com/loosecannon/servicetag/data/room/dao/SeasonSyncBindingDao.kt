@@ -61,6 +61,10 @@ interface SeasonSyncBindingDao {
     @Query("SELECT * FROM season_sync_binding WHERE asset_id = :assetId")
     fun observeByAsset(assetId: String): Flow<SeasonSyncBindingEntity?>
 
+    /** #113/#114 (C24, rev 6): every binding, emitted again on each write to the table. */
+    @Query("SELECT * FROM season_sync_binding ORDER BY asset_id")
+    fun observeAll(): Flow<List<SeasonSyncBindingEntity>>
+
     @Query("SELECT EXISTS(SELECT 1 FROM season_sync_binding WHERE enabled = 1)")
     suspend fun anyEnabled(): Boolean
 }

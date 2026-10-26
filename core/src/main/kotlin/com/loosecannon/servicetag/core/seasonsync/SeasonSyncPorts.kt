@@ -15,6 +15,12 @@ interface SeasonSyncRepository {
 
     fun observeFor(assetId: AssetId): Flow<SeasonSyncBinding?>
 
+    /**
+     * #113/#114 (C24, rev 6) — every binding, emitted again on each change: a link, an entity or mode change, a stop,
+     * a resume or a CASCADE. The publishing projector and #116 read it; no #16 runner, worker or command does.
+     */
+    fun observeAll(): Flow<List<SeasonSyncBinding>>
+
     suspend fun insert(binding: SeasonSyncBinding)
 
     /**
@@ -35,6 +41,58 @@ interface HaConnectionRepository {
 
     /** Deletes the row; the schema's CASCADE takes every binding on it (C9, R16-14). */
     suspend fun delete(id: String)
+
+    /**
+     * #113/#114 (C24, rev 6) — the one connection, emitted again on each save and null once it is forgotten. The
+     * publishing projector and #116 read it; no #16 runner, worker or command does.
+     */
+    fun observe(): Flow<HaConnection?>
+}
+
+/**
+ * #113/#114 (C26, C28) — what the four #16 commands ask of the outbound side, inside their own write. Each command
+ * takes it as a trailing parameter defaulted to [NONE], so every shipped construction compiles unchanged (F-6);
+ * production always passes the publishing side's own.
+ */
+interface OutboundTargets {
+    /**
+     * C26 — whether this phone writes [entityId] on [connectionId]: a publish binding names it as its target, enabled
+     * or not, or a PENDING tombstone does. Linking or editing an inbound entity refuses such an id.
+     */
+    suspend fun writes(connectionId: String, entityId: String): Boolean
+
+    /**
+     * C28, O-12 — whether an address change of [connectionId] must wait: a date binding is enabled, or a tombstone of
+     * this connection is PENDING, so the old Home Assistant still has to hear `1970-01-01`.
+     */
+    suspend fun blocksAddressChange(connectionId: String): Boolean
+
+    /**
+     * C28, A04, F-2 — a re-authorised save: every publish binding of [connectionId] moves its revision by one, its
+     * delivery error cleared with the pair, a standing validation kept, so a send built before is dropped and a
+     * pending invalidation is still delivered.
+     */
+    suspend fun reauthorize(connectionId: String)
+
+    /**
+     * C28, O-11 — Forget, in its write and before the delete: each enabled date binding of [connectionId] that still
+     * owes `1970-01-01`, and each PENDING tombstone of it, becomes an UNDELIVERABLE tombstone, which no key ties to
+     * the connection.
+     */
+    suspend fun forget(connectionId: String)
+
+    companion object {
+        /** No outbound side: writes nothing, refuses nothing. Only shipped constructions and tests reach it. */
+        val NONE: OutboundTargets = object : OutboundTargets {
+            override suspend fun writes(connectionId: String, entityId: String): Boolean = false
+
+            override suspend fun blocksAddressChange(connectionId: String): Boolean = false
+
+            override suspend fun reauthorize(connectionId: String) = Unit
+
+            override suspend fun forget(connectionId: String) = Unit
+        }
+    }
 }
 
 /**

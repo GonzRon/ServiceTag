@@ -33,6 +33,8 @@ class RoomSeasonSyncRepository(private val dao: SeasonSyncBindingDao) : SeasonSy
     override fun observeFor(assetId: AssetId): Flow<SeasonSyncBinding?> =
         dao.observeByAsset(assetId.value).map { it?.toDomain() }
 
+    override fun observeAll(): Flow<List<SeasonSyncBinding>> = dao.observeAll().map { rows -> rows.map { it.toDomain() } }
+
     override suspend fun insert(binding: SeasonSyncBinding) = dao.insert(binding.toEntity())
 
     /** Writes [binding] only over the stored row's `binding.revision - 1`; a missing row answers false (C11). */
@@ -66,6 +68,12 @@ class RoomHaConnectionRepository(private val dao: HaConnectionDao) : HaConnectio
     override suspend fun upsert(connection: HaConnection) = dao.upsert(connection.toEntity())
 
     override suspend fun delete(id: String) = dao.delete(id)
+
+    /** The one row, or null; a second row fails loudly here too, as [get] does. */
+    override fun observe(): Flow<HaConnection?> = dao.observeAll().map { rows ->
+        check(rows.size <= 1) { "ha_connection holds ${rows.size} rows; one installation has one connection" }
+        rows.firstOrNull()?.toDomain()
+    }
 }
 
 internal fun HaConnectionEntity.toDomain() = HaConnection(
@@ -77,6 +85,7 @@ internal fun HaConnectionEntity.toDomain() = HaConnection(
     backgroundChecks = BackgroundChecks.valueOf(backgroundChecks),
     createdAt = createdAt,
     updatedAt = updatedAt,
+    configGeneration = configGeneration,
 )
 
 internal fun HaConnection.toEntity() = HaConnectionEntity(
@@ -88,6 +97,7 @@ internal fun HaConnection.toEntity() = HaConnectionEntity(
     backgroundChecks = backgroundChecks.name,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    configGeneration = configGeneration,
 )
 
 internal fun SeasonSyncBindingEntity.toDomain() = SeasonSyncBinding(

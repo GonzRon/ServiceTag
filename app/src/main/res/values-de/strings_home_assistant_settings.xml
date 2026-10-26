@@ -41,6 +41,7 @@
     <string name="ha_precise_location_why">Um zu prüfen, ob dieses Telefon in deinem Heim-Wi-Fi ist, bevor es das Zugriffstoken sendet, muss ServiceTag den Namen des Wi-Fi-Netzwerks lesen. Android erlaubt das nur mit der Berechtigung für den genauen Standort, wähle also „Genau“. ServiceTag verwendet deinen Standort nicht, aber Android führt die App unter den Apps auf, die den Standort verwendet haben.</string>
     <string name="ha_precise_location_refused">Ohne die Berechtigung für den genauen Standort kann ServiceTag nicht erkennen, welches Wi-Fi das ist, daher bleibt „Nur in diesem Heim-Wi-Fi“ aus.</string>
     <string name="ha_http_needs_home_wifi">Eine http://-Adresse erfordert „Nur in diesem Heim-Wi-Fi“. Wähle diese Option oder verwende eine https://-Adresse.</string>
+    <string name="ha_publishing_blocks_address_change">Beende das Veröffentlichen der Saisonstart-Daten, bevor du die Adresse änderst: Das alte Home Assistant muss es zuerst erfahren.</string>
     <string name="ha_turn_on_location">Schalte „Standort“ ein, damit ServiceTag den Namen des Wi-Fi-Netzwerks lesen kann, und versuche es dann erneut.</string>
     <string name="ha_background_off">Wenn die Hintergrundprüfungen aus sind, prüft ServiceTag nach Ablauf des gewählten Intervalls, sobald du die App öffnest oder zu ihr zurückkehrst, und wenn du auf „Jetzt synchronisieren“ tippst. Während die App verwendet wird, braucht sie weiterhin den genauen Standort.</string>
     <string name="ha_background_checks">Hintergrundprüfungen in diesem Heimnetz</string>

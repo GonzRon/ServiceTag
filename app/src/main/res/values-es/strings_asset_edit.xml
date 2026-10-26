@@ -160,6 +160,7 @@
     <string name="season_sync_link_manual">A partir de ahora, Home Assistant inicia y termina la temporada de este equipo. Su historial de temporadas se queda como está.</string>
     <string name="season_sync_follows_ha">La temporada de este equipo sigue a Home Assistant. Usa “Dejar de sincronizar” en la página del equipo para cambiarla aquí.</string>
     <string name="season_sync_bad_entity_id">Introduce un ID de entidad como input_boolean.example_heater_in_season: letras minúsculas, dígitos y guiones bajos, con un punto.</string>
+    <string name="season_sync_outbound_target">%s es un ayudante que establece este teléfono. Elige el ayudante que controla el propio Home Assistant.</string>
     <string name="season_sync_choose_entity">Elegir entidad</string>
     <string name="season_sync_change_entity">Cambiar</string>
     <string name="season_sync_enter_manually">Introducir el ID de entidad manualmente</string>

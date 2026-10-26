@@ -157,6 +157,7 @@
     <string name="season_sync_link_manual">今後はHome Assistantがこの機器のシーズンを開始・終了します。シーズンの履歴はそのまま残ります。</string>
     <string name="season_sync_follows_ha">この機器のシーズンはHome Assistantに従っています。ここで変更するには、機器のページで「同期を停止」を選んでください。</string>
     <string name="season_sync_bad_entity_id">input_boolean.example_heater_in_seasonのようなエンティティIDを入力してください（英小文字、数字、アンダースコアで構成し、ドットを1つ含めます）。</string>
+    <string name="season_sync_outbound_target">%sはこのスマートフォンが設定するヘルパーです。Home Assistant自身が制御するヘルパーを選んでください。</string>
     <string name="season_sync_choose_entity">エンティティを選択</string>
     <string name="season_sync_change_entity">変更</string>
     <string name="season_sync_enter_manually">エンティティIDを手動で入力</string>

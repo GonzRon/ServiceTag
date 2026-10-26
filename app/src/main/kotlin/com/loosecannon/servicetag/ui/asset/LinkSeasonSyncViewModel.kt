@@ -250,7 +250,7 @@ internal class LinkSeasonSyncViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SeasonSyncLinkRefused) {
-                refusedFor(e.reason)
+                refusedFor(e.reason, asked.entityToLink)
             } catch (e: SeasonModeStrandsPolicy) {
                 Refused(refusal = seasonStrands(e.schedules.map(StrandedSchedule::title)))
             } catch (e: SeasonSyncOwnsSeason) {
@@ -287,8 +287,9 @@ internal class LinkSeasonSyncViewModel(
     }
 
     /** C16's codes, each its ratified sentence. ALREADY_LINKED has none: the asset is linked, and the card says so. */
-    private fun refusedFor(reason: SeasonSyncLinkRefusal): Next = when (reason) {
+    private fun refusedFor(reason: SeasonSyncLinkRefusal, entityId: String): Next = when (reason) {
         SeasonSyncLinkRefusal.BAD_ENTITY_ID -> Refused(entityLine = SEASON_SYNC_BAD_ENTITY_ID)
+        SeasonSyncLinkRefusal.OUTBOUND_TARGET -> Refused(entityLine = seasonSyncOutboundTarget(entityId))
         SeasonSyncLinkRefusal.NOT_MAINTAINED_HERE -> Refused(refusal = SEASON_SYNC_NOT_MAINTAINED_HERE)
         SeasonSyncLinkRefusal.NO_CONNECTION -> Refused(refusal = HA_NOT_CONNECTED)
         SeasonSyncLinkRefusal.NEEDS_TOKEN -> Refused(refusal = HA_ENTER_TOKEN_AGAIN)

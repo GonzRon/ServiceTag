@@ -304,6 +304,8 @@
     <string name="season_sync_follows_ha">This asset\'s season follows Home Assistant. Stop syncing on the asset\'s page to change it here.</string>
     <!-- P16-49: under the Entity ID field. input_boolean.example_heater_in_season is an example entity ID: keep it. -->
     <string name="season_sync_bad_entity_id">Enter an entity ID such as input_boolean.example_heater_in_season: lowercase letters, digits and underscores, with one dot.</string>
+    <!-- P113-43 (#113/#114, C26): under the Entity ID field; %s is the entity ID typed, a helper ServiceTag writes. -->
+    <string name="season_sync_outbound_target">%s is a helper this phone sets. Choose the helper Home Assistant itself controls.</string>
     <!-- P105-1: the setup sheet's row with nothing chosen, and the browser's title (#105). -->
     <string name="season_sync_choose_entity">Choose entity</string>
     <!-- P105-2: the form's row after a pick. -->

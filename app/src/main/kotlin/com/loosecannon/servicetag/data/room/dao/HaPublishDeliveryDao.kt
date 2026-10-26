@@ -3,16 +3,20 @@ package com.loosecannon.servicetag.data.room.dao
 import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.Query
+import androidx.room3.Transaction
+import androidx.room3.Update
 import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 
 /**
  * #113/#114 (C5): the device-local delivery records, one per binding. **No flow is offered** — the projector never
- * observes delivery bookkeeping (C31, I28). Three writes, each one statement and each a compare-and-set:
+ * observes delivery bookkeeping (C31, I28). Three compare-and-set writes, each one statement, beside a command's
+ * whole-row [upsert] (B3):
  *  - [writeDesired], the projector's: on the binding's revision **and** the `desired_revision` read in the same
  *    transaction (A02); it moves the desired revision, so it clears the error and its pair and restarts the attempt
  *    count (A04, C17);
  *  - [record], the sender's: on the binding's revision **and** the desired revision as snapshotted (C17); it never
- *    writes the desired value or the request stamp, and an error is written with the pair it was recorded at;
+ *    writes the desired value, the boundary cache or the request stamp, and an error is written with the pair it was
+ *    recorded at;
  *  - [stampRequest], the API's Publish now (rev 5, C35b): `last_request_id` and `last_request_at` only.
  * Nothing here is exported, merged or packed.
  */
@@ -20,6 +24,14 @@ import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 interface HaPublishDeliveryDao {
 
     @Insert suspend fun insert(e: HaPublishDeliveryEntity)
+
+    /** A command's whole-row write (B3: a new record, Enable's reset, Check helper's re-seed), inside its transaction. */
+    @Transaction
+    suspend fun upsert(e: HaPublishDeliveryEntity) {
+        if (update(e) == 0) insert(e)
+    }
+
+    @Update suspend fun update(e: HaPublishDeliveryEntity): Int
 
     @Query("SELECT * FROM ha_publish_delivery WHERE binding_id = :bindingId")
     suspend fun get(bindingId: String): HaPublishDeliveryEntity?
@@ -55,7 +67,8 @@ interface HaPublishDeliveryDao {
     /**
      * The sender's record (C17): [e]'s bookkeeping, only while the binding is still at [bindingRevision] and the
      * delivery still at `e.desiredRevision`; a moved generation or a newer desired value drops it whole. Answers
-     * whether it wrote. The error's pair is that compare-and-set pair, and null exactly when the error is (A04).
+     * whether it wrote. The error's pair is that compare-and-set pair, and null exactly when the error is (A04). As
+     * `DeliverySteps.commit`, it never writes the desired value, the boundary cache or the request stamp (B3).
      */
     suspend fun record(bindingRevision: Long, e: HaPublishDeliveryEntity): Boolean = recordRow(
         bindingId = e.bindingId, bindingRevision = bindingRevision, desiredRevision = e.desiredRevision,
@@ -66,8 +79,7 @@ interface HaPublishDeliveryDao {
         remoteValue = e.remoteValue, remoteReadAt = e.remoteReadAt, errorKind = e.errorKind,
         errorDetail = e.errorDetail, errorAt = e.errorAt, outcomeUnknownSince = e.outcomeUnknownSince,
         needsDelivery = e.needsDelivery, attemptsAtRevision = e.attemptsAtRevision, lastAttemptAt = e.lastAttemptAt,
-        boundaryValue = e.boundaryValue, boundaryReadAt = e.boundaryReadAt,
-        boundaryBindingRevision = e.boundaryBindingRevision, reconcilePending = e.reconcilePending,
+        reconcilePending = e.reconcilePending,
     ) == 1
 
     @Query(
@@ -82,8 +94,7 @@ interface HaPublishDeliveryDao {
             "error_desired_revision = CASE WHEN :errorKind IS NULL THEN NULL ELSE :desiredRevision END, " +
             "outcome_unknown_since = :outcomeUnknownSince, needs_delivery = :needsDelivery, " +
             "attempts_at_revision = :attemptsAtRevision, last_attempt_at = :lastAttemptAt, " +
-            "boundary_value = :boundaryValue, boundary_read_at = :boundaryReadAt, " +
-            "boundary_binding_revision = :boundaryBindingRevision, reconcile_pending = :reconcilePending " +
+            "reconcile_pending = :reconcilePending " +
             "WHERE binding_id = :bindingId AND desired_revision = :desiredRevision AND EXISTS " +
             "(SELECT 1 FROM ha_publish_binding WHERE id = :bindingId AND revision = :bindingRevision)",
     )
@@ -108,9 +119,6 @@ interface HaPublishDeliveryDao {
         needsDelivery: Boolean,
         attemptsAtRevision: Int,
         lastAttemptAt: Long?,
-        boundaryValue: String?,
-        boundaryReadAt: Long?,
-        boundaryBindingRevision: Long?,
         reconcilePending: Boolean,
     ): Int
 

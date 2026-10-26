@@ -116,11 +116,16 @@ class EditSeasonSyncEntity(
     private val scheduler: SeasonSyncScheduler,
     private val uow: UnitOfWork,
     private val clock: Clock,
+    /** #113/#114 (C26, F-6): the outbound side, defaulted so every shipped construction compiles unchanged. */
+    private val outbound: OutboundTargets = OutboundTargets.NONE,
 ) {
     suspend fun run(assetId: AssetId, entityId: String): SeasonSyncBinding {
         if (!isValidEntityId(entityId)) throw SeasonSyncLinkRefused(SeasonSyncLinkRefusal.BAD_ENTITY_ID)
         val written = uow.write {
             val stored = bindings.get(assetId) ?: throw SeasonSyncNotLinked(assetId)
+            if (outbound.writes(stored.connectionId, entityId)) {
+                throw SeasonSyncLinkRefused(SeasonSyncLinkRefusal.OUTBOUND_TARGET)
+            }
             val next = stored.copy(
                 entityId = entityId,
                 observedState = null,
@@ -209,6 +214,12 @@ enum class SaveHaConnectionRefusal {
 
     /** [NetworkEligibility.HOME_NETWORK_ONLY] with no captured Wi-Fi name, or a blank one (P16-62's prompt). */
     HOME_NETWORK_NOT_SET,
+
+    /**
+     * #113/#114 (C28, O-12) — a new address while a date binding is enabled or a tombstone of this connection is
+     * PENDING: the old Home Assistant has to hear `1970-01-01` first (P113-42).
+     */
+    PUBLISHING_BLOCKS_ADDRESS_CHANGE,
 }
 
 /** #16 (C17) — a save refused for [reason]; nothing was written. The message is the code only, never the address. */
@@ -227,6 +238,11 @@ class SaveHaConnectionRefused(val reason: SaveHaConnectionRefusal) :
  * every binding's revision, so a read built before it is dropped, and each enabled binding is then read afresh; a
  * changed cadence, eligibility or background setting ensures or cancels the work after the commit — even when the
  * token store fails, whose failure then reaches the caller and asks for no read.
+ *
+ * #113/#114 (C28): every save moves [HaConnection.configGeneration] by one (a new connection starts at 1), so a
+ * validation read before it is stale; a re-authorised save also moves every publish binding's revision, keeping its
+ * validation ([OutboundTargets.reauthorize]); and a new address is refused while [OutboundTargets.blocksAddressChange]
+ * ([SaveHaConnectionRefusal.PUBLISHING_BLOCKS_ADDRESS_CHANGE], O-12).
  */
 class SaveHaConnection(
     private val connections: HaConnectionRepository,
@@ -236,6 +252,8 @@ class SaveHaConnection(
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
+    /** #113/#114 (C28, F-6): the outbound side, defaulted so every shipped construction compiles unchanged. */
+    private val outbound: OutboundTargets = OutboundTargets.NONE,
 ) {
     private class Saved(val connection: HaConnection, val reread: List<AssetId>, val work: Boolean?)
 
@@ -261,6 +279,9 @@ class SaveHaConnection(
         }
         val saved = uow.write {
             val stored = connections.get()
+            if (stored != null && stored.baseUrl != endpoint.canonical && outbound.blocksAddressChange(stored.id)) {
+                throw SaveHaConnectionRefused(SaveHaConnectionRefusal.PUBLISHING_BLOCKS_ADDRESS_CHANGE)
+            }
             val now = clock.nowMillis()
             val next = stored?.copy(
                 baseUrl = endpoint.canonical,
@@ -269,6 +290,7 @@ class SaveHaConnection(
                 homeNetworkSsid = ssid,
                 backgroundChecks = backgroundChecks ?: stored.backgroundChecks,
                 updatedAt = now,
+                configGeneration = stored.configGeneration + 1,
             ) ?: HaConnection(
                 id = ids.newId(),
                 baseUrl = endpoint.canonical,
@@ -278,6 +300,7 @@ class SaveHaConnection(
                 backgroundChecks = backgroundChecks ?: BackgroundChecks.OFF,
                 createdAt = now,
                 updatedAt = now,
+                configGeneration = 1,
             )
             connections.upsert(next)
             if (stored == null) return@write Saved(next, emptyList(), null)
@@ -286,6 +309,7 @@ class SaveHaConnection(
                 stored.networkEligibility != next.networkEligibility ||
                 stored.homeNetworkSsid != next.homeNetworkSsid
             val reread = if (reauthorized) {
+                outbound.reauthorize(next.id)
                 bindings.all().map { bindings.bump(it, it, now) }.filter { it.enabled }.map { it.assetId }
             } else {
                 emptyList()
@@ -314,15 +338,25 @@ class SaveHaConnection(
  * write; no END is written and season history stays. Then the token is deleted from the [SecretStore] and the work
  * cancelled — cancelled even when the store fails, whose failure then reaches the caller to be logged by its kind; a
  * token left behind is swept at the next start (C18). Home Assistant itself still holds the token (limit 10).
+ *
+ * #113/#114 (C28, O-11): in the same write, before the delete, every undelivered date obligation of the connection
+ * becomes an UNDELIVERABLE tombstone ([OutboundTargets.forget]), which no key ties to the connection.
  */
 class ForgetHaConnection(
     private val connections: HaConnectionRepository,
     private val secrets: SecretStore,
     private val scheduler: SeasonSyncScheduler,
     private val uow: UnitOfWork,
+    /** #113/#114 (C28, F-6): the outbound side, defaulted so every shipped construction compiles unchanged. */
+    private val outbound: OutboundTargets = OutboundTargets.NONE,
 ) {
     suspend fun run() {
-        val id = uow.write { connections.get()?.id?.also { connections.delete(it) } } ?: return
+        val id = uow.write {
+            connections.get()?.id?.also {
+                outbound.forget(it)
+                connections.delete(it)
+            }
+        } ?: return
         try {
             secrets.delete(id)
         } finally {

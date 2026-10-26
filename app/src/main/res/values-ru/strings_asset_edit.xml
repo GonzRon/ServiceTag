@@ -163,6 +163,7 @@
     <string name="season_sync_link_manual">С этого момента Home Assistant начинает и завершает сезон этого объекта. История сезонов остаётся без изменений.</string>
     <string name="season_sync_follows_ha">Сезон этого объекта следует за Home Assistant. Чтобы изменить его здесь, выберите «Остановить синхронизацию» на странице объекта.</string>
     <string name="season_sync_bad_entity_id">Введите ID сущности, например input_boolean.example_heater_in_season: строчные буквы, цифры и подчёркивания, с одной точкой.</string>
+    <string name="season_sync_outbound_target">%s — вспомогательный объект, который задаёт этот телефон. Выберите вспомогательный объект, которым управляет сам Home Assistant.</string>
     <string name="season_sync_choose_entity">Выбрать сущность</string>
     <string name="season_sync_change_entity">Изменить</string>
     <string name="season_sync_enter_manually">Ввести ID сущности вручную</string>

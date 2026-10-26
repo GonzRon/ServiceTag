@@ -41,6 +41,7 @@
     <string name="ha_precise_location_why">アクセストークンを送信する前にこのスマートフォンが自宅のWi-Fiに接続されていることを確認するため、ServiceTagはWi-Fiネットワークの名前を読み取る必要があります。Androidでは正確な位置情報の権限がある場合にのみこれが許可されるため、「正確」を選んでください。ServiceTagが位置情報を使用することはありませんが、Androidでは位置情報を使用したアプリの一覧に表示されます。</string>
     <string name="ha_precise_location_refused">正確な位置情報の権限がないと、ServiceTagは接続中のWi-Fiを判別できないため、「この自宅のWi-Fiでのみ」はオフのままになります。</string>
     <string name="ha_http_needs_home_wifi">http://アドレスには「この自宅のWi-Fiでのみ」が必要です。これを選ぶか、https://アドレスを使用してください。</string>
+    <string name="ha_publishing_blocks_address_change">アドレスを変更する前に、シーズン開始日の公開を停止してください。先に以前のHome Assistantに伝える必要があります。</string>
     <string name="ha_turn_on_location">ServiceTagがWi-Fiネットワークの名前を読み取れるよう位置情報をオンにしてから、もう一度お試しください。</string>
     <string name="ha_background_off">バックグラウンドでの確認がオフの場合、ServiceTagは選択した間隔が過ぎた後にアプリを開くかアプリに戻ったとき、および「今すぐ同期」をタップしたときに確認します。アプリの使用中は引き続き正確な位置情報が必要です。</string>
     <string name="ha_background_checks">この自宅ネットワークでのバックグラウンド確認</string>
