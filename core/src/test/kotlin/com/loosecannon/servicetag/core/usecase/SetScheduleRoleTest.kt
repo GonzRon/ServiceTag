@@ -116,7 +116,7 @@ internal class SeasonStartHarness(today: String = ROLE_TODAY) {
         SaveSchedule(schedules, assets, groups, raw.definitions, raw.profiles, raw.uow, ids, clock, recompute, raw.subjects)
     val saveGroup = SaveGroup(groups, assets, raw.uow, ids, clock, schedules, raw.transfers)
     val archiveSchedule = ArchiveSchedule(schedules, raw.uow, recompute, raw.subjects, assets, clock, groups, raw.transfers)
-    val archiveGroup = ArchiveGroup(groups, raw.uow, clock, schedules, assets, raw.transfers)
+    val archiveGroup = ArchiveGroup(groups, raw.uow, clock, schedules, assets, raw.transfers, recompute)
     val updateEvent =
         UpdateEvent(raw.events, raw.definitions, raw.profiles, raw.supplyItems, raw.uow, ids, clock, recompute, todayPort)
     val logEvent = LogEvent(raw.events, raw.definitions, raw.profiles, assets, raw.supplyItems, raw.uow, ids, clock, recompute)

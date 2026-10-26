@@ -448,7 +448,7 @@ class HeldWriteGuardTest {
         seed()
         recompute.all()
         val save = SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, subjects)
-        val archiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, install.transfers)
+        val archiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, install.transfers, recompute)
         refused(
             heater,
             "SaveSchedule (create)" to { save.run(null, monthlyCommand(heater, null)) },

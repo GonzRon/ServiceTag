@@ -10,8 +10,10 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.closes
@@ -877,6 +879,23 @@ internal fun mergePlanOf(
             }
         }
     }
+
+    // #124 (C42, O-9): an accepted live schedule counting from its asset's opening service needs a live role on that
+    // asset once every schedule row is decided — this phone's, or one this plan accepted, whatever the rows' order. One
+    // with none is a CONFLICT, never inserted to wait for a service nothing can record; its detail is the asset's id.
+    scheduleWrites.filter { it.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE && it.status != ScheduleStatus.ARCHIVED }
+        .forEach { row ->
+            val assetId = (row.target as? ScheduleTarget.AssetTarget)?.assetId?.value ?: return@forEach
+            if (assetId in claimedSeasonStartAssets) return@forEach
+            val id = row.id.value
+            scheduleWrites.remove(row)
+            acceptedSchedules -= id
+            row.providers.forEach { claimedProviderPairs.remove(id to it.provider) }
+            val at = decisions.indexOfFirst { it.table == MergeTable.SCHEDULES && it.id == id }
+            decisions[at] = MergeDecision(
+                MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.SEASON_START_SERVICE_MISSING, assetId,
+            )
+        }
 
     fun scheduleAvailable(id: String) = id in localSchedules || id in acceptedSchedules
 

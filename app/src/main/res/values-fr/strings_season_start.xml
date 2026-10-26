@@ -43,4 +43,8 @@
     <string name="season_start_strand_quick_needs_election">Ce plan est un entretien de début de saison. Confirmez que les entretiens terminés en un seul appui doivent compter avant de le passer à un seul appui.</string>
     <string name="season_start_role_line">Entretien de début de saison · les entretiens comptent à partir du %s</string>
     <string name="season_start_count_one_tap">Compter les entretiens terminés en un seul appui</string>
+    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
+    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
+    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
+    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
 </resources>

@@ -16,12 +16,16 @@ import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.SeasonStartBadDate
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefusal
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.di.AppGraph
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -90,6 +94,11 @@ class ScheduleRoleViewModel(
 
     private val _state = MutableStateFlow(ScheduleRoleState())
     val state: StateFlow<ScheduleRoleState> = _state.asStateFlow()
+
+    private val _messages = Channel<String>(Channel.BUFFERED)
+
+    /** #124 (C42): one-off sentences the schedule detail shows as a snackbar — a refused "Stop using" (P124-8). */
+    val messages: Flow<String> = _messages.receiveAsFlow()
 
     init {
         viewModelScope.launch { schedules.observeAll().collect { load() } }
@@ -188,7 +197,10 @@ class ScheduleRoleViewModel(
         return open.copy(problem = sentence, quickElected = open.quickElected || elect)
     }
 
-    /** "Stop using as Season Start service": the role and its day are cleared; no confirm (§5 has none). */
+    /**
+     * "Stop using as Season Start service": the role and its day are cleared; no confirm (§5 has none). #124 (C42): while
+     * a schedule counts from this one the clear is stranded, and [messages] says so (P124-8) — the role is kept.
+     */
     fun stop() {
         val now = _state.value
         if (now.busy || !now.canStop) return
@@ -196,6 +208,10 @@ class ScheduleRoleViewModel(
         viewModelScope.launch {
             val failure = runCatching { setScheduleRole.run(scheduleId, ScheduleRole.NONE) }.exceptionOrNull()
             if (failure is CancellationException) throw failure
+            if (failure is SeasonStartStrands) {
+                val name = failure.assetId?.let { assets.get(it) }?.name
+                SeasonStartStrings.strand(failure, name)?.let { _messages.trySend(it) }
+            }
             load()
             _state.update { it.copy(busy = false) }
         }

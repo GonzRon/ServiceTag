@@ -37,6 +37,9 @@ class SeasonStartCodesTest {
             SeasonStartRefusal.GroupArchived to "SeasonStartRefused(reason=GROUP_ARCHIVED)",
             SeasonStartRefusal.GroupHasNoMembers to "SeasonStartRefused(reason=GROUP_HAS_NO_MEMBERS)",
             SeasonStartRefusal.DateInFuture to "SeasonStartRefused(reason=DATE_IN_FUTURE)",
+            // #124 (C42)
+            SeasonStartRefusal.NoSeasonStartService(heater) to "SeasonStartRefused(reason=NO_SEASON_START_SERVICE, assetId=heater)",
+            SeasonStartRefusal.CountsFromItself to "SeasonStartRefused(reason=COUNTS_FROM_ITSELF)",
         )
         for ((reason, named) in cases) {
             val error = error(SeasonStartRefused(reason), 409)

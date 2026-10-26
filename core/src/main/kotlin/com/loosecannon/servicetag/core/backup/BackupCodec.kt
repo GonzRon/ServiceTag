@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SuccessionProblem
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.isCode
@@ -191,6 +192,8 @@ import kotlinx.serialization.json.JsonObject
  * marker there is a hand-built file and is refused naming the list and the row ([FIRST_SCHEDULE_ROLE_FORMAT]). An
  * unknown role name, and a row breaking R1, are refused at decode. The merge's rule for an older archive and for a
  * Transfer Pack's rows is the planner's (C19, C20). The manifest gains no key: no installation identifier travels.
+ * #124 (C42): format 21 also carries `servicePolicy` `IN_SERVICE_AFTER_OPENING_SERVICE` by its name, a value no format
+ * ≤20 writer knew, so a format ≤20 archive carrying it is refused the same way.
  *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
@@ -513,6 +516,15 @@ object BackupCodec {
                         "(schedule ${held.id})",
                 )
             }
+            // #124 (C42): so is a schedule counting from the opening service, which only a format-21 writer can know.
+            data.maintenanceSchedules
+                .firstOrNull { it.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE.name }
+                ?.let { counting ->
+                    throw BackupCorrupt(
+                        "maintenanceSchedules: a format ${manifest.formatVersion} archive cannot carry a schedule " +
+                            "counting from the opening service (schedule ${counting.id})",
+                    )
+                }
             data.assetEvents.firstOrNull { it.imported }?.let { marked ->
                 throw BackupCorrupt(
                     "assetEvents: a format ${manifest.formatVersion} archive cannot carry an imported marker " +

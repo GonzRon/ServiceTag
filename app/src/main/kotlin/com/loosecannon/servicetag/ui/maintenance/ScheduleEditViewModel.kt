@@ -37,6 +37,7 @@ import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localizedDecimal
@@ -837,6 +838,13 @@ class ScheduleEditViewModel(
             } else {
                 val name = failure.assetId?.let { assets.get(it) }?.name
                 _state.update { it.copy(saving = false, seasonStartRefusal = SeasonStartStrings.strand(failure, name)) }
+            }
+            // #124 (C42): the answer refused — P124-5, P124-6 or P114-17 — under the policy, nothing written.
+            is SeasonStartRefused -> {
+                val name = SeasonStartStrings.assetOf(failure.reason)?.let { assets.get(it) }?.name
+                _state.update {
+                    it.copy(saving = false, seasonStartRefusal = SeasonStartStrings.saveRefused(failure.reason, name))
+                }
             }
             is PreServiceNeedsDates -> {
                 val fresh = assets.get(failure.assetId)?.seasonInputs(emptyList())

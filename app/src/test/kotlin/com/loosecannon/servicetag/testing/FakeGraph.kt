@@ -818,7 +818,7 @@ class FakeGraph(
         assets, schedules, groups, tags, definitions, profiles, loans, transferRecords, assetSuccessions,
         uow, ids, clock, todayPort, retireAsset, saveAssetSettings, saveSchedule, saveGroup, bindTag,
     )
-    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, transferRecords)
+    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, transferRecords, recomputeSchedules)
 
     /** #15 (C15–C17): the SupplyItem and applicability use cases, from exactly the members `AppGraph` builds them from. */
     val saveSupplyItem: SaveSupplyItem = SaveSupplyItem(supplyItems, uow, ids, clock)

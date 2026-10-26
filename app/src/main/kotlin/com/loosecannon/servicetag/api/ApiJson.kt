@@ -672,6 +672,9 @@ private fun seasonStartRefusalName(reason: SeasonStartRefusal): String = when (r
     SeasonStartRefusal.GroupArchived -> "SeasonStartRefused(reason=GROUP_ARCHIVED)"
     SeasonStartRefusal.GroupHasNoMembers -> "SeasonStartRefused(reason=GROUP_HAS_NO_MEMBERS)"
     SeasonStartRefusal.DateInFuture -> "SeasonStartRefused(reason=DATE_IN_FUTURE)"
+    is SeasonStartRefusal.NoSeasonStartService ->
+        "SeasonStartRefused(reason=NO_SEASON_START_SERVICE, assetId=${reason.assetId.value})"
+    SeasonStartRefusal.CountsFromItself -> "SeasonStartRefused(reason=COUNTS_FROM_ITSELF)"
 }
 
 /** #114 (A4w review M2): a [SeasonStartRefusal]'s bare upper-snake name, as a strand's `reason=…` carries it. */
@@ -685,6 +688,8 @@ private fun refusalReasonOf(reason: SeasonStartRefusal): String = when (reason) 
     SeasonStartRefusal.GroupArchived -> "GROUP_ARCHIVED"
     SeasonStartRefusal.GroupHasNoMembers -> "GROUP_HAS_NO_MEMBERS"
     SeasonStartRefusal.DateInFuture -> "DATE_IN_FUTURE"
+    is SeasonStartRefusal.NoSeasonStartService -> "NO_SEASON_START_SERVICE"
+    SeasonStartRefusal.CountsFromItself -> "COUNTS_FROM_ITSELF"
 }
 
 /** #114 (C2): one developer sentence per [SeasonStartRefusal]; the phone's sentences are §5's, not these. */
@@ -700,6 +705,10 @@ private fun seasonStartRefusalMessage(reason: SeasonStartRefusal): String = when
     SeasonStartRefusal.GroupArchived -> "this group is archived, so it has no assets to mark ready"
     SeasonStartRefusal.GroupHasNoMembers -> "this group has no assets to mark ready"
     SeasonStartRefusal.DateInFuture -> "sinceOn may not be later than today"
+    is SeasonStartRefusal.NoSeasonStartService ->
+        "the asset has no Season Start service to count from; give one of its schedules the role first"
+    SeasonStartRefusal.CountsFromItself ->
+        "a Season Start service cannot count from itself; change when the schedule starts counting first"
 }
 
 /**
@@ -749,6 +758,8 @@ private fun seasonStartStrandMessage(cause: SeasonStartStrandCause): String = wh
         "restoring this would give a Season Start service to an asset that cannot have one"
     SeasonStartStrandCause.RESTORE_ALREADY_COVERED ->
         "restoring this would give a second Season Start service to an asset that already has one"
+    SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES ->
+        "schedules of this asset count from its Season Start service; change when they start counting first"
 }
 
 /**

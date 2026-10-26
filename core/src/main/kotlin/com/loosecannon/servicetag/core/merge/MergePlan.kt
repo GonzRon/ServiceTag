@@ -397,6 +397,14 @@ enum class MergeReason {
      * archive row that claimed the asset first.
      */
     SEASON_START_DUPLICATED_IN_ARCHIVE,
+
+    /**
+     * #124 (C42, O-9). An inserted live schedule counting from its asset's opening service
+     * (`IN_SERVICE_AFTER_OPENING_SERVICE`) whose asset no live Season Start role covers once the plan's accepted rows
+     * are in — this phone's roles and the archive's accepted ones alike. A `CONFLICT`, never a silent fallback: the
+     * schedule would wait with no date for a service nothing can record. [MergeDecision.detail] is the asset's id.
+     */
+    SEASON_START_SERVICE_MISSING,
 }
 
 /**

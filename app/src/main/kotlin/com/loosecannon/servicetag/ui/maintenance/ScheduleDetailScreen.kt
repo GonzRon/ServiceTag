@@ -140,6 +140,8 @@ fun ScheduleDetailScreen(
     // #77 (MJ-1, C19): P77-35 when a write is refused because the owner was transferred out.
     val snackbars = remember { SnackbarHostState() }
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
+    // #124 (C42): the role action's refused "Stop using" (P124-8).
+    LaunchedEffect(roleModel) { roleModel.messages.collect { snackbars.showSnackbar(it) } }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },

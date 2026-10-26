@@ -184,6 +184,28 @@ class AssetEditViewModelTest {
         assertEquals(SeasonMode.MANUAL, graph.assets.get(AssetId("heater"))!!.seasonMode)
     }
 
+    /**
+     * #124 row 149 (N2b, C42): an asset a schedule of which counts from its opening service, about to be all year, is told
+     * P124-8 under its season — the season-mode strand, beside P114-24 — and nothing is written.
+     */
+    @Test fun aChangeToAllYearUnderACountingScheduleSaysP124_8() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        // Stored as it is (no Season Start service covers it): only the dependent can be named.
+        graph.schedules.upsert(
+            scheduleOf("filter", assetId = "heater", title = "Example filter check", completionMode = CompletionMode.FORM)
+                .copy(servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0),
+        )
+
+        val editor = editModel("heater")
+        editor.onSeasonMode(SeasonMode.YEAR_ROUND)
+        editor.saveAndSettle()
+        assertEquals(
+            "\"Example filter check\" counts from Example Heater's Season Start service. Change when it starts counting first.",
+            editor.state.value.seasonRefusal,
+        )
+        assertEquals(SeasonMode.MANUAL, graph.assets.get(AssetId("heater"))!!.seasonMode)
+    }
+
     /** #114 row 78 (C11): a parent change leaving a covered asset a child with no children says P114-25, as the cycle is said. */
     @Test fun aParentChangeLeavingACoveredAssetALeafChildSaysP114_25() = runTest {
         graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))

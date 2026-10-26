@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefusal
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
@@ -321,12 +322,26 @@ class ScheduleRoleViewModelTest {
             SeasonStartRefusal.GroupArchived to "This group has no assets to mark ready.",
             SeasonStartRefusal.GroupHasNoMembers to "This group has no assets to mark ready.",
             SeasonStartRefusal.DateInFuture to "The date services count from cannot be after today.",
+            // #124 (C42): the role action's P124-7, and P124-5.
+            SeasonStartRefusal.CountsFromItself to "This schedule counts from the Season Start service, so it cannot be " +
+                "one. Change when it starts counting first.",
+            SeasonStartRefusal.NoSeasonStartService(heaterId) to "Example Heater has no Season Start service to count " +
+                "from. Use one of its schedules as its Season Start service first.",
         )
         expected.forEach { (reason, sentence) ->
             val name = SeasonStartStrings.assetOf(reason)?.let { "Example Heater" }
             assertEquals(reason.toString(), sentence, SeasonStartStrings.refused(reason, name, throughAGroup = false))
         }
-        assertEquals(9, expected.size)
+        assertEquals(11, expected.size)
+        // The editor's save says P124-6 for the Season Start service itself, and every other refusal as above.
+        assertEquals(
+            "This schedule is the Season Start service, so it cannot count from itself.",
+            SeasonStartStrings.saveRefused(SeasonStartRefusal.CountsFromItself, null),
+        )
+        expected.filterKeys { it != SeasonStartRefusal.CountsFromItself }.forEach { (reason, sentence) ->
+            val name = SeasonStartStrings.assetOf(reason)?.let { "Example Heater" }
+            assertEquals(reason.toString(), sentence, SeasonStartStrings.saveRefused(reason, name))
+        }
     }
 
     /** C11 drawn: every strand cause has its sentence (P114-24…27, P114-43; the restores' P114-20 and P114-16…18). */
@@ -353,12 +368,49 @@ class ScheduleRoleViewModelTest {
                 "start. Give it a calendar or manual season first.",
             SeasonStartStrandCause.RESTORE_ALREADY_COVERED to "Example Heater already has a Season Start service: " +
                 "\"Example annual service\". Stop using that one first.",
+            // #124 (C42): P124-8, the first schedule the strand names (here the one in the list).
+            SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES to "\"Example annual service\" counts from Example Heater's " +
+                "Season Start service. Change when it starts counting first.",
         )
         assertEquals(SeasonStartStrandCause.entries.toSet(), expected.keys)
         expected.forEach { (cause, sentence) ->
             val refusal = SeasonStartRefusal.YearRound(heater).takeIf { cause == SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE }
             assertEquals(cause.name, sentence, SeasonStartStrings.strand(strands(cause, refusal), "Example Heater"))
         }
+    }
+
+    /**
+     * #124 row 149 (N2b, C42): the role action on a schedule that counts from the Season Start service is refused with
+     * P124-7, and "Stop using as Season Start service" while a schedule counts from it says P124-8 — the role kept.
+     */
+    @Test fun aScheduleCountingFromTheServiceBlocksTheRoleActionWithItsSentence() = runTest {
+        heater()
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+        graph.schedules.upsert(
+            scheduleOf("filter", assetId = "heater", title = "Example filter check", completionMode = CompletionMode.FORM)
+                .copy(servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0),
+        )
+
+        val dependent = roleModel("filter")
+        dependent.opened()
+        assertEquals(
+            "This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.",
+            confirmed(dependent).confirm?.problem,
+        )
+        assertEquals(ScheduleRole.NONE, graph.schedules.get(ScheduleId("filter"))!!.role)
+
+        val role = roleModel("annual")
+        role.state.first { it.loaded && it.canStop }
+        val said = CompletableDeferred<String>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { said.complete(role.messages.first()) }
+        role.stop()
+        advanceUntilIdle()
+        assertEquals(
+            "\"Example filter check\" counts from Example Heater's Season Start service. Change when it starts counting first.",
+            said.await(),
+        )
+        assertEquals(ScheduleRole.SEASON_START, graph.schedules.get(ScheduleId("annual"))!!.role)
+        assertTrue("the action stays offered", role.state.first { !it.busy }.canStop)
     }
 
     /** P114-1 on the role schedule's row (keyed on the role), and nothing on any other row. */

@@ -71,6 +71,11 @@ import com.loosecannon.servicetag.core.schedule.BoundaryKind
  * Both read the row as stored **inside** the write, so a role set after [run]'s first read is kept and judged, never
  * wiped.
  *
+ * **Counting from the opening service** (#124, C42). Last, a save that chooses `IN_SERVICE_AFTER_OPENING_SERVICE` — a
+ * create, an edit into it, or a retarget while it holds it — is 409 [SeasonStartRefused]: `COUNTS_FROM_ITSELF` on a role
+ * schedule, `YEAR_ROUND` on an asset in use all year, `NO_SEASON_START_SERVICE` on an asset no live role covers (C9's
+ * coverage, a group's role included). [createInTransaction] (Replace asset) refuses alike.
+ *
  * One `uow.write`: the guard's read of the subjects, the row, any unlinked subject and the recompute
  * commit together or not at all.
  */
@@ -230,6 +235,10 @@ class SaveSchedule(
             throw PreServiceNeedsDates(targetAsset.id)
         }
         if (stored != null) seasonStartStrandOf(stored, saved, seasonStartQuickElected)?.let { throw it }
+        // #124 (C42): a save choosing to count from the opening service needs a live role to count from, never itself.
+        if (choosesOpeningService(stored, saved)) {
+            openingServiceRefusalOf(saved, targetAsset, schedules.all(), groups.all())?.let { throw SeasonStartRefused(it) }
+        }
         unlinkDriven(driven, assets, healthSubjects, prepared.now)
         schedules.upsert(saved)
         recompute.forSchedule(saved.id)
@@ -257,6 +266,15 @@ class SaveSchedule(
         val assetId = (before.target as? ScheduleTarget.AssetTarget)?.assetId
         return SeasonStartStrands(assetId, cause, listOf(StrandedSchedule(before.id, before.title)))
     }
+
+    /**
+     * #124 (C42) — whether this save **chooses** to count from the opening service: a create with it, an edit into it, or
+     * an edit that moves a schedule holding it to another target. An edit that keeps both is not judged again (an
+     * already-broken row blocks no unrelated edit).
+     */
+    private fun choosesOpeningService(before: MaintenanceSchedule?, after: MaintenanceSchedule): Boolean =
+        after.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE &&
+            (before == null || before.servicePolicy != after.servicePolicy || before.target != after.target)
 
     /**
      * Whether this edit would strand a subject the schedule drives (spec §6.1): it removes the time

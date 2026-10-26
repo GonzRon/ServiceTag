@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -50,6 +51,18 @@ sealed interface SeasonStartRefusal {
 
     /** `sinceOn` is after today (P114-23). */
     data object DateInFuture : SeasonStartRefusal
+
+    /**
+     * #124 (C42) — a schedule would count from the opening service of [assetId], which no live role covers (C9's
+     * coverage, a group's role included; P124-5).
+     */
+    data class NoSeasonStartService(val assetId: AssetId) : SeasonStartRefusal
+
+    /**
+     * #124 (C42) — the Season Start service would count from itself: the editor's choice on the role schedule
+     * (P124-6), or the role on a schedule that counts from the opening service (P124-7).
+     */
+    data object CountsFromItself : SeasonStartRefusal
 }
 
 /** #114 (C10) — 409: `SEASON_START` refused for [reason]; nothing was written. The message is the code only. */
@@ -63,10 +76,13 @@ class SeasonStartBadDate(val field: String) : IllegalArgumentException("$field i
  * #114 (C10, C10a) — sets or clears a schedule's passive Season Start role, in one `uow.write`. The phone's role
  * action, and later `/v1` and MCP (A4w), reach it; the schedule form never carries a role (K11).
  *
- * - **`NONE`** clears the role and its boundary. Nothing refuses it but [NoSuchSchedule]: an archived schedule may be
- *   cleared, and clearing a schedule that has no role writes nothing.
+ * - **`NONE`** clears the role and its boundary. Nothing refuses it but [NoSuchSchedule] and #124's strand: clearing a
+ *   live role while a live schedule of an asset it covers counts from the opening service is 409 [SeasonStartStrands]
+ *   (`HAS_DEPENDENT_SCHEDULES`, C42). An archived schedule may be cleared, and clearing a schedule that has no role
+ *   writes nothing.
  * - **`SEASON_START`** takes [sinceOn] as its boundary, today when absent (O-4). In order: a malformed date is 422
- *   [SeasonStartBadDate]; then 409 [SeasonStartRefused] for an archived schedule, a QUICK schedule without
+ *   [SeasonStartBadDate]; then 409 [SeasonStartRefused] for an archived schedule, a schedule that counts from the
+ *   opening service (#124, `COUNTS_FROM_ITSELF`), a QUICK schedule without
  *   [quickElected] (O-2's explicit election, C10a; FORM and `NONE` ignore it), the target's own rule — a group target
  *   archived or with no open member, then **every open member**, the first failing one by name then id — and last a
  *   date after today. An asset fails when it is not maintained here, is `YEAR_ROUND`, is a child with no child row of
@@ -97,7 +113,10 @@ class SetScheduleRole(
     ): MaintenanceSchedule = uow.write {
         val schedule = schedules.get(id) ?: throw NoSuchSchedule(id)
         when (role) {
-            ScheduleRole.NONE -> write(schedule, ScheduleRole.NONE, null)
+            ScheduleRole.NONE -> {
+                clearStrandOf(schedule)?.let { throw it }
+                write(schedule, ScheduleRole.NONE, null)
+            }
             ScheduleRole.SEASON_START -> {
                 val day = today.localDate()
                 val since = sinceOn?.let { parseDate(it) ?: throw SeasonStartBadDate("sinceOn") } ?: day
@@ -123,9 +142,23 @@ class SetScheduleRole(
         is ScheduleTarget.GroupTarget -> groups.get(target.groupId)?.openMembers().orEmpty().map { it.assetId }
     }
 
+    /**
+     * #124 (C42) — clearing a live role that a live schedule of a covered asset counts from is 409 [SeasonStartStrands]
+     * (`HAS_DEPENDENT_SCHEDULES`, naming those schedules): change when they start counting first.
+     */
+    private suspend fun clearStrandOf(schedule: MaintenanceSchedule): SeasonStartStrands? {
+        if (schedule.role != ScheduleRole.SEASON_START) return null
+        val before = schedules.all()
+        val after = before.map { if (it.id == schedule.id) it.copy(role = ScheduleRole.NONE, roleSinceOn = null) else it }
+        val everyGroup = groups.all()
+        return openingServiceStrandOf(coveredBy(schedule), assets.all(), before, everyGroup, after, everyGroup)
+    }
+
     /** C10's table in its order, but for the date (checked last); null when the schedule may take the role. */
     private suspend fun refusalOf(schedule: MaintenanceSchedule, quickElected: Boolean): SeasonStartRefusal? {
         if (schedule.status == ScheduleStatus.ARCHIVED) return SeasonStartRefusal.ScheduleArchived
+        // #124 (C42): a schedule that counts from the opening service cannot be the one it counts from.
+        if (schedule.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE) return SeasonStartRefusal.CountsFromItself
         if (schedule.completionMode == CompletionMode.QUICK && !quickElected) return SeasonStartRefusal.QuickNotElected
         val all = assets.all()
         val held = transfers.heldIds()

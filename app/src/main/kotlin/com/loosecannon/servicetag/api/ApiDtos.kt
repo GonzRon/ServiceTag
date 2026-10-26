@@ -142,7 +142,10 @@ internal data class MergeTallyDto(
     val skipped: Int,
 )
 
-/** One row's outcome. `reason` is a `MergeReason` name; `detail` is an id or a key, never a label. */
+/**
+ * One row's outcome. `reason` is a `MergeReason` name — #124's `SEASON_START_SERVICE_MISSING` among them, its `detail`
+ * the asset with no live Season Start service — and `detail` is an id or a key, never a label.
+ */
 @Serializable
 internal data class MergeDecisionDto(
     val table: String,

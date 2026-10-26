@@ -920,6 +920,11 @@ class ScheduleEditViewModelTest {
             heater.id,
             SeasonModeCommand(seasonMode = SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON),
         )
+        // N2b (C42): a schedule counts from the opening service only under a live Season Start service of its asset.
+        graph.schedules.upsert(
+            scheduleOf("s-annual", assetId = heater.id.value, title = "Example annual service", completionMode = CompletionMode.FORM)
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
         val row = scheduleOf("s-opening", assetId = heater.id.value, timeInterval = 1, timeUnit = RecurrenceUnit.MONTH)
             .copy(servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 7)
         graph.schedules.upsert(row)
@@ -938,6 +943,39 @@ class ScheduleEditViewModelTest {
         assertEquals("Clean the burn pot first", stored.description)
         assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, stored.servicePolicy)
         assertEquals(7, stored.policyOffsetDays)
+    }
+
+    /**
+     * #124 row 149 (N2b, C42): a save the core refuses for counting from the opening service draws its sentence — P124-5
+     * on an asset no Season Start service covers, P124-6 on the Season Start service itself — and writes nothing.
+     */
+    @Test fun countingFromTheOpeningServiceIsRefusedWithItsSentence() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.schedules.upsert(
+            scheduleOf("filter", assetId = "heater", title = "Example filter check", completionMode = CompletionMode.FORM),
+        )
+        suspend fun refusalOf(id: String): String? {
+            val vm = viewModel(scheduleId = id)
+            vm.state.first { it.loaded }
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            vm.save()
+            return vm.state.first { !it.saving }.seasonStartRefusal
+        }
+
+        assertEquals(
+            "Example Heater has no Season Start service to count from. Use one of its schedules as its Season Start " +
+                "service first.",
+            refusalOf("filter"),
+        )
+        assertEquals(ServicePolicy.CONTINUOUS, graph.schedules.get(ScheduleId("filter"))!!.servicePolicy)
+
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+        assertEquals("This schedule is the Season Start service, so it cannot count from itself.", refusalOf("annual"))
+        assertEquals(ServicePolicy.CONTINUOUS, graph.schedules.get(ScheduleId("annual"))!!.servicePolicy)
     }
 
     /**

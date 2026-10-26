@@ -2583,12 +2583,15 @@ class AssetEditViewModel(
                     return
                 }
                 is SeasonStartStrands -> {
-                    // #114 (C11): a change into all year sits under the season field (P114-24); a parent change that
-                    // would leave a covered asset a leaf child is about the pair, said as the cycle is (P114-25).
+                    // #114 (C11): a change into all year sits under the season field (P114-24, and #124's P124-8 for the
+                    // schedules counting from the opening service); a parent change that would leave a covered asset a
+                    // leaf child is about the pair, said as the cycle is (P114-25).
                     val name = failure.assetId?.let { assets.get(it) }?.name
                     val line = SeasonStartStrings.strand(failure, name)
                         ?: localized(R.string.asset_model_could_not_save)
-                    if (failure.strandCause == SeasonStartStrandCause.NEEDS_SEASONS) {
+                    if (failure.strandCause == SeasonStartStrandCause.NEEDS_SEASONS ||
+                        failure.strandCause == SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES
+                    ) {
                         _state.update { it.copy(saving = false, seasonRefusal = line) }
                     } else {
                         _state.update { it.copy(saving = false) }

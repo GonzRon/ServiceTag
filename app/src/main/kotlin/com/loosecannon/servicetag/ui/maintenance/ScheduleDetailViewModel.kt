@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
@@ -524,7 +525,9 @@ class ScheduleDetailViewModel(
     /**
      * Archive or restore. **Archiving a schedule a health subject depends on asks first** (spec §6.1,
      * D-30; inv. 130): the refusal naming the subject opens S140, and nothing is archived until the
-     * owner answers "Archive both". A restore is never guarded.
+     * owner answers "Archive both". A restore is never guarded by the link; #114/#124's Season Start rules (a restored
+     * role, a schedule counting from the opening service) and an archived role a schedule counts from are said as
+     * messages.
      */
     fun archive(archived: Boolean) = operateGuarded {
         try {
@@ -533,13 +536,22 @@ class ScheduleDetailViewModel(
         } catch (refused: ScheduleDrivesHealthSubject) {
             LinkGuardPrompt.Asks(refused.name)
         } catch (refused: SeasonStartStrands) {
-            // #114 (C11 erratum): a restore that would strand a Season Start role is refused and said, not folded.
+            // #114 (C11 erratum): a restore that would strand a Season Start role is refused and said, not folded; so is
+            // #124's archive of one a schedule counts from (P124-8).
             restoreRefusal(refused)?.let { _messages.trySend(it) }
+            null
+        } catch (refused: SeasonStartRefused) {
+            // #124 (C42): a schedule counting from the opening service comes back only under a live Season Start service.
+            val name = SeasonStartStrings.assetOf(refused.reason)?.let { assets.get(it) }?.name
+            SeasonStartStrings.saveRefused(refused.reason, name)?.let { _messages.trySend(it) }
             null
         }
     }
 
-    /** The sentence for a refused restore of this schedule; a group target's member sentence sits inside P114-21. */
+    /**
+     * The sentence for a refused archive or restore of this schedule ([SeasonStartStrings.strand]); a group target's
+     * member sentence sits inside P114-21.
+     */
     private suspend fun restoreRefusal(refused: SeasonStartStrands): String? {
         val name = refused.assetId?.let { assets.get(it) }?.name ?: return null
         val throughAGroup = schedules.get(scheduleId)?.target is ScheduleTarget.GroupTarget

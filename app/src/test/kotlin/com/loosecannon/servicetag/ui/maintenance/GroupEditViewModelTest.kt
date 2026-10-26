@@ -2,10 +2,12 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
@@ -288,6 +290,38 @@ class GroupEditViewModelTest {
         )
         assertEquals(listOf(AssetId("heater")), openMembers("pre").map { it.assetId })
         assertNull(GroupEditState().seasonStartRefusal)
+    }
+
+    /**
+     * #124 row 149 (N2b, C42): taking a member out of the group whose Season Start service a schedule of it counts from
+     * says P124-8, and the member stays.
+     */
+    @Test fun removingAMemberACountingScheduleNeedsSaysP124_8() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("stove", name = "Example Stove", seasonMode = SeasonMode.MANUAL))
+        graph.groups.upsert(
+            groupOf(
+                "pre",
+                name = "Example pre-season",
+                members = listOf(Triple("heater", "2026-01-01", null), Triple("stove", "2026-01-01", null)),
+            ),
+        )
+        graph.schedules.upsert(scheduleOf("pre-check", groupId = "pre", title = "Example pre-season check"))
+        graph.setScheduleRole.run(ScheduleId("pre-check"), ScheduleRole.SEASON_START, quickElected = true)
+        graph.schedules.upsert(
+            scheduleOf("filter", assetId = "stove", title = "Example filter check", completionMode = CompletionMode.FORM)
+                .copy(servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0),
+        )
+
+        val vm = viewModel("pre")
+        loaded(vm)
+        vm.toggle(AssetId("stove"))
+        vm.save()
+        assertEquals(
+            "\"Example filter check\" counts from Example Stove's Season Start service. Change when it starts counting first.",
+            vm.state.first { !it.saving }.seasonStartRefusal,
+        )
+        assertEquals(listOf(AssetId("heater"), AssetId("stove")), openMembers("pre").map { it.assetId })
     }
 
     /**

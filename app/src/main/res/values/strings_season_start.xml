@@ -115,4 +115,12 @@
     <string name="season_start_role_line">Season Start service · services count from %s</string>
     <!-- P114-42: the confirm button of the editor's one-tap election; its body is P114-5. -->
     <string name="season_start_count_one_tap">Count one-tap completions</string>
+    <!-- P124-5 (#124): a schedule would count from the opening service of an asset no Season Start service covers (NO_SEASON_START_SERVICE). %s: the asset's name. -->
+    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
+    <!-- P124-6 (#124): the schedule editor, the role schedule set to count from the Season Start service (COUNTS_FROM_ITSELF). -->
+    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
+    <!-- P124-7 (#124): the role action, on a schedule that counts from the Season Start service (COUNTS_FROM_ITSELF). -->
+    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
+    <!-- P124-8 (#124): a change that would leave schedules counting from the Season Start service with none (HAS_DEPENDENT_SCHEDULES). %1$s: the first such schedule's title; %2$s: the asset's name. -->
+    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
 </resources>

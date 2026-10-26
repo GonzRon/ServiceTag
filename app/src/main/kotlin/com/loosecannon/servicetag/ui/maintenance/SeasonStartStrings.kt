@@ -13,9 +13,9 @@ import com.loosecannon.servicetag.l10n.localizedDate
 /**
  * #114 (C33) — the Season Start role's words on the phone (§5; `res/values/strings_season_start.xml`): the role's
  * label and line, the confirm, and one sentence for every refusal ([SeasonStartRefusal], P114-5, P114-16…23,
- * P114-28) and every strand ([SeasonStartStrandCause], P114-20/21 and P114-24…27, P114-43), each an exhaustive `when`
- * with no `else`. One mapping for every caller: the role confirm, the three editors and the two restores from the
- * archive (the C11 erratum).
+ * P114-28; #124's P124-5…7) and every strand ([SeasonStartStrandCause], P114-20/21 and P114-24…27, P114-43; #124's
+ * P124-8), each an exhaustive `when` with no `else`. One mapping for every caller: the role action and confirm, the three
+ * editors and the archive and restore actions (the C11 erratum, #124's C42).
  */
 internal object SeasonStartStrings {
 
@@ -49,18 +49,22 @@ internal object SeasonStartStrings {
         is SeasonStartRefusal.YearRound -> reason.assetId
         is SeasonStartRefusal.LeafChild -> reason.assetId
         is SeasonStartRefusal.AlreadyCovered -> reason.assetId
+        is SeasonStartRefusal.NoSeasonStartService -> reason.assetId
         SeasonStartRefusal.ScheduleArchived,
         SeasonStartRefusal.QuickNotElected,
         SeasonStartRefusal.GroupArchived,
         SeasonStartRefusal.GroupHasNoMembers,
         SeasonStartRefusal.DateInFuture,
+        SeasonStartRefusal.CountsFromItself,
         -> null
     }
 
     /**
      * The sentence for `SetScheduleRole`'s refusal [reason]: P114-19, P114-5, P114-22 or P114-23 as they stand; an
      * asset's own refusal — P114-16, P114-17, P114-18 or P114-20 with [assetName], the name of [assetOf]'s asset —
-     * inside P114-21 when a group target brings the asset in ([throughAGroup]). Null only when that name is missing.
+     * inside P114-21 when a group target brings the asset in ([throughAGroup]). #124: `COUNTS_FROM_ITSELF` is the role
+     * action's P124-7 here (the editor's is [saveRefused]), and `NO_SEASON_START_SERVICE` P124-5 with [assetName]. Null
+     * only when that name is missing.
      */
     fun refused(reason: SeasonStartRefusal, assetName: String?, throughAGroup: Boolean): String? = when (reason) {
         SeasonStartRefusal.ScheduleArchived -> localized(R.string.season_start_refused_schedule_archived)
@@ -69,6 +73,9 @@ internal object SeasonStartStrings {
         SeasonStartRefusal.GroupHasNoMembers,
         -> localized(R.string.season_start_refused_no_members)
         SeasonStartRefusal.DateInFuture -> localized(R.string.season_start_refused_date_in_future)
+        SeasonStartRefusal.CountsFromItself -> localized(R.string.season_start_refused_counts_from_the_service)
+        is SeasonStartRefusal.NoSeasonStartService ->
+            assetName?.let { localized(R.string.season_start_refused_no_season_start_service, it) }
         is SeasonStartRefusal.LeafChild,
         is SeasonStartRefusal.YearRound,
         is SeasonStartRefusal.NotMaintainedHere,
@@ -89,7 +96,30 @@ internal object SeasonStartStrings {
         SeasonStartRefusal.GroupArchived,
         SeasonStartRefusal.GroupHasNoMembers,
         SeasonStartRefusal.DateInFuture,
+        SeasonStartRefusal.CountsFromItself,
+        is SeasonStartRefusal.NoSeasonStartService,
         -> null
+    }
+
+    /**
+     * #124 (C42) — the sentence for a schedule that may not count from the opening service, refused by the editor's save
+     * or a restore from the archive: `COUNTS_FROM_ITSELF` → P124-6 (the editor's, on the role schedule itself),
+     * `NO_SEASON_START_SERVICE` → P124-5 and `YEAR_ROUND` → P114-17, both with [assetName]; any other [reason] as
+     * [refused] says it. Null only when a sentence that names the asset has no name.
+     */
+    fun saveRefused(reason: SeasonStartRefusal, assetName: String?): String? = when (reason) {
+        SeasonStartRefusal.CountsFromItself -> localized(R.string.season_start_refused_counts_from_itself)
+        is SeasonStartRefusal.NoSeasonStartService,
+        is SeasonStartRefusal.YearRound,
+        SeasonStartRefusal.ScheduleArchived,
+        SeasonStartRefusal.QuickNotElected,
+        is SeasonStartRefusal.NotMaintainedHere,
+        is SeasonStartRefusal.LeafChild,
+        is SeasonStartRefusal.AlreadyCovered,
+        SeasonStartRefusal.GroupArchived,
+        SeasonStartRefusal.GroupHasNoMembers,
+        SeasonStartRefusal.DateInFuture,
+        -> refused(reason, assetName, throughAGroup = false)
     }
 
     /**
@@ -102,7 +132,9 @@ internal object SeasonStartStrings {
      * - `MEMBER_NOT_ELIGIBLE` and `MEMBER_ALREADY_COVERED` → P114-27 (the group editor);
      * - a restore from the archive (the C11 erratum): `RESTORE_ALREADY_COVERED` → P114-20, naming the role that already
      *   covers the asset — the first of [SeasonStartStrands.schedules] not among [restored]; `RESTORE_NOT_ELIGIBLE` →
-     *   [refused] for the asset rule's answer, inside P114-21 when a group target brings the asset in ([throughAGroup]).
+     *   [refused] for the asset rule's answer, inside P114-21 when a group target brings the asset in ([throughAGroup]);
+     * - #124 (C42): `HAS_DEPENDENT_SCHEDULES` → P124-8, the first dependent by title (the strand names them all) and
+     *   [assetName] — the role action, the archive actions, the group and asset editors alike.
      */
     fun strand(
         strands: SeasonStartStrands,
@@ -123,6 +155,10 @@ internal object SeasonStartStrings {
                 ?.let { other -> localized(R.string.season_start_refused_already_covered, name, other.title) }
         }
         SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE -> strands.refusal?.let { refused(it, assetName, throughAGroup) }
+        SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES -> assetName?.let { name ->
+            strands.schedules.firstOrNull()
+                ?.let { dependent -> localized(R.string.season_start_strand_dependent_schedules, dependent.title, name) }
+        }
     }
 
     /** P114-24 or P114-25: [assetName] and the first role covering it ([SeasonStartStrands.schedules], by title). */

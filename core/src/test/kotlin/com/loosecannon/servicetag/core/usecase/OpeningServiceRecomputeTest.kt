@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
@@ -22,14 +23,15 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 /**
  * #124 (C41; rows 143–145) — the feed: `RecomputeSchedules` hands a schedule counting from the opening service its
  * asset's qualifying day, read by the one reader inside the write, and asks the reader for no other schedule; a group
  * role's members each count from their own completion (C1); and every change that can move that day rebuilds the
- * dependent in the same write — an asset-role and a group-role completion, the role set, moved and cleared, an END
- * and a START, a deleted completion. Every name is fictional; today is 2026-10-26 and the zone UTC.
+ * dependent in the same write — an asset-role and a group-role completion, the role set and moved, a role group
+ * restored, an END and a START, a deleted completion (clearing a role under a live dependent is refused, N2b). Every name is fictional; today is 2026-10-26 and the zone UTC.
  */
 class OpeningServiceRecomputeTest {
     private val h = SeasonStartHarness()
@@ -186,8 +188,9 @@ class OpeningServiceRecomputeTest {
         deleteEvent.run(later.id)
         assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the later completion deleted")
 
-        h.setScheduleRole.run(ScheduleId("s1"), ScheduleRole.NONE)
-        assertWaiting("d-heater", "the role cleared")
+        // #124 (N2b, C42): clearing the role a live dependent counts from is stranded; the dependent keeps its day.
+        assertFailsWith<SeasonStartStrands> { h.setScheduleRole.run(ScheduleId("s1"), ScheduleRole.NONE) }
+        assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the role kept")
     }
 
     @Test fun aGroupRoleSetAndClearedMovesEveryMembersDependent() = runTest {
@@ -205,9 +208,28 @@ class OpeningServiceRecomputeTest {
         assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the group role set")
         assertCounts("d-boiler", "2026-10-15", PolicyReason.OPENING_SERVICE, "every open member")
 
-        h.setScheduleRole.run(ScheduleId("g1-check"), ScheduleRole.NONE)
-        assertWaiting("d-heater", "the group role cleared")
-        assertWaiting("d-boiler", "the group role cleared")
+        // #124 (N2b, C42): clearing it while the members' dependents count from it is stranded.
+        assertFailsWith<SeasonStartStrands> { h.setScheduleRole.run(ScheduleId("g1-check"), ScheduleRole.NONE) }
+        assertCounts("d-boiler", "2026-10-15", PolicyReason.OPENING_SERVICE, "the group role kept")
+    }
+
+    /**
+     * N2a's C41 erratum (the controller, 2026-10-26): a role group's restore moves the role's coverage of each open
+     * member, so the same write rebuilds their dependents. (Archiving one under a live dependent is refused, C42.)
+     */
+    @Test fun restoringARoleGroupMovesEveryMembersDependent() = runTest {
+        calendar("heater")
+        h.group("g1", Triple("heater", "2025-12-01", null))
+        yearly("g1-check", groupId = "g1", role = ScheduleRole.SEASON_START)
+        completeGroupMembers.all(ScheduleId("g1-check"), CompletionCommand(occurredOn = "2026-10-01", tzId = "UTC"))
+        h.archiveGroup.run(GroupId("g1"), archived = true)
+        // A dependent stored while the group is archived (as only a merge could leave it): it waits, uncovered.
+        dependent("d-heater")
+        h.recompute.forAsset(AssetId("heater"))
+        assertWaiting("d-heater", "the role's group archived")
+
+        h.archiveGroup.run(GroupId("g1"), archived = false)
+        assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the role's group restored")
     }
 
     @Test fun anEndAndAStartEachMoveTheDependent() = runTest {
