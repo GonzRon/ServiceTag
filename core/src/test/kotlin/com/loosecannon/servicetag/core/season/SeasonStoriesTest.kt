@@ -2,21 +2,31 @@ package com.loosecannon.servicetag.core.season
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
 import com.loosecannon.servicetag.core.testing.SeasonFixtures.activationOf
 import com.loosecannon.servicetag.core.testing.SeasonFixtures.assetOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
+import com.loosecannon.servicetag.core.usecase.ScheduleSeasonHarness
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlinx.coroutines.test.runTest
 
 /**
  * #114 (G22, I30): seasonality is configured per asset. Fictional stories 2 and 3 and their neighbours (rows
@@ -195,5 +205,94 @@ class SeasonStoriesTest {
             assertEquals(baseline, answer(asset, "Season Start service"), "the title too")
             assertEquals(baseline, answer(asset, "Example annual service"), "any title")
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Row h4 (#125) — the owner's case, fictional: the opening service follows the winterize switch, and the
+    // weekly in-use checks start with the in-use season.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * An "Example Heater" in use 11-01…03-31 (`CALENDAR`). Its Season Start service (the role, `IN_SERVICE_AT_START`,
+     * 0, its yearly due long reached) follows the Home Assistant winterize switch, which turns on when the first freeze
+     * is forecast; its weekly in-use check (#124, `IN_SERVICE_AFTER_OPENING_SERVICE`, 7) keeps the asset's season.
+     */
+    private suspend fun winterizedHeater(h: ScheduleSeasonHarness) {
+        h.on("2026-10-15")
+        h.asset()
+        h.schedule(
+            "s-open", policy = ServicePolicy.IN_SERVICE_AT_START, offset = 0, role = ScheduleRole.SEASON_START,
+        )
+        h.schedule(
+            "s-weekly", policy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, offset = 7, unit = RecurrenceUnit.WEEK,
+            anchorOn = "2026-01-05",
+        )
+        h.connect()
+        h.link.run(ScheduleId("s-open"), "input_boolean.example_heater_winterize_season")
+        h.answer("s-open", HaSwitchState.OFF)
+    }
+
+    private suspend fun ScheduleSeasonHarness.readiness(): Readiness = seasonReadiness(
+        raw.assets.rows.getValue("heater"), raw.assets.rows.values, raw.schedules.rows.values, raw.groups.rows.values,
+        raw.events.rows.values, raw.activations.rows.values.toList(), day, ZoneOffset.UTC,
+    )
+
+    @Test
+    fun theOpeningServiceIsDueWithTheWinterizeSwitchAndTheWeeklyChecksStartWithTheInUseSeason() = runTest {
+        val h = ScheduleSeasonHarness()
+        winterizedHeater(h)
+        val waiting = h.state("s-open")
+        assertNull(waiting.actionableDueOn, "the switch is off: no start is predicted")
+        assertEquals(PolicyReason.AWAITING_START, waiting.policyReason)
+
+        // The switch turns on: the opening service comes due that day.
+        h.on("2026-10-20")
+        h.answer("s-open", HaSwitchState.ON)
+        assertEquals("2026-10-20" to PolicyPhase.ACTIVE, h.state("s-open").let { it.actionableDueOn to it.policyPhase })
+
+        // Serviced on 10-22: the asset is ready, by its own window's cutoff. The equipment is on standby: no weekly
+        // check runs before the in-use season, and the first one is held at 11-01 + 7.
+        h.on("2026-10-22")
+        h.complete("s-open", "2026-10-22")
+        assertEquals(
+            Readiness.Ready(on("2026-10-22"), ScheduleId("s-open"), window("2026-04-01")),
+            h.readiness(),
+            "readiness stays on the asset's season",
+        )
+        val standby = h.state("s-weekly")
+        assertEquals("2026-11-08" to PolicyPhase.DORMANT, standby.actionableDueOn to standby.policyPhase, "standby")
+
+        // The in-use season starts 11-01: the first weekly check is the later of 11-01 and 10-22, plus 7 — never 10-29.
+        h.on("2026-11-01")
+        h.recompute.forAsset(AssetId("heater"))
+        val weekly = h.state("s-weekly")
+        assertEquals(
+            Triple("2026-11-08", PolicyPhase.ACTIVE, PolicyReason.SEASON_START),
+            Triple(weekly.actionableDueOn, weekly.policyPhase, weekly.policyReason),
+        )
+        assertEquals(ScheduleSeasonSource.ASSET, h.stored("s-weekly").seasonSource, "the asset's other schedules untouched")
+    }
+
+    @Test
+    fun aLateOpeningServiceStartsTheWeeklyChecksSevenDaysAfterIt() = runTest {
+        val h = ScheduleSeasonHarness()
+        winterizedHeater(h)
+        h.on("2026-10-20")
+        h.answer("s-open", HaSwitchState.ON)
+        assertEquals("2026-10-20", h.state("s-open").actionableDueOn, "due with the switch")
+
+        // In use from 11-01 but not yet serviced: the weekly check waits for the opening service.
+        h.on("2026-11-03")
+        h.recompute.forAsset(AssetId("heater"))
+        assertEquals(PolicyReason.AWAITING_OPENING_SERVICE, h.state("s-weekly").policyReason)
+
+        h.on("2026-11-05")
+        h.complete("s-open", "2026-11-05")
+        val weekly = h.state("s-weekly")
+        assertEquals(
+            Triple("2026-11-12", PolicyPhase.ACTIVE, PolicyReason.OPENING_SERVICE),
+            Triple(weekly.actionableDueOn, weekly.policyPhase, weekly.policyReason),
+            "the later of 11-01 and 11-05, plus 7",
+        )
     }
 }

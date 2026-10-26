@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.OutboundTargets
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.isValidEntityId
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
@@ -99,6 +100,7 @@ private class PublishActivation(
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
+    private val scheduleSeasons: ScheduleSeasonBindingRepository,
 ) {
     suspend fun run(
         action: PublishAction,
@@ -190,11 +192,12 @@ private class PublishActivation(
     }
 
     /**
-     * C26 — whether an inbound #16 binding on this connection reads [entityId], or a date binding other than [stored]
-     * reads it as its season-ended helper.
+     * C26 — whether an inbound #16 binding on this connection reads [entityId], or a schedule's own binding does
+     * (#125), or a date binding other than [stored] reads it as its season-ended helper.
      */
     private suspend fun readsAsInbound(connectionId: String, entityId: String, stored: PublishBinding?): Boolean =
         seasonSync.all().any { it.connectionId == connectionId && it.entityId == entityId } ||
+            scheduleSeasons.all().any { it.connectionId == connectionId && it.entityId == entityId } ||
             bindings.all().any { it.id != stored?.id && it.connectionId == connectionId && it.boundaryEntityId == entityId }
 
     /**
@@ -267,9 +270,11 @@ class EnablePublishing(
     uow: UnitOfWork,
     ids: IdGenerator,
     clock: Clock,
+    /** #125 (C26's schedule half): the schedule bindings, whose helpers are read too; defaulted (F-6). */
+    scheduleSeasons: ScheduleSeasonBindingRepository = ScheduleSeasonBindingRepository.NONE,
 ) {
     private val activation = PublishActivation(
-        bindings, deliveries, tombstones, connections, seasonSync, assets, transfers, uow, ids, clock,
+        bindings, deliveries, tombstones, connections, seasonSync, assets, transfers, uow, ids, clock, scheduleSeasons,
     )
 
     suspend fun run(
@@ -300,9 +305,11 @@ class ChangePublishTarget(
     uow: UnitOfWork,
     ids: IdGenerator,
     clock: Clock,
+    /** #125 (C26's schedule half): the schedule bindings, whose helpers are read too; defaulted (F-6). */
+    scheduleSeasons: ScheduleSeasonBindingRepository = ScheduleSeasonBindingRepository.NONE,
 ) {
     private val activation = PublishActivation(
-        bindings, deliveries, tombstones, connections, seasonSync, assets, transfers, uow, ids, clock,
+        bindings, deliveries, tombstones, connections, seasonSync, assets, transfers, uow, ids, clock, scheduleSeasons,
     )
 
     suspend fun run(

@@ -137,7 +137,20 @@ data class MaintenanceSchedule(
     val role: ScheduleRole = ScheduleRole.NONE,
     /** ISO `YYYY-MM-DD`, the commissioning boundary: non-null exactly when [role] is SEASON_START (R1). */
     val roleSinceOn: String? = null,
+    /**
+     * #125 (U-C2): whose season this schedule's due rules read. [ScheduleSeasonSource.ASSET], the default, is its
+     * asset's; [ScheduleSeasonSource.OWN] is the schedule's own Home Assistant season. Only the link, the unlink and
+     * the archive move it; a save keeps it and a create (a Replace asset copy among them) has the default.
+     */
+    val seasonSource: ScheduleSeasonSource = ScheduleSeasonSource.ASSET,
 )
+
+/**
+ * #125 (U-C2): whose season a schedule's due rules read. [ASSET] is its asset's, as shipped. [OWN] is a `MANUAL`
+ * season by construction, made of the schedule's own activation rows and the asset's break, and nothing else; no
+ * asset-level reader (readiness, publishing, the asset's own season) ever sees it.
+ */
+enum class ScheduleSeasonSource { ASSET, OWN }
 
 /**
  * #114 (C7): a schedule's role. `SEASON_START` marks the one schedule whose completion makes its asset ready

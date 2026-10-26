@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -199,6 +200,8 @@ class SaveSchedule(
             // `ReplaceAsset`'s copy among them — has none.
             role = existing?.role ?: ScheduleRole.NONE,
             roleSinceOn = existing?.roleSinceOn,
+            // #125 (U-C2): no command carries the source either; a save keeps it and a create follows its asset.
+            seasonSource = existing?.seasonSource ?: ScheduleSeasonSource.ASSET,
         )
         val saved = if (existing != null && ruleChanged(existing, candidate)) {
             candidate.copy(postponedDueOn = null, ruleChangedAt = now)
@@ -220,7 +223,11 @@ class SaveSchedule(
         // The role is the stored row's as of this write (M-3): a role set since `prepare` read is neither wiped nor
         // left unjudged.
         val stored = existing?.let { schedules.get(it.id) }
-        val saved = prepared.saved.copy(role = stored?.role ?: ScheduleRole.NONE, roleSinceOn = stored?.roleSinceOn)
+        val saved = prepared.saved.copy(
+            role = stored?.role ?: ScheduleRole.NONE,
+            roleSinceOn = stored?.roleSinceOn,
+            seasonSource = stored?.seasonSource ?: ScheduleSeasonSource.ASSET,
+        )
         // The guard's 422: its remedy is the flag in this very body.
         val driven = if (existing != null && breaksHealthLink(existing, saved)) {
             guardDriven(existing.id, unlinkHealthSubject, healthSubjects)
@@ -228,9 +235,10 @@ class SaveSchedule(
             emptyList()
         }
         // A 409, after every 422: the body is well formed, and the remedy is the asset — give it a
-        // season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99).
+        // season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99). #125: read through the
+        // schedule's effective season, so an `OWN` schedule counts back only from the asset's break.
         if (targetAsset != null && cmd.servicePolicy == ServicePolicy.PRE_SERVICE &&
-            targetAsset.boundaryKind() == BoundaryKind.NONE
+            targetAsset.boundaryKindFor(saved.seasonSource) == BoundaryKind.NONE
         ) {
             throw PreServiceNeedsDates(targetAsset.id)
         }

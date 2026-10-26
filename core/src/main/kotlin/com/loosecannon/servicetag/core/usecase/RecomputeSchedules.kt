@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonInputs
@@ -26,6 +27,8 @@ import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.ServicePolicyEngine
 import com.loosecannon.servicetag.core.season.OpeningServiceReader
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
+import com.loosecannon.servicetag.core.seasonsync.ownSeasonInputs
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -69,6 +72,11 @@ class RecomputeSchedules(
      * stays the trailing lambda.
      */
     private val openingService: OpeningServiceReader = OpeningServiceReader.NONE,
+    /**
+     * #125 (U-C2) — a schedule's own season history, read only for an asset-targeted schedule whose source is
+     * `OWN`. Defaulted (F-6) so every shipped construction compiles unchanged; production passes the table.
+     */
+    private val scheduleActivations: ScheduleSeasonActivationRepository = ScheduleSeasonActivationRepository.NONE,
     /**
      * The owner's zone, read once per rebuild and handed to the engine beside `T`.
      *
@@ -217,7 +225,7 @@ class RecomputeSchedules(
 
     /**
      * What one schedule's rebuild reads. An asset-targeted schedule reads its Asset's events and
-     * its Asset's [SeasonInputs] — the activation rows only when the Asset is MANUAL; a
+     * the season [seasonFor] answers — its Asset's, or its own (#125); a
      * group-targeted one reads every member's events and the group's membership rows, and no season
      * at all, because a group target is CONTINUOUS only.
      *
@@ -249,16 +257,22 @@ class RecomputeSchedules(
         }
 
     /**
-     * The target Asset's [SeasonInputs] — its activation rows read only when it is MANUAL, the one
-     * mode that consults them (invariant 90) — or null for a group target and for an asset that is
-     * gone, which the engine reads as no season and no break.
+     * **The season [schedule]'s due rules read** (#125, U-C2), the one answer the rebuild, [quietUntil] and every
+     * other reader of a schedule's due season ask for: for an `ASSET` source, the target Asset's [SeasonInputs] — its
+     * activation rows read only when it is MANUAL, the one mode that consults them (invariant 90); for an `OWN` source,
+     * the schedule's own season ([ownSeasonInputs]: MANUAL, no window, the asset's break, its own rows). Null for a
+     * group target, whatever its source (inv. 106), and for an asset that is gone, which the engine reads as no season
+     * and no break. Never asked by an asset-level reader: readiness and publishing read the asset's season (I-R).
      */
-    private suspend fun seasonFor(schedule: MaintenanceSchedule): SeasonInputs? {
+    suspend fun seasonFor(schedule: MaintenanceSchedule): SeasonInputs? {
         val target = schedule.target as? ScheduleTarget.AssetTarget ?: return null
         val asset = assets.get(target.assetId) ?: return null
-        return asset.seasonInputs(
-            if (asset.seasonMode == SeasonMode.MANUAL) activations.forAsset(asset.id) else emptyList(),
-        )
+        return when (schedule.seasonSource) {
+            ScheduleSeasonSource.ASSET -> asset.seasonInputs(
+                if (asset.seasonMode == SeasonMode.MANUAL) activations.forAsset(asset.id) else emptyList(),
+            )
+            ScheduleSeasonSource.OWN -> asset.ownSeasonInputs(scheduleActivations.forSchedule(schedule.id))
+        }
     }
 
     private data class RebuildInputs(

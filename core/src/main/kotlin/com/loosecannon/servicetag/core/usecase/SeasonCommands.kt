@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season
@@ -21,6 +22,7 @@ import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.season.isLeafChild
 import com.loosecannon.servicetag.core.season.roleCoverageOf
+import com.loosecannon.servicetag.core.seasonsync.ownSeasonInputs
 import java.time.LocalDate
 import java.time.Year
 
@@ -305,6 +307,15 @@ private fun coversSomeYear(start: String, end: String): Boolean = PROBE_YEARS.an
 internal fun Asset.boundaryKind(): BoundaryKind = SeasonContext.of(seasonInputs(emptyList())).boundaryKind
 
 /**
+ * #125 (U-C2) — the boundary PRE_SERVICE counts back from for a schedule of this asset reading [source]: the asset's
+ * own ([boundaryKind]), or for an `OWN` season only the asset's break, read as the engine reads that context.
+ */
+internal fun Asset.boundaryKindFor(source: ScheduleSeasonSource): BoundaryKind = when (source) {
+    ScheduleSeasonSource.ASSET -> boundaryKind()
+    ScheduleSeasonSource.OWN -> SeasonContext.of(ownSeasonInputs(emptyList())).boundaryKind
+}
+
+/**
  * **The strands rule** (spec §3.2, §4.4; master plan §7.2; RS-4, O-3, dec. 44): the PRE_SERVICE
  * schedules among [targeting] whose boundary the change from [before] to [after] would remove or
  * re-kind — the kind before is not NONE and the kind after differs. Empty when the change keeps the
@@ -314,15 +325,19 @@ internal fun Asset.boundaryKind(): BoundaryKind = SeasonContext.of(seasonInputs(
  * [targeting] is every schedule aimed at the asset **whatever its lifecycle**: a paused or archived
  * PRE_SERVICE schedule can be resumed or restored, and the boundary-less state is one commands never
  * reach (plan decision 7).
+ *
+ * #125 (U-C2): each schedule's kinds are read from its **effective** context ([boundaryKindFor]), so an `OWN`
+ * schedule is stranded only when the change removes the asset's break; the asset's mode and window are not its boundary.
  */
-internal fun strandedBy(before: Asset, after: Asset, targeting: List<MaintenanceSchedule>): List<StrandedSchedule> {
-    val kindBefore = before.boundaryKind()
-    if (kindBefore == BoundaryKind.NONE || kindBefore == after.boundaryKind()) return emptyList()
-    return targeting
+internal fun strandedBy(before: Asset, after: Asset, targeting: List<MaintenanceSchedule>): List<StrandedSchedule> =
+    targeting
         .filter { it.servicePolicy == ServicePolicy.PRE_SERVICE }
+        .filter { schedule ->
+            val kindBefore = before.boundaryKindFor(schedule.seasonSource)
+            kindBefore != BoundaryKind.NONE && kindBefore != after.boundaryKindFor(schedule.seasonSource)
+        }
         .sortedWith(compareBy({ it.title }, { it.id.value }))
         .map { StrandedSchedule(it.id, it.title) }
-}
 
 /**
  * #114 (C11) — **the Season Start strand rule**, for the season-mode and parent writers (`SetSeasonMode`,

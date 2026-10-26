@@ -1,7 +1,9 @@
 package com.loosecannon.servicetag.core.seasonsync
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * #16 (C7, C11) — the device-local `season_sync_binding` table: at most one binding per asset. The schema's
@@ -31,6 +33,81 @@ interface SeasonSyncRepository {
     suspend fun update(binding: SeasonSyncBinding): Boolean
 
     suspend fun anyEnabled(): Boolean
+}
+
+/**
+ * #125 (U-C1) — the device-local `schedule_season_sync_binding` table: at most one binding per schedule. The schema's
+ * CASCADEs take a schedule's binding with the schedule and a connection's bindings with the connection, as #16's do.
+ * Unlike #16's, a binding is deleted one at a time too: by the unlink and the archive, the two ways a schedule returns
+ * to its asset's season (constraint 6). No publishing projector, readiness reader or #116 reader reads it (I-R).
+ */
+interface ScheduleSeasonBindingRepository {
+    suspend fun get(scheduleId: ScheduleId): ScheduleSeasonBinding?
+
+    suspend fun all(): List<ScheduleSeasonBinding>
+
+    fun observeFor(scheduleId: ScheduleId): Flow<ScheduleSeasonBinding?>
+
+    suspend fun insert(binding: ScheduleSeasonBinding)
+
+    /** #16's compare-and-set: writes [binding] only over the stored `revision - 1`, and answers whether it wrote. */
+    suspend fun update(binding: ScheduleSeasonBinding): Boolean
+
+    suspend fun delete(scheduleId: ScheduleId)
+
+    suspend fun anyEnabled(): Boolean
+
+    companion object {
+        /** No table: no binding is ever stored. Shipped constructions only (F-6); production passes its own. */
+        val NONE: ScheduleSeasonBindingRepository = object : ScheduleSeasonBindingRepository {
+            override suspend fun get(scheduleId: ScheduleId): ScheduleSeasonBinding? = null
+
+            override suspend fun all(): List<ScheduleSeasonBinding> = emptyList()
+
+            override fun observeFor(scheduleId: ScheduleId): Flow<ScheduleSeasonBinding?> = flowOf(null)
+
+            override suspend fun insert(binding: ScheduleSeasonBinding) {
+                error("no schedule season binding table in this construction")
+            }
+
+            override suspend fun update(binding: ScheduleSeasonBinding): Boolean = false
+
+            override suspend fun delete(scheduleId: ScheduleId) = Unit
+
+            override suspend fun anyEnabled(): Boolean = false
+        }
+    }
+}
+
+/**
+ * #125 (U-C1) — the `schedule_season_activation` table: a schedule's own season history, insert and query only (an
+ * activation is an immutable fact). Rows order by `(occurredOn, createdAt, id)`, as the asset's do; they leave only by
+ * their schedule's CASCADE, so an unlink keeps them as history. Only a schedule's own due rules read them (I-R).
+ */
+interface ScheduleSeasonActivationRepository {
+    suspend fun insert(row: ScheduleSeasonActivation)
+
+    suspend fun forSchedule(scheduleId: ScheduleId): List<ScheduleSeasonActivation>
+
+    suspend fun all(): List<ScheduleSeasonActivation>
+
+    fun observeForSchedule(scheduleId: ScheduleId): Flow<List<ScheduleSeasonActivation>>
+
+    companion object {
+        /** No table: every schedule's own history is empty. Shipped constructions only (F-6). */
+        val NONE: ScheduleSeasonActivationRepository = object : ScheduleSeasonActivationRepository {
+            override suspend fun insert(row: ScheduleSeasonActivation) {
+                error("no schedule season activation table in this construction")
+            }
+
+            override suspend fun forSchedule(scheduleId: ScheduleId): List<ScheduleSeasonActivation> = emptyList()
+
+            override suspend fun all(): List<ScheduleSeasonActivation> = emptyList()
+
+            override fun observeForSchedule(scheduleId: ScheduleId): Flow<List<ScheduleSeasonActivation>> =
+                flowOf(emptyList())
+        }
+    }
 }
 
 /** #16 (C7, C11) — the device-local `ha_connection` table: one row per installation, or none (R16-10). */

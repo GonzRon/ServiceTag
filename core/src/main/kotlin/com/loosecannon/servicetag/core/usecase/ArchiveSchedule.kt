@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -12,6 +13,8 @@ import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
+import com.loosecannon.servicetag.core.seasonsync.unlinkedInTransaction
 
 /**
  * Takes a schedule out of every due list without deleting it, or puts it back.
@@ -47,6 +50,9 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * covers its asset (`NO_SEASON_START_SERVICE`, or `YEAR_ROUND`) — a restore never brings back a schedule that would wait
  * for a service nothing can record.
  *
+ * **A schedule's own season** (#125, U-C3): archiving an `OWN` schedule unlinks it in the same write — its binding
+ * deleted, its source back to `ASSET`, its own rows kept — so a restore reads the asset's season.
+ *
  * One `uow.write`.
  */
 class ArchiveSchedule(
@@ -58,17 +64,24 @@ class ArchiveSchedule(
     private val clock: Clock,
     private val groups: GroupRepository,
     private val transfers: TransferRecordRepository,
+    /** #125 (U-C3): the schedule bindings an archive deletes; defaulted (F-6) so shipped constructions compile. */
+    private val scheduleSeasons: ScheduleSeasonBindingRepository = ScheduleSeasonBindingRepository.NONE,
 ) {
     suspend fun run(id: ScheduleId, archived: Boolean, unlinkHealthSubject: Boolean = false): MaintenanceSchedule =
         uow.write {
             val existing = schedules.get(id) ?: throw NoSuchSchedule(id)
-            val saved = existing.copy(
+            var saved = existing.copy(
                 status = if (archived) ScheduleStatus.ARCHIVED else ScheduleStatus.ACTIVE,
             )
             if (archived && existing.status != ScheduleStatus.ARCHIVED) {
                 val driven = guardDriven(id, unlinkHealthSubject, healthSubjects)
                 if (existing.role == ScheduleRole.SEASON_START) archiveStrandOf(existing, saved)?.let { throw it }
                 unlinkDriven(driven, assets, healthSubjects, clock.nowMillis())
+                // #125 (U-C3): an archived schedule follows no Home Assistant switch; restored, it reads its asset's.
+                when (saved.seasonSource) {
+                    ScheduleSeasonSource.ASSET -> Unit
+                    ScheduleSeasonSource.OWN -> saved = unlinkedInTransaction(saved, scheduleSeasons)
+                }
             }
             if (!archived && existing.status == ScheduleStatus.ARCHIVED) {
                 val after = schedules.all().map { if (it.id == id) saved else it }
