@@ -102,6 +102,35 @@ class AssetHealthEngineTest {
         assertEquals(SubjectValue.Scored(0, HealthBand.CRITICAL, 159), continuousTub.value, "18 Apr → 24 Sep")
     }
 
+    /**
+     * #124 review I-2: a MEDIUM subject on a schedule waiting, in season, for its asset's opening
+     * service is tracked — 0 days, up to date, as a PART subject on it is — never "Not tracked while out
+     * of season" while its asset is in season. Out of season it is not tracked, as on any in-service
+     * schedule.
+     */
+    @Test
+    fun aMediumSubjectWaitingForTheOpeningServiceIsTrackedInSeason() {
+        val heater = SeasonFixtures.assetOf(
+            id = "heat", name = "Example Heater", mode = SeasonMode.CALENDAR, seasonStart = "10-01", seasonEnd = "04-30",
+        )
+        val schedule = scheduleOf(
+            id = "s-heat", assetId = "heat", title = "Burn pot clean", timeInterval = 1, timeUnit = RecurrenceUnit.MONTH,
+            anchorOn = "2026-10-05", createdOn = "2026-06-01",
+            servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0,
+        )
+        val medium = HealthFixtures.subjectOf(
+            id = "h-heat", assetId = "heat", kind = HealthSubjectKind.MEDIUM, driver = HealthDriver.MAINTENANCE_OVERDUE,
+            scheduleId = "s-heat", nominalUntil = 14, warningFrom = 45, criticalFrom = 120,
+        )
+        val waiting = HealthFixtures.healthOn("2026-11-15", heater, listOf(medium), listOf(schedule)).subjects.single()
+        assertEquals(SubjectValue.Scored(100, HealthBand.NOMINAL, 0), waiting.value)
+        assertEquals(listOf(DriverLine.UpToDate("Burn pot clean")), waiting.lines)
+
+        val offSeason = HealthFixtures.healthOn("2026-06-15", heater, listOf(medium), listOf(schedule)).subjects.single()
+        assertEquals(SubjectValue.NotTracked(NotTrackedReason.OUT_OF_SEASON), offSeason.value)
+        assertEquals(listOf(DriverLine.NotTrackedOutOfSeason), offSeason.lines)
+    }
+
     @Test
     fun driverLineData() {
         val t1 = 14

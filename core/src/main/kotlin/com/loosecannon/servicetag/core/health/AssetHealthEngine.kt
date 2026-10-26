@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -227,7 +228,11 @@ object AssetHealthEngine {
             ScheduleStatus.ACTIVE -> Unit
         }
         val now = ServicePolicyEngine.evaluate(link.inputs, season, at = today)
-        if (subject.kind == HealthSubjectKind.MEDIUM && link.inputs.policy.isInService() && now.phase == PolicyPhase.DORMANT) {
+        // #124 (review I-2): waiting in season for the opening service is DORMANT but not out of season;
+        // the subject stays tracked, at no late day, as a PART subject on the same schedule is.
+        if (subject.kind == HealthSubjectKind.MEDIUM && link.inputs.policy.isInService() && now.phase == PolicyPhase.DORMANT &&
+            now.reason != PolicyReason.AWAITING_OPENING_SERVICE
+        ) {
             return notTracked(subject, NotTrackedReason.OUT_OF_SEASON, DriverLine.NotTrackedOutOfSeason)
         }
 

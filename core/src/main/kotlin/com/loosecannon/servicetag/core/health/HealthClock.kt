@@ -37,6 +37,12 @@ import java.time.temporal.ChronoUnit
  * kept in the tests as the oracle this must equal.
  *
  * No meter side contributes (Q-2), no snooze is an input (O-6), and nothing here reads a clock.
+ *
+ * **#124's opening service** (review I-1): `openingServiceOn` is today's readiness, which answers for
+ * the cycle running today and no other. So an `IN_SERVICE_AFTER_OPENING_SERVICE` link is evaluated as
+ * `IN_SERVICE_AT_START` with the same offset on every run outside that cycle: a season's end resetting
+ * readiness, or the next season's opening service, never erases an ended cycle's late days. Runs never
+ * straddle a cycle, so the rule is exact per run.
  */
 object HealthClock {
 
@@ -48,11 +54,20 @@ object HealthClock {
             season?.latestCycleStartOnOrBefore(today)?.let { restart -> from = maxOf(from, restart) }
         }
 
+        val running = season?.takeIf { it.phaseAt(today) == SeasonPhase.IN_SEASON }?.cycleStartAt(today)
+
         var counted = 0L
         var spanStart = from
         while (spanStart <= today) {
             val spanEnd = if (inService && season != null) lastDayOfRun(season, spanStart, today) else today
-            val outcome = ServicePolicyEngine.evaluate(link, season, at = spanStart)
+            val asked = if (
+                link.policy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE && season?.cycleStartAt(spanStart) != running
+            ) {
+                link.copy(policy = ServicePolicy.IN_SERVICE_AT_START)
+            } else {
+                link
+            }
+            val outcome = ServicePolicyEngine.evaluate(asked, season, at = spanStart)
             val actionable = outcome.actionableOn
             if (outcome.phase == PolicyPhase.ACTIVE && actionable != null) {
                 val firstLate = maxOf(spanStart, actionable.plusDays(1))
@@ -90,7 +105,8 @@ object HealthClock {
 
 /**
  * The three policies that follow the season's phase (#124 adds the opening service): the clock's
- * MEDIUM restart and its runs by the season ask this, and nothing else in the health package does.
+ * MEDIUM restart and its runs by the season, and `AssetHealthEngine`'s OUT_OF_SEASON not-tracked case,
+ * ask this; nothing else in the health package does.
  */
 internal fun ServicePolicy.isInService(): Boolean = when (this) {
     ServicePolicy.IN_SERVICE_AT_START,

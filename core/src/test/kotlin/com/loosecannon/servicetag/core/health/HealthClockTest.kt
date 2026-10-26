@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.schedule.PolicyInputs
 import com.loosecannon.servicetag.core.schedule.SeasonContext
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.schedule.ServicePolicyEngine
 import com.loosecannon.servicetag.core.testing.HealthFixtures
 import com.loosecannon.servicetag.core.testing.HealthFixtures.SPEC_DAY
@@ -48,10 +49,18 @@ class HealthClockTest {
         val due = link.postponedDueOn ?: link.rawDueOn ?: return 0
         val inService = link.policy.followsTheSeason()
         val restart = if (kind == HealthSubjectKind.MEDIUM && inService) season?.latestCycleStartOnOrBefore(today) else null
+        // #124 (review I-1): `openingServiceOn` is today's readiness, which answers for the cycle running
+        // today only; a day of any other cycle counts as IN_SERVICE_AT_START with the same offset.
+        val running = season?.takeIf { it.phaseAt(today) == SeasonPhase.IN_SEASON }?.cycleStartAt(today)
         var counted = 0L
         var d = minOf(link.openedOn, due).minusDays(ORACLE_LEAD_DAYS)
         while (d <= today) {
-            val outcome = ServicePolicyEngine.evaluate(link, season, at = d)
+            val asked = if (link.policy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE && season?.cycleStartAt(d) != running) {
+                link.copy(policy = ServicePolicy.IN_SERVICE_AT_START)
+            } else {
+                link
+            }
+            val outcome = ServicePolicyEngine.evaluate(asked, season, at = d)
             val a = outcome.actionableOn
             if (outcome.phase == PolicyPhase.ACTIVE && a != null && d > a && (restart == null || d >= restart)) counted++
             d = d.plusDays(1)
@@ -335,6 +344,46 @@ class HealthClockTest {
         // With 14 days after it, the first late day is 4 Nov.
         val later = ready.copy(offsetDays = 14)
         assertEquals(28, HealthClock.countedDays(later, heating, HealthSubjectKind.PART, on("2026-12-01")))
+    }
+
+    /**
+     * #124 review I-1: readiness answers for the cycle running today, so an occurrence left open across
+     * a season end keeps the ended cycle's late days, counted as IN_SERVICE_AT_START's — the season
+     * ending, or the next opening service, never improves the clock. Monthly, raw due 1 Mar 2026, opened
+     * 1 Feb, never done; heating season 1 Oct – 30 Apr.
+     */
+    @Test
+    fun aPastCycleCountsFromItsSeasonsStartWhateverTodaysReadiness() {
+        val heating = SeasonContext.of(SeasonFixtures.seasonOf(SeasonMode.CALENDAR, "10-01", "04-30"))
+        val open = PolicyInputs(
+            ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, 0, on("2026-03-01"), null, on("2026-02-01"),
+            openingServiceOn = on("2025-10-20"),
+        )
+        val waiting = open.copy(openingServiceOn = null)
+        val atStart = waiting.copy(policy = ServicePolicy.IN_SERVICE_AT_START)
+        fun part(link: PolicyInputs, today: String) = HealthClock.countedDays(link, heating, HealthSubjectKind.PART, on(today))
+
+        assertEquals(59, part(open, "2026-04-29"), "29 Apr, ready since 20 Oct 2025: 2 Mar – 29 Apr")
+        assertEquals(60, part(waiting, "2026-05-10"), "10 May, readiness reset by the season's end: the 60 days stay")
+        assertEquals(60, part(atStart, "2026-05-10"), "AT_START reads the same")
+        assertEquals(86, part(open.copy(openingServiceOn = on("2026-10-20")), "2026-11-15"), "60, plus 21 Oct – 15 Nov")
+        assertEquals(60, part(waiting, "2026-11-15"), "waiting in the new cycle adds nothing and takes nothing away")
+
+        val cases = listOf(
+            open to "2026-04-29",
+            waiting to "2026-05-10",
+            open.copy(openingServiceOn = on("2026-10-20")) to "2026-11-15",
+            waiting to "2026-11-15",
+        )
+        for ((link, today) in cases) {
+            for (kind in HealthSubjectKind.entries) {
+                assertEquals(
+                    oracle(link, heating, kind, on(today)),
+                    HealthClock.countedDays(link, heating, kind, on(today)),
+                    "$kind on $today, served ${link.openingServiceOn}",
+                )
+            }
+        }
     }
 
     /** The spec's "IN_SERVICE" policies — the three that follow the season's phase — named exhaustively. */
