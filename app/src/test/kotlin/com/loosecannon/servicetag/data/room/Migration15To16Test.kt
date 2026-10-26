@@ -26,7 +26,7 @@ class Migration15To16Test {
             withConnection(file) { c ->
                 for (row in SEEDED) {
                     // the chain runs on to v20, whose two owner columns `Migration19To20Test` owns
-                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V20_ATTACHMENT_COLUMNS + V22_COLUMNS }
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V20_ATTACHMENT_COLUMNS + v22ColumnsOf(row.table) }
                     val expected = if (row.table == "attachment") {
                         before.getValue(row) + V16_ATTACHMENT_COLUMNS.map { "$it=NULL" }
                     } else {

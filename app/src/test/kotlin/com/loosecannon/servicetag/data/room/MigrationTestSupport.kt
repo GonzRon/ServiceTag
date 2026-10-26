@@ -238,11 +238,21 @@ internal val V19_TABLES = setOf("installed_component", "installed_component_comp
 internal val V21_TABLES = setOf("ha_connection", "season_sync_binding")
 
 /**
- * The four columns schema v22 appends (#113/#114, C4.1), each with its default and never backfilled: the role pair on
+ * The four columns schema v22 appends, by table (#113/#114, C4.1), each with its default and never backfilled: the role pair on
  * `maintenance_schedule`, `asset_event.imported` and `ha_connection.config_generation`. `Migration21To22Test` owns
  * them; an older step's test, whose chain runs on to v22, sets them aside.
  */
-internal val V22_COLUMNS = setOf("role", "role_since_on", "imported", "config_generation")
+internal val V22_COLUMNS_BY_TABLE = mapOf(
+    "maintenance_schedule" to setOf("role", "role_since_on"),
+    "asset_event" to setOf("imported"),
+    "ha_connection" to setOf("config_generation"),
+)
+
+/**
+ * The v22 columns of one table, and no other table's: `asset_supply` has a `role` of its own, which an older step's
+ * row-survival check must keep comparing.
+ */
+internal fun v22ColumnsOf(table: String): Set<String> = V22_COLUMNS_BY_TABLE[table].orEmpty()
 
 /** The three tables schema v22 added (#113/#114): device-local, never exported, merged or packed. */
 internal val V22_TABLES = setOf("ha_publish_binding", "ha_publish_delivery", "ha_publish_decommission")

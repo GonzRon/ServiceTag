@@ -29,7 +29,7 @@ class Migration17To18Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    val after = c.rowOf(row.table, row.id).filterNot { it.substringBefore('=') in V22_COLUMNS }
+                    val after = c.rowOf(row.table, row.id).filterNot { it.substringBefore('=') in v22ColumnsOf(row.table) }
                     val expected = if (row.table in V18_LINE_TABLES) {
                         before.getValue(row) + V18_LINE_COLUMNS.map { "$it=NULL" }
                     } else {

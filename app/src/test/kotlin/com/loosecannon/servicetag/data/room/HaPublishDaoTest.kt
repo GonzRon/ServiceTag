@@ -190,6 +190,7 @@ class HaPublishDaoTest {
 
         assertTrue(bindings.update(binding("b-status", enabled = false, revision = 2)))
         assertFalse("the same next revision twice", bindings.update(binding("b-status", revision = 2)))
+        assertEquals("a stale revision clears no validation", 0, bindings.clearValidation("b-status", atRevision = 99))
         assertEquals(2L, bindings.get("b-status")?.revision)
         assertEquals(false, bindings.get("b-status")?.enabled)
     }
@@ -338,6 +339,8 @@ class HaPublishDaoTest {
         deliveries.insert(delivery("b-date", desiredValue = "1970-01-01"))
         val before = deliveries.all()
 
+        assertEquals("an empty list stamps nothing", 0, deliveries.stampRequest(emptyList(), "example-request-0", 2_900L))
+        assertEquals(before, deliveries.all())
         assertEquals(2, deliveries.stampRequest(listOf("b-status", "b-date"), "example-request-1", 3_000L))
 
         assertEquals(

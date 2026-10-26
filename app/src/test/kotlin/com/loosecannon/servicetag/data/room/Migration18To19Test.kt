@@ -232,7 +232,7 @@ class Migration18To19Test {
     /** One table whole: its columns, key, foreign keys and indices, then every row by rowid. */
     private fun SQLiteConnection.snapshotOf(table: String): List<String> {
         // less the columns v22 appends, whose defaults `Migration21To22Test` owns (the chain runs on to v22)
-        val kept = columnsOf(table).filterNot { it.substringBefore(' ') in V22_COLUMNS }
+        val kept = columnsOf(table).filterNot { it.substringBefore(' ') in v22ColumnsOf(table) }
         val select = kept.joinToString(", ") { "`${it.substringBefore(' ')}`" }
         return kept + primaryKeyOf(table) + foreignKeysOf(table) + indexDefinitionsOn(table) +
             lines("SELECT $select FROM $table ORDER BY rowid")

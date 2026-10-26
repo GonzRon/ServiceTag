@@ -79,9 +79,9 @@ class ReferenceMigrationTest {
                 after.mapValues { (key, row) ->
                     when (key.first) {
                         "asset" -> row.without(V8_NEW_ASSET_COLUMNS + V11_ASSET_COLUMNS)
-                        "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS + V22_COLUMNS)
+                        "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS + v22ColumnsOf(key.first))
                         "attachment" -> row.without(V10_ATTACHMENT_COLUMNS + V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS)
-                        else -> row.without(V22_COLUMNS)
+                        else -> row.without(v22ColumnsOf(key.first))
                     }
                 },
             )

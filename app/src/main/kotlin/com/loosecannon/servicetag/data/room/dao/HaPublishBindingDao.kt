@@ -64,7 +64,7 @@ interface HaPublishBindingDao {
     /**
      * The compare-and-set (C5): writes [next] whole — the claim derived — only while the stored row is at
      * `next.revision - 1`, and answers whether it wrote. A write moves the generation, so the delivery's error and
-     * its pair are cleared with it (A04).
+     * its pair are cleared with it, in a second statement, same transaction (A04).
      */
     @Transaction
     suspend fun update(next: HaPublishBindingEntity): Boolean {

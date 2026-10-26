@@ -41,7 +41,7 @@ class Migration20To21Test {
                         "updated_at INTEGER notnull=1 default=- pk=0",
                     ),
                     // the chain runs on to v22, whose `config_generation` `Migration21To22Test` owns
-                    m.columnsOf("ha_connection").filterNot { it.substringBefore(' ') in V22_COLUMNS },
+                    m.columnsOf("ha_connection").filterNot { it.substringBefore(' ') in v22ColumnsOf("ha_connection") },
                 )
                 assertEquals(listOf("id"), m.primaryKeyOf("ha_connection"))
                 assertEquals(emptyList<String>(), m.foreignKeysOf("ha_connection"))
@@ -172,7 +172,7 @@ class Migration20To21Test {
     /** One table whole: its columns, key, foreign keys and indices, then every row by rowid. */
     private fun SQLiteConnection.snapshotOf(table: String): List<String> {
         // less the columns v22 appends, whose defaults `Migration21To22Test` owns (the chain runs on to v22)
-        val kept = columnsOf(table).filterNot { it.substringBefore(' ') in V22_COLUMNS }
+        val kept = columnsOf(table).filterNot { it.substringBefore(' ') in v22ColumnsOf(table) }
         val select = kept.joinToString(", ") { "`${it.substringBefore(' ')}`" }
         return kept + primaryKeyOf(table) + foreignKeysOf(table) + indexDefinitionsOn(table) +
             lines("SELECT $select FROM $table ORDER BY rowid")
