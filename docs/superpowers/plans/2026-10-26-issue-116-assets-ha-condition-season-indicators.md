@@ -211,7 +211,7 @@ silently resetting another control (u5); H7 a new surface outside #121's insets 
 | **U2** the drawing, the control, the empty state and the UI proof | 14 · L1 (rev 6.1 of the master plan; after B7; base: the integrated tip after wave 13, U1 in it) | `A/ui/asset/AssetsScreen.kt` (`AssetListRow`'s badge and marks, `AssetsFilterRow`'s Condition control, the empty state's arm); `A/ui/asset/AssetViewModels.kt` (`EmptyReason.CONDITION_HIDDEN` and its decision, only); `A/ui/components/ServiceTagIcons.kt` (two vectors); `app/src/main/res/drawable/{ic_in_season,ic_ha_link}.xml` (new); `app/src/main/res/values*/strings_asset_detail.xml` (×10: P116-1…4, ratified first); `AT/ui/asset/AssetsRowFactsTest.kt` (new), `AT/ui/asset/AssetsIndicatorsTest.kt` (the one named case), `T/ui/asset/AssetViewModelsTest.kt` (+2) — rows u6, u9, u10, u11; ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/api`, `share/`, `InsetsContractTest.kt`, `AssetsFiltersTest.kt`, `AssetsSearchTest.kt`, every other `AT/` file, the condition package |
 
 **Why concurrent is safe:** U1 beside B5 (wave 8) — B5 owns the graph's last edit and `A/api`, `A/hapublish`, `M/`;
-U1 neither. U2 runs alone in wave 14. #124's N3 (wave 12) edits `ScheduleEditScreen` and the due rows, never the
+U1 neither. U2 sits beside #125's H2 in wave 14 (Room, the codec, the merge and the graph; never the Assets list). #124's N3 (wave 12) edits `ScheduleEditScreen` and the due rows, never the
 Assets list. `AssetViewModels.kt` is also
 A5b's (wave 6, the editor's strand causes): sequential, by wave.
 

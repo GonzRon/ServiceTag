@@ -12,6 +12,10 @@
 > 134–153, limits 20–21). **Four briefs** — N1 (wave 0), N2a (wave 9, the graph's last edit), N2b (wave 10), N3
 > (wave 12) — and D1 moves to wave 13: **twenty-seven dispatches here and #116's two, in fifteen waves (0–14)**. Nine
 > strings pending (P124-1…9). The vehicle carries seven issues.
+> **#125 cross-reference (2026-10-26):** #125, a schedule following its own Home Assistant switch, is its own plan
+> (`2026-10-26-issue-125-schedule-season-sync.md`) in the same release (eight issues). Its briefs H1–H4 take waves
+> 13–16 (§4), H3 becomes the graph's last edit (G20), D1 moves to wave 16, the MCP ladder ends at 104, and G3 and
+> G17 are narrowed for schedule links only (its constraints 4 and 8). **Seventeen waves (0–16).**
 
 > **Rev 6 (2026-10-26)** follows the owner gate's close ("APPROVED WITH THE O-16 AMENDMENT AND RELEASE-BASE
 > RECONCILIATION", `owner-rulings-2026-10-26.md`) and the controller's rulings of that day, nothing else. **Base:** the
@@ -349,8 +353,8 @@ Each line is a sentence a reviewer can test against the diff.
     name, token, HA automation names and production-phone state never enter the repository (§8 names two HA-side places
     the owner's ruling allows, and only in this plan; the private ledger holds the rest).
 20. **AppGraph and FakeGraph** are edited only by A0 (rev 6), S1, A2, A3, B3, B4a, B4b1, B4b2, B5 and N2a (rev
-    6.1), never by two concurrent briefs; A0 is the first (wave 0) and N2a the last (wave 9) (§4). #116's briefs and
-    N1, N2b, N3 edit neither.
+    6.1), never by two concurrent briefs; A0 is the first (wave 0) and N2a the last of this plan's (wave 9) (§4).
+    #116's briefs and N1, N2b, N3 edit neither; #125's H2 (wave 14) and H3 (wave 15) edit it after N2a, H3 last.
 21. **Standing rules.** Commits: one casual lowercase subject line, no body, no trailer, no tool name; implementers
     never write ledgers; JVM first; every counted RED a real mutation (`--no-build-cache --rerun-tasks`), quoted,
     reverted; no rerun-until-green; time boxes 1 h target, 2 h hard, fix rounds 45 min.
@@ -1458,7 +1462,8 @@ sealed interface CallOutcome {
     `get_season_readiness` (wave 4: 90 → 91); A4w `set_schedule_role`, `list_ha_entities` (wave 7: → 93); B5
     `get_ha_publishing` (wave 8: → 94); B5r `list_ha_publishing` (wave 9 since rev 6.1: → 95); B5w1 `enable_ha_publishing`,
     `change_ha_publishing_target` (wave 10: → 97); B5w2 `disable_ha_publishing`, `check_ha_publishing_helper`,
-    `publish_ha_now`, `acknowledge_ha_decommission` (wave 11: → **101**); N3 adds no tool — each site read on `62e39670`, moved in that brief
+    `publish_ha_now`, `acknowledge_ha_decommission` (wave 11: → **101**); N3 adds no tool; #125's H3 (wave 15) → 104,
+    its block after this one (its plan) — each site read on `62e39670`, moved in that brief
     and inside its §4 row: `server.py:78-183` (`TOOL_NAMES`, the "#113/#114" block appended after `:182` with its
     comment; the guard's `expected_count` at `:4430` follows it); `M/tests/test_tools.py:23` (`EXPECTED_TOOLS`),
     `:127-138` (`test_tool_names_are_ninety`, its docstring, three `== 90`), `:1007`, `:1011` (`"Ninety:"`);
@@ -2362,7 +2367,7 @@ cleared, no recompute, no closure (a counting double or a before/after table sna
 | **A4w** role write + helper discovery (rev 5) | 7 · L2 | `A/api/{ApiRouter,MaintenanceHandlers,MaintenanceDtos,HaEntityHandlers,ApiJson,ApiHandlers}.kt` (the role route and `ScheduleRoleRequest`, the PATCH flag, discovery in its own handler class — new — as a trailing defaulted handler group, and the `SEASON_START_DATE_INVALID`, `HA_PUBLISH_REFUSED` / `STALE_PLAN` and `HA_HELPER_READ_FAILED` arms); `C/seasonsync/EntityPicker.kt` (two scopes) and `C/seasonsync/HaEntityList.kt` (`HaEntityCandidate`'s defaulted `attributes`, filled for the two domains only); `docs/api/command-shapes.json` (`:8`, `scheduleRole`) with `T/api/CommandShapesGoldenTest.kt` (`:44-58`, `:118-120`), `M/src/servicetag_mcp/command_shapes.py` (`:44`, `:108`), `M/tests/test_command_shapes.py` (`:65-76`); `docs/api/v1.md` (C29b's part); `M/src/servicetag_mcp/server.py` (`set_schedule_role`, `list_ha_entities`, `update_schedule`'s flag), `M/README.md`; `T/api/{ScheduleRoleRoutesTest,HaEntityRoutesTest}.kt` (new), `T/api/{MaintenanceFixtures,ApiReadsWriteNothingTest}.kt`; `CT/hapublish/HelperAttributesTest.kt` (new); `M/tests/test_ha_publishing_write_tools.py` (new, its half) and D1's count-pin sites (C29a; 91 → 93) — rows 113, 114, 115, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/usecase`, `C/hapublish`, `A/hapublish`, `A/ui`, `res/`, every shipped `CT/seasonsync` and `T/seasonsync` test file, `S/`, `B/` |
 | **B5** decommission + read | 8 · L1 | `C/hapublish/Decommission.kt` (new); `A/hapublish/{PublishRunner,PublishProjector}.kt` (drain, `drainBeforeForget`, orphan retirement); `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt`, `A/api/SeasonHealthHandlers.kt` (the readiness handler's `HaBoundary` argument only, C29); `docs/api/v1.md` (the route, rev 4.1's keys); `M/src/servicetag_mcp/server.py`, `M/README.md`, `M/tests/test_ha_publishing_tools.py` (the publishing half) and D1's count-pin sites (C29a; 93 → 94); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the Forget orchestration, the tombstone read model) — **the last edit of either**; `CT/hapublish/DecommissionTest.kt`, `T/hapublish/DecommissionScenarioTest.kt`, `T/api/HaPublishingRoutesTest.kt` (new) — rows 70–74, 82, 84 (half), 107 (its cases, rev 5's `request` key and `RequestProgress` included), 111 (its pins); rev 4.1 adds ~10 min, rev 5 ~5 | `A/ui/**`, `C/usecase`, `C/backup`, `C/merge`, `S/`, `B/` |
 | **B6a** status block, sheet, HA screen | 11 · L1 (rev 6.1) | `A/ui/asset/{PublishBlock,PublishBlockViewModel,LinkPublishSheet,LinkPublishViewModel,PublishStrings}.kt` (new; the block's frame for **both** kinds, the sheet with its scope parameter); `A/ui/asset/AssetDetailScreen.kt` (the two blocks' slots); `A/ui/asset/LinkSeasonSyncSheet.kt` (the browser's scope parameter only); `A/ui/homeassistant/{HomeAssistantScreen,HomeAssistantViewModel,HomeAssistantStrings}.kt` (P113-40, the P113-41 plural, orphan tombstones); `docs/localization-glossary.md` (**helper**, **publish**); `app/src/main/res/values*/strings_ha_publishing.xml` and `values*/plurals.xml` (ten files each); every control call through B4b2's `PublishControls`, and `HomeAssistantViewModel`'s save followed by `requestDelivery()` (A03); rev 5: the `PublishRefusal.STALE_PLAN` arm with P113-44, and A4w's two scopes consumed; rev 6: `T/ui/nav/InsetsContractTest.kt` (`GROUP_E` and K4's counts, only; G28) — rows 88 (status half), 89, 90, 133 | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `ReadinessStrings.kt`, the three B3 arms |
-| **D1** documents | 13 · L2 (rev 6.1) | C38's list, including the **one KDoc-only edit** in `A/fetch/UrlConnectionTransport.kt:20-22` (A11) | any other `.kt`, any `.py`, any `.xml` but the manifest comment at `:12`; any code line of `UrlConnectionTransport.kt`; `docs/versioning.md`, `docs/releases` |
+| **D1** documents | 16 · L2 (rev 6.1, #125) | C38's list, including the **one KDoc-only edit** in `A/fetch/UrlConnectionTransport.kt:20-22` (A11) | any other `.kt`, any `.py`, any `.xml` but the manifest comment at `:12`; any code line of `UrlConnectionTransport.kt`; `docs/versioning.md`, `docs/releases` |
 | **B6b** date block and tombstones | 12 · L1 (rev 6.1) | `A/ui/asset/{PublishDateBlock,PublishDateStrings}.kt` (new), `PublishBlockViewModel.kt` (the date states and the P114-36/37 rule), the date sheet's boundary-helper field, offered only for a `MANUAL` asset with an enabled #16 binding (P114-47/48, D); `app/src/main/res/values*/strings_ha_publishing_date.xml` (new, ten files: P114-30…39, P114-47, P114-48); rev 5: `NoSuchDecommission` / `DecommissionStillPending` from P114-38's tap re-read the block, no sentence (C25a); rev 6 (§0 r14): `LinkPublishSheet.kt` (the boundary-helper field only, inside the sheet's own scrolling content) — row 88 (date half) | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `AssetDetailScreen.kt`, every other line of `LinkPublishSheet.kt`, `InsetsContractTest.kt` |
 | **B5r** publishing collection + MCP parity (rev 4.1) | 9 · L2 (rev 6.1) | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt` (the collection's route, handler and DTOs); `docs/api/v1.md` (C35a's rows, the 405 path list, the no-endpoint publishing half); `M/src/servicetag_mcp/server.py` (`list_ha_publishing`; the eleven G-R6 sentences, nothing else in those tools), `M/README.md`; `T/api/{HaPublishingRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_tools.py` (the collection, the sentences) and D1's count-pin sites (C29a; 94 → 95) — rows 107 (its cases), 108, 111 (its half); ~40 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/`; any tool's request or arguments |
 | **N2a** #124's feed (rev 6.1) | 9 · L1 | `C/season/{OpeningService,SeasonReadinessReader}.kt` (new); `C/usecase/RecomputeSchedules.kt` (the trailing reader, its use), `C/schedule/ScheduleRecompute.kt` (`policyInputsOf`'s defaulted day), `C/usecase/{CompleteGroupMembers,SetScheduleRole}.kt` (the two recompute triggers only); `A/ui/health/AssetHealthReadModel.kt` (`:334`, the day passed); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the reader and N2b's collaborators) — **the graph's last edit**; `CT/season/SeasonReadinessReaderTest.kt`, `CT/usecase/OpeningServiceRecomputeTest.kt`, `T/hapublish/OpeningServiceAgreementTest.kt` (new) — rows 141–145; ~55 min | `A/api`, `A/hapublish`, `A/ui` but `:334`, `C/hapublish`, `res/`, `S/`, `B/` |
@@ -2399,8 +2404,10 @@ waves 11–13, D1 to wave 13 (after every route it documents) and U2 to wave 14:
 | 10 | N2b (#124) | B5w1 | N2b is core, `ApiDtos.kt` and A5b's UI arms; B5w1 is other `A/api` files, `M/`, `docs/api` |
 | 11 | B6a | B5w2 | UI versus `A/api`, `M/`, `docs/api` |
 | 12 | B6b | N3 (#124) | UI over B6a's frame; N3 is the schedule editor, due rows, v1.md and `M/`, after B5w2 on lane 2 |
-| 13 | B7 | D1 | `AT/` only versus docs; D1 after every route it documents |
-| 14 | U2 (#116) | — | U2 is `AssetsScreen.kt`, `res/`, an `AT/` class (its plan) |
+| 13 | B7 | H1 (#125) | `AT/` only versus core JVM (its plan) |
+| 14 | U2 (#116) | H2 (#125) | the Assets screen versus Room, the codec, the merge and the graph |
+| 15 | H3 (#125) | — | the graph's last edit, `A/api`, `M/`, `A/seasonsync` |
+| 16 | H4 (#125) | D1 | the schedule detail's row versus docs; D1 after every route it documents, #125's included |
 
 **Rev 6.1's order (#124):** N1 (nothing; the strings batch ruled) → N2a (N1, A1, A2, A3, B1, B3 — all landed by wave 4) →
 N2b (N2a, A2's hooks, A3's planner) → N3 (N2b, B5w2's v1.md) → D1. The order below is rev 6's, with the waves of the
@@ -2983,6 +2990,10 @@ and `oil_zone_owner`. ServiceTag ships none of this; D1's guide carries a generi
   B1's `equipmentStatusOf`, B3's `PublishBindingRepository.observeAll()` and `SeasonSyncRepository.observeAll()`, and
   its briefs U1 and U2 sit in this plan's wave 8 lane 2 and (rev 6.1) wave 14 lane 1. **#104:** the roadmap of record; 1.9.0
   assigned (2026-10-26). **#62:** rows 91–92 are tiers 2–3; no UI driving. **#90:** reporting only.
+- **#125 (cross-reference):** a schedule following its own Home Assistant switch, its own plan
+  (`docs/superpowers/plans/2026-10-26-issue-125-schedule-season-sync.md`); readiness and publishing stay on the
+  asset's season (its constraint 3: no reader here sees a schedule's own season rows); C26 runs both ways over its
+  schedule bindings too.
 - **#124 (rev 6.1):** counting from the opening service, the same release; it consumes C9 through one reader (C41)
   and the shipped engine, and its briefs N1, N2a, N2b and N3 are this plan's.
 - **#119, #121, #123 (the 1.9.0 fixes, on master first from `issue-121-keyboard-insets`):** consumed as the base
