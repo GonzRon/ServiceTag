@@ -128,8 +128,13 @@ fun fieldOf(problem: ScheduleProblem): String = when (problem) {
  */
 enum class PolicyOption { BEFORE_SEASON, BEFORE_BREAK, WHEN_SEASON_STARTS, AFTER_BREAK, WHENEVER_DUE }
 
-/** S73 "Start counting from", under S67: S74 is AT_START ([SEASON_START]), S75 RESUME_CLAMPED ([OWN_DATE]). */
-enum class StartCountingFrom { SEASON_START, OWN_DATE }
+/**
+ * S73 "Start counting from", under S67: S74 is AT_START ([SEASON_START]), S75 RESUME_CLAMPED ([OWN_DATE]).
+ * [OPENING_SERVICE] is #124's IN_SERVICE_AFTER_OPENING_SERVICE, its offset held in the same "Days
+ * after" text: a stored row loads into it and saves back unchanged, and no answer is drawn for it until
+ * N3 adds P124-1 and P124-2.
+ */
+enum class StartCountingFrom { SEASON_START, OWN_DATE, OPENING_SERVICE }
 
 /**
  * S140–S141, and S137 when the answer to "Archive both" is that the subject is the one its asset's
@@ -194,7 +199,8 @@ internal data class PolicyChoice(
  * Which answer a stored row is, among [options] — or null when none of them is it, which the editor
  * never guesses at: PRE_SERVICE −14 is the "Before…" option with 14, AT_START 5 is S67 · S74 · 5,
  * RESUME_CLAMPED is S67 · S75, CONTINUOUS is S68. AT_START is S70 only at offset 0, because S70 has no
- * field to show another offset in.
+ * field to show another offset in. #124's AFTER_OPENING_SERVICE 7 is S67 · [StartCountingFrom.OPENING_SERVICE]
+ * · 7, never AT_START, which would count from the wrong day.
  */
 internal fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List<PolicyOption>): PolicyChoice? =
     when (policy) {
@@ -211,8 +217,12 @@ internal fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List
         ServicePolicy.IN_SERVICE_RESUME_CLAMPED ->
             PolicyChoice(PolicyOption.WHEN_SEASON_STARTS, StartCountingFrom.OWN_DATE)
                 .takeIf { PolicyOption.WHEN_SEASON_STARTS in options }
-        // #124: no answer shows it yet; never guessed at (the next commit loads it).
-        ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE -> null
+        ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE ->
+            PolicyChoice(
+                PolicyOption.WHEN_SEASON_STARTS,
+                StartCountingFrom.OPENING_SERVICE,
+                daysAfter = (offsetDays ?: 0).toString(),
+            ).takeIf { PolicyOption.WHEN_SEASON_STARTS in options }
     }
 
 /** S71's and S72's bounds: 1–365 before, 0–365 after (spec §4.2). */
@@ -341,6 +351,7 @@ data class ScheduleEditState(
                 PolicyOption.WHEN_SEASON_STARTS -> when (startCountingFrom) {
                     StartCountingFrom.SEASON_START -> ServicePolicy.IN_SERVICE_AT_START
                     StartCountingFrom.OWN_DATE -> ServicePolicy.IN_SERVICE_RESUME_CLAMPED
+                    StartCountingFrom.OPENING_SERVICE -> ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE
                 }
                 PolicyOption.AFTER_BREAK -> ServicePolicy.IN_SERVICE_AT_START
                 PolicyOption.WHENEVER_DUE -> ServicePolicy.CONTINUOUS
@@ -360,7 +371,8 @@ data class ScheduleEditState(
             when (policyOption) {
                 PolicyOption.BEFORE_SEASON, PolicyOption.BEFORE_BREAK -> daysBefore.toIntOrNull()?.let { -it }
                 PolicyOption.WHEN_SEASON_STARTS -> when (startCountingFrom) {
-                    StartCountingFrom.SEASON_START -> if (hasTimeRule) daysAfter.toIntOrNull() ?: 0 else 0
+                    StartCountingFrom.SEASON_START, StartCountingFrom.OPENING_SERVICE ->
+                        if (hasTimeRule) daysAfter.toIntOrNull() ?: 0 else 0
                     StartCountingFrom.OWN_DATE -> null
                 }
                 PolicyOption.AFTER_BREAK -> 0

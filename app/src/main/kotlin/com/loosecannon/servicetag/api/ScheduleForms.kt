@@ -23,14 +23,16 @@ import kotlinx.serialization.json.JsonObject
  *   key is 422 `LEGACY_AND_CURRENT_FIELDS_MIXED`, and nothing is written.
  *
  * **The 1.4 form** takes the policy as sent: an omitted `servicePolicy` is `CONTINUOUS`, and an
- * omitted *or null* `policyOffsetDays` is 0 on `IN_SERVICE_AT_START` — spec §4.2's default, which
- * v1's full replace clears to (plan decision 31) — and null otherwise. Everything else about the
+ * omitted *or null* `policyOffsetDays` is 0 on `IN_SERVICE_AT_START` and on #124's
+ * `IN_SERVICE_AFTER_OPENING_SERVICE` — spec §4.2's default, which v1's full replace clears to (plan
+ * decision 31) — and null otherwise. Everything else about the
  * pair is `SaveSchedule`'s to refuse (`POLICY_OFFSET_INVALID`, `SEASON_POLICY_NEEDS_A_TIME_RULE`,
  * `SEASON_FOLLOWS_ASSET_ON_GROUP_TARGET`, `PRE_SERVICE_NEEDS_DATES`), so none of it is restated here.
  *
  * **The legacy form translates only through [LegacySeasonMapping]** (inv. 128) — this file holds no
  * table of its own. It is **refused, never reset**, in the one case a schedule command can reach: a
- * PATCH of a stored `PRE_SERVICE` schedule, which 1.3's three fields cannot spell, is 422
+ * PATCH of a stored schedule whose policy 1.3's three fields cannot spell — `PRE_SERVICE`, and #124's
+ * `IN_SERVICE_AFTER_OPENING_SERVICE`, the two the table reverses to no behaviour at all — is 422
  * `LEGACY_WRITE_CANNOT_REPRESENT` and writes nothing (the asset pair's own case is `UpdateAsset`'s).
  * Any other legacy body translates, and a create clobbers nothing. The one documented change: a
  * legacy body that omits `seasonReentry` on an `IN_SERVICE_RESUME_CLAMPED` schedule becomes
@@ -87,12 +89,13 @@ internal object ScheduleForms {
     fun read(request: ApiRequest, stored: MaintenanceSchedule?, acceptsFlags: Boolean): Parsed {
         val raw = readObject(request)
         val form = classify(raw)
-        if (form == Form.LEGACY && stored?.servicePolicy == ServicePolicy.PRE_SERVICE) {
+        if (form == Form.LEGACY && stored != null && !legacySpells(stored)) {
+            val policy = stored.servicePolicy.name
             throw ApiFailure(
                 422, "Unprocessable Content", "LEGACY_WRITE_CANNOT_REPRESENT",
-                "this schedule is PRE_SERVICE, which the deprecated season fields cannot represent; " +
+                "this schedule is $policy, which the deprecated season fields cannot represent; " +
                     "send servicePolicy and policyOffsetDays instead",
-                listOf("LegacyWriteCannotRepresent(scheduleId=${stored.id.value}, servicePolicy=PRE_SERVICE)"),
+                listOf("LegacyWriteCannotRepresent(scheduleId=${stored.id.value}, servicePolicy=$policy)"),
             )
         }
         val flagKeys = if (acceptsFlags) ACTION_FLAGS.filter { it in raw } else emptyList()
@@ -101,6 +104,14 @@ internal object ScheduleForms {
         val body = strict(ScheduleCommandRequest.serializer(), JsonObject(raw.filterKeys { it !in flagKeys }))
         return Parsed(form, body, flags.unlinkHealthSubject)
     }
+
+    /**
+     * Whether 1.3's three fields can spell [stored]'s policy, read off the one table's reverse
+     * projection: a policy it reverses to no behaviour at all (`PRE_SERVICE`, #124's
+     * `IN_SERVICE_AFTER_OPENING_SERVICE`) cannot be written back in the legacy form.
+     */
+    private fun legacySpells(stored: MaintenanceSchedule): Boolean =
+        LegacySeasonMapping.toLegacy(stored.servicePolicy, stored.policyOffsetDays).seasonBehavior != null
 
     /**
      * The body as one JSON object, through the shipped 415 and 400 paths only (#94, 1.7.1).
@@ -146,11 +157,15 @@ internal object ScheduleForms {
 
     /**
      * The 1.4 form: the policy by name (an unknown one is the shipped 400), and the offset as sent —
-     * or, omitted or null, 0 on `IN_SERVICE_AT_START` and null on every other policy.
+     * or, omitted or null, 0 on `IN_SERVICE_AT_START` and `IN_SERVICE_AFTER_OPENING_SERVICE` and null on
+     * every other policy.
      */
     private fun current(servicePolicy: String, offsetDays: Int?): LegacySeasonMapping.Policy {
         val policy = enumOr400<ServicePolicy>(servicePolicy, "servicePolicy")
-        val offset = offsetDays ?: if (policy == ServicePolicy.IN_SERVICE_AT_START) 0 else null
+        val offset = offsetDays ?: when (policy) {
+            ServicePolicy.IN_SERVICE_AT_START, ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE -> 0
+            ServicePolicy.CONTINUOUS, ServicePolicy.IN_SERVICE_RESUME_CLAMPED, ServicePolicy.PRE_SERVICE -> null
+        }
         return LegacySeasonMapping.Policy(policy, offset)
     }
 

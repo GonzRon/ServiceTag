@@ -15,9 +15,11 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.reminders.ProviderId
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
@@ -26,6 +28,7 @@ import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
+import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
@@ -901,5 +904,37 @@ class ScheduleEditViewModelTest {
 
         vm.cancelLinkGuard()
         assertNull(vm.state.value.linkGuard)
+    }
+
+    /**
+     * #124 (C40, row 140): a stored `IN_SERVICE_AFTER_OPENING_SERVICE` schedule opened in the editor
+     * and saved after an unrelated edit keeps its policy and its offset — never rewritten to
+     * AT_START, whose "Days after it starts" names the wrong anchor. The editor draws no option for
+     * it yet (N3 adds the third answer): it loads under S67 with the stored offset and saves it back.
+     */
+    @Test fun aStoredOpeningServicePolicyRoundTripsThroughAnEdit() = runTest {
+        val heater = graph.createAsset.run(AssetCommand(name = "Example Heater", category = "Heating"))
+        graph.setSeasonMode.run(
+            heater.id,
+            SeasonModeCommand(seasonMode = SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON),
+        )
+        val row = scheduleOf("s-opening", assetId = heater.id.value, timeInterval = 1, timeUnit = RecurrenceUnit.MONTH)
+            .copy(servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 7)
+        graph.schedules.upsert(row)
+
+        val vm = viewModel(scheduleId = row.id.value)
+        val opened = vm.state.first { it.loaded }
+        assertEquals(PolicyOption.WHEN_SEASON_STARTS, opened.policyOption)
+        assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, opened.servicePolicy)
+        assertEquals(7, opened.policyOffsetDays)
+        assertTrue("Save must be open, or the round trip below would pass by never saving", opened.canSave)
+
+        vm.onDescription("Clean the burn pot first")
+        val saved = savedId(vm)
+        vm.save()
+        val stored = graph.schedules.get(saved.await())!!
+        assertEquals("Clean the burn pot first", stored.description)
+        assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, stored.servicePolicy)
+        assertEquals(7, stored.policyOffsetDays)
     }
 }
