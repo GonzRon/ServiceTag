@@ -18,12 +18,12 @@ import com.loosecannon.servicetag.core.model.closes
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.openOuts
 import com.loosecannon.servicetag.core.model.shortPackId
+import com.loosecannon.servicetag.core.season.roleCoverageOf
 import com.loosecannon.servicetag.core.transfer.OwnerLookup
 import com.loosecannon.servicetag.core.transfer.OwnerRef
 import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.transfer.TransferOwnership
 import com.loosecannon.servicetag.core.transfer.TransferRetention
-import com.loosecannon.servicetag.core.usecase.seasonStartRolesCovering
 import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
 import com.loosecannon.servicetag.core.backup.AssetReferenceDto
@@ -796,14 +796,14 @@ internal fun mergePlanOf(
             else -> row
         }
     }
-    // #114 (C19, O-9): one live Season Start role per asset, by C9's coverage (`seasonStartRolesCovering`) over this
+    // #114 (C19, O-9): one live Season Start role per asset, by C9's coverage (`roleCoverageOf`'s `covering`) over this
     // phone's rows and this plan's accepted groups and members. The claim map is seeded from the destination's live
     // roles and gains each accepted role's assets, so a second coverage from either side is a CONFLICT, never a
     // silent correction. Value = the schedule id holding the claim.
     val coverageGroups = snapshot.groups + groupWrites
     val claimedSeasonStartAssets = snapshot.assets
         .mapNotNull { asset ->
-            seasonStartRolesCovering(asset.id, snapshot.schedules, snapshot.groups).firstOrNull()
+            roleCoverageOf(asset.id, snapshot.schedules, snapshot.groups).covering.minByOrNull { it.id.value }
                 ?.let { asset.id.value to it.id.value }
         }
         .toMap(mutableMapOf())
@@ -815,7 +815,7 @@ internal fun mergePlanOf(
                 coverageGroups.filter { it.id == target.groupId }.flatMap { group -> group.members.map { it.assetId } }
         }
         return candidates.distinct()
-            .filter { seasonStartRolesCovering(it, listOf(row), coverageGroups).isNotEmpty() }
+            .filter { roleCoverageOf(it, listOf(row), coverageGroups).covering.isNotEmpty() }
             .map { it.value }
     }
     val scheduleWrites = mutableListOf<MaintenanceSchedule>()
@@ -843,7 +843,9 @@ internal fun mergePlanOf(
         )
         val inserted = if (local == null && !targetInvalid) insertedSchedule(dto) else null
         val covered = inserted?.let(::seasonStartCoverage).orEmpty()
-        val seasonStartHolder = covered.firstNotNullOfOrNull { claimedSeasonStartAssets[it] }
+        // A local holder is named before an earlier archive row, whichever member comes first (N-2).
+        val holders = covered.mapNotNull { claimedSeasonStartAssets[it] }
+        val seasonStartHolder = holders.firstOrNull { it in localSchedules } ?: holders.firstOrNull()
         decisions += when {
             local != null && sameSchedule(dto, local.toDto()) ->
                 MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.IDENTICAL)

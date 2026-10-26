@@ -64,9 +64,7 @@ class TransferPackRoleTest {
     private fun backup(vararg events: AssetEvent, schedules: List<MaintenanceSchedule> = listOf(annual)): Backup =
         backupOf(
             BackupData(
-                assets = listOf(heater.toDto()),
-                nfcTags = emptyList(),
-                externalLinks = emptyList(),
+                listOf(heater.toDto()), emptyList(), emptyList(),
                 maintenanceSchedules = schedules.map { it.toDto() },
                 assetEvents = events.map { it.toDto() },
             ),

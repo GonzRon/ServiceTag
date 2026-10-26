@@ -47,9 +47,7 @@ class BackupFormat21Test {
         .copy(imported = true)
 
     private fun data(): BackupData = BackupData(
-        assets = listOf(heater.toDto()),
-        nfcTags = emptyList(),
-        externalLinks = emptyList(),
+        listOf(heater.toDto()), emptyList(), emptyList(),
         maintenanceSchedules = listOf(annual.toDto(), filter.toDto()),
         assetEvents = listOf(ownService.toDto(), packService.toDto()),
     )

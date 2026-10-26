@@ -95,7 +95,7 @@ class BuildBackupMergePlan(
      * locator holding other bytes stays `ATTACHMENT_BYTES_DIFFER`. [returning] are the assets the pack brings back:
      * the plan runs on the snapshot without their stale local graph ([ReturnScope]). Both empty is [run] above.
      * #114 (C20, A01, A): [context] is the pack's import context, captured once by its preview, and the scope's return
-     * carry goes beside its snapshot; null and [ReturnCarry.NONE] for an ordinary merge.
+     * carry goes beside its snapshot; null and `ReturnCarry.NONE` for an ordinary merge.
      */
     suspend fun run(
         backup: Backup,

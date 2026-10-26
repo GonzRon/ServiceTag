@@ -55,9 +55,7 @@ class ScheduleRoleMergeTest {
         events: List<AssetEvent> = emptyList(),
     ): Backup = backupOf(
         BackupData(
-            assets = assets.map { it.toDto() },
-            nfcTags = emptyList(),
-            externalLinks = emptyList(),
+            assets.map { it.toDto() }, emptyList(), emptyList(),
             maintenanceGroups = groups.map { it.toDto() },
             maintenanceSchedules = schedules.map { it.toDto() },
             assetEvents = events.map { it.toDto() },
@@ -118,14 +116,20 @@ class ScheduleRoleMergeTest {
     @Test
     fun aMatchedEventComparesWithoutItsMarkerAndKeepsTheLocalOne() {
         val service = completionOf("e1", "2025-10-05", "2025-10-01", assetId = "heater", scheduleId = "s-annual")
-        for ((incoming, local) in listOf(service to service.copy(imported = true), service.copy(imported = true) to service)) {
+        // A format-20 archive cannot carry the marker (its codec refuses `imported = true`), so only the local row has it.
+        val cases = listOf(20, 21).flatMap { format ->
+            listOf(Triple(format, service, service.copy(imported = true))) +
+                if (format >= 21) listOf(Triple(format, service.copy(imported = true), service)) else emptyList()
+        }
+        for ((format, incoming, local) in cases) {
+            val schedule = if (format >= 21) annualWithRole else annual
             val plan = mergePlanOf(
-                archive(21, schedules = listOf(annualWithRole), events = listOf(incoming)),
+                archive(format, schedules = listOf(schedule), events = listOf(incoming)),
                 here(schedules = listOf(annualWithRole), events = listOf(local)),
             )
 
-            assertEquals(MergeVerdict.IDENTICAL, plan.decision(MergeTable.EVENTS, "e1").verdict)
-            assertTrue(plan.writes.events.isEmpty())
+            assertEquals(MergeVerdict.IDENTICAL, plan.decision(MergeTable.EVENTS, "e1").verdict, "format $format")
+            assertTrue(plan.writes.events.isEmpty(), "format $format")
         }
         // Any other difference still counts.
         val renoted = mergePlanOf(
@@ -172,6 +176,31 @@ class ScheduleRoleMergeTest {
             here(schedules = listOf(archived, scheduleOf(id = "s-plain", assetId = "heater"))),
         )
         assertEquals(MergeVerdict.INSERT, free.decision(MergeTable.SCHEDULES, "s-new").verdict)
+    }
+
+    /**
+     * C1's shape, the owner's own: the destination's role is a GROUP schedule over the heater, so the seed reaches the
+     * asset through this phone's groups. A member whose window is closed is no longer covered, and the role inserts.
+     */
+    @Test
+    fun aLocalGroupRoleHoldsTheAssetsOfItsOpenMembers() {
+        fun localGroup(removedOn: String?) =
+            groupOf("g-local", "Example pre-season check", members = listOf(Triple("heater", "2025-09-01", removedOn)))
+        val localRole = roleOn("s-local-group", groupId = "g-local")
+        val incoming = archive(21, schedules = listOf(roleOn("s-new", assetId = "heater")))
+
+        val held = mergePlanOf(incoming, here(groups = listOf(localGroup(null)), schedules = listOf(localRole)))
+        assertEquals(
+            MergeDecision(
+                MergeTable.SCHEDULES, "s-new", MergeVerdict.CONFLICT, MergeReason.SEASON_START_HELD_BY_A_LOCAL_ROW,
+                "s-local-group",
+            ),
+            held.decision(MergeTable.SCHEDULES, "s-new"),
+        )
+        assertTrue(held.writes.schedules.isEmpty())
+
+        val closed = mergePlanOf(incoming, here(groups = listOf(localGroup("2025-10-01")), schedules = listOf(localRole)))
+        assertEquals(MergeVerdict.INSERT, closed.decision(MergeTable.SCHEDULES, "s-new").verdict)
     }
 
     @Test
