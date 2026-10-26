@@ -198,6 +198,11 @@ TOOL_NAMES: tuple[str, ...] = (
     "check_ha_publishing_helper",
     "publish_ha_now",
     "acknowledge_ha_decommission",
+    # #125 (U-C7) — a schedule's own Home Assistant season, each at the schema-22 minimum, after the "#113/#114" block:
+    # the read, the link and the unlink, taking the total to 104.
+    "get_schedule_season",
+    "link_schedule_season",
+    "unlink_schedule_season",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -297,6 +302,9 @@ tool's pattern. The global write minimum stays 8."""
 
 _HA_PUBLISHING_FEATURE = "season readiness and Home Assistant publishing"
 """The feature a "#113/#114" tool names when it refuses a phone below schema 22."""
+
+_SCHEDULE_SEASON_FEATURE = "a schedule's own Home Assistant season"
+"""The feature a "#125" tool names when it refuses a phone below schema 22, the schema that carries it (U-C1)."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan", "/v1/assets/{id}/ha-publishing-plan"}
@@ -433,6 +441,11 @@ def _require_season_sync_schema(tool: str) -> None:
 def _require_ha_publishing_schema(tool: str) -> None:
     """A tool of the "#113/#114" block, the reads included, on a phone below schema 22."""
     _require_tool_schema(tool, _MIN_HA_PUBLISHING_SCHEMA_VERSION, _HA_PUBLISHING_FEATURE)
+
+
+def _require_schedule_season_schema(tool: str) -> None:
+    """A tool of the "#125" block, the read included, on a phone below schema 22."""
+    _require_tool_schema(tool, _MIN_HA_PUBLISHING_SCHEMA_VERSION, _SCHEDULE_SEASON_FEATURE)
 
 
 def _carries_supply_id(lines: Any) -> bool:
@@ -1430,8 +1443,8 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of twenty-three tables, `transfers`, `successions`, `supplyItems` and `assetSupplies`, then
-    `installedComponents` last.
+    skipped}` for each of twenty-four tables, `transfers`, `successions`, `supplyItems` and `assetSupplies`, then
+    `installedComponents` and (#125, format 21) `scheduleSeasonActivations` last.
 
     A Transfer Pack is not a data archive, and the phone refuses one here: packs are made, imported,
     marked and withdrawn on the phone only, and no tool does any of it. The `data.zip` inside a pack is
@@ -1695,7 +1708,8 @@ def list_schedules(asset_id: str | None = None, group_id: str | None = None) -> 
 
     #114: each row carries `role` (`NONE` or `SEASON_START`, the passive Season Start role) and `roleSinceOn` (its
     commissioning boundary, `null` without a role) — response only: no schedule command takes either, and
-    `update_schedule` never sends them.
+    `update_schedule` never sends them. #125: each row also carries `seasonSource` (`ASSET`, or `OWN` for a schedule
+    following its own Home Assistant switch — `get_schedule_season`), response only as well.
     """
     if asset_id and group_id:
         raise ToolError("pass asset_id or group_id, not both — they are two different questions")
@@ -1724,7 +1738,9 @@ def get_schedule(schedule_id: str) -> dict[str, Any]:
 
     #114: `schedule` carries `role` (`NONE` or `SEASON_START`, the passive Season Start role) and `roleSinceOn` (its
     commissioning boundary, `null` without a role) — response only: no schedule command takes either, and
-    `update_schedule` never sends them. Whether the role's asset is ready is `get_season_readiness`.
+    `update_schedule` never sends them. Whether the role's asset is ready is `get_season_readiness`. #125: it also
+    carries `seasonSource` (`ASSET`, or `OWN` for a schedule following its own Home Assistant switch —
+    `get_schedule_season`), response only as well.
     """
     return _call("GET", f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}")
 
@@ -4556,8 +4572,8 @@ def set_schedule_role(
 ) -> dict[str, Any]:
     """Set or clear a schedule's passive Season Start role: `POST /v1/schedules/{id}/role` → `{schedule}`, the row
     with `role` and `roleSinceOn`. `role` is `SEASON_START` or `NONE`. The role marks the schedule whose completion
-    is the season's service, which `get_season_readiness` reads; it changes no rule, no due date and no history, and
-    no tool takes a value, a date to publish or a ready flag.
+    is the season's service, which `get_season_readiness` reads; it changes no rule and no history; a schedule counting
+    from the opening service moves with it, and no tool takes a value, a date to publish or a ready flag.
 
     `SEASON_START` takes `since_on` (`YYYY-MM-DD`, not after today) as the role's commissioning boundary, today when
     omitted: only completions dated on or after it can count. Setting the role a schedule already has with the same
@@ -4919,6 +4935,95 @@ def acknowledge_ha_decommission(
     _require_ha_publishing_schema("acknowledge_ha_decommission")
     values = {"decommissionId": decommission_id, "acknowledgedClearedInHa": acknowledged_cleared_in_ha}
     body = {key: values[key] for key in command_shapes.HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS}
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+# --- #125, a schedule's own Home Assistant season (docs/api/v1.md, **A schedule's own Home Assistant season (#125)**) --
+#
+# One path shape a phone below schema 22 does not have, read and written. On the phone a schedule may follow its own
+# Home Assistant switch while its asset keeps its season: only that schedule's due date moves. These three tools read
+# it, link it (Follow only) and unlink it, each with the caller's own confirmation; the asset's link, Force, the token,
+# the connection and Forget stay the phone's alone, and no answer carries the address, the Wi-Fi name or the token.
+
+
+def _schedule_season_path(schedule_id: str) -> str:
+    return f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/season-sync"
+
+
+@mcp.tool()
+def get_schedule_season(schedule_id: str) -> dict[str, Any]:
+    """One schedule's own Home Assistant season, read only: `GET /v1/schedules/{id}/season-sync` →
+    `{scheduleId, seasonSource, seasonPhase, connection, binding, activations}`, answered as the phone sends it.
+
+    On the phone an asset's season can be its calendar while one of its schedules follows its own Home Assistant
+    switch — a Season Start service due the day a "winterize season" switch turns on. `seasonSource` is `OWN` for such
+    a schedule and `ASSET` otherwise; only that schedule's due date moves, and readiness, publishing and the asset's
+    season never read it. `seasonPhase` is `IN_SEASON` or `OUT_OF_SEASON`, the phase the schedule's due rules read
+    today (its own season's, or its asset's), `null` for a group's schedule. `connection` is `get_season_sync`'s,
+    key for key. `binding` is `null` (no link, or an `OWN` schedule whose link Forget took: it keeps its own season,
+    frozen, until linked again or unlinked) or `get_season_sync`'s binding shape — `mode` always `FOLLOW`, `state`
+    `ACTIVE`, `STOPPED`, `NEEDS_TOKEN` or `NOT_MAINTAINED_HERE`, `observation`, `lastSuccessAt`, `lastAttemptAt`,
+    `lastError` and `lastApplied`. `activations` is the schedule's own season, `[{id, action: START|END, occurredOn,
+    createdAt}]`, oldest first, kept as history after an unlink. Never the address, the Wi-Fi name or the token.
+
+    An unknown schedule is `NO_SUCH_SCHEDULE` (404). Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _schedule_season_path(schedule_id)
+    _require_schedule_season_schema("get_schedule_season")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def link_schedule_season(schedule_id: str, entity_id: str, confirm_entity_id: str | None = None) -> dict[str, Any]:
+    """Make one asset-targeted schedule follow its own Home Assistant switch: `POST /v1/schedules/{id}/season-sync`
+    with exactly `{action: "LINK", entityId, confirmEntityId}` → `get_schedule_season`'s shape. Follow only: Home
+    Assistant's `on` starts the schedule's own season and `off` ends it, each dated the day the phone applies it; only
+    that schedule's due date moves.
+
+    **`confirm_entity_id` must be the caller's own, exactly `entity_id`, given once the owner has confirmed that
+    switch.** Without it, or with another id, this tool sends nothing; it never fills it, and the phone refuses a link
+    without it (`SCHEDULE_SEASON_CONFIRMATION_REQUIRED`, 422). `entity_id` is an `input_boolean` id.
+
+    The link records no season row: the phone launches the schedule's first check at once and answers without waiting
+    for it, so the schedule is out of its own season until then — read `get_schedule_season` for the check's outcome.
+    Refusals, each writing nothing, are `SCHEDULE_SEASON_REFUSED` (409) with `ScheduleSeasonRefused(reason=…)` in
+    `problems`: `GROUP_TARGET` (a group's schedule), `SCHEDULE_ARCHIVED`, `NOT_MAINTAINED_HERE`, `NO_CONNECTION`,
+    `NEEDS_TOKEN` (enter the token on the phone), `BAD_ENTITY_ID`, `OUTBOUND_TARGET` (a helper the phone writes),
+    `ALREADY_LINKED` or `STRANDS_PRE_SERVICE` (a `PRE_SERVICE` schedule whose asset has no maintenance break). An
+    unknown schedule is `NO_SUCH_SCHEDULE` (404). It is never re-sent on a dropped connection: read
+    `get_schedule_season` before running it again. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _schedule_season_path(schedule_id)
+    if confirm_entity_id is None or confirm_entity_id != entity_id:
+        raise ToolError(
+            "confirm_entity_id must be exactly entity_id, the switch the owner confirmed; nothing was sent"
+        )
+    _require_schedule_season_schema("link_schedule_season")
+    values = {"action": "LINK", "entityId": entity_id, "confirmEntityId": confirm_entity_id}
+    body = {key: values[key] for key in command_shapes.SCHEDULE_SEASON_KEYS if key in values}
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+
+@mcp.tool()
+def unlink_schedule_season(schedule_id: str, confirm_unlink: Annotated[bool, Strict()]) -> dict[str, Any]:
+    """Return one schedule to its asset's season: `POST /v1/schedules/{id}/season-sync` with exactly
+    `{action: "UNLINK", confirmUnlink: true}` → `get_schedule_season`'s shape, `seasonSource` `ASSET` and `binding`
+    `null`. The schedule's own season rows are kept as history and no longer read; unlinking an `ASSET` schedule
+    writes nothing. This is the only way, with archiving the schedule, that it returns to its asset's season.
+
+    **`confirm_unlink` must be the caller's own `true`, given once the owner has said so.** Anything else is refused
+    here and nothing is sent; this tool never fills it, and the phone refuses an unlink without it
+    (`SCHEDULE_SEASON_CONFIRMATION_REQUIRED`, 422). An unknown schedule is `NO_SUCH_SCHEDULE` (404). It is never
+    re-sent on a dropped connection. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _schedule_season_path(schedule_id)
+    if confirm_unlink is not True:
+        raise ToolError("confirm_unlink must be true, the owner's own word; nothing was sent")
+    _require_schedule_season_schema("unlink_schedule_season")
+    values = {"action": "UNLINK", "confirmUnlink": confirm_unlink}
+    body = {key: values[key] for key in command_shapes.SCHEDULE_SEASON_KEYS if key in values}
     return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
 
 

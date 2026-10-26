@@ -182,6 +182,7 @@ import com.loosecannon.servicetag.seasonsync.JdkAead
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
 import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.seasonsync.ResumeRefresh
+import com.loosecannon.servicetag.seasonsync.ScheduleSeasonPolling
 import com.loosecannon.servicetag.seasonsync.SeasonSyncRunner
 import com.loosecannon.servicetag.seasonsync.SeasonSyncWork
 import com.loosecannon.servicetag.seasonsync.SeasonSyncWorkRequest
@@ -503,9 +504,15 @@ class FakeGraph(
     val recordSeasonSyncResult: RecordSeasonSyncResult = RecordSeasonSyncResult(
         seasonSyncBindings, assets, seasonActivations, transferRecords, recordSeasonActivation, uow, clock, todayPort,
     )
+    /** #125 (U-C5) — the schedule applier, built before the runner whose schedule pass records through it. */
+    val recordScheduleSeasonSyncResult: RecordScheduleSeasonSyncResult = RecordScheduleSeasonSyncResult(
+        scheduleSeasonBindings, schedules, assets, scheduleSeasonActivations, transferRecords, recomputeSchedules, uow,
+        ids, clock, todayPort,
+    )
     val seasonSyncRunner: SeasonSyncRunner = SeasonSyncRunner(
         seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateReader, recordSeasonSyncResult,
         seasonSyncWork, seasonSyncBackgroundAllowed, seasonSyncScope, clock, io = queryContext,
+        scheduleSeasons = ScheduleSeasonPolling(scheduleSeasonBindings, schedules, recordScheduleSeasonSyncResult),
     )
     val resumeRefresh: ResumeRefresh = ResumeRefresh {
         seasonSyncRunner.launchRefreshIfStale()
@@ -528,17 +535,13 @@ class FakeGraph(
     val forgetHaConnection: ForgetHaConnection =
         ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow, outboundTargets)
 
-    /** #125 (U-C3, U-C5) — the link, the unlink and the applier, mirroring `AppGraph`'s fields by name. */
+    /** #125 (U-C3) — the link and the unlink, mirroring `AppGraph`'s fields by name; the applier is above the runner. */
     val linkScheduleSeason: LinkScheduleSeason = LinkScheduleSeason(
         schedules, assets, transferRecords, scheduleSeasonBindings, haConnections, secretStore, recomputeSchedules,
         seasonSyncRunner, uow, clock, outboundTargets,
     )
     val unlinkScheduleSeason: UnlinkScheduleSeason =
         UnlinkScheduleSeason(schedules, scheduleSeasonBindings, recomputeSchedules, seasonSyncRunner, uow, clock)
-    val recordScheduleSeasonSyncResult: RecordScheduleSeasonSyncResult = RecordScheduleSeasonSyncResult(
-        scheduleSeasonBindings, schedules, assets, scheduleSeasonActivations, transferRecords, recomputeSchedules, uow,
-        ids, clock, todayPort,
-    )
 
     /**
      * #113/#114 (C25, C25a) — the publishing controls, one write each and no HTTP inside: the app layer reads the helper

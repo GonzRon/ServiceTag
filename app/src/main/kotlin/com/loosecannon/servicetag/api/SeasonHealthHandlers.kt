@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
 import com.loosecannon.servicetag.core.seasonsync.currentSeasonSyncState
@@ -84,6 +85,8 @@ internal class SeasonHealthHandlers(
     private val schedules: ScheduleRepository,
     private val uow: UnitOfWork,
     private val readiness: SeasonReadinessReader,
+    // #125 (U-C6): the schedules' own season rows, counted beside the asset's under the archive's list name.
+    private val scheduleActivations: ScheduleSeasonActivationRepository,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.seasonActivations, graph.conditions, graph.healthSubjects,
@@ -92,7 +95,7 @@ internal class SeasonHealthHandlers(
         graph.assetHealthReadModel, graph.attentionReadModel,
         graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.transferRecords,
         graph.seasonSyncBackgroundAllowed,
-        graph.schedules, graph.uow, graph.openingServiceReader,
+        graph.schedules, graph.uow, graph.openingServiceReader, graph.scheduleSeasonActivations,
     )
 
     // --- the season ---------------------------------------------------------------------------
@@ -245,13 +248,14 @@ internal class SeasonHealthHandlers(
     suspend fun listAttention(): ApiResponse =
         ok(AttentionResponse.serializer(), AttentionResponse(attention.items().map { it.toDto() }))
 
-    // --- the three counts `/v1/status` gained -------------------------------------------------
+    // --- the four counts `/v1/status` gained -------------------------------------------------
 
-    /** Under the archive's own list names, as `assetReferences` is. */
+    /** Under the archive's own list names, as `assetReferences` is; #125's (format 21) last. */
     suspend fun counts(): Map<String, Int> = mapOf(
         "seasonActivations" to activations.all().size,
         "assetConditions" to conditions.all().size,
         "healthSubjects" to healthSubjects.all().size,
+        "scheduleSeasonActivations" to scheduleActivations.all().size,
     )
 
     // --- plumbing -----------------------------------------------------------------------------

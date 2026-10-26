@@ -671,6 +671,8 @@ class ReferenceRoutesTest {
                 "supplyItems", "assetSupplies",
                 // #47's two, under the archive's own manifest keys (format 19).
                 "installedComponents", "compositionEntries",
+                // #125's one, under the archive's own list name (format 21).
+                "scheduleSeasonActivations",
             ),
             counts.keys,
         )
@@ -737,14 +739,14 @@ class ReferenceRoutesTest {
         // the twenty-sixth sub-resource, and #47's format 19 made the report twenty-three tables, the range 1–19
         // and its installed component list the twenty-seventh; #69's format 20 moved the range to 1–20 (no table,
         // and its four shapes are no asset sub-resource); #16's season sync read is the twenty-eighth (no table, no
-        // format), and #114's season readiness read the twenty-ninth (no table). These pins moved with the document.
+        // format), and #114's season readiness read the twenty-ninth (no table); #125's format 21 made the report
+        // twenty-four tables (a schedule route, no asset sub-resource). These pins moved with the document.
         assertFalse(
-            "the merge report is twenty-three tables now",
-            listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-two").any {
-                "$it tables" in text
-            },
+            "the merge report is twenty-four tables now",
+            listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-two", "twenty-three")
+                .any { "$it tables" in text },
         )
-        assertTrue("the merge report must say twenty-three tables", "twenty-three tables" in text)
+        assertTrue("the merge report must say twenty-four tables", "twenty-four tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
         assertFalse("the import endpoints read format 1–21 now", "1–7" in text || "1–8" in text || "1–9" in text)

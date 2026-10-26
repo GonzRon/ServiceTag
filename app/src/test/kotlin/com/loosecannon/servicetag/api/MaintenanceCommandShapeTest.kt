@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.runBlocking
@@ -151,12 +152,16 @@ class MaintenanceCommandShapeTest {
      * derived season triple — and the command carries both: `servicePolicy`/`policyOffsetDays` as
      * the 1.4 form and the triple as the deprecated legacy form (spec §9.3). `ruleChangedAt` is
      * response-only, so it is subtracted with the identity keys. #114 (K11, G18): so are `role` and
-     * `roleSinceOn` — the role has its own command, and a schedule body carrying either is the 400.
+     * `roleSinceOn` — the role has its own command, and a schedule body carrying either is the 400. #125 (U-C7): so is
+     * `seasonSource` — the link and the unlink are their own command.
      */
     @Test fun theScheduleCommandIsTheScheduleRowMinusIdentityBookkeepingAndThePostponement() {
         val fromRow = ScheduleRowResponse.serializer().descriptor.names
             .filterNot {
-                it in setOf("id", "status", "createdAt", "updatedAt", "postponedDueOn", "ruleChangedAt", "role", "roleSinceOn")
+                it in setOf(
+                    "id", "status", "createdAt", "updatedAt", "postponedDueOn", "ruleChangedAt", "role", "roleSinceOn",
+                    "seasonSource",
+                )
             }
             .map {
                 when (it) {
@@ -177,8 +182,8 @@ class MaintenanceCommandShapeTest {
     @Test fun theScheduleRowIsTheArchiveRowPlusTheDerivedTriple() {
         assertEquals(
             // #114 (C29): format 21's `role` and `roleSinceOn` are archive fields, so the `/v1` row carries them too.
-            // #125: format 21's `seasonSource` reaches the `/v1` row with H3 (U-C7, h16), which drops this subtraction.
-            MaintenanceScheduleDto.serializer().descriptor.names.filterNot { it == "seasonSource" } +
+            // #125 (U-C7, h16): so is format 21's `seasonSource`.
+            MaintenanceScheduleDto.serializer().descriptor.names +
                 listOf("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays"),
             ScheduleRowResponse.serializer().descriptor.names,
         )
@@ -428,6 +433,65 @@ class MaintenanceCommandShapeTest {
                 val response = call(method, path, """{$annualService,"targetAssetId":"$heater","$key":$value}""")
                 assertEquals("$method $path $key: ${response.text()}", 400, response.status)
                 assertTrue("$method $path did not name $key: ${response.text()}", response.text().contains(key))
+            }
+        }
+        assertEquals("nothing was written", before, runBlocking { graph.schedules.all() })
+    }
+
+    // --- #125 (U-C7; row h16): a schedule's season source on every schedule read, and in no command ------
+
+    private fun ownSeason(schedule: String) = runBlocking {
+        graph.uow.write {
+            val stored = graph.schedules.get(ScheduleId(schedule))!!
+            graph.schedules.upsert(stored.copy(seasonSource = ScheduleSeasonSource.OWN))
+        }
+    }
+
+    /**
+     * Every response that carries a schedule carries `seasonSource` (response only): the reads — the list, one
+     * schedule, an asset's, a group's — and the writes' answers. A schedule following its own Home Assistant season
+     * reads `OWN`; any other `ASSET`.
+     */
+    @Test fun everyScheduleReadCarriesSeasonSource() {
+        val heater = seasonalAsset("Example Heater")
+        val boiler = seasonalAsset("Example Boiler")
+        val start = createSchedule(""""targetAssetId":"$heater"""")
+        ownSeason(start)
+        val group = tree(call("POST", "/v1/groups", """{"name":"Example appliances","members":[{"assetId":"$boiler"}]}"""))
+            .getValue("group").jsonObject.text("id")
+        val check = createSchedule(""""targetGroupId":"$group"""")
+        val plain = createSchedule(""""targetAssetId":"$boiler"""")
+        val sources = mapOf(start to "OWN", check to "ASSET", plain to "ASSET")
+
+        fun assertRows(label: String, response: ApiResponse, expected: Set<String>) {
+            val rows = scheduleRowsIn(tree(response))
+            assertEquals(label, expected, rows.map { it.text("id") }.toSet())
+            for (row in rows) assertEquals("$label ${row.text("id")}", sources.getValue(row.text("id")), row.text("seasonSource"))
+        }
+        assertRows("list", call("GET", "/v1/schedules"), setOf(start, check, plain))
+        assertRows("one", call("GET", "/v1/schedules/$start"), setOf(start))
+        assertRows("asset", call("GET", "/v1/assets/$heater/schedules"), setOf(start))
+        assertRows("group", call("GET", "/v1/groups/$group/schedules"), setOf(check))
+        assertRows("update", call("PATCH", "/v1/schedules/$start", """{$annualService,"targetAssetId":"$heater"}"""), setOf(start))
+        assertRows("pause", call("POST", "/v1/schedules/$start/pause", """{"paused":true}"""), setOf(start))
+        assertRows("resume", call("POST", "/v1/schedules/$start/pause", """{"paused":false}"""), setOf(start))
+        assertRows("archive", call("POST", "/v1/schedules/$plain/archive", """{"archived":true}"""), setOf(plain))
+        assertEquals(
+            "a full-replace PATCH keeps the stored source",
+            ScheduleSeasonSource.OWN, runBlocking { graph.schedules.get(ScheduleId(start)) }!!.seasonSource,
+        )
+    }
+
+    /** G18: `ignoreUnknownKeys = false`, so a schedule body carrying `seasonSource` is the 400 naming it. */
+    @Test fun aBodyCarryingSeasonSourceIs400() {
+        val heater = seasonalAsset("Example Heater")
+        val start = createSchedule(""""targetAssetId":"$heater"""")
+        val before = runBlocking { graph.schedules.all() }
+        for (value in listOf("\"OWN\"", "\"ASSET\"")) {
+            for ((method, path) in listOf("POST" to "/v1/schedules", "PATCH" to "/v1/schedules/$start")) {
+                val response = call(method, path, """{$annualService,"targetAssetId":"$heater","seasonSource":$value}""")
+                assertEquals("$method $path $value: ${response.text()}", 400, response.status)
+                assertTrue("$method $path did not name seasonSource: ${response.text()}", response.text().contains("seasonSource"))
             }
         }
         assertEquals("nothing was written", before, runBlocking { graph.schedules.all() })

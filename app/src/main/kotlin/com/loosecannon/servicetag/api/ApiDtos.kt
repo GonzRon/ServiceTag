@@ -179,8 +179,9 @@ internal data class MergeReportResponse(
     // follows here, as in the enum, though a merge writes categories **first** (`MergeWrites`), and
     // #79's `serviceCases` and `caseEntries` follow, as they follow in the enum, then #72's `loans`, #77's
     // `transfers`, #86's `successions`, #15's `supplyItems` and `assetSupplies`, and #47's `installedComponents` close
-    // the list. Fifteen tables since format 9, seventeen since format 12, eighteen since 13, nineteen since 14, twenty
-    // since 15, twenty-two since 18, twenty-three since 19.
+    // the list, and #125's `scheduleSeasonActivations` after them. Fifteen tables since format 9, seventeen since
+    // format 12, eighteen since 13, nineteen since 14, twenty since 15, twenty-two since 18, twenty-three since 19,
+    // twenty-four since 21.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -211,6 +212,8 @@ internal data class MergeReportResponse(
     val assetSupplies: MergeTallyDto,
     /** #47 — the installed components, each with its composition (format 19). */
     val installedComponents: MergeTallyDto,
+    /** #125 — the schedules' own season rows (format 21); a schedule's Home Assistant link never travels. */
+    val scheduleSeasonActivations: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -251,6 +254,7 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     supplyItems = supplyItems.dto(),
     assetSupplies = assetSupplies.dto(),
     installedComponents = installedComponents.dto(),
+    scheduleSeasonActivations = scheduleSeasonActivations.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )

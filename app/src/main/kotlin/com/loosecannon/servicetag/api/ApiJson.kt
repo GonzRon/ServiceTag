@@ -11,6 +11,8 @@ import com.loosecannon.servicetag.core.hapublish.PublishRefused
 import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefusal
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefused
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
 import com.loosecannon.servicetag.core.usecase.AssetCycle
@@ -566,6 +568,17 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         422, "Unprocessable Content", "SEASON_START_DATE_INVALID", "${e.field} must be an ISO YYYY-MM-DD date",
         listOf("SeasonStartBadDate(field=${e.field})"), e.field,
     )
+    // #125 (U-C3, U-C7): a schedule's link refused by its `ScheduleSeasonRefusal` name, nothing written — on the
+    // season-sync route, and on a schedule PATCH that would leave an own-season schedule on a group (`GROUP_TARGET`).
+    is ScheduleSeasonRefused -> errorResponse(
+        409, "Conflict", "SCHEDULE_SEASON_REFUSED", scheduleSeasonRefusalMessage(e.reason),
+        listOf("ScheduleSeasonRefused(reason=${e.reason.name})"),
+    )
+    // #125 (U-C7): a link or unlink without the caller's own confirmation, or with one the action does not check.
+    is ScheduleSeasonConfirmationRequired -> errorResponse(
+        422, "Unprocessable Content", "SCHEDULE_SEASON_CONFIRMATION_REQUIRED", scheduleSeasonConfirmationMessage(e),
+        listOf("ScheduleSeasonConfirmationRequired(field=${e.field})"), e.field,
+    )
     // #113/#114 (C25, C25a, C29b): a publishing refusal by its `PublishRefusal` name — `STALE_PLAN` its own code.
     is PublishRefused -> publishRefusedResponse(e)
     // #113/#114 (C35b; B3 review M2): a control on a kind the asset does not publish — no binding to change. The
@@ -761,6 +774,29 @@ private fun publishRefusedResponse(e: PublishRefused): ApiResponse {
         PublishRefusal.STALE_READ -> refused("the helper's check is out of date; check it again")
         PublishRefusal.BOUNDARY_IS_TARGET -> refused("the season-ended helper is one ServiceTag writes")
     }
+}
+
+/** #125 (U-C3): one developer sentence per [ScheduleSeasonRefusal]; nothing was written. */
+private fun scheduleSeasonRefusalMessage(reason: ScheduleSeasonRefusal): String = when (reason) {
+    ScheduleSeasonRefusal.NOT_MAINTAINED_HERE -> "the schedule's asset is archived, retired or transferred out"
+    ScheduleSeasonRefusal.NO_CONNECTION -> "no Home Assistant connection is saved on this phone"
+    ScheduleSeasonRefusal.NEEDS_TOKEN -> "the Home Assistant token is not on this phone; enter it on the phone first"
+    ScheduleSeasonRefusal.BAD_ENTITY_ID -> "entityId is not an input_boolean entity id"
+    ScheduleSeasonRefusal.ALREADY_LINKED -> "this schedule already follows a Home Assistant switch; unlink it first"
+    ScheduleSeasonRefusal.OUTBOUND_TARGET -> "ServiceTag writes that helper, so it cannot follow it"
+    ScheduleSeasonRefusal.GROUP_TARGET -> "a group's schedule follows no season of its own"
+    ScheduleSeasonRefusal.SCHEDULE_ARCHIVED -> "this schedule is archived; restore it first"
+    ScheduleSeasonRefusal.STRANDS_PRE_SERVICE ->
+        "this PRE_SERVICE schedule would have no boundary: its asset has no maintenance break; change its policy first"
+}
+
+/** #125 (U-C7): what the caller must send, or that the action takes no such key. */
+private fun scheduleSeasonConfirmationMessage(e: ScheduleSeasonConfirmationRequired): String = when (val action = e.takenBy) {
+    null -> when (e.field) {
+        FIELD_CONFIRM_UNLINK -> "UNLINK needs confirmUnlink: true, the caller's own confirmation"
+        else -> "LINK needs confirmEntityId, exactly entityId, the caller's own confirmation"
+    }
+    ScheduleSeasonAction.LINK, ScheduleSeasonAction.UNLINK -> "${action.name} takes no ${e.field}"
 }
 
 /** #114 (C2): one developer sentence per [SeasonStartStrandCause]; the remedy is always the role first. */

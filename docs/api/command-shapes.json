@@ -67,5 +67,8 @@
   },
   "haPublishingAcknowledgement": {
     "keys": ["decommissionId", "acknowledgedClearedInHa"]
+  },
+  "scheduleSeason": {
+    "keys": ["action", "entityId", "confirmEntityId", "confirmUnlink"]
   }
 }

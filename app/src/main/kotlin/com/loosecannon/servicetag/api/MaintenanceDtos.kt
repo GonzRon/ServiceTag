@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /*
  * The 1.2 maintenance shapes on the wire (master plan §9).
@@ -472,3 +473,46 @@ internal data class ScheduleArchiveRequest(val archived: Boolean, val unlinkHeal
 /** Omitted means today. Any date from the round's open date through today is accepted. */
 @Serializable
 internal data class CloseRoundRequest(val closedOn: String? = null)
+
+// --- #125 (U-C7): a schedule's own Home Assistant season ------------------------------------------
+
+/**
+ * `GET /v1/schedules/{id}/season-sync`, and the answer of its `POST`: `GET /v1/assets/{id}/season-sync`'s shape for one
+ * schedule. [seasonSource] is `ASSET` or `OWN`; [seasonPhase] is `IN_SEASON` or `OUT_OF_SEASON`, the phase the
+ * schedule's due rules read today — its own season's for `OWN`, its asset's for `ASSET` — and null for a group's
+ * schedule, which has no one season. [connection] is the phone's one connection as settings, [binding] the schedule's
+ * link or `null` (none, or stranded after Forget), and [activations] its own season rows, oldest first, kept as
+ * history after an unlink. Nothing here holds the address, the home Wi-Fi's name or the token.
+ */
+@Serializable
+internal data class ScheduleSeasonResponse(
+    val scheduleId: String,
+    val seasonSource: String,
+    val seasonPhase: String?,
+    val connection: SeasonSyncConnectionDto,
+    val binding: SeasonSyncBindingDto?,
+    val activations: List<ScheduleSeasonActivationDto>,
+)
+
+/** One row of a schedule's own season: `START` or `END`, the day it was applied, and when it was written. */
+@Serializable
+internal data class ScheduleSeasonActivationDto(
+    val id: String,
+    val action: String,
+    val occurredOn: String,
+    val createdAt: Long,
+)
+
+/**
+ * `POST /v1/schedules/{id}/season-sync`: `{"action": "LINK", "entityId", "confirmEntityId"}`, the caller's own
+ * confirmation equal to the entity (O-21's destination precedent), or `{"action": "UNLINK", "confirmUnlink": true}`,
+ * the JSON `true`. Each key is the caller's, decoded as given (null when absent) and never filled here; a key the
+ * action does not take is refused. [confirmUnlink] is kept as the JSON element sent, so only the literal `true` passes.
+ */
+@Serializable
+internal data class ScheduleSeasonRequest(
+    val action: String,
+    val entityId: String? = null,
+    val confirmEntityId: String? = null,
+    val confirmUnlink: JsonElement? = null,
+)

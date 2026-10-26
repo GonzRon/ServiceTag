@@ -1,8 +1,14 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
+import com.loosecannon.servicetag.core.seasonsync.LastAppliedSource
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncState
+import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -94,15 +100,33 @@ internal fun SeasonSyncBinding.toDto(state: SeasonSyncState) = SeasonSyncBinding
     mode = mode.name,
     enabled = enabled,
     state = state.name,
-    observation = observedState?.let { SeasonSyncObservationDto(it.name, observedChangedAt) },
+    observation = observationOf(observedState, observedChangedAt),
     lastSuccessAt = lastSuccessAt,
     lastAttemptAt = lastAttemptAt,
-    lastError = errorKind?.let { kind -> errorAt?.let { at -> SeasonSyncErrorDto(kind.name, errorDetail, at) } },
-    lastApplied = appliedAction?.let { action ->
-        appliedOn?.let { on ->
-            appliedAt?.let { at ->
-                lastAppliedSource?.let { source -> SeasonSyncAppliedDto(action.name, on, at, source.name) }
-            }
-        }
-    },
+    lastError = errorOf(errorKind, errorDetail, errorAt),
+    lastApplied = appliedOf(appliedAction, appliedOn, appliedAt, lastAppliedSource),
 )
+
+/** #125 (U-C7): a schedule's binding in #16's own shape, at [state] — the same keys, times and status objects. */
+internal fun ScheduleSeasonBinding.toDto(state: SeasonSyncState) = SeasonSyncBindingDto(
+    entityId = entityId,
+    mode = mode.name,
+    enabled = enabled,
+    state = state.name,
+    observation = observationOf(observedState, observedChangedAt),
+    lastSuccessAt = lastSuccessAt,
+    lastAttemptAt = lastAttemptAt,
+    lastError = errorOf(errorKind, errorDetail, errorAt),
+    lastApplied = appliedOf(appliedAction, appliedOn, appliedAt, lastAppliedSource),
+)
+
+/** #125 (U-C7): one row of a schedule's own season. */
+internal fun ScheduleSeasonActivation.toDto() = ScheduleSeasonActivationDto(id, action.name, occurredOn, createdAt)
+
+private fun observationOf(state: HaSwitchState?, changedAt: String?) = state?.let { SeasonSyncObservationDto(it.name, changedAt) }
+
+private fun errorOf(kind: SyncErrorKind?, detail: String?, at: Long?) =
+    kind?.let { k -> at?.let { SeasonSyncErrorDto(k.name, detail, it) } }
+
+private fun appliedOf(action: SeasonAction?, on: String?, at: Long?, source: LastAppliedSource?) =
+    action?.let { a -> on?.let { day -> at?.let { time -> source?.let { SeasonSyncAppliedDto(a.name, day, time, it.name) } } } }

@@ -76,6 +76,9 @@ the one body key it is about, then the `problems` in parentheses.
   `get_ha_publishing`, `list_ha_publishing`, `enable_ha_publishing`, `change_ha_publishing_target`,
   `disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now` and `acknowledge_ha_decommission`, the
   block's next ten.
+- **The schedule season tools need schema 22.** `get_schedule_season`, `link_schedule_season` and
+  `unlink_schedule_season` (#125) refuse an app whose `schemaVersion` is below 22 the same way, from the same read,
+  naming the feature "a schedule's own Home Assistant season".
 
 ## Using it
 
@@ -118,7 +121,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-One hundred and one: `pair` plus one per API operation.
+One hundred and four: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -403,6 +406,17 @@ attestation — an orphaned date helper may still permit a start in Home Assista
 dropped connection. No tool takes a value, a date to publish or a ready flag.
 `docs/api/v1.md`'s **Home Assistant publishing (#113, #114)** section is the contract.
 
+**A schedule's own Home Assistant season (#125; needs schema 22)** — `get_schedule_season`,
+`link_schedule_season`, `unlink_schedule_season`, over `GET` and `POST /v1/schedules/{id}/season-sync`. On the phone a
+schedule may follow its own Home Assistant switch while its asset keeps its season; only that schedule's due date
+moves, and readiness and publishing never read it. `get_schedule_season` reads its `seasonSource` (`ASSET` or `OWN`),
+its phase today, the connection's settings, its link and its own season rows. `link_schedule_season` sends
+`{action: "LINK", entityId, confirmEntityId}` only when `confirm_entity_id` is the caller's own, exactly `entity_id`;
+`unlink_schedule_season` sends `{action: "UNLINK", confirmUnlink: true}` only when `confirm_unlink` is the caller's own
+`true`. Neither fills its confirmation, and neither is re-sent on a dropped connection. Follow only: Force, the asset's
+own link, the token, the connection and Forget stay the phone's alone. `docs/api/v1.md`'s **A schedule's own Home
+Assistant season (#125)** section is the contract.
+
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
@@ -551,12 +565,12 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty-three**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty-four**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
 `categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`, `successions`, `supplyItems`,
-`assetSupplies`, `installedComponents`. A season activation, a condition and a case's timeline
-entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
+`assetSupplies`, `installedComponents`, `scheduleSeasonActivations`. A season activation (an asset's or a
+schedule's own), a condition and a case's timeline entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
 either: one returned, re-dated or relinked on one phone after the other received it conflicts, and an
 open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`. A
 transfer record (`OUT`, `IN` or `WITHDRAWN`) is an immutable fact too, and a merge never undoes a

@@ -183,6 +183,11 @@ internal class ApiHandlers(
     internal val haEntities: HaEntityHandlers = HaEntityHandlers { null },
     /** #113/#114 (C35): the publishing read; a suite that wires none answers its route 404. */
     internal val haPublishing: HaPublishingHandlers? = null,
+    /**
+     * #125 (U-C7): a schedule's own Home Assistant season, read, linked and unlinked; a suite that wires none answers
+     * its route 404. Its row count is `seasonHealth`'s, so `/v1/status` reports it whatever the wiring.
+     */
+    internal val scheduleSeason: ScheduleSeasonHandlers? = null,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles, graph.events,
@@ -203,6 +208,7 @@ internal class ApiHandlers(
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
         HaEntityHandlers(graph),
         HaPublishingHandlers(graph),
+        ScheduleSeasonHandlers(graph),
     )
 
     // --- status ---------------------------------------------------------------------------

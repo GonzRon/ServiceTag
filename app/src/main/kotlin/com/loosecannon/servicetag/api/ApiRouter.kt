@@ -219,6 +219,11 @@ internal class ApiRouter(
      * call (another verb on it a 404, as on every asset sub-resource), and `POST
      * /v1/ha-publishing/decommissions/{id}/acknowledge`, the owner's attestation that an undeliverable obligation was
      * cleared in Home Assistant, a 405 for any other verb. Neither takes a value, a date to publish or READY.
+     *
+     * #125 (U-C7) added one shape, `/v1/schedules/{id}/season-sync`: `GET` reads a schedule's own Home Assistant season
+     * and `POST` links or unlinks it (Follow only, each with the caller's own confirmation); unlike the other schedule
+     * sub-resources, another verb on it is a 405. It never reaches the asset's link, Force, the token, the connection's
+     * save or Forget.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -425,6 +430,14 @@ internal class ApiRouter(
             rest.size == 2 && rest[0] == "schedules" -> when (method) {
                 "GET" -> handlers.maintenance.getSchedule(rest[1])
                 "PATCH" -> handlers.maintenance.updateSchedule(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            // #125 (U-C7): a schedule's own Home Assistant season, read, linked and unlinked. Unlike the sub-resources
+            // below, another verb on it is a 405 (the asset season sync's precedent).
+            rest.size == 3 && rest[0] == "schedules" && rest[2] == "season-sync" -> when (method) {
+                "GET" -> (handlers.scheduleSeason ?: throw ApiFailure.notFound(request.path)).get(rest[1])
+                "POST" -> (handlers.scheduleSeason ?: throw ApiFailure.notFound(request.path)).act(rest[1], request)
                 else -> notAllowed(request)
             }
 

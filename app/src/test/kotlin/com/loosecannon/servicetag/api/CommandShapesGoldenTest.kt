@@ -57,9 +57,14 @@ class CommandShapesGoldenTest {
                 "scheduleRole",
                 // #113/#114 (C35b): the publishing plan and the control that commits it; the tombstone acknowledgement.
                 "haPublishingPlan", "haPublishingAction", "haPublishingAcknowledgement",
+                // #125 (U-C7): a schedule's own season, linked or unlinked, each with the caller's own confirmation.
+                "scheduleSeason",
             ),
             shapes.keys.toList(),
         )
+        assertEquals(keysOf("scheduleSeason"), ScheduleSeasonRequest.serializer().descriptor.names)
+        assertEquals(listOf("action", "entityId", "confirmEntityId", "confirmUnlink"), keysOf("scheduleSeason"))
+        assertTrue("Follow only: no mode key", "mode" !in keysOf("scheduleSeason"))
         assertEquals(keysOf("haPublishingPlan"), HaPublishingPlanRequest.serializer().descriptor.names)
         assertEquals(listOf("kind", "action", "entityId", "boundaryEntityId"), keysOf("haPublishingPlan"))
         assertEquals(keysOf("haPublishingAction"), HaPublishingActionRequest.serializer().descriptor.names)
@@ -153,7 +158,7 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat21AndTwentyThreeTables() {
+    @Test fun theContractDocumentNamesFormat21AndTwentyFourTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
@@ -218,7 +223,9 @@ class CommandShapesGoldenTest {
             "a reference's document role" in identical && "format 17" in identical,
         )
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
-        assertTrue("the report's twenty-three tables", "twenty-three tables" in doc.lowercase())
+        // #125 (format 21): the schedules' own season rows are the twenty-fourth.
+        assertTrue("the report's twenty-four tables", "twenty-four tables" in doc.lowercase())
+        assertFalse("the report's old twenty-three tables", "twenty-three tables" in doc.lowercase())
         assertFalse("the report's old twenty-two tables", "twenty-two tables" in doc.lowercase())
         assertFalse("the report's old twenty tables", "twenty tables" in doc.lowercase())
         assertFalse("the report's old fourteen tables", "fourteen tables" in doc.lowercase())

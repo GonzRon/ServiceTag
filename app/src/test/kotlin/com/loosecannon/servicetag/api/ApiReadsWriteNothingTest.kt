@@ -9,6 +9,8 @@ import com.loosecannon.servicetag.core.hapublish.RemoteEntity
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
+import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
@@ -16,6 +18,8 @@ import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
@@ -89,6 +93,9 @@ class ApiReadsWriteNothingTest {
             "ha_publish_decommission" to graph.publishDecommissions.all().toSet(),
             "ha_connection" to setOfNotNull(graph.haConnections.get()),
             "season_sync_binding" to graph.seasonSyncBindings.all().toSet(),
+            // #125 (U-C7): a schedule's own season, its device-local binding and its rows.
+            "schedule_season_sync_binding" to graph.scheduleSeasonBindings.all().toSet(),
+            "schedule_season_activation" to graph.scheduleSeasonActivations.all().toSet(),
         )
     }
 
@@ -195,6 +202,23 @@ class ApiReadsWriteNothingTest {
                     appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 1L, updatedAt = 1L,
                 ),
             )
+            // #125 (h15): the held job follows its own switch, with one row of its own season, so its read has a
+            // binding, a stale state row and an own season to leave alone.
+            graph.uow.write {
+                val stored = graph.schedules.get(ScheduleId(held))!!
+                graph.schedules.upsert(stored.copy(seasonSource = ScheduleSeasonSource.OWN))
+            }
+            graph.scheduleSeasonBindings.insert(
+                ScheduleSeasonBinding(
+                    ScheduleId(held), "example-connection", "input_boolean.example_generator_load_season", SyncMode.FOLLOW,
+                    enabled = true, revision = 1, observedState = null, observedChangedAt = null, lastSuccessAt = null,
+                    lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null, appliedAction = null,
+                    appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            graph.scheduleSeasonActivations.insert(
+                ScheduleSeasonActivation("example-own-start", ScheduleId(held), SeasonAction.START, "2026-01-15", 1L),
+            )
             graph.publishDecommissions.upsertMerging(
                 DecommissionTombstone(
                     "example-tombstone-1", "example-connection", "input_datetime.example_gone", null, "example-installation",
@@ -241,6 +265,8 @@ class ApiReadsWriteNothingTest {
             "/v1/assets/$generator/ha-publishing",
             // B5r (C35a): the collection, over the same snapshot (row 108).
             "/v1/ha-publishing",
+            // #125 (U-C7, row h15): a schedule's own season, derived for today — its phase, binding state and rows.
+            "/v1/schedules/$held/season-sync",
         )) {
             val response = api.call("GET", path)
             assertEquals("$path: ${response.bodyText()}", 200, response.status)

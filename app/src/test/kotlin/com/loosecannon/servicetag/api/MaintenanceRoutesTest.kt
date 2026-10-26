@@ -1246,6 +1246,8 @@ class MaintenanceRoutesTest {
                 "supplyItems", "assetSupplies",
                 // #47 (format 19): table 23, the installed components.
                 "installedComponents",
+                // #125 (format 21): table 24, the schedules' own season rows.
+                "scheduleSeasonActivations",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1316,9 +1318,10 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
         assertEquals(
-            "after categories, in table order, before #72's loans, #77's transfers, #86's successions, #15's two and #47's",
+            "after categories, in table order, before #72's loans, #77's transfers, #86's successions, #15's two, #47's " +
+                "and #125's",
             listOf("serviceCases", "caseEntries", "loans"),
-            wire.keys.toList().dropLast(7).takeLast(3),
+            wire.keys.toList().dropLast(8).takeLast(3),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1369,9 +1372,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("assets"))
         assertEquals(5, inserts("loans"))
         assertEquals(
-            "after the case entries, before #77's transfers, #86's successions, #15's two and #47's",
+            "after the case entries, before #77's transfers, #86's successions, #15's two, #47's and #125's",
             "loans",
-            wire.keys.toList().dropLast(7).last(),
+            wire.keys.toList().dropLast(8).last(),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1575,11 +1578,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-20** archive (this build's export) and reports **twenty-three** tables: the donor's
+     * Import-merge reads a **format-21** archive (this build's export) and reports **twenty-four** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat20AndReportsTwentyThreeTables() {
+    @Test fun importMergeReadsFormat21AndReportsTwentyFourTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1589,7 +1592,7 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(23, tallies.size)
+        assertEquals(24, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
         assertEquals(21, report.formatVersion)
         assertTrue(report.text(), report.applicable)
@@ -1603,6 +1606,8 @@ class MaintenanceRoutesTest {
         assertEquals(listOf(none, none), listOf(report.supplyItems, report.assetSupplies))
         // #47 (format 19): the installed components are on the report, empty for a donor with none.
         assertEquals(none, report.installedComponents)
+        // #125 (format 21): the schedules' own season rows are on the report, empty for a donor with none.
+        assertEquals(none, report.scheduleSeasonActivations)
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {

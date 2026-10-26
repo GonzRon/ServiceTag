@@ -100,6 +100,17 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
     schedules = graph.schedules,
     uow = graph.uow,
     readiness = graph.openingServiceReader,
+    scheduleActivations = graph.scheduleSeasonActivations,
+)
+
+/**
+ * #125 (U-C7): a schedule's own season over a [FakeGraph], wired as `ScheduleSeasonHandlers(graph)` wires it — the
+ * post-link check launched on the graph's season sync scope, which `awaitSeasonSyncReads` joins.
+ */
+internal fun scheduleSeasonHandlersFor(graph: FakeGraph): ScheduleSeasonHandlers = ScheduleSeasonHandlers(
+    graph.schedules, graph.assets, graph.transferRecords, graph.scheduleSeasonBindings, graph.scheduleSeasonActivations,
+    graph.haConnections, graph.secretStore, graph.seasonSyncBackgroundAllowed, graph.recomputeSchedules, graph.todayPort,
+    graph.linkScheduleSeason, graph.unlinkScheduleSeason, graph.seasonSyncRunner::requestScheduleRead,
 )
 
 /** #113/#114 (C35): the publishing read over a [FakeGraph], wired as `HaPublishingHandlers(graph)` wires it. */
@@ -233,6 +244,7 @@ internal class V1Client(
             schemaVersion = AppGraph.SCHEMA_VERSION,
             haEntities = HaEntityHandlers(haEntities),
             haPublishing = haPublishingHandlersFor(graph, haPublishingPlans),
+            scheduleSeason = scheduleSeasonHandlersFor(graph),
         ),
         token,
     )

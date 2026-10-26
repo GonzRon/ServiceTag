@@ -275,6 +275,7 @@ import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
 import com.loosecannon.servicetag.seasonsync.NetworkPlatform
 import com.loosecannon.servicetag.seasonsync.PlatformNetworkReader
 import com.loosecannon.servicetag.seasonsync.ResumeRefresh
+import com.loosecannon.servicetag.seasonsync.ScheduleSeasonPolling
 import com.loosecannon.servicetag.seasonsync.SeasonSyncRunner
 import com.loosecannon.servicetag.seasonsync.SeasonSyncWork
 import com.loosecannon.servicetag.seasonsync.WorkManagerSeasonSync
@@ -965,9 +966,18 @@ class AppGraph(private val context: Context) {
     val seasonSyncWork: SeasonSyncWork = WorkManagerSeasonSync(context.applicationContext)
     val seasonSyncBackgroundAllowed: () -> Boolean =
         { networkPlatform.preciseLocationGranted() && networkPlatform.backgroundLocationGranted() }
+    /**
+     * #125 (U-C5) — the schedule applier, the one writer of a schedule binding's status and of a schedule's own season
+     * row, built before the runner whose schedule pass records through it.
+     */
+    val recordScheduleSeasonSyncResult: RecordScheduleSeasonSyncResult = RecordScheduleSeasonSyncResult(
+        scheduleSeasonBindings, schedules, assets, scheduleSeasonActivations, transferRecords, recomputeSchedules, uow,
+        ids, clock, today,
+    )
     val seasonSyncRunner: SeasonSyncRunner = SeasonSyncRunner(
         seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateClient, recordSeasonSyncResult,
         seasonSyncWork, seasonSyncBackgroundAllowed, appScope, clock,
+        scheduleSeasons = ScheduleSeasonPolling(scheduleSeasonBindings, schedules, recordScheduleSeasonSyncResult),
     )
     val resumeRefresh: ResumeRefresh = ResumeRefresh {
         seasonSyncRunner.launchRefreshIfStale()
@@ -992,9 +1002,9 @@ class AppGraph(private val context: Context) {
         ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow, outboundTargets)
 
     /**
-     * #125 (U-C3, U-C5) — a schedule's own Home Assistant season: the link, the unlink and the applier, over the two
-     * tables above. Nothing polls a schedule binding and no route reaches these until H3 (the runner's schedule pass,
-     * the API) and H4 (the phone).
+     * #125 (U-C3) — a schedule's own Home Assistant season: the link and the unlink, over the two tables above; the
+     * runner's schedule pass polls the bindings they leave, and `/v1/schedules/{id}/season-sync` reaches both (H3). The
+     * phone's row arrives with H4.
      */
     val linkScheduleSeason: LinkScheduleSeason = LinkScheduleSeason(
         schedules, assets, transferRecords, scheduleSeasonBindings, haConnections, secretStore, recomputeSchedules,
@@ -1002,10 +1012,6 @@ class AppGraph(private val context: Context) {
     )
     val unlinkScheduleSeason: UnlinkScheduleSeason =
         UnlinkScheduleSeason(schedules, scheduleSeasonBindings, recomputeSchedules, seasonSyncRunner, uow, clock)
-    val recordScheduleSeasonSyncResult: RecordScheduleSeasonSyncResult = RecordScheduleSeasonSyncResult(
-        scheduleSeasonBindings, schedules, assets, scheduleSeasonActivations, transferRecords, recomputeSchedules, uow,
-        ids, clock, today,
-    )
 
     /**
      * #113/#114 (C25, C25a) — the publishing controls, one write each and no HTTP inside: the app layer reads the helper
