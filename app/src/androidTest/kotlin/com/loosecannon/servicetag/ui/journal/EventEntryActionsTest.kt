@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.clearInstall
+import com.loosecannon.servicetag.ui.settleKeyboard
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -81,6 +82,7 @@ class EventEntryActionsTest {
 
         // Notes is the form's last field; the button sits under it, inside the same scrolling column.
         rule.onNode(hasSetTextAction() and hasText(NOTES)).performScrollTo().performTextInput("Rinsed the prefilter")
+        rule.settleKeyboard()
         rule.onNodeWithText(RECORD_ENTRY).performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
 
         rule.waitUntil(TIMEOUT_MS) { rule.runOnIdle { left.isNotEmpty() } }

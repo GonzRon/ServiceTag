@@ -47,6 +47,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
+import com.loosecannon.servicetag.ui.settleKeyboard
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.runBlocking
@@ -386,6 +387,7 @@ class ScheduleEditorTest {
         rule.awaitText(QUESTION)
         gone("Before the season starts")
         rule.onNodeWithText("Every N").performTextInput("3")
+        rule.settleKeyboard()
         rule.onNodeWithText("Before the season starts").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("When the season starts").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Whenever it is due").performScrollTo().assertIsDisplayed()
@@ -453,6 +455,7 @@ class ScheduleEditorTest {
         rule.awaitText(QUESTION)
         rule.onNodeWithText("Name").performTextInput("Belt check")
         rule.onNodeWithText("Every N").performTextInput("3")
+        rule.settleKeyboard()
         rule.onNodeWithText("Save").assertIsEnabled()
         rule.onNodeWithText("Before the season starts").performScrollTo().performClick()
 
