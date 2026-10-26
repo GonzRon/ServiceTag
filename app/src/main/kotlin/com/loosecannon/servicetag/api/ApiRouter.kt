@@ -100,7 +100,7 @@ internal class ApiRouter(
     internal fun downloadInFlight(): Job? = download.current()
 
     /**
-     * The whole surface. Eighty-two path shapes over one hundred and two method-and-path rows; anything
+     * The whole surface. Eighty-three path shapes over one hundred and three method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -192,6 +192,10 @@ internal class ApiRouter(
      * Assistant season sync, read only (R16-9): the binding's non-secret state and status and the connection's
      * settings, never its address or token. **No route writes season sync**: linking, the mode, Sync now, stopping,
      * resuming and the connection itself are the phone's alone, so every other verb on the shape is a 404.
+     *
+     * #114 added one row over one shape: the twenty-ninth `/v1/assets/{id}/…` sub-resource, the asset's season
+     * readiness, read only (C29): C9's answer, derived when it is read and stored nowhere. **No route writes readiness**:
+     * nothing takes a value, a date to publish or READY (G17), so every other verb on the shape is a 404.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -270,6 +274,8 @@ internal class ApiRouter(
                 "installed-components" to "GET" -> handlers.installedComponents.listForAsset(rest[1])
                 // #16 — the twenty-eighth: the asset's Home Assistant season sync, its non-secret state, read only.
                 "season-sync" to "GET" -> handlers.seasonHealth.getSeasonSync(rest[1])
+                // #114 — the twenty-ninth: the asset's season readiness, derived for today, read only.
+                "season-readiness" to "GET" -> handlers.seasonHealth.getSeasonReadiness(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 

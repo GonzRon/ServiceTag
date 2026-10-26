@@ -111,6 +111,8 @@ EXPECTED_TOOLS = (
     "remove_installed_component",
     "replace_installed_component",
     "get_season_sync",
+    # #113/#114 — the readiness read opens the block.
+    "get_season_readiness",
 )
 
 
@@ -124,18 +126,19 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_ninety() -> None:
+def test_tool_names_are_ninety_one() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
     repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
     tools to sixty-three, #72's five loan tools to sixty-eight, #86's succession read to sixty-nine,
     #92's five attachment tools to seventy-four and its two replace tools to seventy-six, #15's eight supply
-    tools to eighty-four, #47's five installed-component tools to eighty-nine, and #16's season sync read takes it
-    to ninety; `TOOL_NAMES`, the registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 90
-    assert len(server_module.TOOL_NAMES) == 90
+    tools to eighty-four, #47's five installed-component tools to eighty-nine, #16's season sync read to ninety, and
+    #114's season readiness read takes it to ninety-one; `TOOL_NAMES`, the registered tools and the guard's
+    `expected_count` all agree."""
+    assert len(EXPECTED_TOOLS) == 91
+    assert len(server_module.TOOL_NAMES) == 91
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 90
+    assert len(registered) == 91
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -975,14 +978,14 @@ TWENTY_THREE_TALLIES = TWENTY_TWO_TALLIES + ("installedComponents",)
 """#47 (format 19) appends the installed components, each with its composition, last."""
 
 
-def test_import_merge_docs_say_formats_1_to_20_twenty_three_tables_and_the_four_reasons() -> None:
-    """#77 (C24), #86 (C21), #15 (C28), #47 (C24) and #69 (C23): the tool's docstring and the README's
-    `import_merge` section name the range 1–20, the twenty-three tables (format 20 adds none), the `transfers`,
+def test_import_merge_docs_say_formats_1_to_21_twenty_three_tables_and_the_four_reasons() -> None:
+    """#77 (C24), #86 (C21), #15 (C28), #47 (C24), #69 (C23) and #114 (D5): the tool's docstring and the README's
+    `import_merge` section name the range 1–21, the twenty-three tables (formats 20 and 21 add none), the `transfers`,
     `successions`, `supplyItems`, `assetSupplies` and `installedComponents` tallies, the two reasons a transfer
     record conflicts with and the two a succession does; the README lists the twenty-three tallies in the report's
     order."""
     doc = " ".join((server_module.import_merge.__doc__ or "").split())
-    assert "format 1–20" in doc and "1–19" not in doc and "1–18" not in doc and "1–17" not in doc
+    assert "format 1–21" in doc and "1–20" not in doc and "1–19" not in doc and "1–18" not in doc
     assert "format 20 adds" in doc and "`supplyItemId`" in doc and "`installedComponentId`" in doc
     assert "twenty-three tables" in doc and "twenty-two tables" not in doc and "twenty tables" not in doc
     assert "nineteen" not in doc
@@ -994,7 +997,7 @@ def test_import_merge_docs_say_formats_1_to_20_twenty_three_tables_and_the_four_
     readme = README.read_text(encoding="utf-8")
     section = readme.split("### `import_merge`", 1)[1].split("\n## ", 1)[0]
     flat = " ".join(section.split())
-    assert "format **1–20**" in flat and "1–19" not in flat and "1–18" not in flat and "1–17" not in flat
+    assert "format **1–21**" in flat and "1–20" not in flat and "1–19" not in flat and "1–18" not in flat
     assert "format 20" in flat and "`supplyItemId`" in flat and "`installedComponentId`" in flat
     assert "each of **twenty-three** tables" in flat and "twenty-two" not in flat and "nineteen" not in flat
     for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
@@ -1004,15 +1007,16 @@ def test_import_merge_docs_say_formats_1_to_20_twenty_three_tables_and_the_four_
 
 
 def test_the_readme_names_every_tool_the_supply_gate_and_the_installed_component_gate() -> None:
-    """#15's C28, #47's C24 and #16's C25: the README's tool list counts ninety and names each tool, the schema-18
-    gate and the line key, and the schema-19 gate."""
+    """#15's C28, #47's C24, #16's C25 and #114's C29: the README's tool list counts ninety-one and names each tool,
+    the schema-18 gate and the line key, the schema-19 gate, and the schema-21 and schema-22 gates."""
     readme = " ".join(README.read_text(encoding="utf-8").split())
     tools = readme.split("## The tools", 1)[1]
-    assert tools.lstrip().startswith("Ninety:"), tools[:40]
+    assert tools.lstrip().startswith("Ninety-one:"), tools[:40]
     for name in EXPECTED_TOOLS:
         assert f"`{name}`" in readme, name
     assert "The supply tools need schema 18." in readme
     assert "The installed component tools need schema 19." in readme
     assert "A supply item or installed component owner needs schema 20." in readme
     assert "The season sync tool needs schema 21." in readme
+    assert "The season readiness tool needs schema 22." in readme
     assert "`supplyId`" in tools and "`APP_SCHEMA_TOO_OLD`" in tools

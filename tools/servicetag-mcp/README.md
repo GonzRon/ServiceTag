@@ -67,9 +67,12 @@ the one body key it is about, then the `problems` in parentheses.
   `asset_id`, each keeps exactly the minimum it had. The minima are therefore 8 for every write, 11 for the warranty
   tools, 12 for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the
   supply tools and a linked line, 19 for the installed component tools, 20 for a supply item or installed
-  component owner on the five resource tools, and 21 for the season sync tool.
+  component owner on the five resource tools, 21 for the season sync tool and 22 for the #113/#114 tools.
 - **The season sync tool needs schema 21.** `get_season_sync` — a read — refuses an app whose `schemaVersion` is
   below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
+- **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
+  tools — refuses an app whose `schemaVersion` is below 22 the same way, from the same read, naming the feature
+  "season readiness and Home Assistant publishing".
 
 ## Using it
 
@@ -112,7 +115,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Ninety: `pair` plus one per API operation.
+Ninety-one: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -336,6 +339,16 @@ Linking, the modes, Sync now, stopping and the connection are the phone's alone;
 `start_season`, `end_season` and a `set_season_mode` change on that asset answer `SEASON_SYNC_ENABLED` (409).
 `docs/api/v1.md`'s **Home Assistant season sync (#16)** section is the contract.
 
+**Season readiness (#114; needs schema 22)** — `get_season_readiness`: `GET /v1/assets/{id}/season-readiness`, read
+only. Whether an asset is ready for its season — its Season Start schedule has a qualifying completion of this
+asset dated on or after the later of the role's commissioning boundary and the day its season last ended — with the
+reason when it is not, the role schedule, and the cutoff and who set it as two fields. Derived on the phone and
+stored nowhere: no tool takes a value, a date to publish or a ready flag. Every schedule row carries `role` and
+`roleSinceOn`, response only, which `update_schedule` never sends; every event carries the read-only `imported`
+marker; and `set_season_mode`, `update_asset`, `update_schedule` and `update_group` can answer
+`SEASON_START_STRANDED` (409) while a Season Start role would be stranded. `docs/api/v1.md`'s **Season readiness and
+the Season Start role (#114)** section is the contract.
+
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
@@ -456,12 +469,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–20** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–21** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition, format 20 each attachment's and reference's `supplyItemId` and `installedComponentId` (a file or a link on a supply item or an installed component; no new table); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition, format 20 each attachment's and reference's `supplyItemId` and `installedComponentId` (a file or a link on a supply item or an installed component; no new table), format 21 each schedule's Season Start `role` and `roleSinceOn` and each event's `imported` marker (#114; no new table — an incoming `SEASON_START` schedule that would give an asset a second live role conflicts as `SEASON_START_HELD_BY_A_LOCAL_ROW` or `SEASON_START_DUPLICATED_IN_ARCHIVE`); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;

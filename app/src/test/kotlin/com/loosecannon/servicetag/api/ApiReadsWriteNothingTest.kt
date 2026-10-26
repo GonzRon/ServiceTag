@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import kotlinx.coroutines.runBlocking
@@ -94,7 +96,10 @@ class ApiReadsWriteNothingTest {
         api.ok(ConditionResponse.serializer(), "POST", "/v1/assets/$generator/conditions", """{"condition":"DEGRADED","tzId":"UTC"}""", status = 201)
         val tub = api.asset("Hot tub")
         api.ok(AssetSeasonResponse.serializer(), "POST", "/v1/assets/$tub/season-mode", """{"seasonMode":"MANUAL","manualPhase":"IN_SEASON"}""")
-        schedule(tub, "Water change", """"servicePolicy":"IN_SERVICE_RESUME_CLAMPED"""")
+        val waterChange = schedule(tub, "Water change", """"servicePolicy":"IN_SERVICE_RESUME_CLAMPED"""")
+        // #114 (row 83): a Season Start role, so the readiness read runs C9 over a role, its schedule and its events.
+        runBlocking { graph.setScheduleRole.run(ScheduleId(waterChange), ScheduleRole.SEASON_START, "2026-01-20", quickElected = true) }
+        api.ok(CompletionResponse.serializer(), "POST", "/v1/schedules/$waterChange/complete", """{"occurredOn":"2026-01-20","tzId":"UTC"}""", status = 201)
         val case = api.ok(
             ServiceCaseResponse.serializer(), "POST", "/v1/service-cases",
             """{"assetId":"$generator","title":"Starter claim","type":"REPAIR","openedOn":"2026-01-19","coverage":"UNKNOWN"}""",
@@ -135,6 +140,9 @@ class ApiReadsWriteNothingTest {
             "/v1/loans/$loan",
             "/v1/schedules",
             "/v1/status",
+            // #114 (C29): readiness, derived for today and stored nowhere — with no role, and with one.
+            "/v1/assets/$generator/season-readiness",
+            "/v1/assets/$tub/season-readiness",
         )) {
             val response = api.call("GET", path)
             assertEquals("$path: ${response.bodyText()}", 200, response.status)

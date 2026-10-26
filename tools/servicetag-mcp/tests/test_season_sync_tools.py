@@ -25,7 +25,8 @@ STATUS_21: dict = {
 STATUS_20: dict = dict(STATUS_21, schemaVersion=20)
 
 SEASON_SYNC_TOOLS = ("get_season_sync",)
-"""C25's one tool, the #16 block, appended last (R16-17). The registered total is **90** since #16, which
+"""C25's one tool, the #16 block, appended after the shipped tools (R16-17) and followed only by #113/#114's block.
+The registered total was **90** after #16 and is **91** since #114's season readiness read, which
 `test_argument_guard.py` pins."""
 
 CONNECTION_KEYS = {
@@ -83,7 +84,7 @@ def test_get_season_sync_is_registered_guarded_listed_last_and_takes_only_an_ass
     assert tool is not None and tool.parameters.get("additionalProperties") is False
     assert list(inspect.signature(server_module.get_season_sync).parameters) == ["asset_id"]
     assert set(tool.parameters.get("properties", {})) == {"asset_id"}
-    assert server_module.TOOL_NAMES[-len(SEASON_SYNC_TOOLS):] == SEASON_SYNC_TOOLS
+    assert server_module.TOOL_NAMES[-len(SEASON_SYNC_TOOLS) - 1:-1] == SEASON_SYNC_TOOLS
 
 
 def test_no_other_tool_speaks_of_season_sync_or_home_assistant() -> None:

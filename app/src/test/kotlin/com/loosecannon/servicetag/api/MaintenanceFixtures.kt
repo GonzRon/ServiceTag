@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import kotlinx.serialization.KSerializer
 import java.io.File
+import java.time.ZoneOffset
 
 /**
  * The 1.2 handlers over a [FakeGraph], built in one place because four suites need them.
@@ -95,6 +96,12 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
     secrets = graph.secretStore,
     transfers = graph.transferRecords,
     backgroundAllowed = graph.seasonSyncBackgroundAllowed,
+    schedules = graph.schedules,
+    groups = graph.groups,
+    events = graph.events,
+    uow = graph.uow,
+    today = graph.todayPort,
+    zone = { ZoneOffset.UTC },
 )
 
 /**

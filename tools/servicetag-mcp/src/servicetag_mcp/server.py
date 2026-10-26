@@ -180,6 +180,9 @@ TOOL_NAMES: tuple[str, ...] = (
     "replace_installed_component",
     # #16 — Home Assistant season sync, read only, at a schema-21 minimum. One, taking the total to 90.
     "get_season_sync",
+    # #113/#114 — season readiness and Home Assistant publishing, each at a schema-22 minimum, appended last in C1's
+    # order. A4's readiness read opens it: one, taking the total to 91.
+    "get_season_readiness",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -265,6 +268,15 @@ it, with nothing sent: a per-tool minimum on the succession tool's pattern. The 
 
 _SEASON_SYNC_FEATURE = "Home Assistant season sync"
 """The feature `get_season_sync` names when it refuses a phone below schema 21 (G2)."""
+
+_MIN_HA_PUBLISHING_SCHEMA_VERSION = 22
+"""The Room schema that carries #113/#114 (C1): the Season Start role on a schedule, the event's `imported` marker
+and the Home Assistant publishing tables. Every tool of the "#113/#114" block speaks a route an older app does not
+have, so each refuses — the reads too — a phone below it, with nothing sent: a per-tool minimum on the season sync
+tool's pattern. The global write minimum stays 8."""
+
+_HA_PUBLISHING_FEATURE = "season readiness and Home Assistant publishing"
+"""The feature a "#113/#114" tool names when it refuses a phone below schema 22."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
@@ -382,6 +394,11 @@ def _require_resource_owner_schema(tool: str) -> None:
 def _require_season_sync_schema(tool: str) -> None:
     """#16's one season sync tool, a read, on a phone below schema 21 (G2)."""
     _require_tool_schema(tool, _MIN_SEASON_SYNC_SCHEMA_VERSION, _SEASON_SYNC_FEATURE)
+
+
+def _require_ha_publishing_schema(tool: str) -> None:
+    """A tool of the "#113/#114" block, the reads included, on a phone below schema 22."""
+    _require_tool_schema(tool, _MIN_HA_PUBLISHING_SCHEMA_VERSION, _HA_PUBLISHING_FEATURE)
 
 
 def _carries_supply_id(lines: Any) -> bool:
@@ -781,6 +798,12 @@ def update_asset(
     `SEASON_MODE_STRANDS_POLICY` — change the mode with `set_season_mode`. Condition, the break and
     the health policy are in no asset command; each has its own tool.
 
+    #114: while a Season Start role covers an asset, the app refuses an edit that would leave it where it may not
+    stand as `SEASON_START_STRANDED` (409) and writes nothing — a cleared season pair that makes a `CALENDAR` asset
+    year-round (cause `NEEDS_SEASONS`), or a new `parent_asset_id` that leaves a covered asset, this one or its old
+    parent, a child with no child of its own (cause `WOULD_BE_LEAF_CHILD`). Its `problems` name the cause first, then
+    each role schedule by id and title; clear the role first.
+
     #79: the warranty reminder lead is in no asset command either, so this tool never sends it — an
     edit keeps it while the warranty date stays, and clearing `warranty_expires_on` clears the lead
     with it (the app's rule). Set it with `set_warranty_reminder`.
@@ -1173,7 +1196,11 @@ def archive_profile(profile_id: str, archived: bool = True) -> dict[str, Any]:
 
 @mcp.tool()
 def list_events(asset_id: str) -> dict[str, Any]:
-    """One asset's service record, newest first."""
+    """One asset's service record, newest first.
+
+    #114: each event carries `imported`, **read only** — `true` only on an event a Transfer Pack import brought to
+    the phone, set there by that import alone. No tool sets or clears it, an edit keeps it, and such an event never
+    counts toward the asset's season readiness (`get_season_readiness`)."""
     return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/events")
 
 
@@ -1296,7 +1323,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–20 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–21 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1338,7 +1365,12 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `INSTALLED_COMPONENT_REPLACEMENT_TAKEN`; format 20 adds each attachment's and reference's `supplyItemId` and
     `installedComponentId` (#69), so a file or a link may belong to a supply item or an installed component
     instead of an asset — exactly one owner each, and no new table — and an older archive naming either owner is
-    corrupt).
+    corrupt; format 21 adds each schedule's Season Start `role` and `roleSinceOn` and each event's `imported`
+    marker (#114), still no new table: both are written as the archive has them and a matched row keeps its own
+    marker, and an incoming `SEASON_START` schedule that would give an asset a second live role conflicts — as
+    `SEASON_START_HELD_BY_A_LOCAL_ROW` when a role on the phone already covers it, as
+    `SEASON_START_DUPLICATED_IN_ARCHIVE` when two of the archive's would; an older archive carries no role and no
+    marker).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1541,6 +1573,12 @@ def update_group(
 
     Removed members come back as **new** rows with new ids if you add them again later — a window
     that closed stays closed, always.
+
+    #114: when a group schedule carries the Season Start role, the app refuses an edit that adds a member it may not
+    cover as `SEASON_START_STRANDED` (409) and writes nothing: a member that cannot have a Season Start service (cause
+    `MEMBER_NOT_ELIGIBLE`: archived, retired or transferred out, year-round, or a child with no child of its own) or
+    one another role already covers (cause `MEMBER_ALREADY_COVERED`). Its `problems` name the cause and the asset
+    first, then each role schedule by id and title.
     """
     supplied = {"description": description, "members": members}
     to_clear = _validate_clear_fields(clear_fields, _GROUP_CLEARABLE_FIELDS, supplied)
@@ -1596,6 +1634,10 @@ def list_schedules(asset_id: str | None = None, group_id: str | None = None) -> 
     asset** — never a group's, even a group that asset belongs to; ask `list_asset_groups` and then
     this tool with `group_id` for those. With `group_id`, that group's. Pass one scope or neither,
     never both.
+
+    #114: each row carries `role` (`NONE` or `SEASON_START`, the passive Season Start role) and `roleSinceOn` (its
+    commissioning boundary, `null` without a role) — response only: no schedule command takes either, and
+    `update_schedule` never sends them.
     """
     if asset_id and group_id:
         raise ToolError("pass asset_id or group_id, not both — they are two different questions")
@@ -1621,6 +1663,10 @@ def get_schedule(schedule_id: str) -> dict[str, Any]:
     `null` for `PRE_SERVICE`). `state` adds `actionableDueOn` — the day the work is actionable under
     the policy, the season and the break, beside `effectiveDueOn`, whose meaning is unchanged —
     `policyReason`, `policyPhase` and `quiet`; `seasonActive` is `policyPhase == ACTIVE`.
+
+    #114: `schedule` carries `role` (`NONE` or `SEASON_START`, the passive Season Start role) and `roleSinceOn` (its
+    commissioning boundary, `null` without a role) — response only: no schedule command takes either, and
+    `update_schedule` never sends them. Whether the role's asset is ready is `get_season_readiness`.
     """
     return _call("GET", f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}")
 
@@ -1885,6 +1931,13 @@ def update_schedule(
     immediately overdue. **A policy change is not a rule change**: changing only `service_policy` or
     `policy_offset_days` does none of that. Pausing, archiving and postponing are **not** here: each
     is its own tool, so an edit can never quietly do one of them.
+
+    **The Season Start role (#114).** This tool never sends `role` or `roleSinceOn` — they are not in the schedule
+    command — so an edit of a role schedule leaves it a role schedule with its boundary. While the role stands, the
+    app refuses two edits as `SEASON_START_STRANDED` (409) and writes nothing: moving the schedule to another asset
+    or group (cause `ROLE_SCHEDULE_RETARGET`; clear the role first), and changing it from `FORM` to `QUICK`
+    (cause `QUICK_NEEDS_ELECTION`). The refusal's `problems` name the cause first, then the role schedule by id and
+    title.
     """
     arguments = _arguments(locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject"))
     to_clear = _validate_clear_fields(clear_fields, _SCHEDULE_CLEARABLE_FIELDS, arguments)
@@ -2450,6 +2503,8 @@ def set_season_mode(
     schedule counts back from is `SEASON_MODE_STRANDS_POLICY`, naming those schedules. The same mode
     and window as stored writes nothing. A change on an asset whose season follows Home Assistant (#16: a season
     sync enabled on the phone, which `get_season_sync` shows) is `SEASON_SYNC_ENABLED` (409) and writes nothing.
+    A change to `YEAR_ROUND` of an asset a Season Start role covers (#114) is `SEASON_START_STRANDED` (409) with
+    cause `NEEDS_SEASONS` and writes nothing; its `problems` name the role schedules — clear the role first.
     Answers `{asset, season}`.
     """
     return _call(
@@ -4331,6 +4386,41 @@ def get_season_sync(asset_id: str) -> dict[str, Any]:
     """
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-sync"
     _require_season_sync_schema("get_season_sync")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def get_season_readiness(asset_id: str) -> dict[str, Any]:
+    """Whether one asset is ready for its season, read only: `GET /v1/assets/{id}/season-readiness` →
+    `{assetId, readyForSeason, seasonServiceDoneOn, reason, roleScheduleId, roleTarget, roleSinceOn, cutoffOn,
+    boundarySource, boundaryCheckedAt, boundaryUnverifiedSince}`, answered as the phone sends it. Derived on the
+    phone when it is read and stored nowhere: no tool sets it, and no tool takes a value, a date to publish or a
+    ready flag.
+
+    A schedule may carry the passive Season Start role (`role` on a schedule row; at most one live role covers an
+    asset, its own schedule or a group schedule it is an open member of). The asset is ready exactly when that
+    schedule has a qualifying completion **of this asset** dated on or after `cutoffOn`, the later of the role's
+    commissioning boundary and the day the asset's season last ended. Qualifying: not `detailsPending`, not
+    `imported` (a Transfer Pack brought it), dated from `cutoffOn` to today and written on or after the day it names.
+    It reports whether the service was recorded, nothing more; whether equipment may start is never decided here.
+
+    `assetId` is the path's id; `readyForSeason` and `seasonServiceDoneOn` (`YYYY-MM-DD`, the latest qualifying day,
+    `null` unless ready);
+    `reason`, `null` when ready, else the first that holds of `SCHEDULE_ARCHIVED`, `NO_ROLE`, `TWO_ROLES`,
+    `ROLE_NOT_ALLOWED`, `FUTURE_DATED`, `RECORDED_IN_ADVANCE`, `DETAILS_PENDING`, `INHERITED_SERVICE_ONLY`,
+    `NOT_DONE_SINCE_COMMISSIONING` and `NOT_DONE_SINCE_SEASON_END`; `roleScheduleId`, `roleTarget` (`ASSET` or
+    `GROUP`) and `roleSinceOn`, the role schedule the answer is about (for `SCHEDULE_ARCHIVED` the archived one),
+    `null` when no single role decides it; `cutoffOn` and `boundarySource`, two fields — who set the cutoff:
+    `CALENDAR_WINDOW`, `PHONE_SEASON_END`, `HA_SEASON_ENDED`, `HA_UNVERIFIED` or `COMMISSIONING` — both `null` when
+    the answer stops before a boundary; `boundaryCheckedAt`, the epoch milliseconds of the Home Assistant read, for
+    `HA_SEASON_ENDED` only; and `boundaryUnverifiedSince`, set whenever the asset's Home Assistant boundary is
+    unverified, whatever won the cutoff.
+
+    An unknown asset is `no_such_asset`. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-readiness"
+    _require_ha_publishing_schema("get_season_readiness")
     return _call("GET", path)
 
 

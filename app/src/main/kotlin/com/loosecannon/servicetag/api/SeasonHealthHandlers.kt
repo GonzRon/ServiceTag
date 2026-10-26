@@ -6,9 +6,16 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
+import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.season.HaBoundary
+import com.loosecannon.servicetag.core.season.seasonReadiness
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
@@ -26,6 +33,7 @@ import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
+import java.time.ZoneId
 
 /**
  * One method per 1.4 `/v1` endpoint (spec §9.1; master plan §11.1) — the season, the maintenance
@@ -47,6 +55,10 @@ import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
  * #16 adds one read, the asset's Home Assistant season sync (C24), over the binding and connection repositories and
  * the token store's `has`, and writes nothing. Its season writes answer `SEASON_SYNC_ENABLED` from their use cases'
  * guard while a binding is enabled; nothing here re-checks it.
+ *
+ * #114 adds one read, the asset's season readiness (C29): C9's rule over one `uow.read` snapshot of the asset tree,
+ * the schedules, the groups and this asset's events and activations, for today. It writes nothing, and the season
+ * writes answer `SEASON_START_STRANDED` from their use cases while a Season Start role would be stranded.
  *
  * A read that names an asset answers the shipped 404 `no_such_asset` when it is not there, before
  * any read model is asked: the health and season views of a vanished asset are empty rather than
@@ -72,6 +84,13 @@ internal class SeasonHealthHandlers(
     private val secrets: SecretStore,
     private val transfers: TransferRecordRepository,
     private val backgroundAllowed: () -> Boolean,
+    // #114 (C29): the readiness read's snapshot — the rest of the tree C9 reads, the transaction and the day.
+    private val schedules: ScheduleRepository,
+    private val groups: GroupRepository,
+    private val events: EventRepository,
+    private val uow: UnitOfWork,
+    private val today: Today,
+    private val zone: () -> ZoneId,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.seasonActivations, graph.conditions, graph.healthSubjects,
@@ -80,6 +99,7 @@ internal class SeasonHealthHandlers(
         graph.assetHealthReadModel, graph.attentionReadModel,
         graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.transferRecords,
         graph.seasonSyncBackgroundAllowed,
+        graph.schedules, graph.groups, graph.events, graph.uow, graph.today, { ZoneId.systemDefault() },
     )
 
     // --- the season ---------------------------------------------------------------------------
@@ -139,6 +159,29 @@ internal class SeasonHealthHandlers(
             found.toDto(currentSeasonSyncState(found, secrets, assets, transfers))
         }
         return ok(SeasonSyncResponse.serializer(), SeasonSyncResponse(assetId, connection, binding))
+    }
+
+    // --- season readiness (#114) ---------------------------------------------------------------
+
+    /**
+     * #114 (C29) — the twenty-ninth `/v1/assets/{id}/…` sub-resource, read only: whether the asset is ready for its
+     * season, computed now by C9 ([seasonReadiness]) from one `uow.read` snapshot, today from the shipped [Today] and
+     * an event's unresolvable zone read in the phone's own. An asset that is not there is the shipped 404
+     * `no_such_asset`. Until B5 reads the date binding's boundary cache, the Home Assistant boundary is
+     * [HaBoundary.NotUsed]: no date binding exists before B6a. Nothing here writes — no recompute, no state row.
+     */
+    suspend fun getSeasonReadiness(assetId: String): ApiResponse {
+        val id = AssetId(assetId)
+        val day = today.localDate()
+        val answer = uow.read {
+            val asset = assets.get(id) ?: throw NoSuchAsset(id)
+            val everySchedule = schedules.all()
+            seasonReadiness(
+                asset, assets.all(), everySchedule, groups.all(), events.forAsset(id), activations.forAsset(id),
+                day, zone(), HaBoundary.NotUsed,
+            ).toResponse(id, everySchedule)
+        }
+        return ok(SeasonReadinessResponse.serializer(), answer)
     }
 
     // --- condition ----------------------------------------------------------------------------
