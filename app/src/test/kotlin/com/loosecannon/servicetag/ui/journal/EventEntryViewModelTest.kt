@@ -1252,6 +1252,17 @@ class EventEntryViewModelTest {
         )
     }
 
+    /** A5a review (Minor 1): an asset whose name reads blank draws no P114-14 with a gap where the name goes. */
+    @Test fun aBlankAssetNameDrawsNoCompletionLine() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        graph.schedules.upsert(schedule.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-02-01"))
+        graph.assets.upsert(spa.asset.copy(name = ""))
+
+        assertNull(formModel(spa.id, spa.profile.id, schedule.id).state.first { it.loaded }.seasonStartLine)
+    }
+
     /** V5 (pin): the same asset and profile without a schedule id — the asset screen's way in — log an ordinary entry. */
     @Test fun theSameProfileWithoutAScheduleIdStaysAnOrdinaryEntry() = runTest {
         onTheTenth()

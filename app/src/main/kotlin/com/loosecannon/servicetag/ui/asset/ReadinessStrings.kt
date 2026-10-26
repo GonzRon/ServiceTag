@@ -80,7 +80,8 @@ internal object ReadinessStrings {
     /**
      * O-19 — P114-45 under another source's line while Home Assistant's season end is unverified, whatever won the
      * cutoff (C9a: "unverified since" on the card); null while it is not, and for `HA_UNVERIFIED`, whose own source
-     * line is already P114-45.
+     * line is already P114-45. Under `COMMISSIONING`, P114-45's "using %2$s" names the role's day, the cutoff in use
+     * (A5a ruling 3).
      */
     fun unverifiedDisclosure(boundary: ReadinessBoundary, zone: ZoneId): String? = when (boundary.source) {
         BoundarySource.HA_UNVERIFIED -> null

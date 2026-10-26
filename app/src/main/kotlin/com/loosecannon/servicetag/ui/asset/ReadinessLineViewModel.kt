@@ -171,6 +171,7 @@ internal fun readinessLinesOf(
             -> null
         }
     }
+    // A null line takes the source and cutoff lines with it: C9 never builds a null-line state with a boundary.
     val line = ReadinessStrings.line(readiness, hasDateBinding, evidenceOn) ?: return ReadinessLineState()
     return ReadinessLineState(
         line = line,

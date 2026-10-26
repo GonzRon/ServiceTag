@@ -355,7 +355,7 @@ class EventEntryViewModel(
                     },
                     notes = existing?.notes ?: draft?.second.orEmpty(),
                     alsoRecords = pending?.condition,
-                    seasonStartLine = schedule?.let { ReadinessStrings.completionLine(it, assetName) },
+                    seasonStartLine = schedule?.let { ReadinessStrings.completionLine(it, assetName.takeIf(String::isNotBlank)) },
                     loaded = true,
                 )
             }
