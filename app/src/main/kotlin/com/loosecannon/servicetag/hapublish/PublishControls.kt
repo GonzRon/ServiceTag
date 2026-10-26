@@ -51,8 +51,8 @@ data class PublishRequest(val requestId: String, val acceptedAt: Long, val bindi
  * Change target activate on this installation ([installationId], C27) and pass the API's `expectedPlanId` through
  * (C25a); the phone passes none.
  *
- * [requestPublishNow] (the API's Publish now) stamps the covered bindings in one write and launches a projection
- * ([reconciler], I18: so a time-only move is never sent stale) and then [PublishRunner.publishNow] on [scope], **never
+ * [requestPublishNow] (Publish now) projects first ([reconciler], I18), then stamps the covered bindings in one write,
+ * then launches the runner's pass ([PublishRunner.publishNow], after another, idempotent projection) on [scope], **never
  * awaited** (I35): the stamp moves no revision, desired value or error, and nothing observes it (I28).
  */
 class PublishControls(
@@ -143,13 +143,19 @@ class PublishControls(
     }
 
     /**
-     * C35b — Publish now for [assetId]: in one write, the bindings a reconcile pass would read back (enabled, activated
-     * here, a connection and a token that reads — the runner's own test, so an undecryptable one is never stamped — a
-     * standing validation, the asset eligible, the date kind's pending projection included) take one new request id and
-     * time; then a projection (I18) and the runner's reconcile pass for the asset are launched, and this returns at
-     * once. With no covered binding nothing is stamped or launched.
+     * C35b — Publish now for [assetId]. It projects first (I18; B5w2 review I1), so the coverage below reads the value
+     * the pass will send: a condition recorded inside the observer's debounce, or an Enable not yet projected, is
+     * covered. Then, in one write, the bindings a reconcile pass would read back (enabled, activated here, a connection
+     * and a token that reads — the runner's own test, so an undecryptable one is never stamped — a standing validation,
+     * and something to read back or deliver: for a date binding whose asset is no longer maintained here, `1970-01-01`
+     * until it is read back) take one new request id and time; then another, idempotent projection (a time-only move
+     * while the pass waits on the runner's lock) and the runner's reconcile pass for the asset are launched, and this
+     * returns at once. With no covered binding nothing is stamped or launched.
      */
     suspend fun requestPublishNow(assetId: AssetId): PublishRequest {
+        // I18: project first — one local write and no HTTP (the projector's own contract), so the answer still comes
+        // before any Home Assistant call (I35). A failure throws before any stamp: nothing is written.
+        reconciler.reconcileDesired(today.localDate())
         val requestId = ids.newId()
         val at = clock.nowMillis()
         val here = installationId()

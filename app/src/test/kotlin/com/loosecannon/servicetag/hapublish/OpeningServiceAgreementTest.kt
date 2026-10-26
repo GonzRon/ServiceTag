@@ -90,14 +90,14 @@ class OpeningServiceAgreementTest {
         return if (value == JsonNull) null else value.jsonPrimitive.content
     }
 
-    /** The reader, the projection and (with [route]) the readiness route all answer [expected]. */
-    private suspend fun assertAgree(binding: PublishBinding, expected: String?, route: Boolean, why: String) {
+    /** The reader, the projection and the readiness route all answer [expected]: row 142 owes every case its route leg. */
+    private suspend fun assertAgree(binding: PublishBinding, expected: String?, why: String) {
         val read = graph.uow.read { graph.openingServiceReader.openingServiceOn(rig.heater) }
         graph.publishProjector.reconcileDesired(graph.today)
         val projected = graph.publishDeliveries.get(binding.id)!!.desiredValue
         assertEquals("the reader: $why", expected, read?.toString())
         assertEquals("the projection: $why", expected ?: INVALID_SERVICE_DATE, projected)
-        if (route) assertEquals("the route: $why", expected, routeDoneOn())
+        assertEquals("the route: $why", expected, routeDoneOn())
     }
 
     @Test
@@ -105,10 +105,10 @@ class OpeningServiceAgreementTest {
         calendar()
         role("2025-09-01")
         val binding = dateBinding()
-        assertAgree(binding, null, route = true, why = "no service yet")
+        assertAgree(binding, null, why = "no service yet")
 
         complete("2026-01-20")
-        assertAgree(binding, "2026-01-20", route = true, why = "after the window's end, 2025-11-01")
+        assertAgree(binding, "2026-01-20", why = "after the window's end, 2025-11-01")
     }
 
     @Test
@@ -117,10 +117,10 @@ class OpeningServiceAgreementTest {
         phoneEnd("2025-10-15")
         role("2025-09-01")
         val binding = dateBinding()
-        assertAgree(binding, null, route = true, why = "no service yet")
+        assertAgree(binding, null, why = "no service yet")
 
         complete("2026-01-20")
-        assertAgree(binding, "2026-01-20", route = true, why = "after the phone's END")
+        assertAgree(binding, "2026-01-20", why = "after the phone's END")
     }
 
     /** HA's season ended 2025-10-01, the phone saw it 2025-11-15: a service on 2025-10-20 counts only by HA's date. */
@@ -131,10 +131,10 @@ class OpeningServiceAgreementTest {
         role("2025-09-01")
         val binding = dateBinding(boundary = ENDED)
         cacheBoundary(binding, "2025-10-01", daysAgo = 1)
-        assertAgree(binding, null, route = true, why = "no service yet")
+        assertAgree(binding, null, why = "no service yet")
 
         complete("2025-10-20")
-        assertAgree(binding, "2025-10-20", route = true, why = "on or after HA's fresh date, before the phone's END")
+        assertAgree(binding, "2025-10-20", why = "on or after HA's fresh date, before the phone's END")
     }
 
     /** HA's cached 2026-01-25, read a month ago, is later than the phone's END: a service on 2026-01-20 waits. */
@@ -146,10 +146,10 @@ class OpeningServiceAgreementTest {
         val binding = dateBinding(boundary = ENDED)
         cacheBoundary(binding, "2026-01-25", daysAgo = 30)
         complete("2026-01-20")
-        assertAgree(binding, null, route = true, why = "before the later of HA's cached date and the phone's END")
+        assertAgree(binding, null, why = "before the later of HA's cached date and the phone's END")
 
         complete("2026-02-01")
-        assertAgree(binding, "2026-02-01", route = true, why = "after both")
+        assertAgree(binding, "2026-02-01", why = "after both")
     }
 
     private companion object {

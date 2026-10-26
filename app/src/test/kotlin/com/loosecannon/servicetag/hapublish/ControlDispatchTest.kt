@@ -195,8 +195,12 @@ class ControlDispatchTest {
 
         reading.await() // the pass is under way, Home Assistant held
         delay(OBSERVER_SETTLES)
-        // M1 (I18): the pass's own projection before its read-back, and none from the stamp.
-        assertEquals("the stamp triggers no projection", projections + 1, graph.desiredStateReconciler.days.size)
+        // M1 (I18; B5w2 review I1): the request's own projection before its coverage and the pass's before its read-back.
+        assertEquals(
+            "the request's own projection before its coverage and the pass's before its read-back; none from the stamp",
+            projections + 2,
+            graph.desiredStateReconciler.days.size,
+        )
         held.complete(Unit)
         graph.awaitDispatched()
         observer.cancel()

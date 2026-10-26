@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.hapublish.RemoteRead
 import com.loosecannon.servicetag.core.hapublish.VALIDATION_MAX_AGE_MILLIS
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SyncMode
@@ -697,11 +698,30 @@ class HaPublishingWriteRoutesTest {
             "example-other-installation",
         )
         graph.awaitDispatched()
+        // Publish now projects first (I18; B5w2 review I1): the copied date binding's 1970-01-01 is that projection's
+        // own write, made here first so the comparison below isolates the request's stamp.
+        graph.publishProjector.reconcileDesired(graph.today)
         val before = tables()
         val accepted = api.publishNow().accepted()
         assertEquals(0, accepted.getValue("bindings").jsonArray.size)
         graph.awaitDispatched()
         assertEquals("nothing stamped", before, tables())
+    }
+
+    /**
+     * B5w2 review I1 (I18): Publish now projects before it decides what it covers, so a condition recorded inside the
+     * observer's debounce, or an Enable not yet projected, is covered and sent.
+     */
+    @Test
+    fun aConditionNotYetProjectedIsCovered() = rig.run {
+        val api = ready()
+        api.enable(PublishKind.EQUIPMENT_STATUS, STATUS) // no condition yet: WAITING_FOR_SOURCE
+        graph.awaitDispatched()
+        record(OperationalCondition.DEGRADED) // FakeGraph starts no observer: nothing projects it
+        val covered = api.publishNow().accepted().getValue("bindings").jsonArray.map { it.jsonObject.str("kind") }
+        assertEquals(listOf("EQUIPMENT_STATUS"), covered)
+        graph.awaitDispatched()
+        assertEquals("DEGRADED", graph.haPublish.state(STATUS))
     }
 
     /** B5w1 ruling (1): a quiet INVALIDATED_INELIGIBLE date binding is neither read nor sent, so it is not covered. */
@@ -728,7 +748,7 @@ class HaPublishingWriteRoutesTest {
     }
 
     @Test
-    fun aSecondRequestIsSafe() = rig.run {
+    fun aSecondRequestReplacesTheStampWithOnePost() = rig.run {
         val api = ready()
         publishedThenReset(api)
         val posted = graph.haPublish.posts.size

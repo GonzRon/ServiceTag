@@ -455,9 +455,8 @@ class ApiReadsWriteNothingTest {
             setOf("ha_publish_binding"),
             tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing", """{"kind":"EQUIPMENT_STATUS","action":"CHECK_HELPER"}""") }),
         )
-        // A condition to publish, projected as the phone's observer would (it is not started here).
+        // A condition to publish, not yet projected (no observer is started here): Publish now projects it first (I18).
         api.call("POST", "/v1/assets/$heater/conditions", """{"condition":"DOWN","tzId":"UTC"}""")
-        runBlocking { graph.publishProjector.reconcileDesired(graph.today) }
         assertEquals(
             setOf("ha_publish_delivery"),
             tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing/publish-now", "{}") }),

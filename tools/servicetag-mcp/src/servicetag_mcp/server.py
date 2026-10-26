@@ -4841,9 +4841,11 @@ def publish_ha_now(asset_id: str) -> dict[str, Any]:
     /v1/assets/{id}/ha-publishing/publish-now` with `{}` → **202** `{requestId, acceptedAt, bindings: [{kind,
     state}]}`, the accepted request, returned as the phone sends it. It takes no value: what is published stays derived
     from the phone's own records. The phone answers before it calls Home Assistant and then, in the background, reads
-    each covered publication back and writes it where Home Assistant differs. `bindings` lists the publications the
-    request covers — enabled on this phone, with a token and a standing helper check, a value to publish, and the
-    asset maintained here; an empty list means nothing was covered and nothing will be sent.
+    each covered publication back and writes it where Home Assistant differs. The phone first brings each value up to
+    date from its own records, so a condition recorded a moment ago is covered. `bindings` lists the publications the
+    request covers — enabled on this phone, with a token and a standing helper check, and a value to publish (for a
+    date publication whose asset left, `1970-01-01` until it is read back); an empty list means this request covers
+    nothing and sends nothing.
 
     **Poll `get_ha_publishing`** for the result: each covered binding's `request` carries this `requestId` and its
     `progress` — `ACCEPTED` while nothing has happened yet, then `PUBLISHED` (the phone's write, read back), `VERIFIED`
