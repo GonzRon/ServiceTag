@@ -47,4 +47,9 @@
     <string name="season_start_refused_counts_from_itself">Dieser Plan ist die Saisonstart-Wartung und kann deshalb nicht ab sich selbst zählen.</string>
     <string name="season_start_refused_counts_from_the_service">Dieser Plan zählt ab der Saisonstart-Wartung und kann deshalb keine sein. Ändere zuerst, ab wann er zählt.</string>
     <string name="season_start_strand_dependent_schedules">„%1$s“ zählt ab der Saisonstart-Wartung von %2$s. Ändere zuerst, ab wann dieser Plan zählt.</string>
+    <string name="season_start_counting_from_the_service">Saisonstart-Wartung</string>
+    <string name="season_start_days_after_the_service">Tage nach der Saisonstart-Wartung</string>
+    <string name="season_start_why_waiting">Wartet auf die Saisonstart-Wartung dieser Saison</string>
+    <string name="season_start_why_moved_to_the_service">Vom %1$s verschoben, um ab der Saisonstart-Wartung zu zählen</string>
+    <string name="season_start_status_waiting">Wartet</string>
 </resources>

@@ -2,15 +2,20 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.readingOf
@@ -391,6 +396,69 @@ class DueReadModelTest {
         val unsnoozed = readModel().items().single()
         assertNull("a schedule with no delivery row has no snooze", unsnoozed.snoozedUntil)
         assertEquals(snoozed.effectiveDueOn, unsnoozed.effectiveDueOn)
+    }
+
+    // ---------------------------------------------------------------- #124: counting from the opening service
+
+    /**
+     * "Example Heater" is in season 1 April – 31 October, so on 15 April its cycle started on 1 April; "Example annual
+     * service" is its Season Start service, and "Example filter check" counts from it, seven days after.
+     */
+    private suspend fun aDependentOfTheSeasonStartService() {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        seed(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", anchorOn = "2025-06-01")
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        seed(
+            scheduleOf(
+                "filter", assetId = "heater", title = "Example filter check", anchorOn = "2026-01-01",
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 7,
+            ),
+        )
+    }
+
+    /**
+     * #124 row 151 (C43, AC124-3): in season with no opening service yet, the dependent waits — its word P124-9 and its
+     * line P124-3, in CURRENT and never OUT OF SEASON (the asset is in season), with no `dormantUntil`, counted in no due
+     * total and delivering no reminder.
+     */
+    @Test fun aWaitingRowIsCurrentWithItsOwnWordAndNoNextStart() = runTest {
+        aDependentOfTheSeasonStartService()
+
+        val waiting = readModel().items().single { it.scheduleId.value == "filter" }
+        assertEquals(PolicyReason.AWAITING_OPENING_SERVICE, waiting.policyReason)
+        assertEquals(DueStatus.INACTIVE_SEASON, waiting.status)
+        assertEquals(AttentionSection.CURRENT, waiting.section)
+        assertNull("the asset is in season: no next start to name", waiting.dormantUntil)
+        assertFalse(waiting.countsAsDue)
+        assertFalse(waiting.status.notifies)
+        assertEquals("Waiting", rowStatusLabel(waiting))
+        assertEquals("Waiting for this season's Season Start service", whyLine(waiting, ::displayDate))
+    }
+
+    /**
+     * #124 row 151 (C43): the opening service done on 10 April, after the cycle's start, moves the dependent to seven
+     * days after it, and its line says so (P124-4) from the date it was moved from.
+     */
+    @Test fun aRowMovedToCountFromTheOpeningServiceSaysSo() = runTest {
+        aDependentOfTheSeasonStartService()
+        val day = graph.today
+        graph.today = LocalDate.parse("2026-04-10")
+        graph.now = dayMillis("2026-04-10") + 12 * 60 * 60 * 1000L
+        graph.completeSchedule.run(ScheduleId("annual"), CompletionCommand(occurredOn = "2026-04-10", tzId = "UTC"))
+        graph.today = day
+        graph.now = dayMillis("2026-04-15") + 12 * 60 * 60 * 1000L
+
+        val moved = readModel().items().single { it.scheduleId.value == "filter" }
+        assertEquals(PolicyReason.OPENING_SERVICE, moved.policyReason)
+        assertEquals(LocalDate.parse("2026-04-17"), moved.actionableDueOn)
+        assertEquals(
+            "Moved from ${displayDate(moved.effectiveDueOn!!)} to count from the Season Start service",
+            whyLine(moved, ::displayDate),
+        )
     }
 
     private companion object {

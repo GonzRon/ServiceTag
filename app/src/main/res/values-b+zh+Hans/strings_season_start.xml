@@ -47,4 +47,9 @@
     <string name="season_start_refused_counts_from_itself">此保养计划是使用季开始保养，因此不能以自身为计算起点。</string>
     <string name="season_start_refused_counts_from_the_service">此保养计划以使用季开始保养为计算起点，因此不能用作使用季开始保养。请先更改它的计算起点。</string>
     <string name="season_start_strand_dependent_schedules">“%1$s”以 %2$s 的使用季开始保养为计算起点。请先更改它的计算起点。</string>
+    <string name="season_start_counting_from_the_service">使用季开始保养</string>
+    <string name="season_start_days_after_the_service">使用季开始保养后天数</string>
+    <string name="season_start_why_waiting">正在等待本使用季的使用季开始保养</string>
+    <string name="season_start_why_moved_to_the_service">已从%1$s改期，以使用季开始保养为计算起点</string>
+    <string name="season_start_status_waiting">等待中</string>
 </resources>

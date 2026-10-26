@@ -169,6 +169,28 @@ val ARCHIVE_BOTH: String get() = localized(R.string.maintenance_archive_both)
 /** S140, the link-guard dialog, naming the subject: "This schedule drives the health subject <name>. …". */
 fun scheduleDrivesSubject(name: String): String = localized(R.string.maintenance_schedule_drives_subject, name)
 
+// #124 (C43), RATIFIED 2026-10-26: the third answer to S73 and its field.
+
+/** P124-1, option: S73's third answer, counting from the asset's opening service. */
+val THE_SEASON_START_SERVICE: String get() = localized(R.string.season_start_counting_from_the_service)
+
+/** P124-2, field: the offset under P124-1 — S72 "Days after it starts" names the season's start, the wrong anchor. */
+val DAYS_AFTER_THE_SEASON_START_SERVICE: String get() = localized(R.string.season_start_days_after_the_service)
+
+/** Each S73 answer's ratified word: S74, S75, P124-1. */
+internal fun startCountingLabel(value: StartCountingFrom): String = when (value) {
+    StartCountingFrom.SEASON_START -> THE_SEASONS_START
+    StartCountingFrom.OWN_DATE -> ITS_OWN_DATE_NOT_BEFORE_THE_SEASON
+    StartCountingFrom.OPENING_SERVICE -> THE_SEASON_START_SERVICE
+}
+
+/** The day field under an S73 answer — S72 under S74, P124-2 under P124-1 — or null: S75 counts from its own date. */
+internal fun daysAfterLabel(value: StartCountingFrom): String? = when (value) {
+    StartCountingFrom.SEASON_START -> DAYS_AFTER_IT_STARTS
+    StartCountingFrom.OWN_DATE -> null
+    StartCountingFrom.OPENING_SERVICE -> DAYS_AFTER_THE_SEASON_START_SERVICE
+}
+
 /** Each option's ratified word. */
 internal fun policyOptionLabel(option: PolicyOption): String = when (option) {
     PolicyOption.BEFORE_SEASON -> BEFORE_THE_SEASON_STARTS
@@ -525,7 +547,11 @@ private fun PolicyQuestion(state: ScheduleEditState, model: ScheduleEditViewMode
     }
 }
 
-/** S73 under S67: S74 with S72's offset, or S75. S72 is absent on a meter-only schedule (O-7). */
+/**
+ * S73 under S67: S74 with S72's offset, S75, and #124's P124-1 with P124-2's offset — the answers
+ * [ScheduleEditState.startCountingOptions] offers, in its order. A day field is absent on a meter-only schedule (O-7),
+ * which is never offered P124-1 at all (N1 review M-2). S84 warns under S74 only.
+ */
 @Composable
 private fun StartCounting(state: ScheduleEditState, model: ScheduleEditViewModel) {
     if (state.anchorOutsideSeason) QuietLine(FIRST_DUE_OUTSIDE_THE_SEASON)
@@ -534,28 +560,26 @@ private fun StartCounting(state: ScheduleEditState, model: ScheduleEditViewModel
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    ChoiceOption(
-        label = THE_SEASONS_START,
-        selected = state.startCountingFrom == StartCountingFrom.SEASON_START,
-        enabled = true,
-        onSelect = { model.onStartCountingFrom(StartCountingFrom.SEASON_START) },
-    )
-    if (state.startCountingFrom == StartCountingFrom.SEASON_START && state.hasTimeRule) {
-        MaintenanceField(
-            value = state.daysAfter,
-            onValueChange = model::onDaysAfter,
-            label = DAYS_AFTER_IT_STARTS,
-            digitsOnly = true,
-            problem = ScheduleField.POLICY_OFFSET in state.marks,
+    state.startCountingOptions.forEach { answer ->
+        ChoiceOption(
+            label = startCountingLabel(answer),
+            selected = state.startCountingFrom == answer,
+            enabled = true,
+            onSelect = { model.onStartCountingFrom(answer) },
         )
-        if (state.offsetPassesSeasonEnd) QuietLine(AFTER_THE_SEASON_ENDS)
+        val field = daysAfterLabel(answer)
+        if (state.startCountingFrom == answer && state.hasTimeRule && field != null) {
+            MaintenanceField(
+                value = state.daysAfter,
+                onValueChange = model::onDaysAfter,
+                label = field,
+                digitsOnly = true,
+                problem = ScheduleField.POLICY_OFFSET in state.marks,
+            )
+            // S84 is about the season's start plus the offset, so it is only ever true under S74.
+            if (state.offsetPassesSeasonEnd) QuietLine(AFTER_THE_SEASON_ENDS)
+        }
     }
-    ChoiceOption(
-        label = ITS_OWN_DATE_NOT_BEFORE_THE_SEASON,
-        selected = state.startCountingFrom == StartCountingFrom.OWN_DATE,
-        enabled = true,
-        onSelect = { model.onStartCountingFrom(StartCountingFrom.OWN_DATE) },
-    )
 }
 
 /**

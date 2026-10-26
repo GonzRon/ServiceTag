@@ -979,6 +979,101 @@ class ScheduleEditViewModelTest {
     }
 
     /**
+     * #124 row 150 (C43; N1 review M-2): "The Season Start service" (P124-1) is S73's third answer for an asset target on a
+     * `CALENDAR` or a `MANUAL` asset whose schedule has a time rule, and its field is P124-2, never S72's "Days after it
+     * starts". A meter-only schedule stays phase-only: taking the time rule away withdraws the answer and a chosen one with
+     * it, so the question stands unanswered and is never re-answered for the owner.
+     */
+    @Test fun theOpeningServiceAnswerIsOfferedOnASeasonalAssetWithATimeRule() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler", seasonMode = SeasonMode.MANUAL))
+        val all = listOf(StartCountingFrom.SEASON_START, StartCountingFrom.OWN_DATE, StartCountingFrom.OPENING_SERVICE)
+        for (asset in listOf("heater", "boiler")) {
+            val vm = viewModel(targetAssetId = asset)
+            vm.state.first { it.loaded }
+            vm.onInterval("1")
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            assertEquals(asset, all, vm.state.value.startCountingOptions)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(asset, ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, vm.state.value.servicePolicy)
+
+            vm.onInterval("")
+            assertEquals(asset, all - StartCountingFrom.OPENING_SERVICE, vm.state.value.startCountingOptions)
+            assertNull("$asset: the withdrawn answer leaves the question unanswered", vm.state.value.servicePolicy)
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(asset, ServicePolicy.IN_SERVICE_AT_START, vm.state.value.servicePolicy)
+        }
+        // A meter-only row an API wrote with the value is an answer the form does not offer: shown unanswered, never guessed.
+        graph.definitions.upsert(meterDefinitionOf("d-hours", assetId = "heater"))
+        graph.schedules.upsert(
+            scheduleOf(
+                "s-meter", assetId = "heater", timeInterval = null, timeUnit = null, anchorOn = null,
+                meterDefinitionId = "d-hours", meterInterval = 100.0,
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0,
+            ),
+        )
+        val meterOnly = viewModel(scheduleId = "s-meter").state.first { it.loaded }
+        assertNull(meterOnly.policyOption)
+        assertFalse(meterOnly.canSave)
+
+        assertEquals("The Season Start service", startCountingLabel(StartCountingFrom.OPENING_SERVICE))
+        assertEquals("Days after the Season Start service", daysAfterLabel(StartCountingFrom.OPENING_SERVICE))
+        assertEquals("Days after it starts", daysAfterLabel(StartCountingFrom.SEASON_START))
+        assertNull(daysAfterLabel(StartCountingFrom.OWN_DATE))
+    }
+
+    /** #124 row 150 (C43, inv. 106): never on a `YEAR_ROUND` asset, with a maintenance break or without, and never on a group. */
+    @Test fun theOpeningServiceAnswerIsNeverOfferedOnAYearRoundAssetOrAGroup() = runTest {
+        graph.assets.upsert(assetRow("pool", name = "Example Pool", breakStart = "12-01", breakEnd = "02-28"))
+        graph.assets.upsert(assetRow("pump", name = "Example Pump"))
+        val group = aGroupOf(listOf(AssetId("pump")))
+        val editors = listOf(
+            viewModel(targetAssetId = "pool"), viewModel(targetAssetId = "pump"), viewModel(targetGroupId = group.id.value),
+        )
+        for (vm in editors) {
+            vm.state.first { it.loaded }
+            vm.onInterval("1")
+            val target = vm.state.value.target.toString()
+            assertEquals(target, emptyList<StartCountingFrom>(), vm.state.value.startCountingOptions)
+            (vm.state.value.policyOptions + PolicyOption.WHEN_SEASON_STARTS).forEach { option ->
+                vm.onPolicy(option)
+                vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+                assertEquals(target, emptyList<StartCountingFrom>(), vm.state.value.startCountingOptions)
+                assertTrue(target, vm.state.value.servicePolicy != ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE)
+            }
+        }
+    }
+
+    /** #124 row 150 (C43): saving the answer sends `IN_SERVICE_AFTER_OPENING_SERVICE` with the offset typed under P124-2. */
+    @Test fun savingTheOpeningServiceAnswerSendsTheValueAndItsOffset() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM)
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        val vm = viewModel(targetAssetId = "heater")
+        vm.state.first { it.loaded }
+        vm.onTitle("Example filter check")
+        vm.onInterval("1")
+        vm.onUnit(RecurrenceUnit.MONTH)
+        vm.onAnchor("2026-04-01")
+        vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+        vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+        vm.onDaysAfter("14")
+        val saved = savedId(vm)
+        vm.save()
+
+        val stored = graph.schedules.get(saved.await())!!
+        assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, stored.servicePolicy)
+        assertEquals(14, stored.policyOffsetDays)
+    }
+
+    /**
      * #114 row 78 (C11, O-2, F-22): a Season Start service's FORM → QUICK edit asks the owner's election first (P114-5,
      * P114-42); declined, P114-43 and nothing written; confirmed, the same edit saves with the role kept.
      */

@@ -133,9 +133,8 @@ enum class PolicyOption { BEFORE_SEASON, BEFORE_BREAK, WHEN_SEASON_STARTS, AFTER
 
 /**
  * S73 "Start counting from", under S67: S74 is AT_START ([SEASON_START]), S75 RESUME_CLAMPED ([OWN_DATE]).
- * [OPENING_SERVICE] is #124's IN_SERVICE_AFTER_OPENING_SERVICE, its offset held in the same "Days
- * after" text: a stored row loads into it and saves back unchanged, and no answer is drawn for it until
- * N3 adds P124-1 and P124-2.
+ * [OPENING_SERVICE] is #124's IN_SERVICE_AFTER_OPENING_SERVICE, P124-1, its offset held in the same "Days
+ * after" text and drawn under P124-2; it is offered only with a time rule ([ScheduleEditState.startCountingOptions]).
  */
 enum class StartCountingFrom { SEASON_START, OWN_DATE, OPENING_SERVICE }
 
@@ -350,6 +349,23 @@ data class ScheduleEditState(
     /** Whether S65 is drawn at all. When it is not, the policy is CONTINUOUS (inv. 106). */
     val questionDrawn: Boolean get() = policyOptions.isNotEmpty()
 
+    /**
+     * S73's answers under S67, in order: S74, S75 and #124's P124-1, "The Season Start service". S67 is offered only for
+     * an asset target on a CALENDAR or MANUAL asset, so P124-1 is never offered on a YEAR_ROUND asset or a group (inv.
+     * 106); and it is offered only with a time rule, because a meter-only schedule stays phase-only (N1 review M-2).
+     * Empty while S67 is not one of the options.
+     */
+    val startCountingOptions: List<StartCountingFrom>
+        get() = if (PolicyOption.WHEN_SEASON_STARTS !in policyOptions) {
+            emptyList()
+        } else {
+            listOfNotNull(
+                StartCountingFrom.SEASON_START,
+                StartCountingFrom.OWN_DATE,
+                StartCountingFrom.OPENING_SERVICE.takeIf { hasTimeRule },
+            )
+        }
+
     /** The policy the chosen answer means; null while the question is drawn and unanswered. */
     val servicePolicy: ServicePolicy?
         get() = if (!questionDrawn) {
@@ -438,16 +454,26 @@ data class ScheduleEditState(
             return start.plusDays(offset.toLong()) > end
         }
 
-    /** The same form with the question's answer cleared when it is no longer one of the options. */
-    internal fun withOfferedOption(): ScheduleEditState =
-        if (questionDrawn && policyOption != null && policyOption !in policyOptions) copy(policyOption = null) else this
+    /**
+     * The same form with the question's answer cleared when it is no longer one of the options — S67 included when its
+     * S73 answer is the one withdrawn (#124's P124-1 without a time rule), which also goes back to S74, S67's own first
+     * answer, so picking S67 again never brings back an answer that is not offered.
+     */
+    internal fun withOfferedOption(): ScheduleEditState = when {
+        questionDrawn && policyOption != null && policyOption !in policyOptions -> copy(policyOption = null)
+        policyOption == PolicyOption.WHEN_SEASON_STARTS && startCountingFrom !in startCountingOptions ->
+            copy(policyOption = null, startCountingFrom = StartCountingFrom.SEASON_START)
+        else -> this
+    }
 
     /**
      * A stored row's policy, loaded into its option. A policy the options cannot show is never guessed
      * at: the question stands unanswered, and when the asset has no boundary at all it is the S77 state.
      */
     internal fun withStoredPolicy(row: MaintenanceSchedule): ScheduleEditState {
+        // #124: an S73 answer the form does not offer — P124-1 on a meter-only row an API wrote — is not shown either.
         val choice = storedChoice(row.servicePolicy, row.policyOffsetDays, policyOptions)
+            ?.takeIf { it.option != PolicyOption.WHEN_SEASON_STARTS || it.startCountingFrom in startCountingOptions }
         if (choice != null) {
             return copy(
                 policyOption = choice.option,
@@ -640,10 +666,14 @@ class ScheduleEditViewModel(
         if (value in form.policyOptions) form.copy(policyOption = value) else form
     }
 
-    /** S73's answer, under S67 only. */
+    /** S73's answer, under S67 only, and only one it offers ([ScheduleEditState.startCountingOptions]). */
     fun onStartCountingFrom(value: StartCountingFrom) =
         clearing(ScheduleField.POLICY, ScheduleField.POLICY_OFFSET) { form ->
-            if (form.policyOption == PolicyOption.WHEN_SEASON_STARTS) form.copy(startCountingFrom = value) else form
+            if (form.policyOption == PolicyOption.WHEN_SEASON_STARTS && value in form.startCountingOptions) {
+                form.copy(startCountingFrom = value)
+            } else {
+                form
+            }
         }
 
     /** S71, through its filter: a keystroke the filter refuses leaves the field as it was. */

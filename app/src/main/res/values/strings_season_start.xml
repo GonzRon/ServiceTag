@@ -123,4 +123,14 @@
     <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
     <!-- P124-8 (#124): a change that would leave schedules counting from the Season Start service with none (HAS_DEPENDENT_SCHEDULES). %1$s: the first such schedule's title; %2$s: the asset's name. -->
     <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
+    <!-- P124-1 (#124): S73's third answer, beside S74 and S75 (IN_SERVICE_AFTER_OPENING_SERVICE). -->
+    <string name="season_start_counting_from_the_service">The Season Start service</string>
+    <!-- P124-2 (#124): the answer's offset field (S72 names the season's start, the wrong anchor here). -->
+    <string name="season_start_days_after_the_service">Days after the Season Start service</string>
+    <!-- P124-3 (#124): why-line of a row waiting in season for the opening service (AWAITING_OPENING_SERVICE). -->
+    <string name="season_start_why_waiting">Waiting for this season\'s Season Start service</string>
+    <!-- P124-4 (#124): why-line of a row moved to count from the opening service (OPENING_SERVICE). %1$s: the date it was moved from. -->
+    <string name="season_start_why_moved_to_the_service">Moved from %1$s to count from the Season Start service</string>
+    <!-- P124-9 (#124): the waiting row's status word, drawn upper-cased as the shipped words. -->
+    <string name="season_start_status_waiting">Waiting</string>
 </resources>

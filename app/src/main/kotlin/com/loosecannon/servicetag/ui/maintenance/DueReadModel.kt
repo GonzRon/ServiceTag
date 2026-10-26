@@ -280,7 +280,7 @@ class DueReadModel(
             parentName = asset?.parentAssetId?.let { world.asset(it)?.name },
             category = asset?.category?.takeIf { it.isNotBlank() },
             status = status,
-            section = sectionOf(status, requiredSetEmpty),
+            section = sectionOf(status, requiredSetEmpty, state.policyReason),
             requiredSetEmpty = requiredSetEmpty,
             effectiveDueOn = state.effectiveDueOn?.let(LocalDate::parse),
             actionableDueOn = state.actionableDueOn?.let(LocalDate::parse),
@@ -288,8 +288,11 @@ class DueReadModel(
             policyPhase = state.policyPhase,
             quiet = state.quiet,
             seasonMode = asset?.seasonMode,
+            // #124 (C43): a row waiting for the opening service is DORMANT while its asset is in season, so it has no
+            // next season start to name.
             dormantUntil = asset?.takeIf {
-                it.seasonMode == SeasonMode.CALENDAR && state.policyPhase == PolicyPhase.DORMANT
+                it.seasonMode == SeasonMode.CALENDAR && state.policyPhase == PolicyPhase.DORMANT &&
+                    state.policyReason != PolicyReason.AWAITING_OPENING_SERVICE
             }?.let { SeasonContext.of(it.seasonInputs(emptyList())).cycleStartAt(t) },
             computedDueMeter = state.computedDueMeter,
             currentMeter = state.currentMeter,
@@ -369,15 +372,17 @@ class DueReadModel(
          * reading" repairs it and #27 raises a finding for it) and takes ATTENTION, while an
          * **empty required set** is not actionable at all and takes no section (invariants 74, 77).
          * `PAUSED` takes no section either. `DEFERRED` has its own quiet section, never a due one
-         * (invariant 103).
+         * (invariant 103). #124's waiting row (`AWAITING_OPENING_SERVICE`) reads `INACTIVE_SEASON` but its
+         * asset is in season, so it sits in CURRENT, never OUT OF SEASON (C43) — still counted in no total.
          */
-        fun sectionOf(status: DueStatus, requiredSetEmpty: Boolean): AttentionSection? = when {
+        fun sectionOf(status: DueStatus, requiredSetEmpty: Boolean, reason: PolicyReason): AttentionSection? = when {
             requiredSetEmpty -> null
             status == DueStatus.OVERDUE || status == DueStatus.DUE -> AttentionSection.ATTENTION
             status == DueStatus.NO_DATA -> AttentionSection.ATTENTION
             status == DueStatus.DUE_SOON -> AttentionSection.UPCOMING
             status == DueStatus.OK -> AttentionSection.CURRENT
             status == DueStatus.DEFERRED -> AttentionSection.DEFERRED
+            status == DueStatus.INACTIVE_SEASON && reason == PolicyReason.AWAITING_OPENING_SERVICE -> AttentionSection.CURRENT
             status == DueStatus.INACTIVE_SEASON -> AttentionSection.OUT_OF_SEASON
             else -> null   // PAUSED
         }

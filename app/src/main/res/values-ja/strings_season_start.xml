@@ -47,4 +47,9 @@
     <string name="season_start_refused_counts_from_itself">このスケジュールはシーズン開始メンテナンスのため、自分自身から数え始めることはできません。</string>
     <string name="season_start_refused_counts_from_the_service">このスケジュールはシーズン開始メンテナンスから数え始めるため、シーズン開始メンテナンスにはできません。先に数え始める日を変更してください。</string>
     <string name="season_start_strand_dependent_schedules">「%1$s」は %2$s のシーズン開始メンテナンスから数え始めます。先に数え始める日を変更してください。</string>
+    <string name="season_start_counting_from_the_service">シーズン開始メンテナンス</string>
+    <string name="season_start_days_after_the_service">シーズン開始メンテナンス後の日数</string>
+    <string name="season_start_why_waiting">今シーズンのシーズン開始メンテナンスを待っています</string>
+    <string name="season_start_why_moved_to_the_service">シーズン開始メンテナンスから数えるため%1$sから移動</string>
+    <string name="season_start_status_waiting">待機中</string>
 </resources>

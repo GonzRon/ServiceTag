@@ -47,4 +47,9 @@
     <string name="season_start_refused_counts_from_itself">Ce plan est l\'entretien de début de saison : il ne peut donc pas compter à partir de lui-même.</string>
     <string name="season_start_refused_counts_from_the_service">Ce plan compte à partir de l\'entretien de début de saison : il ne peut donc pas en être un. Changez d\'abord le moment à partir duquel il commence à compter.</string>
     <string name="season_start_strand_dependent_schedules">« %1$s » compte à partir de l\'entretien de début de saison de %2$s. Changez d\'abord le moment à partir duquel il commence à compter.</string>
+    <string name="season_start_counting_from_the_service">L\'entretien de début de saison</string>
+    <string name="season_start_days_after_the_service">Jours après l\'entretien de début de saison</string>
+    <string name="season_start_why_waiting">En attente de l\'entretien de début de saison de cette saison</string>
+    <string name="season_start_why_moved_to_the_service">Déplacé du %1$s pour compter à partir de l\'entretien de début de saison</string>
+    <string name="season_start_status_waiting">En attente</string>
 </resources>

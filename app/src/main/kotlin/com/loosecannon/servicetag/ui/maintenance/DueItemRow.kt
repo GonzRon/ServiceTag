@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.l10n.localized
@@ -64,6 +65,18 @@ fun statusLabel(status: DueStatus): String = when (status) {
     DueStatus.NO_DATA -> localized(R.string.maintenance_status_no_baseline)
     DueStatus.DEFERRED -> localized(R.string.maintenance_status_deferred)
 }
+
+/**
+ * The status word a schedule row draws: [statusLabel] of its status, except #124's waiting row — `INACTIVE_SEASON` and
+ * `AWAITING_OPENING_SERVICE`, its asset in season and waiting for this season's opening service — which reads P124-9,
+ * "Waiting", never "OUT OF SEASON" (C43). [StatusBadge] upper-cases it, as it does the shipped words.
+ */
+fun rowStatusLabel(item: DueItem): String =
+    if (item.status == DueStatus.INACTIVE_SEASON && item.policyReason == PolicyReason.AWAITING_OPENING_SERVICE) {
+        localized(R.string.season_start_status_waiting)
+    } else {
+        statusLabel(item.status)
+    }
 
 /** The RATIFIED dashboard section labels (D12 §10 `:706-707`; 1.4 spec §10.7 S93 for Deferred). */
 fun sectionLabel(section: AttentionSection): String = when (section) {
@@ -287,7 +300,7 @@ fun DueItemRow(
                 )
                 if (!item.requiredSetEmpty) {
                     StatusBadge(
-                        label = statusLabel(item.status),
+                        label = rowStatusLabel(item),
                         colors = colors,
                         icon = statusIcon(item.status),
                     )

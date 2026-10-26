@@ -1417,8 +1417,10 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     marker (#114), still no new table: both are written as the archive has them and a matched row keeps its own
     marker, and an incoming `SEASON_START` schedule that would give an asset a second live role conflicts — as
     `SEASON_START_HELD_BY_A_LOCAL_ROW` when a role on the phone already covers it, as
-    `SEASON_START_DUPLICATED_IN_ARCHIVE` when two of the archive's would; an older archive carries no role and no
-    marker).
+    `SEASON_START_DUPLICATED_IN_ARCHIVE` when two of the archive's would — and, since #124, an incoming live schedule
+    counting from the opening service (`IN_SERVICE_AFTER_OPENING_SERVICE`) whose asset no live Season Start service
+    would cover once the plan's accepted rows are in conflicts as `SEASON_START_SERVICE_MISSING`; an older archive
+    carries no role and no marker, and one carrying that policy is refused as hand-built).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1812,6 +1814,20 @@ def create_schedule(
     calendar season or a maintenance break to count back from (409 `PRE_SERVICE_NEEDS_DATES` — the
     remedy is the asset).
 
+    **Counting from the Season Start service (#124).** `IN_SERVICE_AFTER_OPENING_SERVICE` (`policy_offset_days`
+    0–365 after the asset's opening service; omitted is 0) counts from the qualifying service date of the asset's
+    Season Start service, the date `get_season_readiness` answers: in season with none yet, the schedule waits with no
+    date (`policyReason` `AWAITING_OPENING_SERVICE`; never due, never notified); once there is one, a date earlier than
+    the later of that day and the season's start, plus the offset, moves to that day (`policyReason` `OPENING_SERVICE`
+    when the service was late); out of season it is exactly `IN_SERVICE_AT_START`. Only an asset target takes it, and
+    a meter-only schedule only at offset 0. The app refuses it with 409 `SEASON_START_REFUSED` and writes nothing,
+    `reason` `COUNTS_FROM_ITSELF` on the Season Start service itself, `YEAR_ROUND` on an asset in use all year, or
+    `NO_SEASON_START_SERVICE` when no live Season Start service — the asset's own or its group's — covers the asset.
+    Once a live schedule counts from it, clearing the role, archiving the role schedule or its group, or taking the
+    asset out of the role's group is 409 `SEASON_START_STRANDED` (cause `HAS_DEPENDENT_SCHEDULES`, naming those
+    schedules). Its deprecated triple reads all `null`. This server keeps no list of policies: the app validates
+    every name.
+
     **Deprecated arguments.** `season_behavior` (`IGNORE`｜`FOLLOW_ASSET`), `season_reentry` and
     `season_reentry_offset_days` are 1.3's season fields, still accepted. Any one of them makes this
     call send 1.3's **legacy form** — those keys only, exactly as given — and **the app translates
@@ -1883,8 +1899,8 @@ mean. `postponed_due_on` and `status` are not in this command: they have their o
 from an asset to a group means supplying the new one *and* clearing the old — an overlay would
 otherwise keep both and the app would refuse the pair.
 
-`policy_offset_days` cleared is `null`, which the app reads as 0 on `IN_SERVICE_AT_START` and as no
-offset on the other policies. `season_reentry` and `season_reentry_offset_days` are the two
+`policy_offset_days` cleared is `null`, which the app reads as 0 on `IN_SERVICE_AT_START` and
+`IN_SERVICE_AFTER_OPENING_SERVICE` (#124) and as no offset on the other policies. `season_reentry` and `season_reentry_offset_days` are the two
 deprecated members: clearing one is a deprecated argument, so it sends the legacy form."""
 
 _UNLINK_HEALTH_SUBJECT = "unlinkHealthSubject"
@@ -1978,8 +1994,8 @@ def update_schedule(
     `clear_fields` the old one in the same call.
 
     **Changing the policy may take two arguments too.** The overlay keeps the row's
-    `policyOffsetDays`, and each policy takes only its own range (`IN_SERVICE_AT_START` 0–365,
-    `PRE_SERVICE` −365 to −1, the other two none). So moving a schedule that has an offset to a
+    `policyOffsetDays`, and each policy takes only its own range (`IN_SERVICE_AT_START` and
+    `IN_SERVICE_AFTER_OPENING_SERVICE` 0–365, `PRE_SERVICE` −365 to −1, the other two none). So moving a schedule that has an offset to a
     policy that does not take it — `IN_SERVICE_AT_START` 5 to `CONTINUOUS`, `PRE_SERVICE` −14 to
     anything else — needs the new `policy_offset_days`, or `clear_fields=["policy_offset_days"]`, in
     the same call; `service_policy` alone is refused as `POLICY_OFFSET_INVALID`. `PRE_SERVICE` needs
@@ -2005,6 +2021,17 @@ def update_schedule(
     `False` send no flag, so the election is never made by default. `True` needs a phone at schema 22 or later: an
     older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is read or sent. Without it the tool reaches any phone
     it always did.
+
+    **Counting from the Season Start service (#124).** `service_policy="IN_SERVICE_AFTER_OPENING_SERVICE"` (offset
+    0–365 after the asset's opening service) is sent unchanged, and an edit of a schedule that has it sends it back as
+    the row has it; `create_schedule` says what it means. On a read the schedule's `policyReason` is
+    `AWAITING_OPENING_SERVICE` while it waits in season for the service, with no date, and `OPENING_SERVICE` when a
+    late service moved its date. The app refuses it as 409 `SEASON_START_REFUSED`, writing nothing: `reason`
+    `COUNTS_FROM_ITSELF` on the Season Start service itself, `YEAR_ROUND` on an asset in use all year, or
+    `NO_SEASON_START_SERVICE` when no live Season Start service covers the asset. While a live schedule counts from
+    the service, clearing the role, archiving the role schedule or its group, or taking the asset out of the role's
+    group is 409 `SEASON_START_STRANDED` (cause `HAS_DEPENDENT_SCHEDULES`, naming those schedules): change when they
+    start counting first. This server keeps no list of policies: the app validates every name.
     """
     arguments = _arguments(
         locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject", "season_start_quick_elected"),

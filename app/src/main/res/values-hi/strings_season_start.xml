@@ -47,4 +47,9 @@
     <string name="season_start_refused_counts_from_itself">यह शेड्यूल मौसम-आरंभ रखरखाव है, इसलिए यह खुद से गिनती शुरू नहीं कर सकता।</string>
     <string name="season_start_refused_counts_from_the_service">यह शेड्यूल मौसम-आरंभ रखरखाव से गिनती शुरू करता है, इसलिए यह मौसम-आरंभ रखरखाव नहीं हो सकता। पहले बदलें कि यह कहाँ से गिनना शुरू करता है।</string>
     <string name="season_start_strand_dependent_schedules">“%1$s” %2$s के मौसम-आरंभ रखरखाव से गिनती शुरू करता है। पहले बदलें कि यह शेड्यूल कहाँ से गिनना शुरू करता है।</string>
+    <string name="season_start_counting_from_the_service">मौसम-आरंभ रखरखाव</string>
+    <string name="season_start_days_after_the_service">मौसम-आरंभ रखरखाव के कितने दिन बाद</string>
+    <string name="season_start_why_waiting">इस मौसम के मौसम-आरंभ रखरखाव की प्रतीक्षा में</string>
+    <string name="season_start_why_moved_to_the_service">मौसम-आरंभ रखरखाव से गिनने के लिए %1$s से खिसकाया गया</string>
+    <string name="season_start_status_waiting">प्रतीक्षा में</string>
 </resources>

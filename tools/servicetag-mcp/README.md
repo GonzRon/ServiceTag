@@ -406,8 +406,8 @@ dropped connection. No tool takes a value, a date to publish or a ready flag.
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
-`IN_SERVICE_RESUME_CLAMPED`, `PRE_SERVICE`) and `policy_offset_days` — on `create_schedule` and
-`update_schedule`. Both keep 1.3's `season_behavior`, `season_reentry` and
+`IN_SERVICE_RESUME_CLAMPED`, `PRE_SERVICE`, and since #124 `IN_SERVICE_AFTER_OPENING_SERVICE`) and
+`policy_offset_days` — on `create_schedule` and `update_schedule`. Both keep 1.3's `season_behavior`, `season_reentry` and
 `season_reentry_offset_days` as **deprecated arguments**:
 
 - **A deprecated argument** makes the call send the API's **legacy form**: those keys only, exactly
@@ -431,6 +431,15 @@ new `policy_offset_days` or `clear_fields=["policy_offset_days"]` in the same ca
 alone is refused as `POLICY_OFFSET_INVALID`. A policy change is **not a rule change**: it clears no
 postponement and abandons no round. `PRE_SERVICE` needs a time rule and an asset with a calendar
 season or a maintenance break to count back from (`PRE_SERVICE_NEEDS_DATES`).
+
+**Counting from the Season Start service (#124).** `IN_SERVICE_AFTER_OPENING_SERVICE` (`policy_offset_days` 0–365,
+omitted 0) counts from the qualifying service date of the asset's Season Start service, the date
+`get_season_readiness` answers: in season with none yet the schedule waits with no date (`policyReason`
+`AWAITING_OPENING_SERVICE`), and a late service moves its date (`OPENING_SERVICE`); out of season it is
+`IN_SERVICE_AT_START`. The app refuses it as `SEASON_START_REFUSED` — `COUNTS_FROM_ITSELF` on the Season Start
+service itself, `YEAR_ROUND` on an asset in use all year, `NO_SEASON_START_SERVICE` when no live Season Start service
+covers the asset — and refuses clearing, archiving or ungrouping the role it counts from as `SEASON_START_STRANDED`
+(`HAS_DEPENDENT_SCHEDULES`). The server keeps no list of policies; the app validates every name.
 
 `update_schedule` and `archive_schedule` also take `unlink_health_subject=True`, the API's action
 flag: while a live health subject is driven by the schedule, an edit that takes away its time rule or
@@ -528,7 +537,7 @@ format-6 archive adds the maintenance groups, the schedules and the occurrence c
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition, format 20 each attachment's and reference's `supplyItemId` and `installedComponentId` (a file or a link on a supply item or an installed component; no new table), format 21 each schedule's Season Start `role` and `roleSinceOn` and each event's `imported` marker (#114; no new table — an incoming `SEASON_START` schedule that would give an asset a second live role conflicts as `SEASON_START_HELD_BY_A_LOCAL_ROW` or `SEASON_START_DUPLICATED_IN_ARCHIVE`); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition, format 20 each attachment's and reference's `supplyItemId` and `installedComponentId` (a file or a link on a supply item or an installed component; no new table), format 21 each schedule's Season Start `role` and `roleSinceOn` and each event's `imported` marker (#114; no new table — an incoming `SEASON_START` schedule that would give an asset a second live role conflicts as `SEASON_START_HELD_BY_A_LOCAL_ROW` or `SEASON_START_DUPLICATED_IN_ARCHIVE`, and, since #124, an incoming live schedule counting from the opening service whose asset no live Season Start service would cover as `SEASON_START_SERVICE_MISSING`); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;

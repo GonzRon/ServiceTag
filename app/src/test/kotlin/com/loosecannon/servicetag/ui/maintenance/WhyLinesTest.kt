@@ -148,6 +148,46 @@ class WhyLinesTest {
         paused.forEach { assertNull("paused, ${it.policyPhase} ${it.policyReason} quiet=${it.quiet}", line(it)) }
     }
 
+    /**
+     * #124 row 151 (C43, AC124-3): a row waiting in season for its opening service says P124-3, ahead of the DORMANT
+     * lines — never "Out of season until…" on an asset that is in season — and its status word is P124-9. Every other
+     * out-of-season row keeps the shipped word, and PAUSED still says nothing.
+     */
+    @Test fun aWaitingRowSaysItWaitsForTheSeasonStartService() {
+        for (mode in listOf(SeasonMode.CALENDAR, SeasonMode.MANUAL)) {
+            val waiting = row(
+                status = DueStatus.INACTIVE_SEASON,
+                policyPhase = PolicyPhase.DORMANT,
+                policyReason = PolicyReason.AWAITING_OPENING_SERVICE,
+                seasonMode = mode,
+                dormantUntil = "2027-04-01".takeIf { mode == SeasonMode.CALENDAR },
+            )
+            assertEquals("$mode", "Waiting for this season's Season Start service", line(waiting))
+            assertEquals("$mode", "Waiting", rowStatusLabel(waiting))
+            assertNull(line(waiting.copy(status = DueStatus.PAUSED)))
+        }
+        val outOfSeason = row(
+            status = DueStatus.INACTIVE_SEASON,
+            policyPhase = PolicyPhase.DORMANT,
+            policyReason = PolicyReason.AWAITING_START,
+            seasonMode = SeasonMode.MANUAL,
+        )
+        assertEquals("OUT OF SEASON", rowStatusLabel(outOfSeason))
+        assertEquals("OVERDUE", rowStatusLabel(row(status = DueStatus.OVERDUE, policyReason = PolicyReason.OPENING_SERVICE)))
+    }
+
+    /** #124 row 151 (C43): a date moved to count from the opening service says so, from the date it was moved from (S88's shape). */
+    @Test fun aRowMovedToCountFromTheSeasonStartServiceSaysFromWhen() {
+        val moved = row(
+            status = DueStatus.DUE,
+            policyReason = PolicyReason.OPENING_SERVICE,
+            seasonMode = SeasonMode.CALENDAR,
+            effectiveDueOn = "2026-04-01",
+            actionableDueOn = "2026-04-17",
+        )
+        assertEquals("Moved from 1 Apr 2026 to count from the Season Start service", line(moved))
+    }
+
     /** A group has no season: a group row is never drawn with a season line, whatever its phase. */
     @Test fun aGroupRowHasNoSeasonLine() {
         val group = row(status = DueStatus.INACTIVE_SEASON, policyPhase = PolicyPhase.DORMANT, seasonMode = null)

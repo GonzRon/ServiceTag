@@ -11,6 +11,10 @@ import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
@@ -148,6 +152,40 @@ class AssetHealthReadModelTest {
         assertEquals("the snooze really wrote", until, graph.scheduleLocalDelivery.get(ScheduleId("s-oil"))?.snoozedUntilAt)
 
         assertEquals(before, view("gen"))
+    }
+
+    /**
+     * #124 (C41; N2a's carry 6): the health read model hands the engine the opening-service day — its link's inputs
+     * carry it, as `RecomputeSchedules` does — so a subject driven by a schedule counting from the Season Start service is
+     * late from the day the service moved it to (5 April, 10 days on 15 April), never held as waiting once it is done.
+     */
+    @Test fun aSubjectOnADependentCountsFromTheOpeningService() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", anchorOn = "2025-06-01")
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        graph.schedules.upsert(
+            scheduleOf(
+                "filter", assetId = "heater", title = "Example filter check", anchorOn = "2026-01-01", leadDays = 0,
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0,
+            ),
+        )
+        graph.healthSubjects.upsert(
+            subjectRow(
+                "h-filter", "heater", name = "Filter", driver = HealthDriver.MAINTENANCE_OVERDUE, scheduleId = "filter",
+                nominalUntilDays = 0, warningFromDays = 100, criticalFromDays = 400,
+            ),
+        )
+        graph.today = LocalDate.parse("2026-04-05")
+        graph.now = dayMillis("2026-04-05") + 12 * 60 * 60 * 1000L
+        graph.completeSchedule.run(ScheduleId("annual"), CompletionCommand(occurredOn = "2026-04-05", tzId = "UTC"))
+        graph.today = LocalDate.parse("2026-04-15")
+
+        val scored = view("heater").result.subjects.single().value as SubjectValue.Scored
+        assertEquals("late from the opening service's day", 10L, scored.trackedDays)
     }
 
     /**

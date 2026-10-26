@@ -47,4 +47,9 @@
     <string name="season_start_refused_counts_from_itself">Este plan es el mantenimiento de inicio de temporada, así que no puede contar desde sí mismo.</string>
     <string name="season_start_refused_counts_from_the_service">Este plan cuenta desde el mantenimiento de inicio de temporada, así que no puede serlo. Cambia desde cuándo empieza a contar primero.</string>
     <string name="season_start_strand_dependent_schedules">“%1$s” cuenta desde el mantenimiento de inicio de temporada de %2$s. Cambia desde cuándo empieza a contar primero.</string>
+    <string name="season_start_counting_from_the_service">El mantenimiento de inicio de temporada</string>
+    <string name="season_start_days_after_the_service">Días después del mantenimiento de inicio de temporada</string>
+    <string name="season_start_why_waiting">Esperando el mantenimiento de inicio de temporada de esta temporada</string>
+    <string name="season_start_why_moved_to_the_service">Movido desde el %1$s para contar desde el mantenimiento de inicio de temporada</string>
+    <string name="season_start_status_waiting">En espera</string>
 </resources>

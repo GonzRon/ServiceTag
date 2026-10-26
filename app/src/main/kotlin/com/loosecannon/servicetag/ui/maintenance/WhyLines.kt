@@ -38,6 +38,13 @@ internal fun movedFromLine(date: LocalDate, format: (LocalDate) -> String): Stri
 internal fun outOfSeasonUntilLine(date: LocalDate, format: (LocalDate) -> String): String =
     localized(R.string.maintenance_why_out_of_season_until, format(date))
 
+/** P124-3 (#124): a row waiting, in season, for its asset's opening service — `AWAITING_OPENING_SERVICE`. */
+internal val WHY_WAITING_FOR_THE_SEASON_START_SERVICE: String get() = localized(R.string.season_start_why_waiting)
+
+/** P124-4 (#124), S88's shape: "Moved from <date> to count from the Season Start service" — `OPENING_SERVICE`. */
+internal fun movedToTheSeasonStartServiceLine(date: LocalDate, format: (LocalDate) -> String): String =
+    localized(R.string.season_start_why_moved_to_the_service, format(date))
+
 /**
  * The one line under a schedule row that says why its date is what it is (spec §10.5; master plan
  * §13.3, plan decision 27), or null for none. The first that applies wins:
@@ -46,20 +53,25 @@ internal fun outOfSeasonUntilLine(date: LocalDate, format: (LocalDate) -> String
  *    §4.5): a paused schedule neither resumes with its season nor notifies after a break, so every
  *    line below would be false of it. Decision 27 is silent on PAUSED, and the shipped word wins
  *    (the controller's ruling on B13's review, I-1).
- * 1. **DORMANT** — S89 with [DueItem.dormantUntil] on a CALENDAR asset, S90 on a MANUAL one. A
+ * 1. **Waiting** (#124, C43) — P124-3 for `AWAITING_OPENING_SERVICE`. Such a row is DORMANT, but its
+ *    asset is in season: it waits for this season's opening service, so the DORMANT lines below
+ *    ("Out of season until…") would be false of it.
+ * 2. **DORMANT** — S89 with [DueItem.dormantUntil] on a CALENDAR asset, S90 on a MANUAL one. A
  *    dormant row is waiting for its season and nothing else about its date is the point.
- * 2. **DEFERRED** — S85 with [DueItem.actionableDueOn], the first allowed day after the break.
- * 3. **quiet** — S91. Quiet changes delivery, never placement, so an OVERDUE quiet row stays where
+ * 3. **DEFERRED** — S85 with [DueItem.actionableDueOn], the first allowed day after the break.
+ * 4. **quiet** — S91. Quiet changes delivery, never placement, so an OVERDUE quiet row stays where
  *    it is and says only this.
- * 4. The policy's **reason** — BEFORE_SEASON (S86), BEFORE_BREAK (S87), or SEASON_START (S88 with
- *    [DueItem.effectiveDueOn], `P ?: R`, the date it was moved from).
- * 5. Otherwise none. `POLICY_INAPPLICABLE` draws none on a row; the schedule editor says S77 (B08).
+ * 5. The policy's **reason** — BEFORE_SEASON (S86), BEFORE_BREAK (S87), SEASON_START (S88 with
+ *    [DueItem.effectiveDueOn], `P ?: R`, the date it was moved from), or #124's OPENING_SERVICE
+ *    (P124-4, from the same date).
+ * 6. Otherwise none. `POLICY_INAPPLICABLE` draws none on a row; the schedule editor says S77 (B08).
  *
  * Every fact is read off the row the projection handed over; nothing here derives a date. [format]
  * is the app's display shape (`displayDate`).
  */
 fun whyLine(item: DueItem, format: (LocalDate) -> String): String? = when {
     item.status == DueStatus.PAUSED -> null
+    item.policyReason == PolicyReason.AWAITING_OPENING_SERVICE -> WHY_WAITING_FOR_THE_SEASON_START_SERVICE
     item.policyPhase == PolicyPhase.DORMANT -> when (item.seasonMode) {
         SeasonMode.CALENDAR -> item.dormantUntil?.let { outOfSeasonUntilLine(it, format) }
         SeasonMode.MANUAL -> WHY_UNTIL_YOU_START
@@ -72,13 +84,13 @@ fun whyLine(item: DueItem, format: (LocalDate) -> String): String? = when {
         PolicyReason.BEFORE_SEASON -> WHY_BEFORE_SEASON
         PolicyReason.BEFORE_BREAK -> WHY_BEFORE_BREAK
         PolicyReason.SEASON_START -> item.effectiveDueOn?.let { movedFromLine(it, format) }
+        PolicyReason.OPENING_SERVICE -> item.effectiveDueOn?.let { movedToTheSeasonStartServiceLine(it, format) }
         PolicyReason.NONE,
         PolicyReason.AFTER_BREAK,
         PolicyReason.POLICY_INAPPLICABLE,
         PolicyReason.AWAITING_START,
-        // #124: OPENING_SERVICE draws nothing until N3's P124-4. AWAITING_OPENING_SERVICE never reaches here: its row is DORMANT and is answered above until N3 puts P124-3 ahead of the DORMANT arm, with no dormantUntil and the CURRENT section (C43).
+        // #124: answered first, above (P124-3), so it never reaches here.
         PolicyReason.AWAITING_OPENING_SERVICE,
-        PolicyReason.OPENING_SERVICE,
         -> null
     }
 }
