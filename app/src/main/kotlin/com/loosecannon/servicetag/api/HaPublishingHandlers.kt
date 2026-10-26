@@ -13,6 +13,9 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.di.AppGraph
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 
 /**
  * #113/#114 (C35, G-R1) — the thirtieth `/v1/assets/{id}/…` sub-resource, read only: the asset's publishing, one
@@ -56,5 +59,31 @@ internal class HaPublishingHandlers(
             HaPublishingResponse(assetId, rows, owed)
         }
         return ok(HaPublishingResponse.serializer(), answer)
+    }
+
+    /**
+     * C35a (G-R2) — `GET /v1/ha-publishing`, one `uow.read`: every binding by asset then kind, led by its `assetId`,
+     * and every obligation by request time then id — the only read of an orphan tombstone, whose asset is gone and
+     * which [get] answers 404 for. `writesEnabled` is whether any binding is enabled. Nothing here writes.
+     */
+    suspend fun list(): ApiResponse {
+        val here = installationId()
+        val answer = uow.read {
+            val connection = connections.get()
+            val hasToken = connection != null && secrets.has(connection.id)
+            val held = transfers.heldIds()
+            val all = bindings.all().sortedWith(compareBy({ it.assetId.value }, { it.kind }))
+            val rows = all.mapNotNull { binding ->
+                val asset = assets.get(binding.assetId) ?: return@mapNotNull null
+                val delivery = deliveries.get(binding.id) ?: return@mapNotNull null
+                val present = connection != null && connection.id == binding.connectionId
+                val state = DeliverySteps.stateOf(Snap(binding, delivery, present, hasToken, here, asset, held))
+                val dto = ApiJson.encodeToJsonElement(HaPublishBindingDto.serializer(), binding.toDto(delivery, state)).jsonObject
+                JsonObject(mapOf("assetId" to JsonPrimitive(binding.assetId.value)) + dto)
+            }
+            val owed = decommissions.all().sortedWith(compareBy({ it.requestedAt }, { it.id })).map { it.toCollectionDto() }
+            HaPublishingCollectionResponse(all.any { it.enabled }, rows, owed)
+        }
+        return ok(HaPublishingCollectionResponse.serializer(), answer)
     }
 }

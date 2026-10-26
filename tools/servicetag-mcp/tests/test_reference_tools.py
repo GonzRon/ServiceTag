@@ -34,7 +34,7 @@ two warranty tools, **63** after #79's five service-case tools, **68** after #72
 after #86's succession read, **74** after #92's five attachment tools, **76** after #92's two replace tools,
 **84** after #15's eight supply tools, **89** after #47's five installed-component tools, **90** after #16's
 season sync read, **91** after #114's season readiness read, **93** after #114's role write and helper
-discovery, and is **94** since #113/#114's publishing read, which `test_argument_guard.py` pins."""
+discovery, and is **95** since #113/#114's publishing reads, which `test_argument_guard.py` pins."""
 
 _DISTINCTIVE_VALUE = "XVALUE_MARKER_1c4e7b_must_never_appear_in_a_message"
 
@@ -63,8 +63,8 @@ def test_the_registered_tool_count_is_93() -> None:
     """A tool added without updating `TOOL_NAMES` makes `_forbid_unknown_arguments` raise at
     *import* time, which is the intended loud failure — so this file importing at all is half the
     proof, and the counts below are the other half."""
-    assert len(server_module.TOOL_NAMES) == 94
-    assert len(server_module.mcp._tool_manager.list_tools()) == 94
+    assert len(server_module.TOOL_NAMES) == 95
+    assert len(server_module.mcp._tool_manager.list_tools()) == 95
 
 
 def test_nothing_deletes_a_reference_and_no_tool_takes_a_kind() -> None:

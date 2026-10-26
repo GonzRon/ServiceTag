@@ -1,10 +1,20 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
+import com.loosecannon.servicetag.core.hapublish.PublishBinding
+import com.loosecannon.servicetag.core.hapublish.PublishDelivery
+import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
+import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
+import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import kotlinx.coroutines.runBlocking
@@ -63,6 +73,12 @@ class ApiReadsWriteNothingTest {
             "service_case_entry" to graph.serviceCaseEntries.all().toSet(),
             // #72's aggregate: the loans, open and returned.
             "asset_loan" to graph.loans.all().toSet(),
+            // #113/#114 (row 108, D2): the Home Assistant tables, none of which a read may touch.
+            "ha_publish_binding" to graph.publishBindings.all().toSet(),
+            "ha_publish_delivery" to graph.publishBindings.all().mapNotNull { graph.publishDeliveries.get(it.id) }.toSet(),
+            "ha_publish_decommission" to graph.publishDecommissions.all().toSet(),
+            "ha_connection" to setOfNotNull(graph.haConnections.get()),
+            "season_sync_binding" to graph.seasonSyncBindings.all().toSet(),
         )
     }
 
@@ -130,9 +146,36 @@ class ApiReadsWriteNothingTest {
             status = 201,
         ).loan.id
 
+        // Row 108: rows in the publishing tables, so the three #113/#114 reads have something to leave alone.
+        runBlocking {
+            graph.haConnections.upsert(
+                HaConnection(
+                    id = "example-connection", baseUrl = "http://192.168.0.10:8123", cadence = SyncCadence.DAILY,
+                    networkEligibility = NetworkEligibility.HOME_NETWORK_ONLY, homeNetworkSsid = "ExampleHomeWifi",
+                    backgroundChecks = BackgroundChecks.OFF, createdAt = 1_000L, updatedAt = 1_000L, configGeneration = 1,
+                ),
+            )
+            graph.publishBindings.insert(
+                PublishBinding(
+                    id = "example-binding-1", assetId = AssetId(generator), connectionId = "example-connection",
+                    kind = PublishKind.EQUIPMENT_STATUS, entityId = "input_select.example_generator_status", enabled = true,
+                    revision = 2, activatedInstallationId = "example-installation", validatedAt = 1L, validatedRevision = 2,
+                    boundaryEntityId = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            graph.publishDeliveries.upsert(PublishDelivery("example-binding-1", "DEGRADED", 3, 1L))
+            graph.publishDecommissions.upsertMerging(
+                DecommissionTombstone(
+                    "example-tombstone-1", "example-connection", "input_datetime.example_gone", null, "example-installation",
+                    DecommissionState.PENDING, 1L, null, null, 1,
+                ),
+            )
+        }
+
         graph.today = LocalDate.parse("2026-02-10")
         graph.now = dayMillis("2026-02-10")
         val before = snapshot()
+        assertTrue("the publishing tables are not empty", before.getValue("ha_publish_binding").isNotEmpty())
         assertTrue("the stored state is stale", runBlocking { graph.scheduleStates.all() }.all { it.computedForOn == "2026-01-20" })
 
         for (path in listOf(
@@ -164,6 +207,8 @@ class ApiReadsWriteNothingTest {
             "/v1/ha-connection/entities/input_boolean",
             // #113/#114 (C35): the asset's publishing, derived from its rows and written nowhere.
             "/v1/assets/$generator/ha-publishing",
+            // B5r (C35a): the collection, over the same snapshot (row 108).
+            "/v1/ha-publishing",
         )) {
             val response = api.call("GET", path)
             assertEquals("$path: ${response.bodyText()}", 200, response.status)

@@ -188,6 +188,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "list_ha_entities",
     # B5 (C35): the asset's publishing read, taking the total to 94.
     "get_ha_publishing",
+    # B5r (C35a): the publishing collection, taking the total to 95.
+    "list_ha_publishing",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -894,6 +896,9 @@ def retire_asset(asset_id: str, retired_on: str) -> dict[str, Any]:
     This tool is **monotonic**: it can only retire, never un-retire. The app's own API row is
     unchanged (it still answers `retired_on: null` to un-retire), but that half is not exposed here
     in 1.1.0 — un-retire an asset in the app itself.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     if not retired_on:
         raise ToolError("retired_on is required (YYYY-MM-DD); this tool cannot un-retire an asset")
@@ -907,7 +912,11 @@ def retire_asset(asset_id: str, retired_on: str) -> dict[str, Any]:
 
 @mcp.tool()
 def archive_asset(asset_id: str, archived: bool = True) -> dict[str, Any]:
-    """Archive or unarchive an asset. Archive is not delete: tags bound to it still resolve."""
+    """Archive or unarchive an asset. Archive is not delete: tags bound to it still resolve.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
+    """
     return _call(
         "POST",
         f"/v1/assets/{_path_id(asset_id, field='asset_id')}/archive",
@@ -1295,6 +1304,9 @@ def update_event(
     `sortOrder` and a numeric `quantity`, which this body does not take. A line carrying `supplyId` at all,
     `null` included, needs a phone at schema 18 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and
     nothing is written.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     if _carries_supply_id(consumables):
         _require_supply_schema("update_event", _SUPPLY_LINK_FEATURE)
@@ -1319,7 +1331,11 @@ def update_event(
 
 @mcp.tool()
 def delete_event(event_id: str) -> dict[str, Any]:
-    """Delete a logged event and its readings. This one is destructive and has no undo."""
+    """Delete a logged event and its readings. This one is destructive and has no undo.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
+    """
     return _call("DELETE", f"/v1/events/{_path_id(event_id, field='event_id')}")
 
 
@@ -1411,6 +1427,9 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     a 120-second read budget rather than the usual 30, because a full-phone merge plans and applies
     inside one Room transaction on the phone; a timeout here does not mean the merge failed, and
     re-running is safe, because the merge only ever inserts and an identical row is a no-op.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     try:
         size = Path(archive_path).stat().st_size
@@ -2020,7 +2039,11 @@ def archive_schedule(
 
     #114: restoring (`archived=False`) a Season Start schedule is refused as `SEASON_START_STRANDED` (409), writing
     nothing, when its role would cover an asset that may not have one (cause `RESTORE_NOT_ELIGIBLE`) or one another
-    live role already covers (cause `RESTORE_ALREADY_COVERED`, both schedules named); clear a role first."""
+    live role already covers (cause `RESTORE_ALREADY_COVERED`, both schedules named); clear a role first.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
+    """
     body: dict[str, Any] = {"archived": archived}
     if unlink_health_subject:
         body[_UNLINK_HEALTH_SUBJECT] = True
@@ -2117,6 +2140,9 @@ def complete_schedule(
     `SCHEDULE_OCCURRENCE_TAKEN`, and a round that was **closed** answers `OCCURRENCE_CLOSED` — work
     done after a round is closed is logged with `log_event`, with no schedule link, and that still
     succeeds.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/complete"
     if _carries_supply_id(consumables):
@@ -2516,6 +2542,9 @@ def end_season(asset_id: str, occurred_on: str | None, event_id: str | None) -> 
     `SEASON_ALREADY_ENDED`. On an asset whose season follows Home Assistant (#16: a season sync enabled on the
     phone, which `get_season_sync` shows) the app answers `SEASON_SYNC_ENABLED` (409) and writes nothing.
     Answers `{activation, season}`.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     return _activation(asset_id, "END", occurred_on, event_id)
 
@@ -2542,6 +2571,9 @@ def set_season_mode(
     A change to `YEAR_ROUND` of an asset a Season Start role covers (#114) is `SEASON_START_STRANDED` (409) with
     cause `NEEDS_SEASONS` and writes nothing; its `problems` name the role schedules — clear the role first.
     Answers `{asset, season}`.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     return _call(
         "POST",
@@ -2613,6 +2645,9 @@ def record_condition(
 
     To link a `DOWN` or `DEGRADED` row to the Incident that explains it, log the Incident with
     `log_event(kind="INCIDENT", …)` first and pass its `id` here as `event_id`.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     return _call(
         "POST",
@@ -3899,6 +3934,9 @@ def replace_asset(
     `{decision: "UNKNOWN", next}`: read `get_asset_succession` for the asset — the apply is idempotent by its
     digest, so the same call is safe to run again (it answers IDENTICAL, or plans afresh). Needs a phone at schema
     16 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     given = {_wire(key): value for key, value in _arguments(locals(), besides=("asset_id", "plan_only")).items()}
     asset_path = _path_id(asset_id, field="asset_id")
@@ -4566,6 +4604,35 @@ def get_ha_publishing(asset_id: str) -> dict[str, Any]:
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/ha-publishing"
     _require_ha_publishing_schema("get_ha_publishing")
     return _call("GET", path)
+
+
+@mcp.tool()
+def list_ha_publishing() -> dict[str, Any]:
+    """Every asset's Home Assistant publishing at once, read only: `GET /v1/ha-publishing` →
+    `{writesEnabled, bindings: [ … ], decommissions: [ … ]}`, answered as the phone sends it. It takes no argument. Derived
+    on the phone from its own records when it is read: nothing is read from Home Assistant, nothing is written, and no
+    tool takes a value, a date to publish or a ready flag.
+
+    `writesEnabled` is true while any binding is enabled, that is, while the phone may set a helper. `bindings` holds
+    one entry per binding, ordered by asset and then kind, each exactly what `get_ha_publishing` answers for a binding
+    (`kind`, `entityId`, `boundaryEntityId`, `enabled`, `state`, `desiredValue`, `lastPublished`, `lastVerified`,
+    `lastError`, `revision`, `validated`, `validatedAt`, `remote`, `needsDelivery`, `reconcilePending`,
+    `outcomeUnknownSince`, `lastAttemptAt`, `boundary` and `request`; `state` is one of `NOT_ENABLED`,
+    `COPIED_INSTALLATION`, `NEEDS_VALIDATION`, `NEEDS_TOKEN`, `WAITING_FOR_SOURCE`, `NOT_MAINTAINED_HERE`, `PENDING`,
+    `OUTCOME_UNKNOWN`, `ERROR`, `PUBLISHED`, `MATCHES` and `INVALIDATED_INELIGIBLE`) led by the `assetId` it belongs to.
+
+    `decommissions` lists every helper the phone still owes `1970-01-01`, each `{id, assetId, entityId, state,
+    requestedAt, lastError}`, ordered by `requestedAt` and then `id`: `PENDING` while the phone is still delivering it,
+    `UNDELIVERABLE` once it cannot, until the owner says it was cleared in Home Assistant. This is the only read of an
+    orphan obligation: one whose asset was deleted or replaced, or that Forget left behind (`assetId` is then the
+    asset's former id, or `null` when none was named), which `get_ha_publishing` cannot reach because that asset is
+    `no_such_asset`. An obligation like that may still allow starts in Home Assistant until it is cleared. The answer
+    carries never the address, the Wi-Fi name, the token or an installation id.
+
+    Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    _require_ha_publishing_schema("list_ha_publishing")
+    return _call("GET", "/v1/ha-publishing")
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

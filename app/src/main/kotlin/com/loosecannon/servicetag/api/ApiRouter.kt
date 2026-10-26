@@ -202,6 +202,10 @@ internal class ApiRouter(
      * /v1/ha-connection/entities/{scope}`, helper discovery over the shipped #105 read, one shape per scope —
      * `input_boolean`, `input_select` or `input_datetime`; any other scope is a 404, another verb a 405. Neither takes
      * a value, a date to publish or READY, and neither reaches the token, the address or the connection's save.
+     *
+     * #113/#114 (C35a) added `GET /v1/ha-publishing`, the publishing collection and the only read of an orphan
+     * tombstone: no asset sub-resource, so another verb on it is a 405. It writes nothing and returns no address,
+     * Wi-Fi name, token or installation id.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -504,6 +508,15 @@ internal class ApiRouter(
 
             rest == listOf("attention") ->
                 if (method == "GET") handlers.seasonHealth.listAttention() else notAllowed(request)
+
+            // #113/#114 (C35a) — the publishing collection, the only read of an orphan tombstone: `GET` alone, a 405 for
+            // any other verb, and no asset sub-resource.
+            rest == listOf("ha-publishing") ->
+                if (method == "GET") {
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).list()
+                } else {
+                    notAllowed(request)
+                }
 
             rest == listOf("import-merge", "plan") ->
                 if (method == "POST") handlers.importMergePlan(request) else notAllowed(request)

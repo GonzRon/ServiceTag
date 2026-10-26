@@ -73,7 +73,7 @@ the one body key it is about, then the `problems` in parentheses.
 - **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
   tools — refuses an app whose `schemaVersion` is below 22 the same way, from the same read, naming the feature
   "season readiness and Home Assistant publishing". So do `set_schedule_role`, `list_ha_entities` and
-  `get_ha_publishing`, the block's next three.
+  `get_ha_publishing` and `list_ha_publishing`, the block's next four.
 
 ## Using it
 
@@ -116,7 +116,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Ninety-three: `pair` plus one per API operation.
+Ninety-five: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -373,6 +373,12 @@ read only. How an asset's two publications stand — its condition to a dropdown
 back and last read, its last error, and its delivery flags; and the helpers it let go of that are still owed
 `1970-01-01`, `PENDING` or `UNDELIVERABLE`. Derived on the phone from its own records: nothing is read from Home
 Assistant, and the answer never carries the address, the Wi-Fi name, the token or an installation id.
+`list_ha_publishing`: `GET /v1/ha-publishing`, read only, no argument — every asset's publishing at once, as
+`{writesEnabled, bindings, decommissions}`, and the only read of an orphan obligation, one whose asset is gone, which
+`get_ha_publishing` cannot reach. When an asset publishes to Home Assistant, the writes that can move a published value
+(`record_condition`, `complete_schedule`, `update_event`, `delete_event`, `archive_schedule`, `end_season`,
+`set_season_mode`, `retire_asset`, `archive_asset`, `import_merge` and `replace_asset`) say so in their descriptions: the
+phone may set its helper within seconds of the write, while the Developer API screen is open.
 `docs/api/v1.md`'s **Home Assistant publishing (#113, #114)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments

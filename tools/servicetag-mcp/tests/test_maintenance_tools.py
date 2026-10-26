@@ -44,7 +44,7 @@ three are one question asked of three scopes. The registered total was 21 + 17 =
 service-case tools, is 68 after #72's five loan tools, **69** after #86's `get_asset_succession`, **76** after
 #92's seven, **84** after #15's eight supply tools, **89** after #47's five installed-component tools, **90** after
 #16's season sync read, **91** after #114's season readiness read, **93** after #114's role write and
-helper discovery, and is **94** since #113/#114's publishing read, which `test_argument_guard.py` pins."""
+helper discovery, and is **95** since #113/#114's publishing reads, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:

@@ -5,7 +5,7 @@ model silently dropped `id`, read `definition_id` as absent, and the tool CREATE
 instead of editing the one the caller meant. A typo must never turn one mutation into another.
 
 `_StrictMCPServer.call_tool` and `_forbid_unknown_arguments` (both in `server.py`) close that,
-centrally, for all 94 tools at once — see their docstrings for the two-layer why. This file proves
+centrally, for all 95 tools at once — see their docstrings for the two-layer why. This file proves
 the six hard acceptance conditions the owner named, one section per condition, plus the fix's own
 `(a)`-`(e)` test list.
 """
@@ -43,12 +43,12 @@ def _assert_value_absent(exc: BaseException, value: str) -> None:
     assert not any(value in text for text in seen), seen
 
 
-# --- condition 1: every one of the 94 tools publishes additionalProperties: false -----------------
+# --- condition 1: every one of the 95 tools publishes additionalProperties: false -----------------
 
 
 def test_every_tool_publishes_additional_properties_false() -> None:
     tools = server_module.mcp._tool_manager.list_tools()
-    assert len(tools) == 94
+    assert len(tools) == 95
     for tool in tools:
         assert tool.parameters.get("additionalProperties") is False, tool.name
 
@@ -179,7 +179,7 @@ def test_a_parameter_that_shadows_a_basemodel_attribute_is_listed_by_its_real_na
     builds it from `info.alias or name` instead, so accepted and listed always agree.
 
     Registered on a throwaway `_StrictMCPServer`, never on the real `mcp` — the published tool count
-    must stay 94 (asserted at the end, the same way condition 5 pins it elsewhere)."""
+    must stay 95 (asserted at the end, the same way condition 5 pins it elsewhere)."""
     throwaway = server_module._StrictMCPServer("throwaway-guard-probe")
 
     @throwaway.tool()
@@ -200,11 +200,11 @@ def test_a_parameter_that_shadows_a_basemodel_attribute_is_listed_by_its_real_na
     assert "json" in text
     assert "field_json" not in text
 
-    assert len(server_module.TOOL_NAMES) == 94
-    assert len(server_module.mcp._tool_manager.list_tools()) == 94
+    assert len(server_module.TOOL_NAMES) == 95
+    assert len(server_module.mcp._tool_manager.list_tools()) == 95
 
 
-# --- fix spec 4(c): parametrised over every one of the 94 registered tools ------------------------
+# --- fix spec 4(c): parametrised over every one of the 95 registered tools ------------------------
 
 
 @pytest.mark.parametrize("tool_name", server_module.TOOL_NAMES)
@@ -254,8 +254,8 @@ def test_a_correct_call_still_works(paired) -> None:
 
 
 def test_the_tool_count_is_93() -> None:
-    assert len(server_module.TOOL_NAMES) == 94
-    assert len(server_module.mcp._tool_manager.list_tools()) == 94
+    assert len(server_module.TOOL_NAMES) == 95
+    assert len(server_module.mcp._tool_manager.list_tools()) == 95
 
 
 # --- condition 6: the guard fails loudly, never silently, on an internals shape it does not -------
@@ -323,7 +323,7 @@ def test_the_guard_raises_when_a_genuine_arg_models_rebuild_does_not_change_vali
     this reproduces the real failure mode instead of a hand-made one: a genuine pydantic arg model,
     built by the SDK itself for a throwaway tool, whose `model_rebuild` is turned into a no-op
     afterwards — patched on this one generated class only, never on the shared `ArgModelBase`, so no
-    other test and none of the real server's 94 already-guarded tools are affected. The guard must
+    other test and none of the real server's 95 already-guarded tools are affected. The guard must
     still raise, because the *effect check* (validating a probe payload) catches what the schema
     check cannot."""
     throwaway = server_module._StrictMCPServer("throwaway-guard-probe-g3-round-2")
@@ -338,8 +338,8 @@ def test_the_guard_raises_when_a_genuine_arg_models_rebuild_does_not_change_vali
     with pytest.raises(RuntimeError, match="demo_tool"):
         server_module._forbid_unknown_arguments([tool])
 
-    assert len(server_module.TOOL_NAMES) == 94
-    assert len(server_module.mcp._tool_manager.list_tools()) == 94
+    assert len(server_module.TOOL_NAMES) == 95
+    assert len(server_module.mcp._tool_manager.list_tools()) == 95
 
 
 # --- G5: a tool registered (or dropped) around the guard's call site must not go unnoticed ---------

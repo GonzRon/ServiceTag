@@ -31,10 +31,12 @@ STATUS_22: dict = {
 }
 STATUS_21: dict = dict(STATUS_22, schemaVersion=21, backupFormatVersion=20)
 
-HA_PUBLISHING_TOOLS = ("get_season_readiness", "set_schedule_role", "list_ha_entities", "get_ha_publishing")
+HA_PUBLISHING_TOOLS = (
+    "get_season_readiness", "set_schedule_role", "list_ha_entities", "get_ha_publishing", "list_ha_publishing",
+)
 """The "#113/#114" block in C1's order, appended last after #16's (the R16-17 tail-pin precedent). A4 opens it with
 one tool, taking the registered total to **91**, A4w appends two, taking it to **93**, and B5 appends the publishing
-read, taking it to **94**; each later brief appends its tools here and moves the pin."""
+read, taking it to **94**, and B5r's collection read, **95**; each later brief appends its tools here and moves the pin."""
 
 READINESS_KEYS = {
     "assetId", "readyForSeason", "seasonServiceDoneOn", "reason", "roleScheduleId", "roleTarget", "roleSinceOn",
@@ -323,14 +325,13 @@ def publishing() -> dict:
     }
 
 
-def test_get_ha_publishing_is_registered_guarded_listed_last_and_takes_only_an_asset_id() -> None:
+def test_get_ha_publishing_is_registered_guarded_and_takes_only_an_asset_id() -> None:
     assert callable(server_module.get_ha_publishing)
     tool = server_module.mcp._tool_manager.get_tool("get_ha_publishing")
     assert tool is not None and tool.parameters.get("additionalProperties") is False
     assert list(inspect.signature(server_module.get_ha_publishing).parameters) == ["asset_id"]
     assert set(tool.parameters.get("properties", {})) == {"asset_id"}
-    assert server_module.TOOL_NAMES[-1] == "get_ha_publishing"
-    assert len(server_module.TOOL_NAMES) == 94
+    assert "get_ha_publishing" in server_module.TOOL_NAMES
 
 
 def test_the_publishing_read_reads_the_route_once_and_answers_the_body_as_sent(phone22) -> None:
@@ -403,3 +404,114 @@ def test_the_readme_and_v1_list_the_publishing_read_and_its_gate() -> None:
             assert word not in lowered, (name, word)
     assert "`get_ha_publishing`" in entry
     assert "`get_ha_publishing`" in flat(paragraph(readme, "- **The season readiness tool needs schema 22.**"))
+
+
+# --- list_ha_publishing (C35a, G-R2, G-R6; rows 107, 111) ---------------------------------------------------------
+
+COLLECTION_KEYS = {"writesEnabled", "bindings", "decommissions"}
+"""C35a's three keys, exactly."""
+
+COLLECTION_DECOMMISSION_KEYS = {"id", "assetId", "entityId", "state", "requestedAt", "lastError"}
+
+
+def collection() -> dict:
+    """The fictional "Example Heater" binding, and an orphan obligation whose asset is gone."""
+    binding = {"assetId": "a1", **publishing()["bindings"][0]}
+    return {
+        "writesEnabled": True,
+        "bindings": [binding],
+        "decommissions": [
+            {
+                "id": "t9", "assetId": None, "entityId": "input_datetime.example_gone_service_done",
+                "state": "UNDELIVERABLE", "requestedAt": 700, "lastError": {"kind": "HTTP_ERROR", "at": 760},
+            },
+        ],
+    }
+
+
+def test_list_ha_publishing_is_registered_guarded_listed_last_and_takes_nothing() -> None:
+    assert callable(server_module.list_ha_publishing)
+    tool = server_module.mcp._tool_manager.get_tool("list_ha_publishing")
+    assert tool is not None and tool.parameters.get("additionalProperties") is False
+    assert list(inspect.signature(server_module.list_ha_publishing).parameters) == []
+    assert set(tool.parameters.get("properties", {})) == set()
+    assert server_module.TOOL_NAMES[-1] == "list_ha_publishing"
+    assert server_module.TOOL_NAMES[-2] == "get_ha_publishing"
+    assert len(server_module.TOOL_NAMES) == 95
+
+
+def test_the_collection_read_reads_the_route_once_and_answers_the_body_as_sent(phone22) -> None:
+    phone22.reply("GET", "/v1/ha-publishing", 200, collection())
+    answer = server_module.list_ha_publishing()
+    assert answer == collection()
+    assert set(answer) == COLLECTION_KEYS
+    assert set(answer["bindings"][0]) == {"assetId"} | BINDING_KEYS
+    assert set(answer["decommissions"][0]) == COLLECTION_DECOMMISSION_KEYS
+    assert paths(phone22) == [("GET", "/v1/status"), ("GET", "/v1/ha-publishing")]
+    assert phone22.last().body == b""
+
+
+def test_the_collection_read_on_a_schema_21_phone_is_refused_with_nothing_sent(paired) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_21)
+    try:
+        answer = server_module.list_ha_publishing()
+    except ToolError as refused:
+        text = str(refused)
+    else:
+        text = f"answered {answer!r}"
+    assert paths(paired) == [("GET", "/v1/status")], "a schema-21 phone must be sent only the status read"
+    assert "APP_SCHEMA_TOO_OLD" in text, text
+    assert "reports schema 21; list_ha_publishing needs schema 22" in text, text
+
+
+def test_the_collection_read_takes_no_argument(paired) -> None:
+    for extra in ({"asset_id": "a1"}, {"value": "2026-02-10"}, {"enabled": True}):
+        with pytest.raises(ToolError, match="does not accept"):
+            asyncio.run(server_module.mcp.call_tool("list_ha_publishing", extra))
+    assert paired.requests == []
+
+
+def test_the_collection_docstring_names_the_route_its_keys_and_the_orphan() -> None:
+    doc = flat(server_module.list_ha_publishing.__doc__)
+    for words in (
+        "GET /v1/ha-publishing", "read only", "`writesEnabled`", "`bindings`", "`decommissions`", "`assetId`",
+        "orphan", "`get_ha_publishing`", "`APP_SCHEMA_TOO_OLD`", "schema 22", "1970-01-01", "`UNDELIVERABLE`",
+        "never the address",
+    ):
+        assert words in doc, words
+    for name in PUBLISHING_STATES:
+        assert f"`{name}`" in doc, name
+    lowered = doc.lower()
+    for word in NEVER_SAID:
+        assert word not in lowered, word
+
+
+G_R6_TOOLS = (
+    "record_condition", "complete_schedule", "update_event", "delete_event", "archive_schedule", "end_season",
+    "set_season_mode", "retire_asset", "archive_asset", "import_merge", "replace_asset",
+)
+G_R6_FRAGMENT = "may set its helper within seconds of this write, while the Developer API screen is open"
+
+
+@pytest.mark.parametrize("name", G_R6_TOOLS)
+def test_each_write_that_can_move_a_published_value_says_the_phone_may_set_the_helper(name: str) -> None:
+    """G-R6: the outbound side effect, one sentence in each of the eleven docstrings, in words that never claim more."""
+    doc = flat(getattr(server_module, name).__doc__)
+    assert "publishes to Home Assistant" in doc and G_R6_FRAGMENT in doc, name
+    assert doc.count(G_R6_FRAGMENT) == 1, name
+    lowered = doc[doc.index("When the asset publishes to Home Assistant"):].lower()
+    for word in NEVER_SAID:
+        assert word not in lowered, (name, word)
+
+
+def test_the_readme_and_v1_list_the_collection_read() -> None:
+    readme = README.read_text(encoding="utf-8")
+    entry = paragraph(readme, "**Home Assistant publishing (#113/#114; needs schema 22)**")
+    v1 = section(V1.read_text(encoding="utf-8"), "### Home Assistant publishing (#113, #114)")
+    for name, text in (("README", entry), ("v1.md", v1)):
+        assert "`GET /v1/ha-publishing`" in text or "GET /v1/ha-publishing" in text, name
+        lowered = flat(text).lower()
+        for word in NEVER_SAID:
+            assert word not in lowered, (name, word)
+    assert "`list_ha_publishing`" in entry
+    assert "`list_ha_publishing`" in flat(paragraph(readme, "- **The season readiness tool needs schema 22.**"))

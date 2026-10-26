@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.hapublish.PublishState
 import com.loosecannon.servicetag.core.hapublish.errorIsCurrent
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * #113/#114 (C35, G-R1) — `GET /v1/assets/{id}/ha-publishing`: the asset's outbound bindings, at most one per kind,
@@ -73,6 +74,29 @@ internal data class HaPublishRequestDto(val id: String, val at: Long, val progre
 @Serializable
 internal data class HaDecommissionDto(
     val id: String,
+    val entityId: String,
+    val state: String,
+    val requestedAt: Long,
+    val lastError: HaDecommissionErrorDto?,
+)
+
+/**
+ * #113/#114 (C35a, G-R2) — `GET /v1/ha-publishing`: every binding (C35's, each led by its `assetId`, built in the
+ * handler from [HaPublishBindingDto] so the two routes cannot drift) and every obligation, orphans included.
+ * [writesEnabled] is true while any binding is enabled.
+ */
+@Serializable
+internal data class HaPublishingCollectionResponse(
+    val writesEnabled: Boolean,
+    val bindings: List<JsonObject>,
+    val decommissions: List<HaCollectionDecommissionDto>,
+)
+
+/** One obligation in the collection (C35a): C34's keys with the soft [assetId], null when the tombstone names none. */
+@Serializable
+internal data class HaCollectionDecommissionDto(
+    val id: String,
+    val assetId: String?,
     val entityId: String,
     val state: String,
     val requestedAt: Long,
@@ -153,6 +177,12 @@ internal fun DecommissionTombstone.toDto(): HaDecommissionDto = HaDecommissionDt
     requestedAt = requestedAt,
     lastError = errorKind?.let { kind -> errorAt?.let { HaDecommissionErrorDto(kind.name, it) } },
 )
+
+/** C35a — one obligation as the collection answers it, orphans included. */
+internal fun DecommissionTombstone.toCollectionDto(): HaCollectionDecommissionDto {
+    val own = toDto()
+    return HaCollectionDecommissionDto(own.id, assetId?.value, own.entityId, own.state, own.requestedAt, own.lastError)
+}
 
 private fun PublishDelivery.publishedLine(binding: PublishBinding): HaPublishLineDto? {
     val value = lastPublishedValue ?: return null

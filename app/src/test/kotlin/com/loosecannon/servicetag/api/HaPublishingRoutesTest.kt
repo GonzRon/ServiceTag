@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
 import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
 import com.loosecannon.servicetag.core.hapublish.PublishDelivery
@@ -233,6 +234,85 @@ class HaPublishingRoutesTest {
         graph.awaitDispatched()
         val stamped = publishing().getValue("bindings").jsonArray.single().jsonObject.getValue("request").jsonObject
         assertEquals(mapOf("id" to request.requestId, "at" to request.acceptedAt.toString(), "progress" to "VERIFIED"), stamped.strings())
+    }
+
+    // --- row 107 (B5r's cases): the collection, C35a ------------------------------------------------------------------
+
+    private fun collection(): JsonObject {
+        val response = api.call("GET", "/v1/ha-publishing")
+        assertEquals(response.bodyText(), 200, response.status)
+        return Json.parseToJsonElement(response.bodyText()).jsonObject
+    }
+
+    private fun orphan(id: String, asset: AssetId?, at: Long, state: DecommissionState = DecommissionState.PENDING) =
+        DecommissionTombstone(
+            id = id, connectionId = "example-connection", entityId = "input_datetime.example_$id", assetId = asset,
+            installationId = "example-installation", state = state, requestedAt = at,
+            errorKind = if (state == DecommissionState.UNDELIVERABLE) PublishErrorKind.HTTP_ERROR else null,
+            errorAt = if (state == DecommissionState.UNDELIVERABLE) at + 5 else null, revision = 1,
+        )
+
+    @Test
+    fun theCollectionListsOrphanTombstonesWithIds() = rig.run {
+        bothPublishedThenRetargeted()
+        // An obligation whose asset is gone, one naming none, and the heater's own; sorted by time, then id.
+        graph.publishDecommissions.upsertMerging(orphan("example-orphan-b", AssetId("example-deleted-asset"), 50L, DecommissionState.UNDELIVERABLE))
+        graph.publishDecommissions.upsertMerging(orphan("example-orphan-a", null, 50L))
+
+        val tree = collection()
+        assertEquals(setOf("writesEnabled", "bindings", "decommissions"), tree.keys)
+        assertEquals("true", tree.str("writesEnabled"))
+        val bindings = tree.getValue("bindings").jsonArray.map { it.jsonObject }
+        assertEquals(listOf("EQUIPMENT_STATUS", "SEASON_SERVICE_DATE"), bindings.map { it.str("kind") })
+        bindings.forEach {
+            assertEquals(setOf("assetId") + BINDING_KEYS, it.keys)
+            assertEquals(heater.value, it.str("assetId"))
+        }
+        // The same binding the per-asset route answers.
+        val perAsset = publishing().getValue("bindings").jsonArray.map { it.jsonObject }
+        assertEquals(perAsset, bindings.map { JsonObject(it - "assetId") })
+
+        val owed = tree.getValue("decommissions").jsonArray.map { it.jsonObject }
+        owed.forEach { assertEquals(setOf("id", "assetId", "entityId", "state", "requestedAt", "lastError"), it.keys) }
+        val real = graph.publishDecommissions.all().first { it.assetId == heater }
+        assertEquals(listOf("example-orphan-a", "example-orphan-b", real.id), owed.map { it.str("id") })
+        assertEquals(JsonNull, owed[0].getValue("assetId"))
+        assertEquals(heater.value, owed[2].str("assetId"))
+        assertEquals("example-deleted-asset", owed[1].str("assetId"))
+        assertEquals("UNDELIVERABLE", owed[1].str("state"))
+        assertEquals("HTTP_ERROR", owed[1].getValue("lastError").jsonObject.str("kind"))
+        // The per-asset route cannot reach the orphan.
+        assertEquals(404, api.call("GET", "/v1/assets/example-deleted-asset/ha-publishing").status)
+    }
+
+    @Test
+    fun theCollectionIsEmptyAndNotWritingUntilABindingIsEnabled() = rig.run {
+        val empty = collection()
+        assertEquals("false", empty.str("writesEnabled"))
+        assertTrue(empty.getValue("bindings").jsonArray.isEmpty())
+        assertTrue(empty.getValue("decommissions").jsonArray.isEmpty())
+        yearRound()
+        connect()
+        graph.haPublish.helpers[STATUS] = statusHelper("unknown")
+        enable(PublishKind.EQUIPMENT_STATUS)
+        assertEquals("true", collection().str("writesEnabled"))
+    }
+
+    @Test
+    fun theCollectionHasOnlyGetAnd405ForTheRest() = rig.run {
+        for (verb in listOf("POST", "PUT", "PATCH", "DELETE")) {
+            val response = api.call(verb, "/v1/ha-publishing")
+            assertEquals(verb, 405, response.status)
+        }
+    }
+
+    @Test
+    fun noAddressTokenWifiOrInstallationIdInTheCollection() = rig.run {
+        bothPublishedThenRetargeted()
+        val body = api.call("GET", "/v1/ha-publishing").bodyText()
+        for (secret in listOf("192.168.0.10", "fictional-token-1", "ExampleHomeWifi", graph.installationIdentity.id())) {
+            assertFalse("$secret in $body", body.contains(secret))
+        }
     }
 
     // --- the readiness route's Home Assistant boundary (C29, C9a; A4's carry) ---------------------------------------
