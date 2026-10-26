@@ -26,7 +26,7 @@ class Migration10To11Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS }
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS + V22_COLUMNS }
                     val expected = if (row.table == "asset") {
                         before.getValue(row) + "warranty_reminder_lead_days=NULL"
                     } else {
@@ -98,7 +98,7 @@ class Migration10To11Test {
                         )
                         assertEquals(30, m.columnsOf("asset").size)
                         // #79b's two case tables follow in the next step of the chain.
-                        assertEquals("the one new table", V11_TABLES, m.tableNames() - ROOM_INTERNAL - v10Tables() - V12_TABLES - V13_TABLES - V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES - V21_TABLES)
+                        assertEquals("the one new table", V11_TABLES, m.tableNames() - ROOM_INTERNAL - v10Tables() - V12_TABLES - V13_TABLES - V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES - V21_TABLES - V22_TABLES)
                     }
                 }
             }

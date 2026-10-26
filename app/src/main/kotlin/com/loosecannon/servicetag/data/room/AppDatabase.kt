@@ -16,6 +16,9 @@ import com.loosecannon.servicetag.data.room.dao.DefinitionDao
 import com.loosecannon.servicetag.data.room.dao.EventDao
 import com.loosecannon.servicetag.data.room.dao.ExternalLinkDao
 import com.loosecannon.servicetag.data.room.dao.HaConnectionDao
+import com.loosecannon.servicetag.data.room.dao.HaPublishBindingDao
+import com.loosecannon.servicetag.data.room.dao.HaPublishDecommissionDao
+import com.loosecannon.servicetag.data.room.dao.HaPublishDeliveryDao
 import com.loosecannon.servicetag.data.room.dao.HealthSubjectDao
 import com.loosecannon.servicetag.data.room.dao.InstalledComponentDao
 import com.loosecannon.servicetag.data.room.dao.MaintenanceGroupDao
@@ -46,6 +49,9 @@ import com.loosecannon.servicetag.data.room.entities.DeadlineLocalDeliveryEntity
 import com.loosecannon.servicetag.data.room.entities.EventProfileEntity
 import com.loosecannon.servicetag.data.room.entities.ExternalLinkEntity
 import com.loosecannon.servicetag.data.room.entities.HaConnectionEntity
+import com.loosecannon.servicetag.data.room.entities.HaPublishBindingEntity
+import com.loosecannon.servicetag.data.room.entities.HaPublishDecommissionEntity
+import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 import com.loosecannon.servicetag.data.room.entities.HealthSubjectEntity
 import com.loosecannon.servicetag.data.room.entities.InstalledComponentCompositionEntity
 import com.loosecannon.servicetag.data.room.entities.InstalledComponentEntity
@@ -105,8 +111,11 @@ import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
         InstalledComponentCompositionEntity::class,
         HaConnectionEntity::class,
         SeasonSyncBindingEntity::class,
+        HaPublishBindingEntity::class,
+        HaPublishDeliveryEntity::class,
+        HaPublishDecommissionEntity::class,
     ],
-    version = 21,
+    version = 22,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -138,4 +147,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun installedComponentDao(): InstalledComponentDao
     abstract fun haConnectionDao(): HaConnectionDao
     abstract fun seasonSyncBindingDao(): SeasonSyncBindingDao
+    abstract fun haPublishBindingDao(): HaPublishBindingDao
+    abstract fun haPublishDeliveryDao(): HaPublishDeliveryDao
+    abstract fun haPublishDecommissionDao(): HaPublishDecommissionDao
 }

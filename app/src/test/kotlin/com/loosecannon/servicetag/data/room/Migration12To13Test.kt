@@ -29,7 +29,7 @@ class Migration12To13Test {
     fun everyRowSurvives() = runTest {
         migrating { file, before ->
             withConnection(file) { c ->
-                for (row in SEEDED) assertEquals("$row", before.getValue(row), c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS })
+                for (row in SEEDED) assertEquals("$row", before.getValue(row), c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS + V22_COLUMNS })
                 assertEquals(
                     "every asset, its warranty lead kept",
                     listOf("a1|2027-03-01|30", "a2|NULL|NULL", "a3|2025-01-31|NULL"),
@@ -147,7 +147,7 @@ class Migration12To13Test {
                             assertEquals("$table foreign keys", f.foreignKeysOf(table), m.foreignKeysOf(table))
                             assertEquals("$table indices", f.indexDefinitionsOn(table), m.indexDefinitionsOn(table))
                         }
-                        assertEquals("the one new table", V13_TABLES, m.tableNames() - ROOM_INTERNAL - v12Tables() - V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES - V21_TABLES)
+                        assertEquals("the one new table", V13_TABLES, m.tableNames() - ROOM_INTERNAL - v12Tables() - V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES - V21_TABLES - V22_TABLES)
                         assertEquals("no column moved on asset", 30, m.columnsOf("asset").size)
                     }
                 }

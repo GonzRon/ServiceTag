@@ -50,9 +50,9 @@ class Migration7To8Test {
                     "maintenance_schedule" -> assertEquals(
                         "$row",
                         was.filterNot { it.column() in V7_SEASON_COLUMNS },
-                        now.filterNot { it.column() in V8_SCHEDULE_COLUMNS },
+                        now.filterNot { it.column() in V8_SCHEDULE_COLUMNS + V22_COLUMNS },
                     )
-                    else -> assertEquals("$row", was, now)
+                    else -> assertEquals("$row", was, now.filterNot { it.column() in V22_COLUMNS })
                 }
             }
         }

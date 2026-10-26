@@ -212,6 +212,8 @@ data class AssetEventEntity(
     @ColumnInfo(name = "schedule_id") val scheduleId: String? = null,
     @ColumnInfo(name = "occurrence_on") val occurrenceOn: String? = null,
     @ColumnInfo(name = "details_pending", defaultValue = "0") val detailsPending: Boolean = false,
+    /** Schema v22 (#114, B): true only on an event a Transfer Pack import inserted (C20); never cleared by an edit. */
+    @ColumnInfo(name = "imported", defaultValue = "0") val imported: Boolean = false,
 )
 
 @Entity(

@@ -188,6 +188,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_17_18
 import com.loosecannon.servicetag.data.room.MIGRATION_18_19
 import com.loosecannon.servicetag.data.room.MIGRATION_19_20
 import com.loosecannon.servicetag.data.room.MIGRATION_20_21
+import com.loosecannon.servicetag.data.room.MIGRATION_21_22
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
@@ -301,6 +302,7 @@ class AppGraph(private val context: Context) {
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
             MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
             MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
+            MIGRATION_21_22,
         )
         .build()
 
@@ -1212,6 +1214,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 21
+        const val SCHEMA_VERSION = 22
     }
 }

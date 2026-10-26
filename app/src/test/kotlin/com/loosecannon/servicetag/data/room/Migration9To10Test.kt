@@ -26,7 +26,7 @@ class Migration9To10Test {
             withConnection(file) { c ->
                 for (row in SEEDED) {
                     // The chain runs on to v16: v11's one asset column `Migration10To11Test` owns, v16's four attachment columns `Migration15To16Test` owns.
-                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V11_ASSET_COLUMNS + V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS }
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V11_ASSET_COLUMNS + V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS + V22_COLUMNS }
                     val expected = if (row.table == "attachment") before.getValue(row) + "document_role=NULL" else before.getValue(row)
                     assertEquals("$row", expected, after)
                 }

@@ -38,7 +38,7 @@ class Migration8To9Test {
                 assertEquals(
                     "$row",
                     expected,
-                    after.getValue(row).filterNot { it.column() in V11_ASSET_COLUMNS + V17_REFERENCE_COLUMNS + V20_REFERENCE_COLUMNS },
+                    after.getValue(row).filterNot { it.column() in V11_ASSET_COLUMNS + V17_REFERENCE_COLUMNS + V20_REFERENCE_COLUMNS + V22_COLUMNS },
                 )
             }
         }

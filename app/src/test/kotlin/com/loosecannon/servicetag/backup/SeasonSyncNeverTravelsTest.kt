@@ -15,6 +15,9 @@ import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.core.usecase.CreateTransferPackResult
+import com.loosecannon.servicetag.data.room.entities.HaPublishBindingEntity
+import com.loosecannon.servicetag.data.room.entities.HaPublishDecommissionEntity
+import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.ByteArrayInputStream
 import java.util.zip.ZipInputStream
@@ -31,6 +34,11 @@ import org.junit.Test
  * no count for them. A replace restore removes every binding with the assets it wipes (the CASCADE) and keeps the
  * connection; a merge leaves a binding and its revision as they were. Over Room, through the Room-backed graph. The
  * asset, entity, address and Wi-Fi name are fictional.
+ *
+ * #113/#114 S1 (C6, G5, G7; row 12) extends the shape to the three publishing tables — `ha_publish_binding`,
+ * `ha_publish_delivery` and `ha_publish_decommission`: no export, merge, Transfer Pack or replace restore names them,
+ * a merge leaves every row and revision, and a replace restore's wipe leaves them for the projector (the binding's
+ * asset is a soft link, C34). Tripwires: schema 22's own RED is row 22's.
  */
 class SeasonSyncNeverTravelsTest {
 
@@ -131,11 +139,119 @@ class SeasonSyncNeverTravelsTest {
         assertEquals("the binding stays here", binding, graph.seasonSyncBindings.get(heater))
     }
 
+    // --- #113/#114 S1 (C6, G5, G7; row 12): the three publishing tables travel nowhere ----------------
+
+    private val statusBinding = HaPublishBindingEntity(
+        id = "example-binding-status", assetId = heater.value, connectionId = CONNECTION, kind = "EQUIPMENT_STATUS",
+        entityId = STATUS_ENTITY, enabled = true, revision = 4, activatedInstallationId = INSTALLATION,
+        validatedAt = 4_000L, validatedRevision = 4, boundaryEntityId = null, createdAt = 4_000L, updatedAt = 4_000L,
+    )
+    private val dateBinding = statusBinding.copy(
+        id = "example-binding-date", kind = "SEASON_SERVICE_DATE", entityId = DATE_ENTITY, revision = 7,
+        validatedRevision = 7, boundaryEntityId = BOUNDARY_ENTITY,
+    )
+
+    /** A delivery with every optional field set, so any column that leaked would carry a marker. */
+    private fun publishDelivery(bindingId: String, value: String) = HaPublishDeliveryEntity(
+        bindingId = bindingId, desiredValue = value, desiredRevision = 9, desiredAt = 4_100L, lastPublishedValue = value,
+        lastPublishedAt = 4_200L, publishedDesiredRevision = 9, publishedBindingRevision = 4, lastVerifiedValue = value,
+        lastVerifiedAt = 4_300L, verifiedBindingRevision = 4, verifiedDesiredRevision = 9, remoteValue = value,
+        remoteReadAt = 4_300L, errorKind = "OUTCOME_UNKNOWN", errorDetail = "publish-detail-x", errorAt = 4_400L,
+        errorBindingRevision = 4, errorDesiredRevision = 9, outcomeUnknownSince = 4_400L, needsDelivery = true,
+        attemptsAtRevision = 3, lastAttemptAt = 4_400L, boundaryValue = "2026-05-02", boundaryReadAt = 4_500L,
+        boundaryBindingRevision = 7, reconcilePending = true, lastRequestId = "example-request-1", lastRequestAt = 4_600L,
+    )
+
+    private val publishTombstone = HaPublishDecommissionEntity(
+        id = "example-tombstone-1", connectionId = CONNECTION, entityId = OLD_DATE_ENTITY, assetId = heater.value,
+        installationId = INSTALLATION, state = "UNDELIVERABLE", requestedAt = 4_700L, errorKind = "AUTH_REFUSED",
+        errorAt = 4_800L, revision = 2,
+    )
+
+    /** A status and a date binding on the heater, their deliveries with every marker set, and one tombstone. */
+    private suspend fun publish(into: FakeGraph) {
+        into.haConnections.upsert(connection)
+        into.db.haPublishBindingDao().insert(statusBinding)
+        into.db.haPublishBindingDao().insert(dateBinding)
+        into.db.haPublishDeliveryDao().insert(publishDelivery(statusBinding.id, "DEGRADED"))
+        into.db.haPublishDeliveryDao().insert(publishDelivery(dateBinding.id, "2026-09-20"))
+        into.db.haPublishDecommissionDao().insertOrMerge(publishTombstone)
+    }
+
+    /** Every row of the three tables, so a move of any field — a revision above all — shows. */
+    private suspend fun publishRows(of: FakeGraph): List<Any> =
+        of.db.haPublishBindingDao().all() + of.db.haPublishDeliveryDao().all() + of.db.haPublishDecommissionDao().all()
+
+    @Test
+    fun anExportCarriesNoPublishBindingDeliveryTombstoneOrEntityByte() = runTest {
+        graph.assets.upsert(heaterRow)
+        graph.haConnections.upsert(connection)
+        val unpublished = graph.exportBackupSet.run().data
+        publish(graph)
+
+        val published = graph.exportBackupSet.run().data
+
+        assertNoMarker("the export", textOf(published), PUBLISH_MARKERS)
+        assertEquals(
+            "publishing changes no byte of the data",
+            entryOf(unpublished, BackupCodec.DATA_ENTRY).decodeToString(),
+            entryOf(published, BackupCodec.DATA_ENTRY).decodeToString(),
+        )
+        assertEquals(setOf(BackupCodec.MANIFEST_ENTRY, BackupCodec.DATA_ENTRY), entriesOf(published).keys)
+    }
+
+    @Test
+    fun aMergeLeavesThemAndTheirRevisions() = runTest {
+        val dehumidifier = Asset(id = AssetId("asset-dehumidifier"), name = "Example Dehumidifier", createdAt = 1_000L, updatedAt = 1_000L)
+        source.assets.upsert(heaterRow)
+        source.assets.upsert(dehumidifier)
+        graph.assets.upsert(heaterRow)
+        publish(graph)
+        val before = publishRows(graph)
+
+        graph.importBackupMerge.run(source.exportBackupSet.run().data)
+
+        assertEquals("the merge applied", dehumidifier, graph.assets.get(dehumidifier.id))
+        assertEquals(5, before.size)
+        assertEquals(before, publishRows(graph))
+    }
+
+    @Test
+    fun aTransferPackCarriesNone() = runTest {
+        graph.assets.upsert(heaterRow)
+        publish(graph)
+        val before = publishRows(graph)
+
+        val created = graph.createTransferPack.run(listOf(heater), "")
+
+        val draft = (created as CreateTransferPackResult.Created).draft
+        assertEquals(listOf(heater.value), draft.assetIds)
+        assertNoMarker("the pack's data", textOf(draft.data), PUBLISH_MARKERS)
+        assertNoMarker("the pack's manifest", draft.manifest("0".repeat(64)).toString(), PUBLISH_MARKERS)
+        assertNoMarker("the pack's counts", draft.counts.keys.joinToString(","), PUBLISH_MARKERS)
+        assertEquals("the rows stay here", before, publishRows(graph))
+    }
+
+    @Test
+    fun aReplaceRestoreLeavesThemForTheProjector() = runTest {
+        graph.assets.upsert(heaterRow)
+        val archive = graph.exportBackupSet.run().data
+        publish(graph)
+        val before = publishRows(graph)
+
+        graph.importBackupReplace.run(archive)
+
+        assertEquals("the asset is restored", heaterRow, graph.assets.get(heater))
+        // the binding's asset is a soft link (C4.2, C34): the wipe leaves every row for the projector to retire
+        assertEquals(before, publishRows(graph))
+        assertEquals("the connection stays", connection, graph.haConnections.get())
+    }
+
     // --- the bytes -----------------------------------------------------------------------------
 
-    private fun assertNoMarker(what: String, text: String) {
+    private fun assertNoMarker(what: String, text: String, markers: List<String> = MARKERS) {
         assertTrue("$what is read", text.isNotEmpty())
-        for (marker in MARKERS) assertTrue("$what carries '$marker'", marker !in text)
+        for (marker in markers) assertTrue("$what carries '$marker'", marker !in text)
     }
 
     private fun entriesOf(archive: ByteArray): Map<String, ByteArray> {
@@ -166,6 +282,22 @@ class SeasonSyncNeverTravelsTest {
             "input_boolean", "192.168.0.10", ":8123", "ExampleHomeWifi", "homeNetwork", "fetch-detail-x",
             "2026-10-01T05:00:00", "networkEligibility", "backgroundChecks", "WEEKLY", "last_applied_source",
             "lastAppliedSource", "FORCED_IN",
+        )
+
+        const val STATUS_ENTITY = "input_select.example_heater_equipment_status"
+        const val DATE_ENTITY = "input_datetime.example_heater_service_done"
+        const val BOUNDARY_ENTITY = "input_datetime.example_heater_season_ended"
+        const val OLD_DATE_ENTITY = "input_datetime.example_old_service_done"
+        const val INSTALLATION = "example-installation-1"
+
+        /** #113/#114 (C6): every name and value the three publishing tables hold that no other row of the fixture does. */
+        val PUBLISH_MARKERS = MARKERS + listOf(
+            "ha_publish", "haPublish", "HaPublish", "desired_value", "desiredValue", "activated_installation_id",
+            "activatedInstallationId", "reconcile_pending", "reconcilePending", "claim_entity_id", "last_request_id",
+            "input_select", "input_datetime", STATUS_ENTITY, DATE_ENTITY, BOUNDARY_ENTITY, OLD_DATE_ENTITY, INSTALLATION,
+            "example-binding-", "example-tombstone-1", "example-request-1", "publish-detail-x", "DEGRADED",
+            "2026-09-20", "2026-05-02", "OUTCOME_UNKNOWN", "UNDELIVERABLE", "AUTH_REFUSED", "SEASON_SERVICE_DATE",
+            "EQUIPMENT_STATUS",
         )
     }
 }

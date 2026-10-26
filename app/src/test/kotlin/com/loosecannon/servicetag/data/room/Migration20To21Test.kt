@@ -24,7 +24,7 @@ class Migration20To21Test {
     fun bothTablesExistEmptyWithKeysForeignKeysAndTheIndex() = runTest {
         migrating { file, before ->
             withConnection(file) { m ->
-                assertEquals("the two new tables", V21_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys)
+                assertEquals("the two new tables", V21_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys - V22_TABLES)
                 for (table in V21_TABLES) {
                     assertEquals("$table is empty", listOf("0"), m.lines("SELECT COUNT(*) FROM $table"))
                 }
@@ -40,7 +40,8 @@ class Migration20To21Test {
                         "created_at INTEGER notnull=1 default=- pk=0",
                         "updated_at INTEGER notnull=1 default=- pk=0",
                     ),
-                    m.columnsOf("ha_connection"),
+                    // the chain runs on to v22, whose `config_generation` `Migration21To22Test` owns
+                    m.columnsOf("ha_connection").filterNot { it.substringBefore(' ') in V22_COLUMNS },
                 )
                 assertEquals(listOf("id"), m.primaryKeyOf("ha_connection"))
                 assertEquals(emptyList<String>(), m.foreignKeysOf("ha_connection"))
@@ -169,9 +170,13 @@ class Migration20To21Test {
     }
 
     /** One table whole: its columns, key, foreign keys and indices, then every row by rowid. */
-    private fun SQLiteConnection.snapshotOf(table: String): List<String> =
-        columnsOf(table) + primaryKeyOf(table) + foreignKeysOf(table) + indexDefinitionsOn(table) +
-            lines("SELECT * FROM $table ORDER BY rowid")
+    private fun SQLiteConnection.snapshotOf(table: String): List<String> {
+        // less the columns v22 appends, whose defaults `Migration21To22Test` owns (the chain runs on to v22)
+        val kept = columnsOf(table).filterNot { it.substringBefore(' ') in V22_COLUMNS }
+        val select = kept.joinToString(", ") { "`${it.substringBefore(' ')}`" }
+        return kept + primaryKeyOf(table) + foreignKeysOf(table) + indexDefinitionsOn(table) +
+            lines("SELECT $select FROM $table ORDER BY rowid")
+    }
 
     /** Each row of [sql] as its columns joined by `|`. */
     private fun SQLiteConnection.lines(sql: String): List<String> = buildList {
