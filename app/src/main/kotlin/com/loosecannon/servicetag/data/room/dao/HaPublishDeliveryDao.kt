@@ -9,9 +9,9 @@ import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
- * #113/#114 (C5): the device-local delivery records, one per binding. **No flow is offered** — the projector never
- * observes delivery bookkeeping (C31, I28). Four compare-and-set writes, each one statement, beside a command's
- * whole-row [upsert] (B3):
+ * #113/#114 (C5): the device-local delivery records, one per binding. One display-only flow, [observe], for the
+ * publishing block (B6a review I2); the projector never observes delivery bookkeeping (C31, I28). Four
+ * compare-and-set writes, each one statement, beside a command's whole-row [upsert] (B3):
  *  - [writeDesired], the projector's: on the binding's revision **and** the `desired_revision` read in the same
  *    transaction (A02); it moves the desired revision, so it clears the error and its pair and restarts the attempt
  *    count (A04, C17);

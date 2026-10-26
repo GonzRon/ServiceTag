@@ -259,8 +259,9 @@ internal fun publishBlockOf(
 /**
  * F-16, C34 — an enabled date binding owing its helper `1970-01-01` that is not yet read back at the current pair with
  * nothing outstanding ([DeliverySteps.isCurrent]) may still let Home Assistant start the appliance: P114-36 beside its
- * own lines, or P114-37 when its current error needs the owner. Never for the status kind, a service date being sent,
- * or a copied setup, whose own line says this phone does not publish (P113-21).
+ * own lines, or P114-37 when its current error needs the owner or the gate holds every send until the owner acts (no
+ * token, or a helper to check again: ServiceTag is not trying, B6b review M1). Never for the status kind, a service
+ * date being sent, or a copied setup, whose own line says this phone does not publish (P113-21).
  */
 private fun invalidationLineOf(
     kind: PublishKind,
@@ -273,9 +274,18 @@ private fun invalidationLineOf(
         PublishKind.SEASON_SERVICE_DATE -> Unit
     }
     if (delivery.desiredValue != INVALID_SERVICE_DATE || DeliverySteps.isCurrent(binding, delivery)) return null
-    if (state == PublishState.COPIED_INSTALLATION) return null
+    val gateHolds = when (state) {
+        // P113-21: this phone does not publish (ruling 2), so neither sentence is true of it.
+        PublishState.COPIED_INSTALLATION -> return null
+        // Nothing is sent until the owner enters the token or checks the helper (C34: a missing token → P114-37).
+        PublishState.NEEDS_TOKEN, PublishState.NEEDS_VALIDATION -> true
+        PublishState.NOT_ENABLED, PublishState.WAITING_FOR_SOURCE, PublishState.NOT_MAINTAINED_HERE,
+        PublishState.PENDING, PublishState.OUTCOME_UNKNOWN, PublishState.ERROR, PublishState.PUBLISHED,
+        PublishState.MATCHES, PublishState.INVALIDATED_INELIGIBLE,
+        -> false
+    }
     val error = delivery.errorKind?.takeIf { delivery.errorIsCurrent(binding) }
-    val ownerMustAct = error != null && when (retryClassOf(error, delivery.errorDetail)) {
+    val ownerMustAct = gateHolds || error != null && when (retryClassOf(error, delivery.errorDetail)) {
         RetryClass.NEEDS_OWNER -> true
         RetryClass.TRANSIENT, RetryClass.WAIT -> false
     }
@@ -298,14 +308,15 @@ private fun optionOf(condition: OperationalCondition): String = when (condition)
 /**
  * #113/#114 (C36, C32) — one publishing block's model. It reads the binding, its delivery, the stored connection,
  * whether the token is on this phone, the asset and the open transfers in one snapshot and derives the state with
- * C17's own rules; it is read again on every change to the bindings, the obligations, the connection, the assets, the
- * transfers and this binding's delivery record (its display-only flow, B6a review I2: I28 bounds what may trigger a
- * projection or a drain, not what a screen observes, so a pass that runs after the control returns redraws the block),
- * on resume and after each control — never on a timer, and the Keystore is asked only when one of those moves. Every control goes through [PublishControls], which asks for
- * delivery after its commit (A03): Publish now, Check helper (a fresh read of the stored helper, then Revalidate, which
- * never activates), Stop publishing after its confirm and, for the date kind, the owner's P114-38 on an obligation. A
- * refusal comes back as a code and is drawn as its sentence. The date kind also reads its asset's obligations (C34) and
- * its meaning row through the one readiness reader ([DateMeaning]).
+ * C17's own rules; it is read again on every change to the bindings, the obligations (the date kind only), the
+ * connection, the assets, the transfers and this binding's delivery record (its display-only flow, B6a review I2: I28
+ * bounds what may trigger a projection or a drain, not what a screen observes, so a pass that runs after the control
+ * returns redraws the block), on resume and after each control — never on a timer, and the Keystore is asked only when
+ * one of those moves. Every control goes through [PublishControls], which asks for delivery after its commit (A03):
+ * Publish now, Check helper (a fresh read of the stored helper, then Revalidate, which never activates), Stop
+ * publishing after its confirm and, for the date kind, the owner's P114-38 on an obligation. A refusal comes back as a
+ * code and is drawn as its sentence. The date kind also reads its asset's obligations (C34) and its meaning row
+ * through the one readiness reader ([DateMeaning]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class PublishBlockViewModel(
@@ -343,8 +354,13 @@ internal class PublishBlockViewModel(
 
     private val reads: Flow<PublishBlockFacts> = combine(
         listOf<Flow<Any?>>(
-            bindings.observeAll(), decommissions.observeAll(), connections.observe(), assets.observeAll(),
-            transfers.observeHeldIds(), deliveryOfThisBinding(), refreshes,
+            bindings.observeAll(),
+            // B6b review N4: only the date kind reads obligations, so a tombstone write never re-reads a status block.
+            when (kind) {
+                PublishKind.EQUIPMENT_STATUS -> flowOf(Unit)
+                PublishKind.SEASON_SERVICE_DATE -> decommissions.observeAll()
+            },
+            connections.observe(), assets.observeAll(), transfers.observeHeldIds(), deliveryOfThisBinding(), refreshes,
         ),
     ) { }.mapLatest { read() }
 

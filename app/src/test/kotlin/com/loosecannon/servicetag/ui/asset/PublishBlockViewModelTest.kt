@@ -517,6 +517,18 @@ class PublishBlockViewModelTest {
         // A service date being sent is not an invalidation; a status binding never draws it.
         assertNull(dateBlock(PublishState.PENDING, pending.copy(desiredValue = "2026-09-15")).invalidationLine)
         assertNull(block(PublishState.PENDING, invalidating).invalidationLine)
+        // B6b review M1 (C34, F-16): while the gate holds, nothing is sent until the owner acts — no token on this phone,
+        // or a helper to check again with no current error — so ServiceTag is not trying: P114-37.
+        assertEquals(CANNOT_REACH, dateBlock(PublishState.NEEDS_TOKEN, invalidating).invalidationLine)
+        assertEquals(CANNOT_REACH, dateBlock(PublishState.NEEDS_VALIDATION, invalidating).invalidationLine)
+        // B6b review M2 — ruling (2): a copied setup's own line (P113-21) says this phone does not publish, so neither
+        // sentence is drawn.
+        assertNull(dateBlock(PublishState.COPIED_INSTALLATION, invalidating).invalidationLine)
+        // A WAIT error (away from home) is retried at the next start, resume or Publish now: P114-36, not P114-37.
+        val away = invalidating.copy(
+            errorKind = PublishErrorKind.NOT_ON_LOCAL_NETWORK, errorAt = 9L, errorBindingRevision = 4, errorDesiredRevision = 7,
+        )
+        assertEquals(NOT_YET_CLEARED, dateBlock(PublishState.ERROR, away).invalidationLine)
     }
 
     /** The heater's date binding, enabled on this phone over the fictional connection. */

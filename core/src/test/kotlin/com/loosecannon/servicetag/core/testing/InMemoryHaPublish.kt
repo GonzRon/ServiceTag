@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /**
@@ -84,14 +85,14 @@ class InMemoryPublishBindingRepository : PublishBindingRepository, Rollbackable 
 
     override suspend fun delete(id: String) {
         if (rows.remove(id) != null) version.value += 1
-        deliveries?.rows?.remove(id)
+        deliveries?.removeRow(id)
     }
 
     /** The schema's CASCADE from `ha_connection`: every binding on it goes, with its delivery. */
     fun cascadeFromConnection(connectionId: String) {
         rows.values.filter { it.connectionId == connectionId }.map { it.id }.forEach { id ->
             rows.remove(id)
-            deliveries?.rows?.remove(id)
+            deliveries?.removeRow(id)
         }
         version.value += 1
     }
@@ -137,8 +138,14 @@ class InMemoryPublishDeliveryRepository(
 
     override suspend fun get(bindingId: String): PublishDelivery? = rows[bindingId]
 
-    /** Display only (I28): moved by this double's own writes. */
-    override fun observe(bindingId: String): Flow<PublishDelivery?> = version.map { rows[bindingId] }
+    /** Display only (I28): moved by this double's own writes, and distinct as Room's flow is (B6b review N3). */
+    override fun observe(bindingId: String): Flow<PublishDelivery?> =
+        version.map { rows[bindingId] }.distinctUntilChanged()
+
+    /** A delivery row gone with its binding (the CASCADE), moving [observe] to `null` as Room's flow does. */
+    fun removeRow(id: String) {
+        if (rows.remove(id) != null) version.value += 1
+    }
 
     override suspend fun upsert(delivery: PublishDelivery) {
         if (delivery.bindingId !in bindings.rows) throw RiggedFailure("ha_publish_delivery: no binding ${delivery.bindingId}")
