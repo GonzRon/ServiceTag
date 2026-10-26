@@ -152,10 +152,11 @@ object ServicePolicyEngine {
      * IN_SERVICE_AFTER_OPENING_SERVICE (#124, C40). A MANUAL asset out of season waits for its START
      * (AWAITING_START), as the other in-service policies do. With no cycle to count in — a YEAR_ROUND
      * asset, no season at all, or a CALENDAR asset whose window is missing — the policy does not apply
-     * and the date stands (POLICY_INAPPLICABLE); every command refuses those, so only a merge reaches
-     * them. Out of season it is IN_SERVICE_AT_START with the same offset, exactly, and never reads
-     * `openingServiceOn`. In season it waits with no date until the opening service is known
-     * (AWAITING_OPENING_SERVICE, held DORMANT by [evaluate]); then it counts from the later of that day
+     * and the date stands (POLICY_INAPPLICABLE): a group target is refused by inv. 106 and a YEAR_ROUND
+     * asset by `SaveSchedule` (N2b, C42); a windowless CALENDAR asset only a merge stores. Out of season
+     * it is IN_SERVICE_AT_START with the same offset, exactly, and never reads `openingServiceOn`. In
+     * season it waits with no date until the opening service is known (AWAITING_OPENING_SERVICE, held
+     * DORMANT by [evaluate]); then it counts from the later of that day
      * and the cycle's start `s`, plus the offset: an early service counts from the season's start
      * (SEASON_START when that moved the date), a late one from its own day (OPENING_SERVICE). A later
      * date is never dragged back (inv. 97), and a date in the break moves past it as shipped.

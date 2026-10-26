@@ -76,7 +76,7 @@ fun whyLine(item: DueItem, format: (LocalDate) -> String): String? = when {
         PolicyReason.AFTER_BREAK,
         PolicyReason.POLICY_INAPPLICABLE,
         PolicyReason.AWAITING_START,
-        // #124: N3 draws P124-3 and P124-4; until then these rows say nothing more.
+        // #124: OPENING_SERVICE draws nothing until N3's P124-4. AWAITING_OPENING_SERVICE never reaches here: its row is DORMANT and is answered above until N3 puts P124-3 ahead of the DORMANT arm, with no dormantUntil and the CURRENT section (C43).
         PolicyReason.AWAITING_OPENING_SERVICE,
         PolicyReason.OPENING_SERVICE,
         -> null
