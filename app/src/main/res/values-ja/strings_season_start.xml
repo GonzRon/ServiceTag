@@ -43,8 +43,8 @@
     <string name="season_start_strand_quick_needs_election">このスケジュールはシーズン開始メンテナンスです。ワンタップに変更する前に、ワンタップでの完了を対象にすることを確認してください。</string>
     <string name="season_start_role_line">シーズン開始メンテナンス · %s 以降のメンテナンスが対象</string>
     <string name="season_start_count_one_tap">ワンタップでの完了を対象にする</string>
-    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
-    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
-    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
-    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
+    <string name="season_start_refused_no_season_start_service">%s には、数え始める基準となるシーズン開始メンテナンスがありません。先にそのスケジュールのいずれかをシーズン開始メンテナンスとして使用してください。</string>
+    <string name="season_start_refused_counts_from_itself">このスケジュールはシーズン開始メンテナンスのため、自分自身から数え始めることはできません。</string>
+    <string name="season_start_refused_counts_from_the_service">このスケジュールはシーズン開始メンテナンスから数え始めるため、シーズン開始メンテナンスにはできません。先に数え始める日を変更してください。</string>
+    <string name="season_start_strand_dependent_schedules">「%1$s」は %2$s のシーズン開始メンテナンスから数え始めます。先に数え始める日を変更してください。</string>
 </resources>

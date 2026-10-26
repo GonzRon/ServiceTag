@@ -43,8 +43,8 @@
     <string name="season_start_strand_quick_needs_election">Dieser Plan ist eine Saisonstart-Wartung. Bestätige, dass Abschlüsse mit einem Tippen zählen sollen, bevor du ihn auf ein Tippen umstellst.</string>
     <string name="season_start_role_line">Saisonstart-Wartung · Wartungen zählen ab %s</string>
     <string name="season_start_count_one_tap">Abschlüsse mit einem Tippen zählen</string>
-    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
-    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
-    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
-    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
+    <string name="season_start_refused_no_season_start_service">%s hat keine Saisonstart-Wartung, ab der gezählt werden kann. Verwende zuerst einen seiner Pläne als seine Saisonstart-Wartung.</string>
+    <string name="season_start_refused_counts_from_itself">Dieser Plan ist die Saisonstart-Wartung und kann deshalb nicht ab sich selbst zählen.</string>
+    <string name="season_start_refused_counts_from_the_service">Dieser Plan zählt ab der Saisonstart-Wartung und kann deshalb keine sein. Ändere zuerst, ab wann er zählt.</string>
+    <string name="season_start_strand_dependent_schedules">„%1$s“ zählt ab der Saisonstart-Wartung von %2$s. Ändere zuerst, ab wann dieser Plan zählt.</string>
 </resources>

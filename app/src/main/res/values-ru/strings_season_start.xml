@@ -43,8 +43,8 @@
     <string name="season_start_strand_quick_needs_election">Этот график — обслуживание к началу сезона. Подтвердите, что выполнение одним нажатием должно учитываться, прежде чем переводить его на одно нажатие.</string>
     <string name="season_start_role_line">Обслуживание к началу сезона · обслуживания учитываются с %s</string>
     <string name="season_start_count_one_tap">Учитывать выполнение одним нажатием</string>
-    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
-    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
-    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
-    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
+    <string name="season_start_refused_no_season_start_service">У объекта %s нет обслуживания к началу сезона, от которого можно вести отсчёт. Сначала используйте один из его графиков как его обслуживание к началу сезона.</string>
+    <string name="season_start_refused_counts_from_itself">Этот график — обслуживание к началу сезона, поэтому он не может отсчитываться от самого себя.</string>
+    <string name="season_start_refused_counts_from_the_service">Этот график отсчитывается от обслуживания к началу сезона, поэтому не может им быть. Сначала измените, от чего он начинает отсчёт.</string>
+    <string name="season_start_strand_dependent_schedules">«%1$s» отсчитывается от обслуживания к началу сезона объекта %2$s. Сначала измените, от чего этот график начинает отсчёт.</string>
 </resources>

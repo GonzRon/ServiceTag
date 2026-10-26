@@ -43,8 +43,8 @@
     <string name="season_start_strand_quick_needs_election">यह शेड्यूल एक मौसम-आरंभ रखरखाव है। इसे एक टैप पर बदलने से पहले पुष्टि करें कि एक टैप से पूरा करना गिना जाना चाहिए।</string>
     <string name="season_start_role_line">मौसम-आरंभ रखरखाव · रखरखाव %s से गिने जाते हैं</string>
     <string name="season_start_count_one_tap">एक टैप से पूरा करना गिनें</string>
-    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
-    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
-    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
-    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
+    <string name="season_start_refused_no_season_start_service">%s के लिए गिनती शुरू करने का कोई मौसम-आरंभ रखरखाव नहीं है। पहले इसके किसी शेड्यूल का इसके मौसम-आरंभ रखरखाव के रूप में उपयोग करें।</string>
+    <string name="season_start_refused_counts_from_itself">यह शेड्यूल मौसम-आरंभ रखरखाव है, इसलिए यह खुद से गिनती शुरू नहीं कर सकता।</string>
+    <string name="season_start_refused_counts_from_the_service">यह शेड्यूल मौसम-आरंभ रखरखाव से गिनती शुरू करता है, इसलिए यह मौसम-आरंभ रखरखाव नहीं हो सकता। पहले बदलें कि यह कहाँ से गिनना शुरू करता है।</string>
+    <string name="season_start_strand_dependent_schedules">“%1$s” %2$s के मौसम-आरंभ रखरखाव से गिनती शुरू करता है। पहले बदलें कि यह शेड्यूल कहाँ से गिनना शुरू करता है।</string>
 </resources>

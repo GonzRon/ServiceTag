@@ -43,8 +43,8 @@
     <string name="season_start_strand_quick_needs_election">Este plano é uma manutenção de início de temporada. Confirme que as conclusões com um toque devem contar antes de mudá-lo para um toque.</string>
     <string name="season_start_role_line">Manutenção de início de temporada · as manutenções contam a partir de %s</string>
     <string name="season_start_count_one_tap">Contar conclusões com um toque</string>
-    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
-    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
-    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
-    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
+    <string name="season_start_refused_no_season_start_service">%s não tem uma manutenção de início de temporada a partir da qual contar. Use um dos planos dele como a manutenção de início de temporada dele primeiro.</string>
+    <string name="season_start_refused_counts_from_itself">Este plano é a manutenção de início de temporada, então não pode contar a partir de si mesmo.</string>
+    <string name="season_start_refused_counts_from_the_service">Este plano conta a partir da manutenção de início de temporada, então não pode ser uma. Mude a partir de quando ele começa a contar primeiro.</string>
+    <string name="season_start_strand_dependent_schedules">“%1$s” conta a partir da manutenção de início de temporada de %2$s. Mude a partir de quando ele começa a contar primeiro.</string>
 </resources>

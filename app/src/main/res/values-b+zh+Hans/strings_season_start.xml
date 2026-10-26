@@ -43,8 +43,8 @@
     <string name="season_start_strand_quick_needs_election">此保养计划是使用季开始保养。在将其改为点按一次之前，请确认点按一次完成应计入。</string>
     <string name="season_start_role_line">使用季开始保养 · 保养从 %s 起计入</string>
     <string name="season_start_count_one_tap">计入点按一次完成</string>
-    <string name="season_start_refused_no_season_start_service">%s has no Season Start service to count from. Use one of its schedules as its Season Start service first.</string>
-    <string name="season_start_refused_counts_from_itself">This schedule is the Season Start service, so it cannot count from itself.</string>
-    <string name="season_start_refused_counts_from_the_service">This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first.</string>
-    <string name="season_start_strand_dependent_schedules">\"%1$s\" counts from %2$s\'s Season Start service. Change when it starts counting first.</string>
+    <string name="season_start_refused_no_season_start_service">%s 没有可作为计算起点的使用季开始保养。请先将它的一个保养计划用作它的使用季开始保养。</string>
+    <string name="season_start_refused_counts_from_itself">此保养计划是使用季开始保养，因此不能以自身为计算起点。</string>
+    <string name="season_start_refused_counts_from_the_service">此保养计划以使用季开始保养为计算起点，因此不能用作使用季开始保养。请先更改它的计算起点。</string>
+    <string name="season_start_strand_dependent_schedules">“%1$s”以 %2$s 的使用季开始保养为计算起点。请先更改它的计算起点。</string>
 </resources>
