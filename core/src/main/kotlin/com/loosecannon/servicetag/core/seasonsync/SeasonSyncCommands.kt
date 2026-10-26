@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.seasonsync
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -235,9 +236,10 @@ class SaveHaConnectionRefused(val reason: SaveHaConnectionRefusal) :
  * takes a fresh id from [ids], [SyncCadence.DAILY] and [BackgroundChecks.OFF] unless [cadence] or
  * [backgroundChecks] is given; a null [cadence] or [backgroundChecks] keeps a stored connection's. [token] is put in
  * the [SecretStore] **after** the commit, and only when given. A new token, address, eligibility or Wi-Fi name moves
- * every binding's revision, so a read built before it is dropped, and each enabled binding is then read afresh; a
- * changed cadence, eligibility or background setting ensures or cancels the work after the commit — even when the
- * token store fails, whose failure then reaches the caller and asks for no read.
+ * every binding's revision — #125: each schedule binding's too — so a read built before it is dropped, and each
+ * enabled binding is then read afresh; a changed cadence, eligibility or background setting ensures or cancels the
+ * work after the commit, an enabled schedule binding counting as an asset's — even when the token store fails, whose
+ * failure then reaches the caller and asks for no read.
  *
  * #113/#114 (C28): every save moves [HaConnection.configGeneration] by one (a new connection starts at 1), so a
  * validation read before it is stale; a re-authorised save also moves every publish binding's revision, keeping its
@@ -254,8 +256,19 @@ class SaveHaConnection(
     private val clock: Clock,
     /** #113/#114 (C28, F-6): the outbound side, defaulted so every shipped construction compiles unchanged. */
     private val outbound: OutboundTargets = OutboundTargets.NONE,
+    /**
+     * #125 (U-C5; the H3 review's ruling 2b, F-6): the schedule bindings this connection serves, and the fresh read of
+     * one (the runner's `requestScheduleRead`). Defaulted for the shipped constructions, which have no schedule binding.
+     */
+    private val scheduleBindings: ScheduleSeasonBindingRepository = ScheduleSeasonBindingRepository.NONE,
+    private val requestScheduleRead: suspend (ScheduleId) -> Unit = {},
 ) {
-    private class Saved(val connection: HaConnection, val reread: List<AssetId>, val work: Boolean?)
+    private class Saved(
+        val connection: HaConnection,
+        val reread: List<AssetId>,
+        val work: Boolean?,
+        val rereadSchedules: List<ScheduleId> = emptyList(),
+    )
 
     suspend fun run(
         baseUrl: String,
@@ -314,10 +327,19 @@ class SaveHaConnection(
             } else {
                 emptyList()
             }
+            // #125 (ruling 2b): the schedule bindings this connection serves move with the asset bindings, so a read
+            // built before the change is dropped by the schedule applier's revision guard, and each enabled one is read
+            // afresh.
+            val rereadSchedules = if (reauthorized) {
+                scheduleBindings.all().map { scheduleBindings.bump(it, now) }.filter { it.enabled }.map { it.scheduleId }
+            } else {
+                emptyList()
+            }
             val rescheduled = stored.cadence != next.cadence ||
                 stored.networkEligibility != next.networkEligibility ||
                 stored.backgroundChecks != next.backgroundChecks
-            Saved(next, reread, if (rescheduled) bindings.anyEnabled() else null)
+            val anyEnabled = if (rescheduled) bindings.anyEnabled() || scheduleBindings.anyEnabled() else null
+            Saved(next, reread, anyEnabled, rereadSchedules)
         }
         try {
             if (token != null) secrets.put(saved.connection.id, token)
@@ -329,7 +351,15 @@ class SaveHaConnection(
             }
         }
         saved.reread.forEach { scheduler.requestFreshRead(it) }
+        saved.rereadSchedules.forEach { requestScheduleRead(it) }
         return saved.connection
+    }
+
+    /** A schedule binding's revision moved by one, a refused compare-and-set thrown inside the write. */
+    private suspend fun ScheduleSeasonBindingRepository.bump(stored: ScheduleSeasonBinding, now: Long): ScheduleSeasonBinding {
+        val written = stored.copy(revision = stored.revision + 1, updatedAt = now)
+        check(update(written)) { "the binding of schedule ${stored.scheduleId.value} moved inside its own write" }
+        return written
     }
 }
 

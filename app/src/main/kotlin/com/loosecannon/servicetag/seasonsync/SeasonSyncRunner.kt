@@ -243,12 +243,13 @@ class SeasonSyncRunner(
 
     /**
      * #16's commands cancel when no **asset** binding is left enabled (Stop, a cadence change) or when Forget deleted
-     * the connection. #125: an enabled schedule binding still needs the work, so then C22's rule is applied instead —
-     * the same answer whenever no schedule binding is enabled.
+     * the connection. #125: an enabled schedule binding still needs the work, so with the schedule pass wired, cancel is
+     * C22's rule applied under [scheduleLock] — read and act in one hold, with no check outside it (H3 review n1); with
+     * no enabled binding of either kind, or no connection, that rule cancels. Without the pass (#16's shipped
+     * constructions) it is the plain cancel.
      */
     override suspend fun cancel() {
-        val polling = scheduleSeasons
-        if (polling != null && database { polling.bindings.anyEnabled() }) {
+        if (scheduleSeasons != null) {
             reconcile(onlyWhenDrifted = false)
             return
         }
@@ -300,7 +301,11 @@ class SeasonSyncRunner(
                 else -> reader.read(connection.baseUrl, binding.entityId, token)
             }
             val fetchedAt = clock.nowMillis()
-            database { polling.record.run(binding.scheduleId, binding.revision, startedAt, fetchedAt, outcome) }
+            database {
+                polling.record.run(
+                    binding.scheduleId, binding.revision, startedAt, fetchedAt, outcome, readEntityId = binding.entityId,
+                )
+            }
             outcomes += outcome
         }
         return outcomes

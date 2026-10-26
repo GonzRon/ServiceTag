@@ -997,6 +997,8 @@ class AppGraph(private val context: Context) {
         ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
     val saveHaConnection: SaveHaConnection = SaveHaConnection(
         haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock, outboundTargets,
+        // #125 (ruling 2b): a re-authorised save moves the schedule bindings too, and reads each enabled one afresh.
+        scheduleBindings = scheduleSeasonBindings, requestScheduleRead = { seasonSyncRunner.requestScheduleRead(it) },
     )
     val forgetHaConnection: ForgetHaConnection =
         ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow, outboundTargets)

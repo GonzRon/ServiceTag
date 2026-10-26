@@ -148,6 +148,47 @@ class ScheduleSeasonRunnerTest {
         assertEquals("both recorded, each at the revision the last wrote", revision + 2, graph.scheduleBinding("start").revision)
     }
 
+    /**
+     * H3 review I1: an unlink and a relink restart the binding at revision 1, so the revision alone cannot tell a read
+     * of the old switch from one of the new. A read of switch A still in flight when the schedule is relinked to B is
+     * dropped: its `ON` never becomes B's observation, and it writes no row of the schedule's own season.
+     */
+    @Test fun aReadInFlightAcrossAnUnlinkAndARelinkIsDropped() = gated {
+        val graph = graph()
+        graph.connect()
+        val start = graph.followingSchedule("start")
+        val relinked = "input_boolean.example_start_other_switch"
+        val inside = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        graph.haStateReader.answer = { entity ->
+            if (entity == switchOf("start")) {
+                inside.complete(Unit)
+                gate.await()
+                HaReadOutcome.Observed(HaSwitchState.ON, null)
+            } else {
+                HaReadOutcome.Observed(HaSwitchState.OFF, null)
+            }
+        }
+
+        graph.seasonSyncRunner.requestScheduleRead(start)
+        inside.await()
+        graph.unlinkScheduleSeason.run(start)
+        graph.linkScheduleSeason.run(start, relinked)
+        assertEquals("the relink starts again at revision 1", 1L, graph.scheduleBinding("start").revision)
+        graph.seasonSyncRunner.requestScheduleRead(start)
+        gate.complete(Unit)
+        graph.awaitSeasonSyncReads()
+
+        val binding = graph.scheduleBinding("start")
+        assertEquals(relinked, binding.entityId)
+        assertEquals("B's own answer, never A's", HaSwitchState.OFF, binding.observedState)
+        assertEquals(
+            "no row from a switch the schedule no longer follows",
+            emptyList<SeasonAction>(), graph.scheduleSeasonActivations.forSchedule(start).map { it.action },
+        )
+        assertEquals(listOf(switchOf("start"), relinked), graph.readEntities())
+    }
+
     @Test fun theResumeRefreshCoversAStaleScheduleBinding() = runBlocking {
         val graph = graph()
         graph.connect(cadence = SyncCadence.DAILY)

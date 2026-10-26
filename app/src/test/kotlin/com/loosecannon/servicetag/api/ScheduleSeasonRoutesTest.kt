@@ -92,6 +92,8 @@ class ScheduleSeasonRoutesTest {
         assertTrue(response.bodyText(), response.bodyText().contains("\"code\":\"$code\""))
         if (problem != null) assertTrue(response.bodyText(), response.bodyText().contains(problem))
         assertEquals("nothing was written", before, snapshot())
+        // H3 review m1: a launched check runs on the season sync scope, so join it before asking whether one ran.
+        runBlocking { graph.awaitSeasonSyncReads() }
         assertTrue("no read was launched", graph.haStateReader.reads.isEmpty())
         return response
     }

@@ -262,7 +262,8 @@ sealed interface ScheduleSeasonRecorded {
  * [RecordSeasonSyncResult] over the schedule's rows, in one write:
  *
  * - **the revision guard**: a result whose `readRevision` is not the stored revision, or whose binding is stopped,
- *   writes nothing; the binding update is a compare-and-set;
+ *   writes nothing; the binding update is a compare-and-set. An unlink and a relink restart the binding at revision 1,
+ *   so a result read of another entity than the stored one is dropped too (H3 review I1);
  * - **status**: a [HaReadOutcome.NoDecision] records its kind and never moves `lastSuccessAt`; an
  *   [HaReadOutcome.Observed] stores the state, HA's change text and the fetch time, and clears the error;
  * - **three times (R16-3)**: a row is dated the day it is applied, never by HA's text;
@@ -288,7 +289,9 @@ class RecordScheduleSeasonSyncResult(
 ) {
     /**
      * Records [outcome], read for [scheduleId] at the binding's [readRevision]. [startedAt] is when the request was
-     * built; [fetchedAt] is the runner's clock when the read returned.
+     * built; [fetchedAt] is the runner's clock when the read returned. [readEntityId] is the entity the read asked
+     * about: the runner passes it, and a result about another entity than the stored binding's is dropped. Null (a
+     * caller that names none, F-6) checks the revision alone.
      */
     suspend fun run(
         scheduleId: ScheduleId,
@@ -296,9 +299,11 @@ class RecordScheduleSeasonSyncResult(
         startedAt: Long,
         fetchedAt: Long,
         outcome: HaReadOutcome,
+        readEntityId: String? = null,
     ): ScheduleSeasonRecorded = uow.write {
         val stored = bindings.get(scheduleId) ?: return@write ScheduleSeasonRecorded.Dropped
         if (stored.revision != readRevision || !stored.enabled) return@write ScheduleSeasonRecorded.Dropped
+        if (readEntityId != null && readEntityId != stored.entityId) return@write ScheduleSeasonRecorded.Dropped
         val schedule = schedules.get(scheduleId) ?: return@write ScheduleSeasonRecorded.Dropped
         val now = clock.nowMillis()
         val attempted = stored.copy(lastAttemptAt = startedAt)

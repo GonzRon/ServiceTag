@@ -60,7 +60,8 @@ internal class ScheduleSeasonHandlers(
         ok(ScheduleSeasonResponse.serializer(), read(ScheduleId(scheduleId)))
 
     /**
-     * `POST /v1/schedules/{id}/season-sync`. A schedule that is not there is 404 `NO_SUCH_SCHEDULE` first.
+     * `POST /v1/schedules/{id}/season-sync`. After the body's shape (400: not JSON, an unknown key, an unknown `action`), a
+     * schedule that is not there is 404 `NO_SUCH_SCHEDULE`, before any confirmation.
      *
      * - `LINK` needs `entityId` (else 400) and the caller's `confirmEntityId`, exactly `entityId` (else 422
      *   `SCHEDULE_SEASON_CONFIRMATION_REQUIRED`), and takes no `confirmUnlink`. Then `LinkScheduleSeason` writes the
