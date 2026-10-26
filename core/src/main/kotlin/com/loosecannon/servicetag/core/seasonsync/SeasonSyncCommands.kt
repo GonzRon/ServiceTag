@@ -309,7 +309,7 @@ class SaveHaConnection(
                 stored.networkEligibility != next.networkEligibility ||
                 stored.homeNetworkSsid != next.homeNetworkSsid
             val reread = if (reauthorized) {
-                outbound.reauthorize(next.id)
+                outbound.reauthorize(next.id, addressChanged = stored.baseUrl != next.baseUrl)
                 bindings.all().map { bindings.bump(it, it, now) }.filter { it.enabled }.map { it.assetId }
             } else {
                 emptyList()

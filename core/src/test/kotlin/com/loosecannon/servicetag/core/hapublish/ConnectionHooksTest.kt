@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.DATE
 import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.DATE_2
 import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.HEATER
 import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.STATUS
+import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.STATUS_2
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
@@ -17,13 +18,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * #113/#114 (C28, K9, I32, O-11, O-12, F-2; row 87) — the shipped connection commands with the publishing side: an
  * address change waits while a date helper is owed `1970-01-01`; a re-authorised save moves every publish binding's
- * revision and keeps its validation; Forget leaves every undelivered date obligation as an UNDELIVERABLE tombstone;
+ * revision and keeps its validation, unless the address moved (M4); Forget leaves every undelivered date obligation as an UNDELIVERABLE tombstone;
  * every save moves `configGeneration` by one. The address, token and helpers are fictional.
  */
 class ConnectionHooksTest {
@@ -68,7 +70,7 @@ class ConnectionHooksTest {
         val status = p.enableStatus(HEATER)
         val date = p.enableDate(BOILER)
         p.enableDate(third, DATE_2)
-        val off = p.disable.run(AssetId(third), PublishKind.SEASON_SERVICE_DATE)
+        val off = assertNotNull(p.disable.run(AssetId(third), PublishKind.SEASON_SERVICE_DATE))
         // An AUTH_REFUSED recorded at the status binding's pair.
         val d = p.deliveries.get(status.id)!!
         assertTrue(p.deliveries.record(status.revision, DeliverySteps.failed(status, d, PublishErrorKind.AUTH_REFUSED, null, p.h.now).delivery))
@@ -131,6 +133,25 @@ class ConnectionHooksTest {
         assertIs<DeliveryPlan.ReadFirst>(p.pass.run(date.id))
         assertEquals(INVALID_SERVICE_DATE, p.transport.stateOf(DATE))
         assertEquals(1, p.transport.posts.size)
+    }
+
+    // M4, ruled: a different Home Assistant may lack the helpers, so an allowed address change keeps no validation.
+
+    @Test
+    fun anAllowedAddressChangeClearsEveryValidation() = runTest {
+        val p = harness()
+        p.connect()
+        val heater = p.enableStatus(HEATER, STATUS)
+        val boiler = p.enableStatus(BOILER, STATUS_2)
+        assertEquals(heater.revision, heater.validatedRevision)
+
+        p.connect(baseUrl = "http://192.168.0.11:8123") // O-12 allows it: status bindings alone
+        for (before in listOf(heater, boiler)) {
+            val moved = p.bindings.get(before.id)!!
+            assertEquals(before.revision + 1, moved.revision)
+            assertNull(moved.validatedRevision, "validated on the old address, not on this one")
+        }
+        assertEquals(DeliveryPlan.Skip(PublishState.NEEDS_VALIDATION), p.pass.run(heater.id))
     }
 
     @Test

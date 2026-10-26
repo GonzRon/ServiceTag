@@ -70,9 +70,10 @@ interface OutboundTargets {
     /**
      * C28, A04, F-2 — a re-authorised save: every publish binding of [connectionId] moves its revision by one, its
      * delivery error cleared with the pair, a standing validation kept, so a send built before is dropped and a
-     * pending invalidation is still delivered.
+     * pending invalidation is still delivered. When [addressChanged], every validation is cleared instead: a different
+     * Home Assistant may lack the helpers (M4).
      */
-    suspend fun reauthorize(connectionId: String)
+    suspend fun reauthorize(connectionId: String, addressChanged: Boolean)
 
     /**
      * C28, O-11 — Forget, in its write and before the delete: each enabled date binding of [connectionId] that still
@@ -88,7 +89,7 @@ interface OutboundTargets {
 
             override suspend fun blocksAddressChange(connectionId: String): Boolean = false
 
-            override suspend fun reauthorize(connectionId: String) = Unit
+            override suspend fun reauthorize(connectionId: String, addressChanged: Boolean) = Unit
 
             override suspend fun forget(connectionId: String) = Unit
         }

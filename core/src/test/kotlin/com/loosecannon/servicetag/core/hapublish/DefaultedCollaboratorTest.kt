@@ -75,7 +75,7 @@ class DefaultedCollaboratorTest {
         val none = OutboundTargets.NONE
         assertFalse(none.writes("conn-1", STATUS))
         assertFalse(none.blocksAddressChange("conn-1"))
-        none.reauthorize("conn-1")
+        none.reauthorize("conn-1", addressChanged = true)
         none.forget("conn-1")
     }
 }

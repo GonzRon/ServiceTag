@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.SEASON
 import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.STATUS
 import com.loosecannon.servicetag.core.hapublish.PublishHarness.Companion.STATUS_2
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
@@ -249,6 +250,10 @@ class PublishCommandsTest {
         assertEquals(AssetId(BOILER), thrown.holderAssetId)
     }
 
+    /**
+     * Only the free claim is B3's: the disabled orphan blocks no other asset. The retirement itself is B4b1's projector
+     * (ruling 8), so this case deletes the row by hand and pins only what the delete takes and leaves.
+     */
     @Test
     fun aDisabledBindingWhoseAssetIsDeletedIsRetired() = runTest {
         val p = harness()
@@ -275,7 +280,7 @@ class PublishCommandsTest {
         val changed = p.change.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS, STATUS_2, p.read(STATUS_2), null, INSTALLATION)
         assertEquals(2, changed.revision)
         assertEquals(STATUS_2, changed.entityId)
-        val disabled = p.disable.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS)
+        val disabled = assertNotNull(p.disable.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS))
         assertEquals(3, disabled.revision)
         assertFalse(disabled.enabled)
     }
@@ -330,12 +335,47 @@ class PublishCommandsTest {
 
         val again = p.enableDate()
         p.transport.posts.clear()
+        assertEquals(DeliveryPlan.Skip(PublishState.PENDING, reproject = true), p.pass.run(again.id))
+        assertTrue(p.transport.posts.isEmpty(), "the re-enable waits for the projector's value")
+        p.project(again, "2026-06-01")
         p.pass.run(again.id)
         assertEquals(listOf(ScriptedPublishTransport.Post(HaServiceAction.SET_DATE, DATE, "2026-06-01")), p.transport.posts)
         assertEquals("2026-06-01", p.transport.stateOf(DATE))
         val delivery = p.deliveries.get(again.id)!!
         assertEquals("2026-06-01", delivery.lastPublishedValue)
         assertEquals(again.revision, delivery.publishedBindingRevision)
+    }
+
+    // I1 (owner §3, G23 "ServiceTag reports facts"): the projector reads only enabled bindings, so a value held while
+    // the binding was disabled, or activated on another installation, is not a fact.
+
+    @Test
+    fun aReEnableSendsNothingTheProjectorHasNotComputed() = runTest {
+        val p = harness()
+        p.connect()
+        val first = p.enableStatus()
+        p.project(first, STATUS_UP)
+        p.pass.run(first.id)
+        assertEquals(STATUS_UP, p.transport.stateOf(STATUS))
+        val heldRevision = p.deliveries.get(first.id)!!.desiredRevision
+
+        p.disable.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS)
+        p.transport.helpers[STATUS] = p.transport.helpers.getValue(STATUS).copy(state = "DOWN")
+        val again = p.enableStatus()
+        p.transport.posts.clear()
+        assertEquals(DeliveryPlan.Skip(PublishState.WAITING_FOR_SOURCE), p.pass.run(again.id))
+        assertTrue(p.transport.posts.isEmpty(), "zero POSTs until the projector computes the value again")
+        val waiting = p.deliveries.get(again.id)!!
+        assertNull(waiting.desiredValue)
+        assertNull(waiting.desiredAt)
+        assertEquals(heldRevision, waiting.desiredRevision, "the projector's compare-and-set still holds")
+
+        // An enabled row activated on another installation holds no fact for this one either.
+        p.project(again, STATUS_UP)
+        p.installation = "installation-b"
+        val here = p.enableStatus()
+        assertEquals("installation-b", here.activatedInstallationId)
+        assertNull(p.deliveries.get(here.id)!!.desiredValue)
     }
 
     // Row 94 (F-1, #113 "never attributed").
@@ -365,16 +405,18 @@ class PublishCommandsTest {
         p.pass.run(first.id)
         val published = p.deliveries.get(first.id)!!
         assertEquals(STATUS_UP, published.lastPublishedValue)
+        assertNotNull(published.lastAttemptAt, "an attempt was made to the old helper")
 
         p.change.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS, STATUS_2, p.read(STATUS_2), null, INSTALLATION)
         val reset = p.deliveries.get(first.id)!!
+        // M5: the old helper's attempts are never the new one's.
         val expected = PublishDelivery(
             bindingId = first.id,
             desiredValue = published.desiredValue,
             desiredRevision = published.desiredRevision,
             desiredAt = published.desiredAt,
-            attemptsAtRevision = published.attemptsAtRevision,
-            lastAttemptAt = published.lastAttemptAt,
+            attemptsAtRevision = 0,
+            lastAttemptAt = null,
         )
         assertEquals(expected, reset, "nothing published to, verified on or read from the old helper is inherited")
     }
@@ -400,10 +442,150 @@ class PublishCommandsTest {
         val p = harness()
         p.connect()
         p.enableDate()
-        val disabled = p.disable.run(AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE)
+        val disabled = assertNotNull(p.disable.run(AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE))
         val tombstones = p.tombstones.rows.toMap()
         assertEquals(disabled, p.disable.run(AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE))
         assertEquals(disabled, p.bindingOf(HEATER, PublishKind.SEASON_SERVICE_DATE), "no revision bump")
         assertEquals(tombstones, p.tombstones.rows.toMap(), "no tombstone written or merged")
+    }
+
+    // C26, C25, N-2: the refusals and Check helper's two paths.
+
+    @Test
+    fun aBoundaryHelperThisPhoneWritesIsBoundaryIsTarget() = runTest {
+        val p = harness()
+        p.asset(HEATER, SeasonMode.MANUAL)
+        val connection = p.connect()
+        p.h.link(HEATER) { it.copy(connectionId = connection.id, entityId = IN_SEASON) }
+
+        p.enableDate(BOILER, SEASON_ENDED)
+        p.refused(PublishRefusal.BOUNDARY_IS_TARGET, FIELD_BOUNDARY_ENTITY_ID) { p.enableDate(boundary = SEASON_ENDED) }
+
+        p.disable.run(AssetId(BOILER), PublishKind.SEASON_SERVICE_DATE)
+        assertEquals(DecommissionState.PENDING, p.tombstones.byTarget(connection.id, SEASON_ENDED)?.state)
+        p.refused(PublishRefusal.BOUNDARY_IS_TARGET, FIELD_BOUNDARY_ENTITY_ID) { p.enableDate(boundary = SEASON_ENDED) }
+
+        // Delivered, nothing on this phone writes it any more: a disabled binding naming it is no claim.
+        p.pass.drainTombstones()
+        assertEquals(SEASON_ENDED, p.enableDate(boundary = SEASON_ENDED).boundaryEntityId)
+    }
+
+    @Test
+    fun aStaleBoundaryReadIsRefused() = runTest {
+        val p = harness()
+        p.asset(HEATER, SeasonMode.MANUAL)
+        val connection = p.connect()
+        p.h.link(HEATER) { it.copy(connectionId = connection.id, entityId = IN_SEASON) }
+        val boundary = p.read(SEASON_ENDED, HEATER, PublishKind.SEASON_SERVICE_DATE)
+        p.refused(PublishRefusal.STALE_READ, FIELD_BOUNDARY_ENTITY_ID) {
+            p.enable.run(
+                AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE, DATE, p.read(DATE),
+                boundary.copy(configGeneration = connection.configGeneration - 1), INSTALLATION,
+            )
+        }
+    }
+
+    @Test
+    fun anAssetNotMaintainedHereIsRefused() = runTest {
+        val p = harness()
+        p.connect()
+        p.h.asset(HEATER, SeasonMode.CALENDAR) { it.copy(status = AssetStatus.ARCHIVED) }
+        p.refused(PublishRefusal.NOT_MAINTAINED_HERE) { p.enableStatus() }
+        p.refused(PublishRefusal.NOT_MAINTAINED_HERE) { p.enableDate() }
+    }
+
+    @Test
+    fun aControlWithNoBindingIsNotSetUp() = runTest {
+        val p = harness()
+        p.connect()
+        val change = assertFailsWith<PublishNotSetUp> {
+            p.change.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS, STATUS, p.read(STATUS), null, INSTALLATION)
+        }
+        assertEquals(PublishKind.EQUIPMENT_STATUS, change.kind)
+        val check = assertFailsWith<PublishNotSetUp> {
+            p.revalidate.run(AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE, p.read(DATE), null)
+        }
+        assertEquals(AssetId(HEATER), check.assetId)
+        assertEquals(PublishKind.SEASON_SERVICE_DATE, check.kind)
+        assertTrue(p.bindings.rows.isEmpty() && p.deliveries.rows.isEmpty(), "nothing written")
+    }
+
+    @Test
+    fun aCheckHelperKeepsThePublishedLineAndTheOutstandingAttempt() = runTest {
+        val p = harness()
+        p.asset(HEATER, SeasonMode.MANUAL)
+        val connection = p.connect()
+        p.h.link(HEATER) { it.copy(connectionId = connection.id, entityId = IN_SEASON) }
+        val first = p.enableDate(boundary = SEASON_ENDED)
+        p.project(first, "2026-06-01")
+        p.pass.run(first.id)
+        val published = p.deliveries.get(first.id)!!
+        assertEquals("2026-06-01", published.lastPublishedValue)
+        // An attempt still outstanding, and an error at the current pair.
+        val outstanding = published.copy(
+            needsDelivery = true,
+            outcomeUnknownSince = p.h.now,
+            reconcilePending = true,
+            errorKind = PublishErrorKind.TIMED_OUT,
+            errorDetail = "timed out",
+            errorAt = p.h.now,
+            errorBindingRevision = first.revision,
+            errorDesiredRevision = published.desiredRevision,
+        )
+        p.deliveries.upsert(outstanding)
+        p.transport.helpers[SEASON_ENDED] = p.transport.helpers.getValue(SEASON_ENDED).copy(state = "2026-05-02")
+        p.later(1_000)
+
+        val checked = p.revalidate.run(
+            AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE, p.read(DATE),
+            p.read(SEASON_ENDED, HEATER, PublishKind.SEASON_SERVICE_DATE),
+        )
+        assertNull(checked.refusedAs)
+        assertEquals(first.revision + 1, checked.binding.revision)
+        assertEquals(checked.binding.revision, checked.binding.validatedRevision)
+        val expected = outstanding.copy(
+            errorKind = null,
+            errorDetail = null,
+            errorAt = null,
+            errorBindingRevision = null,
+            errorDesiredRevision = null,
+            boundaryValue = "2026-05-02",
+            boundaryReadAt = p.h.now,
+            boundaryBindingRevision = checked.binding.revision,
+        )
+        assertEquals(expected, p.deliveries.get(first.id), "the published and outstanding facts stay")
+    }
+
+    @Test
+    fun aCheckHelperOnABrokenHelperRecordsItsKind() = runTest {
+        val p = harness()
+        p.connect()
+        val first = p.enableStatus()
+        p.project(first, STATUS_UP)
+        p.pass.run(first.id)
+        val desired = p.deliveries.get(first.id)!!.desiredRevision
+        p.transport.helpers[STATUS] = p.transport.helpers.getValue(STATUS).copy(options = listOf("UP", "DOWN"))
+
+        val checked = p.revalidate.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS, p.read(STATUS), null)
+        assertEquals(PublishErrorKind.OPTIONS_MISMATCH, checked.refusedAs)
+        assertNull(checked.binding.validatedRevision)
+        val stored = p.bindings.get(first.id)!!
+        assertEquals(first.revision, stored.revision, "the revision does not move")
+        assertNull(stored.validatedRevision)
+        val delivery = p.deliveries.get(first.id)!!
+        assertEquals(PublishErrorKind.OPTIONS_MISMATCH, delivery.errorKind)
+        assertEquals(first.revision, delivery.errorBindingRevision)
+        assertEquals(desired, delivery.errorDesiredRevision)
+        assertEquals(STATUS_UP, delivery.lastPublishedValue, "the Published line stays")
+    }
+
+    // M2 (C35b): an absent binding is R-1's no-op, as a disabled one is.
+
+    @Test
+    fun disablingAnAbsentBindingIsANoOp() = runTest {
+        val p = harness()
+        p.connect()
+        assertNull(p.disable.run(AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE))
+        assertTrue(p.bindings.rows.isEmpty() && p.tombstones.rows.isEmpty(), "nothing written")
     }
 }

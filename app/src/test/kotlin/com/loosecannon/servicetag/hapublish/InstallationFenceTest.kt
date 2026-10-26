@@ -121,6 +121,10 @@ class InstallationFenceTest {
             heater, PublishKind.EQUIPMENT_STATUS, status, restarted.fresh(status, PublishKind.EQUIPMENT_STATUS), null, here,
         )
         assertEquals(here, enabled.activatedInstallationId)
+        // The value held from the other installation is no fact here (I1): nothing is sent until the projector's write.
+        assertEquals(PassResult.Skipped(PublishState.WAITING_FOR_SOURCE), restarted.publishNow())
+        assertTrue("zero POSTs before the projector", restarted.haPublish.posts.isEmpty())
+        assertTrue(restarted.publishDeliveries.writeDesired(enabled.id, enabled.revision, 1, "UP", restarted.now))
         restarted.publishNow()
         assertEquals(listOf(ScriptedHaPublish.Call(HaServiceAction.SELECT_OPTION, status, "UP")), restarted.haPublish.posts)
     }

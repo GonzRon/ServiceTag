@@ -83,7 +83,8 @@ class DecommissionStillPending(val id: String) : IllegalStateException("decommis
 /**
  * #113/#114 (C25, C25a, C26, C27, C9a, F-1, N-2) — Enable and Change target, one write, no HTTP: the fresh read the
  * plan step made is re-validated and its provenance checked here, inside the transaction, and the binding is written
- * enabled at the next revision, validated, activated on [installationId], with its delivery reset (F-1). A PENDING or
+ * enabled at the next revision, validated, activated on [installationId], with its delivery reset (F-1): the desired
+ * value is kept only from a binding enabled on this installation (I1), the attempts never (M5). A PENDING or
  * UNDELIVERABLE tombstone on the new helper is superseded (N-2); a date helper the stored, **enabled** binding let go
  * of is owed `1970-01-01` by a tombstone in the same write (R-1, I19).
  */
@@ -164,15 +165,20 @@ private class PublishActivation(
             oweInvalidation(stored, bindings, tombstones, ids, now)
         }
         val held = deliveries.get(next.id) ?: PublishDelivery(next.id, desiredValue = null, desiredRevision = 0, desiredAt = null)
+        // I1, G23 "ServiceTag reports facts": the projector reads only enabled bindings (C31), so the held value is a
+        // fact only while the stored binding was enabled on this installation; otherwise the projector computes it
+        // again, and its compare-and-set still holds at the kept revision.
+        val live = stored?.enabled == true && stored.activatedInstallationId == installationId
         val boundaryOn = boundaryId?.let { boundaryDateOf(checkNotNull(boundary).remote) }
         deliveries.upsert(
             PublishDelivery(
                 bindingId = next.id,
-                desiredValue = held.desiredValue,
+                desiredValue = held.desiredValue.takeIf { live },
                 desiredRevision = held.desiredRevision,
-                desiredAt = held.desiredAt,
-                attemptsAtRevision = held.attemptsAtRevision,
-                lastAttemptAt = held.lastAttemptAt,
+                desiredAt = held.desiredAt.takeIf { live },
+                // M5, F-1: an attempt made to the old helper is never attributed to the new one.
+                attemptsAtRevision = 0,
+                lastAttemptAt = null,
                 boundaryValue = boundaryOn?.toString(),
                 boundaryReadAt = boundaryOn?.let { checkNotNull(boundary).readAt },
                 boundaryBindingRevision = boundaryOn?.let { next.revision },
@@ -351,7 +357,8 @@ class ChangePublishTarget(
 /**
  * #113/#114 (C25, R-1) — **Disable**, locally and with no Home Assistant read: `enabled = false` at the next revision;
  * the date kind owes its helper `1970-01-01` by a tombstone in the same write, the status kind leaves the remote value
- * as it is (F-10). Disabling a disabled binding is a no-op: no revision, no tombstone.
+ * as it is (F-10). Disabling a disabled binding is a no-op: no revision, no tombstone. So is disabling an absent one,
+ * which answers null (C35b).
  */
 class DisablePublishing(
     private val bindings: PublishBindingRepository,
@@ -360,8 +367,8 @@ class DisablePublishing(
     private val ids: IdGenerator,
     private val clock: Clock,
 ) {
-    suspend fun run(assetId: AssetId, kind: PublishKind): PublishBinding = uow.write {
-        val stored = bindings.forAsset(assetId).firstOrNull { it.kind == kind } ?: throw PublishNotSetUp(assetId, kind)
+    suspend fun run(assetId: AssetId, kind: PublishKind): PublishBinding? = uow.write {
+        val stored = bindings.forAsset(assetId).firstOrNull { it.kind == kind } ?: return@write null
         if (!stored.enabled) return@write stored
         val now = clock.nowMillis()
         val next = stored.copy(enabled = false, revision = stored.revision + 1, updatedAt = now)
@@ -472,12 +479,13 @@ class PublishOutboundTargets(
         bindings.all().any { it.connectionId == connectionId && it.kind == PublishKind.SEASON_SERVICE_DATE && it.enabled } ||
             tombstones.all().any { it.connectionId == connectionId && it.state == DecommissionState.PENDING }
 
-    override suspend fun reauthorize(connectionId: String) {
+    override suspend fun reauthorize(connectionId: String, addressChanged: Boolean) {
         val now = clock.nowMillis()
         for (binding in bindings.all().filter { it.connectionId == connectionId }) {
+            val standing = !addressChanged && binding.validatedRevision == binding.revision
             val next = binding.copy(
                 revision = binding.revision + 1,
-                validatedRevision = if (binding.validatedRevision == binding.revision) binding.revision + 1 else null,
+                validatedRevision = if (standing) binding.revision + 1 else null,
                 updatedAt = now,
             )
             check(bindings.update(next)) { "a binding moved inside the connection's write" }
