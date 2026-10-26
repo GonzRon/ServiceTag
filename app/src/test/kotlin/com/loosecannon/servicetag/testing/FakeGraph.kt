@@ -12,7 +12,6 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
-import com.loosecannon.servicetag.core.season.OpeningServiceReader
 import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.EditSeasonSyncEntity
@@ -451,7 +450,7 @@ class FakeGraph(
         PublishOutboundTargets(publishBindings, publishDeliveries, publishDecommissions, ids, clock)
 
     /** #124 (C41): the one reader of an asset's opening-service day, as `AppGraph` builds it. */
-    val openingServiceReader: OpeningServiceReader = SeasonReadinessReader(
+    val openingServiceReader: SeasonReadinessReader = SeasonReadinessReader(
         assets, schedules, groups, events, seasonActivations, publishBindings, publishDeliveries, seasonSyncBindings,
         haConnections, todayPort, clock,
     ) { ZoneOffset.UTC }

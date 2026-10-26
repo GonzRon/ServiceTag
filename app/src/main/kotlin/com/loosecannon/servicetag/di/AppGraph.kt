@@ -28,7 +28,6 @@ import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
-import com.loosecannon.servicetag.core.season.OpeningServiceReader
 import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
@@ -521,7 +520,7 @@ class AppGraph(private val context: Context) {
      * #124 (C41): the one reader of an asset's opening-service day — C9 over exactly what [publishProjector] hands it,
      * the date binding's Home Assistant boundary included — which [recomputeSchedules] feeds to the engine.
      */
-    val openingServiceReader: OpeningServiceReader = SeasonReadinessReader(
+    val openingServiceReader: SeasonReadinessReader = SeasonReadinessReader(
         assets, schedules, groups, events, seasonActivations, publishBindings, publishDeliveries, seasonSyncBindings,
         haConnections, today, clock,
     ) { ZoneId.systemDefault() }

@@ -30,10 +30,8 @@ import org.junit.Test
  * opening-service day, the publishing projector's date value (B4b1) and the readiness route's `seasonServiceDoneOn`
  * (A4) give one answer, before the service and after it, on the Room-backed graph. The two Home Assistant cases are
  * built so that the phone's END alone would answer otherwise. Today is 2026-02-10 (UTC); every asset, helper,
- * address and token is fictional.
- *
- * The readiness route reads Home Assistant's boundary only from B5 on (until then it passes `HaBoundary.NotUsed`), so
- * its leg runs on the two cases Home Assistant does not decide.
+ * address and token is fictional. The route reads through the same reader (C29, B5 review N3), so its leg runs on
+ * every case.
  */
 class OpeningServiceAgreementTest {
 
@@ -133,10 +131,10 @@ class OpeningServiceAgreementTest {
         role("2025-09-01")
         val binding = dateBinding(boundary = ENDED)
         cacheBoundary(binding, "2025-10-01", daysAgo = 1)
-        assertAgree(binding, null, route = false, why = "no service yet")
+        assertAgree(binding, null, route = true, why = "no service yet")
 
         complete("2025-10-20")
-        assertAgree(binding, "2025-10-20", route = false, why = "on or after HA's fresh date, before the phone's END")
+        assertAgree(binding, "2025-10-20", route = true, why = "on or after HA's fresh date, before the phone's END")
     }
 
     /** HA's cached 2026-01-25, read a month ago, is later than the phone's END: a service on 2026-01-20 waits. */
@@ -148,10 +146,10 @@ class OpeningServiceAgreementTest {
         val binding = dateBinding(boundary = ENDED)
         cacheBoundary(binding, "2026-01-25", daysAgo = 30)
         complete("2026-01-20")
-        assertAgree(binding, null, route = false, why = "before the later of HA's cached date and the phone's END")
+        assertAgree(binding, null, route = true, why = "before the later of HA's cached date and the phone's END")
 
         complete("2026-02-01")
-        assertAgree(binding, "2026-02-01", route = false, why = "after both")
+        assertAgree(binding, "2026-02-01", route = true, why = "after both")
     }
 
     private companion object {

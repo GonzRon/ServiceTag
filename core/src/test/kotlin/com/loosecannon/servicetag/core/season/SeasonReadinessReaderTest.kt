@@ -71,6 +71,19 @@ class SeasonReadinessReaderTest {
         assertNull(read("nobody"), "an asset that is not there")
     }
 
+    /** The readiness route's read (C29): C9's whole answer, not only its day, and null for an asset that is not there. */
+    @Test fun readinessIsC9sWholeAnswer() = runTest {
+        h.asset("heater")
+        h.schedule("s-role", role = ScheduleRole.SEASON_START, since = "2026-09-01")
+        assertEquals(h.readiness("heater"), h.raw.uow.read { h.openingServiceReader.readiness(AssetId("heater")) })
+
+        done("2026-10-01")
+        val answer = h.raw.uow.read { h.openingServiceReader.readiness(AssetId("heater")) }
+        assertIs<Readiness.Ready>(answer)
+        assertEquals(h.readiness("heater"), answer)
+        assertNull(h.raw.uow.read { h.openingServiceReader.readiness(AssetId("nobody")) })
+    }
+
     @Test fun aGroupRoleIsReadPerMemberFromItsOwnCompletion() = runTest {
         h.asset("heater")
         h.asset("boiler")

@@ -31,8 +31,8 @@ import java.time.LocalDate
  * router and `FakeGraph`, on the JVM: C9's answer as eleven keys, every `NotReadyReason` by its name, a group role
  * named as a group, and the boundary's source and cutoff as two fields. Bodies are read as JSON trees, so an absent
  * key and a `null` are told apart. Every name is fictional ("Example Heater", "Example Boiler", "Example pre-season
- * check"). The Home Assistant boundary arrives with B5: until then the route passes `HaBoundary.NotUsed`, so the two
- * HA sources are proved on the response mapping the route uses.
+ * check"). The two Home Assistant sources are proved here on the response mapping the route uses, and through the
+ * route itself, fresh and unverified, in `HaPublishingRoutesTest`.
  */
 class SeasonReadinessRoutesTest {
 
@@ -260,9 +260,8 @@ class SeasonReadinessRoutesTest {
 
     /**
      * F: `cutoffOn` and `boundarySource` are two fields, for every [BoundarySource]. The route reaches the three the
-     * phone decides; the two Home Assistant sources reach the same mapping once B5 passes the asset's `HaBoundary`,
-     * so they are proved on it here: `boundaryCheckedAt` only for `HA_SEASON_ENDED`, `boundaryUnverifiedSince`
-     * whenever the boundary is unverified.
+     * phone decides here; the two Home Assistant sources are proved on the same mapping: `boundaryCheckedAt` only for
+     * `HA_SEASON_ENDED`, `boundaryUnverifiedSince` whenever the boundary is unverified.
      */
     @Test fun boundarySourceAndCutoffAreTwoFields() {
         val seen = mutableSetOf<String>()

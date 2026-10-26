@@ -10,6 +10,8 @@ import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.hapublish.RemoteRead
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.season.BoundarySource
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
@@ -359,6 +361,38 @@ class HaPublishingRoutesTest {
         assertEquals(BoundarySource.HA_SEASON_ENDED.name, readiness.boundarySource)
         assertEquals("2026-01-05", readiness.cutoffOn)
         assertNull(readiness.boundaryUnverifiedSince)
+    }
+
+    /**
+     * C9a, D (B5 review N3): an activation newer than the season-ended read leaves the cached date unverified — HA may
+     * have stamped a newer one — and the route says so, since that read, through the one reader.
+     */
+    @Test
+    fun theReadinessRouteReportsAnUnverifiedBoundary() = rig.run {
+        graph.assets.upsert(assetRow(heater.value, "Example Heater", seasonMode = SeasonMode.MANUAL))
+        role("2025-09-01")
+        val connection = connect()
+        graph.seasonSyncBindings.insert(
+            SeasonSyncBinding(
+                heater, connection.id, INBOUND, SyncMode.FOLLOW, enabled = true, revision = 1, observedState = null,
+                observedChangedAt = null, lastSuccessAt = null, lastAttemptAt = null, errorKind = null, errorDetail = null,
+                errorAt = null, appliedAction = null, appliedOn = null, appliedAt = null, lastAppliedSource = null,
+                createdAt = graph.now, updatedAt = graph.now,
+            ),
+        )
+        graph.haPublish.helpers[ENDED] = dateHelper(ENDED, "2026-01-05")
+        graph.haPublish.helpers[DATE] = dateHelper(DATE, INVALID_SERVICE_DATE)
+        val binding = enable(PublishKind.SEASON_SERVICE_DATE, boundary = ENDED)
+        val readAt = delivery(binding).boundaryReadAt!!
+        graph.seasonActivations.insert(
+            SeasonActivation("start-after-the-read", heater, SeasonAction.START, "2026-02-10", null, readAt + 1_000),
+        )
+
+        val readiness = api.ok(SeasonReadinessResponse.serializer(), "GET", "/v1/assets/${heater.value}/season-readiness")
+        assertEquals(BoundarySource.HA_UNVERIFIED.name, readiness.boundarySource)
+        assertEquals("2026-01-05", readiness.cutoffOn)
+        assertEquals(readAt, readiness.boundaryUnverifiedSince)
+        assertNull(readiness.boundaryCheckedAt)
     }
 
     private fun JsonObject.str(key: String): String = getValue(key).jsonPrimitive.content
