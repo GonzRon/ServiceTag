@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupMember
@@ -268,9 +269,7 @@ class RecomputeSchedules(
         val target = schedule.target as? ScheduleTarget.AssetTarget ?: return null
         val asset = assets.get(target.assetId) ?: return null
         return when (schedule.seasonSource) {
-            ScheduleSeasonSource.ASSET -> asset.seasonInputs(
-                if (asset.seasonMode == SeasonMode.MANUAL) activations.forAsset(asset.id) else emptyList(),
-            )
+            ScheduleSeasonSource.ASSET -> asset.assetSeasonInputs(activations)
             ScheduleSeasonSource.OWN -> asset.ownSeasonInputs(scheduleActivations.forSchedule(schedule.id))
         }
     }
@@ -281,3 +280,12 @@ class RecomputeSchedules(
         val season: SeasonInputs?,
     )
 }
+
+/**
+ * An asset's own season, as an `ASSET`-source schedule on it and the asset's health read it: its activation rows read
+ * only when it is MANUAL, the one mode that consults them (invariant 90). The one spelling [RecomputeSchedules.seasonFor]'s
+ * `ASSET` arm and the health read model share (#125, H1b review m4), so an `ASSET` link's judgement and its stored state
+ * never read two seasons.
+ */
+suspend fun Asset.assetSeasonInputs(activations: SeasonActivationRepository): SeasonInputs =
+    seasonInputs(if (seasonMode == SeasonMode.MANUAL) activations.forAsset(id) else emptyList())

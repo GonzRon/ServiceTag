@@ -120,6 +120,39 @@ class ScheduleOwnSeasonHealthTest {
         assertEquals(34L, weekly.trackedDays, "the asset's schedule: late 11-02…12-05 in the asset's season")
     }
 
+    /**
+     * H1b review m2 — N1's rule on an own season: the check's first run of its own season (10-20…11-29, ended by its
+     * END on 11-30) lies outside the cycle running today (from its START on 12-10), so it is counted as
+     * `IN_SERVICE_AT_START` + 7 against its own rows: late 10-28…11-29, 33 days. Today's cycle adds none: its opening
+     * service — the asset's readiness, done 10-22 — puts it due on 12-17. Counted as the policy it is, the run would
+     * give 31 (late from 10-30); against the asset's window, another number again. A PART subject, so no MEDIUM restart
+     * hides the earlier run.
+     */
+    @Test
+    fun anOwnSeasonsEndedRunKeepsItsLateDaysCountedAsAtStartAgainstItsOwnRows() {
+        val today = LocalDate.parse("2026-12-12")
+        val rows = listOf(
+            row(SeasonAction.START, "2026-10-20", "s-check"),
+            row(SeasonAction.END, "2026-11-30", "s-check"),
+            row(SeasonAction.START, "2026-12-10", "s-check"),
+        )
+        val own = heater.ownSeasonInputs(rows)
+        val link = HealthFixtures.linkedOn(check, emptyList(), today, own).let { linked ->
+            linked.copy(inputs = linked.inputs.copy(openingServiceOn = LocalDate.parse("2026-10-22")), ownSeason = SeasonContext.of(own))
+        }
+        val part = HealthFixtures.subjectOf(
+            id = "p-check", assetId = "heater", kind = HealthSubjectKind.PART, driver = HealthDriver.MAINTENANCE_OVERDUE,
+            scheduleId = "s-check", nominalUntil = 2, warningFrom = 7, criticalFrom = 14, sortOrder = 0,
+        )
+
+        val health = AssetHealthEngine.evaluate(
+            heater, listOf(part), mapOf(check.id to link), emptyList(), { true },
+            SeasonContext.of(heater.seasonInputs(emptyList())), today,
+        ).subjects.single()
+
+        assertEquals(33L, (health.value as SubjectValue.Scored).trackedDays, "late 10-28…11-29, its own ended run")
+    }
+
     @Test
     fun aLinkIsJudgedAgainstExactlyOneSeasonAndAReaderThatForgetsTheOwnOneIsRefused() {
         val today = LocalDate.parse("2026-10-25")

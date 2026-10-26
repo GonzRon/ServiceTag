@@ -22,10 +22,8 @@ import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
-import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.isInService
 import com.loosecannon.servicetag.core.model.maintainedHere
-import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
@@ -39,6 +37,7 @@ import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.assetSeasonInputs
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.coroutines.cancellation.CancellationException
@@ -297,9 +296,7 @@ class AssetHealthReadModel(
 
         val unscorable = live.filter { HealthSubjectShape.problems(it).isNotEmpty() }
         val scorable = own - unscorable.toSet()
-        val season = SeasonContext.of(
-            asset.seasonInputs(if (asset.seasonMode == SeasonMode.MANUAL) activations.forAsset(asset.id) else emptyList()),
-        )
+        val season = SeasonContext.of(asset.assetSeasonInputs(activations))
         val profileIds = profiles.forAsset(asset.id).map { it.id }.toSet()
         val engine = AssetHealthEngine.evaluate(
             asset = asset,

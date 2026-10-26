@@ -972,7 +972,8 @@ class ReplaceAssetTest {
     @Test fun aQuickRoleScheduleKeepsTheOwnersElection() = runTest {
         seasonalEstate(mode = CompletionMode.QUICK)
 
-        val successor = h.replaceWith(bothTicked()).successor.id
+        // the schedule starts on 09-18, so only the replacement date can give the role's 09-15
+        val successor = h.replaceWith(bothTicked(scheduleStartOn = "2026-09-18")).successor.id
         val opening = h.copiesFor(successor).single { it.title == "Opening service" }
 
         assertEquals(CompletionMode.QUICK, opening.completionMode)

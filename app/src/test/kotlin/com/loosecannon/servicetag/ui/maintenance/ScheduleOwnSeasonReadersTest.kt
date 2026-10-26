@@ -37,6 +37,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -178,6 +179,7 @@ class ScheduleOwnSeasonReadersTest {
             Triple(standby.policyPhase, standby.status, standby.actionableDueOn),
         )
         assertEquals(SeasonMode.CALENDAR to LocalDate.parse("2026-11-01"), standby.seasonMode to standby.dormantUntil)
+        assertEquals("the owner's standby line", "Out of season until 2026-11-01", whyLine(standby) { it.toString() })
         assertEquals(SubjectValue.NotTracked(NotTrackedReason.OUT_OF_SEASON), subject(WEEKLY).value)
         val view = health.forAsset(HEATER)
         assertEquals("the done opening service is all the aggregate reads", 100, view.result.aggregate?.score)
@@ -225,7 +227,49 @@ class ScheduleOwnSeasonReadersTest {
         )
     }
 
+    /**
+     * H1b review m1: the editor's `PreServiceNeedsDates` refresh reads the schedule's own season too. A check on its own
+     * season is offered "Before the break" while its asset has a break (its own season's only boundary); the break is
+     * removed while the form is open, so the save is refused 409, and the refreshed form is the own season's — MANUAL,
+     * no boundary, the answer cleared — never the asset's CALENDAR window.
+     */
+    @Test fun theEditorsRefreshAfterARefusedSaveReadsTheOwnSeasonToo() = runTest {
+        heater()
+        graph.assets.upsert(graph.assets.get(HEATER)!!.copy(blackoutStartMmdd = "06-01", blackoutEndMmdd = "08-31"))
+        graph.schedules.upsert(
+            scheduleOf(
+                CHECK.value, assetId = HEATER.value, title = "Example burner check", timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-15",
+                servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0,
+            ).copy(seasonSource = ScheduleSeasonSource.OWN),
+        )
+        val permission = object : NotificationPermission {
+            override fun granted(): Boolean = true
+            override fun shouldExplain(): Boolean = false
+            override suspend fun request(): Boolean = true
+        }
+        val vm = ScheduleEditViewModel(
+            schedules, graph.assets, graph.groups, graph.definitions, graph.profiles, graph.saveSchedule, permission,
+            graph.todayPort, CHECK, targetAssetId = null, targetGroupId = null, recompute = recompute,
+        )
+        val opened = vm.state.first { it.loaded }
+        assertEquals(SeasonMode.MANUAL, opened.season?.mode)
+        assertTrue("the break is its own season's boundary", PolicyOption.BEFORE_BREAK in opened.policyOptions)
+        vm.onPolicy(PolicyOption.BEFORE_BREAK)
+        vm.onDaysBefore("14")
+        graph.assets.upsert(graph.assets.get(HEATER)!!.copy(blackoutStartMmdd = null, blackoutEndMmdd = null))
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals("the own season, never the asset's window", SeasonMode.MANUAL, refused.season?.mode)
+        assertTrue(refused.noBoundary)
+        assertNull(refused.policyOption)
+        assertEquals(ServicePolicy.IN_SERVICE_AT_START, graph.schedules.get(CHECK)!!.servicePolicy)
+    }
+
     private companion object {
+        val CHECK = ScheduleId("s-check")
         val HEATER = AssetId("heater")
         val OPEN = ScheduleId("s-open")
         val WEEKLY = ScheduleId("s-weekly")
