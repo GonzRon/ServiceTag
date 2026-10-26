@@ -90,8 +90,9 @@ internal class HaPublishingHandlers(
             val connection = connections.get()
             val hasToken = connection != null && secrets.has(connection.id)
             val held = transfers.heldIds()
-            val rows = bindings.forAsset(id).mapNotNull { binding ->
-                val delivery = deliveries.get(binding.id) ?: return@mapNotNull null
+            val rows = bindings.forAsset(id).map { binding ->
+                // B5 review N4: Enable writes both rows in one write; a missing delivery is answered empty, never dropped.
+                val delivery = deliveries.get(binding.id) ?: emptyDelivery(binding)
                 val present = connection != null && connection.id == binding.connectionId
                 val state = DeliverySteps.stateOf(Snap(binding, delivery, present, hasToken, here, asset, held))
                 binding.toDto(delivery, state)
@@ -116,7 +117,7 @@ internal class HaPublishingHandlers(
             val all = bindings.all().sortedWith(compareBy({ it.assetId.value }, { it.kind }))
             val rows = all.mapNotNull { binding ->
                 val asset = assets.get(binding.assetId) ?: return@mapNotNull null
-                val delivery = deliveries.get(binding.id) ?: return@mapNotNull null
+                val delivery = deliveries.get(binding.id) ?: emptyDelivery(binding)
                 val present = connection != null && connection.id == binding.connectionId
                 val state = DeliverySteps.stateOf(Snap(binding, delivery, present, hasToken, here, asset, held))
                 val dto = ApiJson.encodeToJsonElement(HaPublishBindingDto.serializer(), binding.toDto(delivery, state)).jsonObject
@@ -254,7 +255,7 @@ internal class HaPublishingHandlers(
             val asset = assets.get(binding.assetId)
             val connection = connections.get()
             val hasToken = connection != null && secrets.has(connection.id)
-            val delivery = deliveries.get(stored.id) ?: PublishDelivery(stored.id, null, 0, null)
+            val delivery = deliveries.get(stored.id) ?: emptyDelivery(stored)
             val present = connection != null && connection.id == stored.connectionId
             val state = DeliverySteps.stateOf(Snap(stored, delivery, present, hasToken, here, asset, transfers.heldIds()))
             stored.toDto(delivery, state)
@@ -263,6 +264,9 @@ internal class HaPublishingHandlers(
 
     private companion object {
         const val FIELD_CONFIRM_DESTINATION = "confirmDestination"
+
+        /** A binding's delivery before any is stored: nothing desired, nothing sent or read. */
+        fun emptyDelivery(binding: PublishBinding) = PublishDelivery(binding.id, null, 0, binding.createdAt)
 
         /** The option C15's mapper publishes for each recorded condition, shown in the status plan's `mapping`. */
         fun statusOptionOf(condition: OperationalCondition): String = when (condition) {

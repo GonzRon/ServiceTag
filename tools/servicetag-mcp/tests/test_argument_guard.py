@@ -253,7 +253,7 @@ def test_a_correct_call_still_works(paired) -> None:
     assert result.is_error is False
 
 
-def test_the_tool_count_is_93() -> None:
+def test_the_tool_count_is_97() -> None:
     assert len(server_module.TOOL_NAMES) == 97
     assert len(server_module.mcp._tool_manager.list_tools()) == 97
 

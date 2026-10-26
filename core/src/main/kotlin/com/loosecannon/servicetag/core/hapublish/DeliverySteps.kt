@@ -120,7 +120,10 @@ object DeliverySteps {
      * The gate, then the plan. Gate: not enabled, another installation's activation, no connection or token, no
      * standing validation, then the per-send eligibility (A02): an asset missing or not maintained here sends
      * nothing for the status kind and only `1970-01-01` for the date kind. A null desired value sends nothing.
-     * Then: `ReadFirst` unless the delivery [isCurrent] and this is not a reconcile; `Done` otherwise.
+     * Then: `ReadFirst` unless the delivery [isCurrent] and this is not a reconcile; `Done` otherwise. A date binding
+     * whose asset left, quiet at `1970-01-01` read back ([isCurrent]), is `Done` on every trigger, a reconcile included
+     * (C34, P114-39, the controller's ruling on B5 review M2): nothing more is read or sent while the asset is not
+     * maintained here; a helper changed in Home Assistant afterwards is Home Assistant's business.
      */
     fun plan(snap: Snap, trigger: DeliveryTrigger): DeliveryPlan {
         val binding = snap.binding
@@ -147,6 +150,11 @@ object DeliverySteps {
             }
         }
         if (errorSkips(binding, delivery, trigger)) return DeliveryPlan.Skip(PublishState.ERROR)
+        val quiet = when (binding.kind) {
+            PublishKind.EQUIPMENT_STATUS -> false
+            PublishKind.SEASON_SERVICE_DATE -> !eligible && isCurrent(binding, delivery)
+        }
+        if (quiet) return DeliveryPlan.Done
 
         val reconcile = when (trigger) {
             DeliveryTrigger.RECONCILE -> true

@@ -144,6 +144,27 @@ class ControlDispatchTest {
         assertTrue(graph.publishBindings.forAsset(BOILER).single().enabled)
     }
 
+    // Row 70a's Forget case (B5 review I3)
+
+    @Test
+    fun forgettingTheConnectionAsksForDeliveryAfterTheCommand() = rig.run {
+        verifiedThenReset()
+        ha.helpers[DATE] = dateHelper(DATE, "2025-11-15") // Home Assistant holds the published date again
+        val before = graph.deliveryRequests.get()
+
+        graph.publishControls.forgetConnection()
+        graph.awaitDispatched()
+
+        assertEquals(before + 1, graph.deliveryRequests.get())
+        assertEquals("no connection: both works cancelled", RecordingPublishWork.Call.Cancel, graph.publishWork.calls.last())
+        assertEquals(
+            listOf("GET $DATE", "POST $DATE=$INVALID_SERVICE_DATE", "GET $DATE"),
+            ha.log.filter { it == "GET $DATE" || it.startsWith("POST $DATE=") },
+        )
+        assertEquals(INVALID_SERVICE_DATE, ha.state(DATE))
+        assertNull(graph.haConnections.get())
+    }
+
     // Row 122
 
     @Test

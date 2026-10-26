@@ -135,6 +135,27 @@ class HaPublishingRoutesTest {
         assertTrue(tree.getValue("pendingDecommissions").jsonArray.isEmpty())
     }
 
+    /** B5 review N4: a binding whose delivery row is missing is answered with an empty delivery, never dropped. */
+    @Test
+    fun aBindingWithNoDeliveryRowIsAnsweredNotDropped() = rig.run {
+        calendar()
+        val connection = connect()
+        graph.publishBindings.insert(
+            PublishBinding(
+                id = "example-binding-bare", assetId = heater, connectionId = connection.id,
+                kind = PublishKind.EQUIPMENT_STATUS, entityId = STATUS, enabled = true, revision = 1,
+                activatedInstallationId = graph.installationIdentity.id(), validatedAt = graph.now, validatedRevision = 1,
+                boundaryEntityId = null, createdAt = graph.now, updatedAt = graph.now,
+            ),
+        )
+        val bare = publishing().getValue("bindings").jsonArray.single().jsonObject
+        assertEquals(STATUS, bare.str("entityId"))
+        assertEquals(JsonNull, bare.getValue("desiredValue"))
+        assertEquals(JsonNull, bare.getValue("lastPublished"))
+        val collection = Json.parseToJsonElement(api.call("GET", "/v1/ha-publishing").bodyText()).jsonObject
+        assertEquals(STATUS, collection.getValue("bindings").jsonArray.single().jsonObject.str("entityId"))
+    }
+
     // --- row 107 (B5's cases) -----------------------------------------------------------------------------------------
 
     /**

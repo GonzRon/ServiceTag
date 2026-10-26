@@ -320,6 +320,15 @@ class DecommissionScenarioTest {
             null, graph.installationIdentity.id(),
         )
         graph.disablePublishing.run(BOILER, PublishKind.SEASON_SERVICE_DATE)
+        // A third helper, let go earlier and reachable: it still holds a date (B5 review I2).
+        graph.assets.upsert(assetRow(CABIN.value, "Example Cabin Heater"))
+        ha.helpers[CABIN_DATE] = dateHelper(CABIN_DATE, INVALID_SERVICE_DATE)
+        graph.enablePublishing.run(
+            CABIN, PublishKind.SEASON_SERVICE_DATE, CABIN_DATE, fresh(CABIN_DATE, PublishKind.SEASON_SERVICE_DATE, CABIN),
+            null, graph.installationIdentity.id(),
+        )
+        graph.disablePublishing.run(CABIN, PublishKind.SEASON_SERVICE_DATE)
+        ha.helpers[CABIN_DATE] = dateHelper(CABIN_DATE, "2025-10-02")
         ha.onRead = { if (it == BOILER_DATE) RemoteRead.Failed(PublishErrorKind.UNREACHABLE, null) else ha.answer(it) }
         ha.log.clear()
 
@@ -329,12 +338,126 @@ class DecommissionScenarioTest {
         // The reachable one: 1970-01-01 written as its desired value, delivered and read back before the command.
         assertEquals(delivered1970(), seen(DATE))
         assertEquals(PassResult.Verified(posted = true), drained.bindings.single().result)
+        // Each obligation of the connection had its one attempt (O-11, C34): the boiler's one read, the cabin's
+        // delivery and read-back.
+        assertEquals(listOf("GET $BOILER_DATE"), seen(BOILER_DATE))
+        assertEquals(
+            TombstoneResult.Pending(PublishErrorKind.UNREACHABLE, null),
+            drained.tombstones.single { it.entityId == BOILER_DATE }.result,
+        )
+        assertEquals(delivered1970(CABIN_DATE), seen(CABIN_DATE))
+        assertEquals(TombstoneResult.Cleared(posted = true), drained.tombstones.single { it.entityId == CABIN_DATE }.result)
         assertNull(graph.haConnections.get())
         val kept = tombstones().single()
         assertEquals(BOILER_DATE, kept.entityId)
         assertEquals(DecommissionState.UNDELIVERABLE, kept.state)
         assertTrue("the heater's helper is no obligation", tombstones().none { it.entityId == DATE })
+        assertTrue("the cabin's helper was cleared", tombstones().none { it.entityId == CABIN_DATE })
         assertNull("the date binding went with the connection", graph.publishBindings.get(heaterDate.id))
+    }
+
+    /** B5 review M1: a drain mid-tombstone when Forget's command runs records nothing over the row Forget changed. */
+    @Test
+    fun aDrainNeverTurnsForgetsUndeliverableRowBackToPending() = rig.run {
+        published()
+        graph.disablePublishing.run(heater, PublishKind.SEASON_SERVICE_DATE)
+        ha.onRead = {
+            if (it == DATE) {
+                graph.forgetHaConnection.run()
+                RemoteRead.Failed(PublishErrorKind.UNREACHABLE, null)
+            } else {
+                ha.answer(it)
+            }
+        }
+
+        graph.publishRunner.drain()
+
+        val kept = tombstones().single()
+        assertEquals(DATE, kept.entityId)
+        assertEquals("Forget's state stands", DecommissionState.UNDELIVERABLE, kept.state)
+        assertEquals("one read, nothing sent", listOf("GET $DATE"), seen(DATE))
+    }
+
+    /** B5 review M3 (a): Forget sends only 1970-01-01, whatever the projector writes while it reads. */
+    @Test
+    fun forgetSendsNothingButTheInvalidDate() = rig.run {
+        published()
+        var hooked = false
+        ha.onRead = {
+            if (it == DATE && !hooked) {
+                hooked = true
+                val stored = graph.publishBindings.all().single()
+                val held = delivery(stored)
+                assertTrue(
+                    graph.publishDeliveries.writeDesired(stored.id, stored.revision, held.desiredRevision, "2025-12-01", graph.now),
+                )
+            }
+            ha.answer(it)
+        }
+
+        val drained = graph.publishControls.forgetConnection()
+        graph.awaitDispatched()
+
+        assertTrue(hooked)
+        assertTrue("nothing but 1970-01-01 is sent", ha.log.none { it.startsWith("POST $DATE=") })
+        assertEquals(PassResult.Superseded, drained.bindings.single().result)
+        val kept = tombstones().single()
+        assertEquals(DATE, kept.entityId)
+        assertEquals(DecommissionState.UNDELIVERABLE, kept.state)
+    }
+
+    /** B5 review M3 (b): a tombstone superseded between its read and its POST is not written to. */
+    @Test
+    fun aTombstoneSupersededBeforeItsPostSendsNothing() = rig.run {
+        published()
+        graph.disablePublishing.run(heater, PublishKind.SEASON_SERVICE_DATE)
+        graph.assets.upsert(
+            assetRow(BOILER.value, "Example Boiler", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        var hooked = false
+        ha.onRead = {
+            if (it == DATE && !hooked) {
+                hooked = true
+                graph.enablePublishing.run(
+                    BOILER, PublishKind.SEASON_SERVICE_DATE, DATE, fresh(DATE, PublishKind.SEASON_SERVICE_DATE, BOILER), null,
+                    graph.installationIdentity.id(),
+                )
+            }
+            ha.answer(it)
+        }
+
+        val pass = graph.publishRunner.publishNow(heater)
+
+        assertTrue(hooked)
+        assertTrue("no 1970-01-01 over the new claim", ha.log.none { it == "POST $DATE=$INVALID_SERVICE_DATE" })
+        assertEquals(TombstoneResult.Superseded, pass.tombstones.single().result)
+        assertTrue("the Enable superseded the row", tombstones().isEmpty())
+    }
+
+    /**
+     * C34, P114-39 (B5 review M2, the controller's ruling): while the asset is archived, retired or transferred out,
+     * nothing more is sent — a quiet `INVALIDATED_INELIGIBLE` binding is neither read nor written on a reconcile, and
+     * Publish now covers none. A helper changed in Home Assistant afterwards is Home Assistant's own business.
+     */
+    @Test
+    fun aQuietIneligibleBindingIsNeitherReadNorSentOnAReconcile() = rig.run {
+        val binding = published()
+        graph.archiveAsset.run(heater)
+        project()
+        graph.publishRunner.drain()
+        assertEquals(PublishState.INVALIDATED_INELIGIBLE, stateOf(binding))
+        ha.helpers[DATE] = dateHelper(DATE, "2025-11-15") // changed in Home Assistant by hand
+        ha.log.clear()
+
+        graph.publishRunner.publishNow(heater)
+        graph.publishRunner.publishNow()
+        val request = graph.publishControls.requestPublishNow(heater)
+        graph.awaitDispatched()
+
+        assertTrue("nothing read, nothing sent", ha.log.isEmpty())
+        assertTrue("Publish now covers no quiet binding", request.bindings.isEmpty())
+        assertEquals("2025-11-15", ha.state(DATE))
+        assertEquals(PublishState.INVALIDATED_INELIGIBLE, stateOf(binding))
     }
 
     // --- row 74 (K12): quiescence is no terminal state ------------------------------------------------------------------
@@ -449,6 +572,8 @@ class DecommissionScenarioTest {
         const val OTHER_DATE = "input_datetime.example_heater_service_done_2"
         const val OTHER_STATUS = "input_select.example_heater_equipment_status_2"
         const val BOILER_DATE = "input_datetime.example_boiler_service_done"
+        const val CABIN_DATE = "input_datetime.example_cabin_heater_service_done"
         val BOILER = AssetId("example-boiler")
+        val CABIN = AssetId("example-cabin-heater")
     }
 }

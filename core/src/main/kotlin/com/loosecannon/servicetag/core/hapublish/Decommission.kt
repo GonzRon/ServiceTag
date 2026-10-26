@@ -52,16 +52,22 @@ sealed interface TombstonePlan {
     data object ReadFirst : TombstonePlan
 }
 
+/**
+ * #114 (C34; B5 review N1) — what a tombstone's POST and read-back came to: cleared or recorded, never a second POST.
+ * Its two members are [TombstoneStep]'s own.
+ */
+sealed interface TombstoneAfterPost
+
 /** #114 (C34) — what a tombstone's read, or its POST and read-back, came to. */
 sealed interface TombstoneStep {
     /** The helper holds `1970-01-01`: the row is deleted **by its id**, never by its pair. */
-    data object Cleared : TombstoneStep
+    data object Cleared : TombstoneStep, TombstoneAfterPost
 
     /**
      * Write [record]'s state and error by the row's revision compare-and-set, and stop. [detail] is the live answer's
      * (the row keeps none), for its retry class.
      */
-    data class Record(val record: DecommissionTombstone, val detail: String? = null) : TombstoneStep
+    data class Record(val record: DecommissionTombstone, val detail: String? = null) : TombstoneStep, TombstoneAfterPost
 
     /** The helper holds something else: POST `1970-01-01` to it, then read it back. */
     data object Post : TombstoneStep
@@ -119,7 +125,7 @@ object DecommissionSteps {
      * After a POST Home Assistant accepted, from its read-back: equal → cleared; differs → `REMOTE_DIFFERS`; a validator
      * failure → that kind; a failed read-back → `OUTCOME_UNKNOWN` (the next drain reads first).
      */
-    fun afterPostAccepted(tombstone: DecommissionTombstone, readBack: RemoteRead, now: Long): TombstoneStep {
+    fun afterPostAccepted(tombstone: DecommissionTombstone, readBack: RemoteRead, now: Long): TombstoneAfterPost {
         val remote = when (readBack) {
             is RemoteRead.Failed -> return TombstoneStep.Record(
                 failed(tombstone, PublishErrorKind.OUTCOME_UNKNOWN, readBack.detail, now), readBack.detail,
@@ -137,11 +143,11 @@ object DecommissionSteps {
     }
 
     /** After a POST known not to have acted (C23): [kind] by its live [detail]'s class. */
-    fun afterPostRefused(tombstone: DecommissionTombstone, kind: PublishErrorKind, detail: String?, now: Long): TombstoneStep =
+    fun afterPostRefused(tombstone: DecommissionTombstone, kind: PublishErrorKind, detail: String?, now: Long): TombstoneAfterPost =
         TombstoneStep.Record(failed(tombstone, kind, detail, now), detail)
 
     /** After a POST that may have acted (C23): `OUTCOME_UNKNOWN`, still PENDING; the next drain reads first. */
-    fun afterPostUnknown(tombstone: DecommissionTombstone, detail: String?, now: Long): TombstoneStep =
+    fun afterPostUnknown(tombstone: DecommissionTombstone, detail: String?, now: Long): TombstoneAfterPost =
         TombstoneStep.Record(failed(tombstone, PublishErrorKind.OUTCOME_UNKNOWN, detail, now), detail)
 
     /**

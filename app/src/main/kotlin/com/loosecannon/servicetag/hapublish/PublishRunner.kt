@@ -326,7 +326,9 @@ class PublishRunner(
      * C34 — each PENDING tombstone [wanted], one at a time from its own snapshot: the gate ([DecommissionSteps.plan]),
      * then a read, and a POST of `1970-01-01` and its read-back while the helper holds anything else; a read equal to
      * it deletes the row **by its id**. Every record is the row's revision compare-and-set; no transaction is held
-     * across a request; a transport failure is a recorded value.
+     * across a request; a transport failure is a recorded value. A PENDING row whose error is of the `WAIT` class is
+     * tried again on every pass, a scheduled one included (unlike a binding's R-2 skip): the request gate refuses it
+     * again before any HTTP while the network still does not allow one (B5 review N2).
      */
     private suspend fun drainTombstones(wanted: (DecommissionTombstone) -> Boolean): List<TombstoneOutcome> {
         val pending = database {
@@ -343,7 +345,7 @@ class PublishRunner(
         val plan = DecommissionSteps.plan(held, installationId(), connection?.id, token != null, clock.nowMillis())
         when (plan) {
             TombstonePlan.Wait -> return null
-            is TombstonePlan.GiveUp -> return outcome(recordTombstone(TombstoneStep.Record(plan.record)))
+            is TombstonePlan.GiveUp -> return outcome(recordTombstone(held, TombstoneStep.Record(plan.record)))
             TombstonePlan.ReadFirst -> Unit
         }
         // The gate passed, so the connection is the tombstone's and its token is here.
@@ -352,7 +354,7 @@ class PublishRunner(
         val read = transport.read(target, held.entityId, secret)
         when (val next = DecommissionSteps.afterRead(held, read, clock.nowMillis())) {
             TombstoneStep.Cleared -> return outcome(clearTombstone(held, posted = false))
-            is TombstoneStep.Record -> return outcome(recordTombstone(next))
+            is TombstoneStep.Record -> return outcome(recordTombstone(held, next))
             TombstoneStep.Post -> Unit
         }
         // Still owed as read: a merge, an Enable's supersession or a dismissal meanwhile leaves it to the next pass.
@@ -369,9 +371,7 @@ class PublishRunner(
         }
         return when (after) {
             TombstoneStep.Cleared -> outcome(clearTombstone(held, posted = true))
-            is TombstoneStep.Record -> outcome(recordTombstone(after))
-            // A read-back never asks for a second POST.
-            TombstoneStep.Post -> outcome(TombstoneResult.Superseded)
+            is TombstoneStep.Record -> outcome(recordTombstone(held, after))
         }
     }
 
@@ -381,10 +381,14 @@ class PublishRunner(
         return TombstoneResult.Cleared(posted)
     }
 
-    /** [step]'s state and error by the row's revision compare-and-set; a moved or deleted row records nothing. */
-    private suspend fun recordTombstone(step: TombstoneStep.Record): TombstoneResult {
+    /**
+     * [step]'s state and error by the row's revision compare-and-set, and only while the row is still exactly [held],
+     * as this drain read it, in the same write: a moved, deleted or otherwise changed row records nothing — Forget's
+     * PENDING → UNDELIVERABLE keeps the revision, so the compare-and-set alone would not see it (B5 review M1).
+     */
+    private suspend fun recordTombstone(held: DecommissionTombstone, step: TombstoneStep.Record): TombstoneResult {
         val record = step.record
-        val wrote = database { uow.write { decommissions.update(record) } }
+        val wrote = database { uow.write { decommissions.get(held.id) == held && decommissions.update(record) } }
         val kind = checkNotNull(record.errorKind) { "a tombstone record carries its kind" }
         if (!wrote) return TombstoneResult.Superseded
         return when (record.state) {

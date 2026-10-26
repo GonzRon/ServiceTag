@@ -183,10 +183,14 @@ class PublishControls(
     private companion object {
         const val TAG = "HaPublish"
 
-        /** Past C17's gate in reconcile mode: a read is due, or the date kind's projection the pass runs first. */
+        /**
+         * Past C17's gate in reconcile mode: a read is due, or the date kind's projection the pass runs first. A
+         * reconcile is `Done` only for a quiet ineligible date binding, which a pass neither reads nor writes (C34,
+         * P114-39), so it is not covered.
+         */
         fun covers(plan: DeliveryPlan): Boolean = when (plan) {
             is DeliveryPlan.ReadFirst -> true
-            DeliveryPlan.Done -> true
+            DeliveryPlan.Done -> false
             is DeliveryPlan.Skip -> when (plan.state) {
                 PublishState.PENDING -> plan.reproject
                 PublishState.NOT_ENABLED,

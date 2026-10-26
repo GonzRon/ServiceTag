@@ -60,7 +60,7 @@ def test_every_reference_tool_is_registered_and_guarded() -> None:
         assert tool.parameters.get("additionalProperties") is False, name
 
 
-def test_the_registered_tool_count_is_93() -> None:
+def test_the_registered_tool_count_is_97() -> None:
     """A tool added without updating `TOOL_NAMES` makes `_forbid_unknown_arguments` raise at
     *import* time, which is the intended loud failure — so this file importing at all is half the
     proof, and the counts below are the other half."""
