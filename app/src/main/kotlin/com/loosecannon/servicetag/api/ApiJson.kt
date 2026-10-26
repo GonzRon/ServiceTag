@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.fetch.FetchProblem
+import com.loosecannon.servicetag.core.hapublish.PublishNotSetUp
 import com.loosecannon.servicetag.core.hapublish.PublishRefusal
 import com.loosecannon.servicetag.core.hapublish.PublishRefused
 import com.loosecannon.servicetag.core.model.AssetSuccession
@@ -565,6 +566,18 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     )
     // #113/#114 (C25, C25a, C29b): a publishing refusal by its `PublishRefusal` name — `STALE_PLAN` its own code.
     is PublishRefused -> publishRefusedResponse(e)
+    // #113/#114 (C35b; B3 review M2): a control on a kind the asset does not publish — no binding to change. The
+    // `BAD_ENTITY_ID` reason of the controls' family, about the body's `kind`; nothing was written.
+    is PublishNotSetUp -> errorResponse(
+        409, "Conflict", "HA_PUBLISH_REFUSED", "this asset has no ${e.kind.name} publishing to change; enable it first",
+        listOf("PublishRefused(reason=${PublishRefusal.BAD_ENTITY_ID.name})"), "kind",
+    )
+    // #113/#114 (C35b): an Enable or Change target without the caller's own plan id and destination confirmation.
+    is PublishConfirmationRequired -> errorResponse(
+        422, "Unprocessable Content", "HA_PUBLISH_CONFIRMATION_REQUIRED",
+        "${e.field} is required: send the planId the plan answered and confirmDestination equal to its entityId",
+        listOf("PublishConfirmationRequired(field=${e.field})"), e.field,
+    )
     // #113/#114 (C29b): a read of Home Assistant answered nothing to use; its kind under the outbound name.
     is HelperReadFailed -> errorResponse(
         409, "Conflict", "HA_HELPER_READ_FAILED", "Home Assistant could not be read: ${e.kind.name}",

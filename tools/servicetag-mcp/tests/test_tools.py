@@ -119,6 +119,9 @@ EXPECTED_TOOLS = (
     "get_ha_publishing",
     # B5r (C35a): the publishing collection.
     "list_ha_publishing",
+    # B5w1 (C35b): Enable and Change target, each a plan and then the confirmed action.
+    "enable_ha_publishing",
+    "change_ha_publishing_target",
 )
 
 
@@ -139,13 +142,14 @@ def test_tool_names_are_ninety_five() -> None:
     #92's five attachment tools to seventy-four and its two replace tools to seventy-six, #15's eight supply
     tools to eighty-four, #47's five installed-component tools to eighty-nine, #16's season sync read to ninety, and
     #114's season readiness read to ninety-one, #114's role write and helper discovery to ninety-three, and #113/#114's
-    publishing read to ninety-four, and its collection read takes it to ninety-five;
+    publishing read to ninety-four, its collection read to ninety-five, and its Enable and Change target take it
+    to ninety-seven;
     `TOOL_NAMES`, the registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 95
-    assert len(server_module.TOOL_NAMES) == 95
+    assert len(EXPECTED_TOOLS) == 97
+    assert len(server_module.TOOL_NAMES) == 97
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 95
+    assert len(registered) == 97
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -1014,11 +1018,11 @@ def test_import_merge_docs_say_formats_1_to_21_twenty_three_tables_and_the_four_
 
 
 def test_the_readme_names_every_tool_the_supply_gate_and_the_installed_component_gate() -> None:
-    """#15's C28, #47's C24, #16's C25 and #114's C29: the README's tool list counts ninety-five and names each tool,
+    """#15's C28, #47's C24, #16's C25 and #114's C29: the README's tool list counts ninety-seven and names each tool,
     the schema-18 gate and the line key, the schema-19 gate, and the schema-21 and schema-22 gates."""
     readme = " ".join(README.read_text(encoding="utf-8").split())
     tools = readme.split("## The tools", 1)[1]
-    assert tools.lstrip().startswith("Ninety-five:"), tools[:40]
+    assert tools.lstrip().startswith("Ninety-seven:"), tools[:40]
     for name in EXPECTED_TOOLS:
         assert f"`{name}`" in readme, name
     assert "The supply tools need schema 18." in readme

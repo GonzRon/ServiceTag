@@ -110,9 +110,13 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
 )
 
 /** #113/#114 (C35): the publishing read over a [FakeGraph], wired as `HaPublishingHandlers(graph)` wires it. */
-internal fun haPublishingHandlersFor(graph: FakeGraph): HaPublishingHandlers = HaPublishingHandlers(
+internal fun haPublishingHandlersFor(
+    graph: FakeGraph,
+    plans: HaPublishingPlans = HaPublishingPlans(graph.clock),
+): HaPublishingHandlers = HaPublishingHandlers(
     graph.assets, graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.haConnections,
-    graph.secretStore, graph.transferRecords, graph.installationIdentity::id, graph.uow,
+    graph.secretStore, graph.transferRecords, graph.installationIdentity::id, graph.uow, graph.seasonSyncBindings,
+    graph.publishRunner::validate, graph.publishControls, plans,
 )
 
 /**
@@ -209,6 +213,11 @@ internal class V1Client(
      */
     private val haEntities: suspend () -> HaListOutcome? = { null },
 ) {
+    /**
+     * #113/#114 (C35b): the publishing plans, held on the handler set as the Developer API screen holds them — one
+     * store per client, so a second client is the screen reopened.
+     */
+    val haPublishingPlans: HaPublishingPlans = HaPublishingPlans(graph.clock)
 
     fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
@@ -230,7 +239,7 @@ internal class V1Client(
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
             haEntities = HaEntityHandlers(haEntities),
-            haPublishing = haPublishingHandlersFor(graph),
+            haPublishing = haPublishingHandlersFor(graph, haPublishingPlans),
         ),
         token,
     )

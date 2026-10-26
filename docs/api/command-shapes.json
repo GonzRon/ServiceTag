@@ -58,5 +58,11 @@
   },
   "scheduleRole": {
     "keys": ["role", "sinceOn", "seasonStartQuickElected"]
+  },
+  "haPublishingPlan": {
+    "keys": ["kind", "action", "entityId", "boundaryEntityId"]
+  },
+  "haPublishingAction": {
+    "keys": ["kind", "action", "planId", "confirmDestination"]
   }
 }

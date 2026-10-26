@@ -56,7 +56,7 @@ def test_the_vendored_key_lists_equal_the_golden_file() -> None:
     vendored = command_shapes.vendored()
     assert set(vendored) == {
         "asset", "schedule", "healthSubject", "serviceCase", "loan", "attachmentUpdate", "attachmentUpload",
-        "materialize", "replaceDraft", "replaceSuccessor", "scheduleRole",
+        "materialize", "replaceDraft", "replaceSuccessor", "scheduleRole", "haPublishingPlan", "haPublishingAction",
     }
     for name, entry in vendored.items():
         assert entry == shapes[name], name

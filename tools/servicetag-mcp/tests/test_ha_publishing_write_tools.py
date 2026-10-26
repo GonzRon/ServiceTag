@@ -5,7 +5,10 @@ A4w appends two tools to the "#113/#114" block — `set_schedule_role`, the Seas
 `GET /v1/ha-connection/entities/{scope}` — and gives `update_schedule` the QUICK election flag. The election is the
 caller's alone: each tool sends `seasonStartQuickElected` only when its argument is true, never by default (O-2,
 O-7). Discovery checks its scope here, before any request, and takes the long read budget, since the phone reads
-Home Assistant inside the call. B5w1 and B5w2 append their halves below. Every name here is fictional.
+Home Assistant inside the call. B5w1 appends `enable_ha_publishing` and `change_ha_publishing_target` (C35b): each
+POSTs only the plan without `plan_id` and `confirm_destination`, sends exactly `{kind, action, planId,
+confirmDestination}` with both, sends nothing with one of them or a destination unequal to the plan's helper, and never
+fills the confirmation itself. B5w2 appends its half below. Every name here is fictional.
 """
 
 from __future__ import annotations
@@ -290,3 +293,167 @@ def test_a_restore_names_the_strand_and_its_two_causes(name) -> None:
     doc = flat(getattr(server_module, name).__doc__)
     assert "`SEASON_START_STRANDED` (409)" in doc, name
     assert "`RESTORE_NOT_ELIGIBLE`" in doc and "`RESTORE_ALREADY_COVERED`" in doc, name
+
+
+# --- B5w1: enable_ha_publishing and change_ha_publishing_target (C35b, C25a; O-21; row 121) --------------------------
+
+B5W1_TOOLS = (("enable_ha_publishing", "ENABLE"), ("change_ha_publishing_target", "CHANGE_TARGET"))
+"""B5w1's two tools, in C29a's order, each with the action it plans and commits."""
+
+STATUS_HELPER = "input_select.example_heater_equipment_status"
+DATE_HELPER = "input_datetime.example_heater_service_done"
+ENDED_HELPER = "input_datetime.example_heater_season_ended"
+PLAN_ID = "a" * 64
+PLAN_PATH = "/v1/assets/a1/ha-publishing-plan"
+ACTION_PATH = "/v1/assets/a1/ha-publishing"
+
+
+def a_plan(action: str = "ENABLE") -> dict:
+    return {
+        "planId": PLAN_ID, "assetId": "a1", "kind": "EQUIPMENT_STATUS", "action": action, "entityId": STATUS_HELPER,
+        "boundaryEntityId": None, "boundaryRequired": False,
+        "remote": {"domain": "input_select", "options": ["UP", "DEGRADED", "DOWN"], "hasDate": None, "hasTime": None},
+        "boundary": None, "mapping": {"OPERATIONAL": "UP", "DEGRADED": "DEGRADED", "DOWN": "DOWN"}, "refusal": None,
+        "readAt": 1000, "expiresAt": 601000,
+    }
+
+
+def tool(name: str):
+    return getattr(server_module, name)
+
+
+def test_b5w1s_two_tools_follow_the_collection_read_in_order() -> None:
+    names = server_module.TOOL_NAMES
+    at = names.index("list_ha_publishing")
+    assert names[at + 1:at + 3] == tuple(name for name, _ in B5W1_TOOLS)
+    for name, _ in B5W1_TOOLS:
+        registered = server_module.mcp._tool_manager.get_tool(name)
+        assert registered is not None and registered.parameters.get("additionalProperties") is False, name
+        assert list(inspect.signature(tool(name)).parameters) == [
+            "asset_id", "kind", "entity_id", "boundary_entity_id", "plan_id", "confirm_destination",
+        ], name
+        for optional in ("boundary_entity_id", "plan_id", "confirm_destination"):
+            assert inspect.signature(tool(name)).parameters[optional].default is None, (name, optional)
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_without_the_plan_id_and_confirmation_it_posts_only_the_plan(phone22, name, action) -> None:
+    phone22.reply("POST", PLAN_PATH, 200, a_plan(action))
+    answer = tool(name)(asset_id="a1", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER)
+    assert answer == a_plan(action)
+    assert paths(phone22) == [("GET", "/v1/status"), ("POST", PLAN_PATH)]
+    assert body_of(phone22.last()) == {
+        "kind": "EQUIPMENT_STATUS", "action": action, "entityId": STATUS_HELPER, "boundaryEntityId": None,
+    }
+    assert list(body_of(phone22.last())) == list(command_shapes.HA_PUBLISHING_PLAN_KEYS)
+    tool(name)(asset_id="a1", kind="SEASON_SERVICE_DATE", entity_id=DATE_HELPER, boundary_entity_id=ENDED_HELPER)
+    assert body_of(phone22.last()) == {
+        "kind": "SEASON_SERVICE_DATE", "action": action, "entityId": DATE_HELPER, "boundaryEntityId": ENDED_HELPER,
+    }
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_with_both_it_sends_exactly_the_action(phone22, name, action) -> None:
+    phone22.reply("POST", ACTION_PATH, 200, {"binding": {"kind": "EQUIPMENT_STATUS", "entityId": STATUS_HELPER}})
+    answer = tool(name)(
+        asset_id="a1", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER, plan_id=PLAN_ID, confirm_destination=STATUS_HELPER,
+    )
+    assert answer == {"binding": {"kind": "EQUIPMENT_STATUS", "entityId": STATUS_HELPER}}
+    assert paths(phone22) == [("GET", "/v1/status"), ("POST", ACTION_PATH)]
+    assert body_of(phone22.last()) == {
+        "kind": "EQUIPMENT_STATUS", "action": action, "planId": PLAN_ID, "confirmDestination": STATUS_HELPER,
+    }
+    assert list(body_of(phone22.last())) == list(command_shapes.HA_PUBLISHING_ACTION_KEYS)
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_with_one_of_them_or_another_destination_it_sends_nothing(paired, name, action) -> None:
+    for partial in (
+        {"plan_id": PLAN_ID},
+        {"confirm_destination": STATUS_HELPER},
+        {"plan_id": PLAN_ID, "confirm_destination": DATE_HELPER},
+        {"plan_id": PLAN_ID, "confirm_destination": STATUS_HELPER.upper()},
+        {"plan_id": PLAN_ID, "confirm_destination": ""},
+    ):
+        with pytest.raises(ToolError, match="nothing was sent"):
+            tool(name)(asset_id="a1", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER, **partial)
+    assert paired.requests == []
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_the_action_is_never_retried_and_only_the_plan_takes_the_long_read_budget(phone22, monkeypatch, name, action) -> None:
+    calls = spy_requests(monkeypatch)
+    tool(name)(asset_id="a1", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER)
+    tool(name)(
+        asset_id="a1", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER, plan_id=PLAN_ID, confirm_destination=STATUS_HELPER,
+    )
+    plans = [kwargs for method, path, kwargs in calls if path == PLAN_PATH]
+    actions = [kwargs for method, path, kwargs in calls if path == ACTION_PATH]
+    assert len(plans) == 1 and plans[0].get("timeout") == httpx.Timeout(30.0, read=120.0)
+    assert len(actions) == 1 and actions[0].get("retry_on_connect") is False
+    assert actions[0].get("timeout") is None
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_a_schema_21_phone_is_refused_with_nothing_sent(paired, name, action) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_21)
+    for confirmation in ({}, {"plan_id": PLAN_ID, "confirm_destination": STATUS_HELPER}):
+        paired.requests.clear()
+        with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as refused:
+            tool(name)(asset_id="a1", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER, **confirmation)
+        assert f"{name} needs schema 22" in str(refused.value)
+        assert set(paths(paired)) <= {("GET", "/v1/status")}, "the status read at most, and no POST"
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_the_refusals_reach_the_caller_by_their_codes(phone22, name, action) -> None:
+    for status, code, problem in (
+        (409, "STALE_PLAN", "PublishRefused(reason=STALE_PLAN)"),
+        (422, "HA_PUBLISH_CONFIRMATION_REQUIRED", "PublishConfirmationRequired(field=confirmDestination)"),
+        (409, "HA_PUBLISH_REFUSED", "PublishRefused(reason=TARGET_IN_USE, holderAssetId=a2)"),
+    ):
+        phone22.reply("POST", ACTION_PATH, status, {"error": {"code": code, "message": "m", "problems": [problem], "field": None}})
+        with pytest.raises(ToolError, match=code):
+            tool(name)(
+                asset_id="a1", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER, plan_id=PLAN_ID,
+                confirm_destination=STATUS_HELPER,
+            )
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_no_argument_takes_a_value_and_an_empty_id_is_refused(paired, name, action) -> None:
+    with pytest.raises(ToolError, match="must not be empty"):
+        tool(name)(asset_id="", kind="EQUIPMENT_STATUS", entity_id=STATUS_HELPER)
+    for extra in ({"value": "UP"}, {"date": "2026-02-10"}, {"ready_for_season": True}):
+        with pytest.raises(ToolError, match="does not accept"):
+            asyncio.run(server_module.mcp.call_tool(
+                name, {"asset_id": "a1", "kind": "EQUIPMENT_STATUS", "entity_id": STATUS_HELPER, **extra},
+            ))
+    assert paired.requests == []
+
+
+@pytest.mark.parametrize(("name", "action"), B5W1_TOOLS)
+def test_the_docstring_names_the_two_steps_and_the_codes(name, action) -> None:
+    doc = flat(tool(name).__doc__)
+    for word in ("`POST /v1/assets/{id}/ha-publishing-plan`", "`POST /v1/assets/{id}/ha-publishing`", "`planId`",
+                 "`STALE_PLAN`", "`HA_PUBLISH_CONFIRMATION_REQUIRED`", "`HA_PUBLISH_REFUSED`", "`APP_SCHEMA_TOO_OLD`",
+                 "`no_such_asset`", f"`{action}`", "confirm_destination", "never fills"):
+        assert word in doc, (name, word)
+    assert "the phone may set" in doc, name
+    lowered = doc.lower()
+    assert not any(word in lowered for word in NEVER_SAID), doc
+
+
+def test_writes_nothing_matches_the_plan_shape_and_the_two_shipped_literals() -> None:
+    assert "/v1/assets/{id}/ha-publishing-plan" in server_module._POSTS_THAT_WRITE_NOTHING
+    for path in ("/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan", "/v1/assets/a1/ha-publishing-plan",
+                 "/v1/assets/example%2Fheater/ha-publishing-plan"):
+        assert server_module._writes_nothing(path), path
+    for path in ("/v1/assets/a1/ha-publishing", "/v1/assets//ha-publishing-plan", "/v1/assets/a/b/ha-publishing-plan",
+                 "/v1/import-merge/apply", "/v1/repairs/schedule-providers/apply", "/v1/assets/{id}/ha-publishing"):
+        assert not server_module._writes_nothing(path), path
+
+
+def test_the_two_shapes_are_vendored() -> None:
+    assert command_shapes.HA_PUBLISHING_PLAN_KEYS == ("kind", "action", "entityId", "boundaryEntityId")
+    assert command_shapes.HA_PUBLISHING_ACTION_KEYS == ("kind", "action", "planId", "confirmDestination")

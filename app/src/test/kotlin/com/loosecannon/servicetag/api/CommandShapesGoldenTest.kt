@@ -55,8 +55,20 @@ class CommandShapesGoldenTest {
                 "attachmentUpdate", "attachmentUpload", "materialize", "replaceDraft", "replaceSuccessor",
                 // #114 (C29b): the Season Start role's own command, never a key of the schedule's.
                 "scheduleRole",
+                // #113/#114 (C35b): the publishing plan and the control that commits it.
+                "haPublishingPlan", "haPublishingAction",
             ),
             shapes.keys.toList(),
+        )
+        assertEquals(keysOf("haPublishingPlan"), HaPublishingPlanRequest.serializer().descriptor.names)
+        assertEquals(listOf("kind", "action", "entityId", "boundaryEntityId"), keysOf("haPublishingPlan"))
+        assertEquals(keysOf("haPublishingAction"), HaPublishingActionRequest.serializer().descriptor.names)
+        assertEquals(listOf("kind", "action", "planId", "confirmDestination"), keysOf("haPublishingAction"))
+        // #114 point 5, I33: no publishing body takes a value, a date to publish or READY.
+        val valueKeys = setOf("value", "desiredValue", "option", "date", "serviceOn", "seasonServiceDoneOn", "ready", "readyForSeason")
+        assertTrue(
+            "no publishing shape holds a value key",
+            (keysOf("haPublishingPlan") + keysOf("haPublishingAction")).none { it in valueKeys },
         )
         assertEquals(keysOf("scheduleRole"), ScheduleRoleRequest.serializer().descriptor.names)
         assertEquals(listOf("role", "sinceOn", "seasonStartQuickElected"), keysOf("scheduleRole"))

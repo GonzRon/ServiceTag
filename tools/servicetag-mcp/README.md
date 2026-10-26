@@ -72,8 +72,9 @@ the one body key it is about, then the `problems` in parentheses.
   below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
 - **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
   tools — refuses an app whose `schemaVersion` is below 22 the same way, from the same read, naming the feature
-  "season readiness and Home Assistant publishing". So do `set_schedule_role`, `list_ha_entities` and
-  `get_ha_publishing` and `list_ha_publishing`, the block's next four.
+  "season readiness and Home Assistant publishing". So do `set_schedule_role`, `list_ha_entities`,
+  `get_ha_publishing`, `list_ha_publishing`, `enable_ha_publishing` and `change_ha_publishing_target`, the block's
+  next six.
 
 ## Using it
 
@@ -116,7 +117,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Ninety-five: `pair` plus one per API operation.
+Ninety-seven: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -379,6 +380,16 @@ Assistant, and the answer never carries the address, the Wi-Fi name, the token o
 (`record_condition`, `complete_schedule`, `update_event`, `delete_event`, `archive_schedule`, `end_season`,
 `set_season_mode`, `retire_asset`, `archive_asset`, `import_merge` and `replace_asset`) say so in their descriptions: the
 phone may set its helper within seconds of the write, while the Developer API screen is open.
+`enable_ha_publishing` and `change_ha_publishing_target` are the phone's Enable and Change target, in two steps.
+Called without `plan_id` and `confirm_destination`, each POSTs only the plan, `POST /v1/assets/{id}/ha-publishing-plan`:
+the phone reads the named helpers from Home Assistant (a two-minute read budget), writes nothing, and answers a
+`planId`, the helper's shape and, when it cannot be used, a `refusal`. Called again with `plan_id` and
+`confirm_destination` — exactly the plan's `entityId`, the destination the owner confirmed — each sends exactly
+`{kind, action, planId, confirmDestination}` to `POST /v1/assets/{id}/ha-publishing` and returns `{binding}`; with
+only one of the two, or another destination, nothing is sent, and neither tool ever fills the confirmation itself.
+A plan that no longer holds is `STALE_PLAN` (409), a missing confirmation `HA_PUBLISH_CONFIRMATION_REQUIRED` (422),
+and the rest `HA_PUBLISH_REFUSED` (409, by reason); the commit is never re-sent on a dropped connection. No tool takes
+a value, a date to publish or a ready flag.
 `docs/api/v1.md`'s **Home Assistant publishing (#113, #114)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments

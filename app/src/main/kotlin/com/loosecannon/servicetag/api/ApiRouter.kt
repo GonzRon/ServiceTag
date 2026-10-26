@@ -206,6 +206,13 @@ internal class ApiRouter(
      * #113/#114 (C35a) added `GET /v1/ha-publishing`, the publishing collection and the only read of an orphan
      * tombstone: no asset sub-resource, so another verb on it is a 405. It writes nothing and returns no address,
      * Wi-Fi name, token or installation id.
+     *
+     * #113/#114 (C35b, O-21) added two rows: the thirty-first `/v1/assets/{id}/…` sub-resource, `POST
+     * …/ha-publishing-plan`, which reads the named helpers from Home Assistant and writes nothing, and `POST
+     * …/ha-publishing`, the publishing controls, Enable and Change target committing that plan through
+     * `PublishControls` with the caller's `planId` and confirmed destination. Another verb on either is a 404, as on
+     * every asset sub-resource. Neither takes a value, a date to publish or READY, nor reaches the token, the address,
+     * the connection's save or Forget.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -289,6 +296,12 @@ internal class ApiRouter(
                 // #113/#114 (C35) — the thirtieth: the asset's Home Assistant publishing and its obligations, read only.
                 "ha-publishing" to "GET" ->
                     (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).get(rest[1])
+                // #113/#114 (C35b) — the thirty-first: the publishing plan, which reads Home Assistant and writes
+                // nothing; and the controls on the thirtieth's path, each committing a held plan.
+                "ha-publishing-plan" to "POST" ->
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).plan(rest[1], request)
+                "ha-publishing" to "POST" ->
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).act(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
 

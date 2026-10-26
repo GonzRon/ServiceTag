@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
 import com.loosecannon.servicetag.core.hapublish.PublishDelivery
 import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.hapublish.RemoteEntity
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
@@ -14,6 +15,7 @@ import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
@@ -214,6 +216,21 @@ class ApiReadsWriteNothingTest {
             assertEquals("$path: ${response.bodyText()}", 200, response.status)
             assertEquals(path, before, snapshot())
         }
+        // B5w1 (C35b, row 117): the publishing plan is a POST that reads — one fresh read of the helper from the
+        // scripted Home Assistant, a plan id, and no row of any table written.
+        runBlocking { graph.secretStore.put("example-connection", Secret("fictional-token-1")) }
+        graph.haPublish.helpers["input_select.example_generator_status"] = RemoteEntity(
+            "input_select.example_generator_status", "DOWN", listOf("UP", "DEGRADED", "DOWN"), null, null,
+        )
+        val beforePlan = snapshot()
+        val plan = api.call(
+            "POST", "/v1/assets/$generator/ha-publishing-plan",
+            """{"kind":"EQUIPMENT_STATUS","action":"ENABLE","entityId":"input_select.example_generator_status"}""",
+        )
+        assertEquals(plan.bodyText(), 200, plan.status)
+        assertTrue(plan.bodyText(), plan.bodyText().contains("\"refusal\":null"))
+        assertEquals("ha-publishing-plan", beforePlan, snapshot())
+        assertTrue(graph.haPublish.posts.isEmpty())
         // And what the reads answered was today's derivation, not the stored row.
         val detail = api.ok(ScheduleDetailResponse.serializer(), "GET", "/v1/schedules/$held")
         assertEquals("2026-02-10", detail.computedForOn)

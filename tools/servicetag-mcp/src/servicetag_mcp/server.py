@@ -190,6 +190,9 @@ TOOL_NAMES: tuple[str, ...] = (
     "get_ha_publishing",
     # B5r (C35a): the publishing collection, taking the total to 95.
     "list_ha_publishing",
+    # B5w1 (C35b): Enable and Change target, each a plan and then the confirmed action, taking the total to 97.
+    "enable_ha_publishing",
+    "change_ha_publishing_target",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -200,9 +203,9 @@ plausible ceiling to hit on a very full archive, so the two import calls get a l
 than everything else (finding 12)."""
 
 _HA_READ_TIMEOUT = httpx.Timeout(30.0, read=120.0)
-"""#113/#114 (C35b): a call the phone answers only after reading Home Assistant itself — helper discovery — gets
-`_IMPORT_TIMEOUT`'s shape: one or two Home Assistant reads at #16's 30 s each, inside the request. Every other
-"#113/#114" call keeps the default, since no Home Assistant call happens inside it."""
+"""#113/#114 (C35b): a call the phone answers only after reading Home Assistant itself — helper discovery and the
+publishing plan — gets `_IMPORT_TIMEOUT`'s shape: one or two Home Assistant reads at #16's 30 s each, inside the
+request. Every other "#113/#114" call keeps the default, since no Home Assistant call happens inside it."""
 
 
 _MIN_SCHEMA_VERSION = 8
@@ -291,10 +294,24 @@ _HA_PUBLISHING_FEATURE = "season readiness and Home Assistant publishing"
 """The feature a "#113/#114" tool names when it refuses a phone below schema 22."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
-    {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
+    {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan", "/v1/assets/{id}/ha-publishing-plan"}
 )
-"""The non-`GET` routes that write nothing, ever — the merge plan and (1.4.1) the provider repair's
-plan: an old app may still be asked for either."""
+"""The non-`GET` routes that write nothing, ever, as path **shapes** — the merge plan and (1.4.1) the provider
+repair's plan, which an old app may still be asked for, and (#113/#114, C35b) the publishing plan, `{id}` one
+non-empty path segment. `_writes_nothing` is the membership test."""
+
+
+def _writes_nothing(path: str) -> bool:
+    """Whether [path] is one of `_POSTS_THAT_WRITE_NOTHING`'s shapes: each segment equal, but `{id}`, which matches
+    exactly one non-empty segment. A literal shape matches only itself, exactly as before."""
+    segments = path.split("/")
+    for shape in _POSTS_THAT_WRITE_NOTHING:
+        wanted = shape.split("/")
+        if len(wanted) == len(segments) and all(
+            want == got or (want == "{id}" and got != "") for want, got in zip(wanted, segments)
+        ):
+            return True
+    return False
 
 
 def _schema_version(*, unconfirmed: str) -> int:
@@ -431,10 +448,10 @@ def _call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
     actually deliver (see the module docstring). `client.py` stays free of any SDK import; this is
     the one seam where that conversion happens.
 
-    It is also the seam every write passes: **any** non-`GET` call but the read-only merge plan runs
-    `_require_schema_8` first, whichever tool makes it.
+    It is also the seam every write passes: **any** non-`GET` call but the plans that write nothing
+    (`_writes_nothing`) runs `_require_schema_8` first, whichever tool makes it.
     """
-    if method != "GET" and path not in _POSTS_THAT_WRITE_NOTHING:
+    if method != "GET" and not _writes_nothing(path):
         _require_schema_8()
     try:
         return device.request(method, path, **kwargs)
@@ -4633,6 +4650,127 @@ def list_ha_publishing() -> dict[str, Any]:
     """
     _require_ha_publishing_schema("list_ha_publishing")
     return _call("GET", "/v1/ha-publishing")
+
+
+def _ha_publishing_control(
+    tool: str,
+    action: str,
+    asset_id: str,
+    kind: str,
+    entity_id: str,
+    boundary_entity_id: str | None,
+    plan_id: str | None,
+    confirm_destination: str | None,
+) -> dict[str, Any]:
+    """B5w1 (C35b): the two steps both tools share. Without `plan_id` and `confirm_destination`, only the plan, which
+    writes nothing; with both, exactly the action's four keys; with one of them, or a destination that is not
+    `entity_id`, nothing at all. The confirmation is the caller's: nothing here fills either key."""
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}"
+    if plan_id is None and confirm_destination is None:
+        _require_ha_publishing_schema(tool)
+        values = {"kind": kind, "action": action, "entityId": entity_id, "boundaryEntityId": boundary_entity_id}
+        body = {key: values[key] for key in command_shapes.HA_PUBLISHING_PLAN_KEYS}
+        return _call(
+            "POST", f"{path}/ha-publishing-plan", json_body=body, content_type="application/json",
+            timeout=_HA_READ_TIMEOUT,
+        )
+    if plan_id is None or confirm_destination is None:
+        raise ToolError(
+            "plan_id and confirm_destination go together: pass both to commit a plan, or neither to make one; "
+            "nothing was sent"
+        )
+    if confirm_destination != entity_id:
+        raise ToolError(
+            "confirm_destination must be exactly entity_id, the helper the plan named and the owner confirmed; "
+            "nothing was sent"
+        )
+    _require_ha_publishing_schema(tool)
+    values = {"kind": kind, "action": action, "planId": plan_id, "confirmDestination": confirm_destination}
+    body = {key: values[key] for key in command_shapes.HA_PUBLISHING_ACTION_KEYS}
+    return _call(
+        "POST", f"{path}/ha-publishing", json_body=body, content_type="application/json", retry_on_connect=False,
+    )
+
+
+_HA_PUBLISHING_CONTROL_DOC = """
+
+    **Two steps.** Without `plan_id` and `confirm_destination` this POSTs only the plan, `POST
+    /v1/assets/{id}/ha-publishing-plan` `{kind, action, entityId, boundaryEntityId}`, and returns it: the phone reads
+    the named helpers once from Home Assistant (so the call can take up to two minutes) and writes nothing. The plan
+    answers `planId`, `boundaryRequired`, the helper's shape as `remote` (never its state), the season-ended helper as
+    `boundary`, `mapping` (the status kind: the option each recorded condition publishes) or `invalidDate`
+    (`1970-01-01`, the date kind), `refusal` (`null`, or `{reason, field}`: `NO_CONNECTION`, a read's failure such as
+    `NEEDS_TOKEN` or `ENTITY_NOT_FOUND`, or `WRONG_DOMAIN`, `OPTIONS_MISMATCH`, `NOT_DATE_ONLY`; `planId` is then
+    `null`), `readAt` and `expiresAt` (ten minutes after the read). Show the owner the plan's helper; once the owner
+    has confirmed it, call again with `plan_id` and `confirm_destination` — the plan's `entityId`, exactly — and this
+    sends exactly `{kind, action, planId, confirmDestination}` to `POST /v1/assets/{id}/ha-publishing`. With only one
+    of them, or a `confirm_destination` other than `entity_id`, nothing is sent. This tool never fills
+    `confirm_destination` itself: it is the owner's confirmation of the destination, and the caller's alone.
+
+    `kind` is `EQUIPMENT_STATUS` (the recorded condition to an `input_select` whose options are exactly `UP`,
+    `DEGRADED` and `DOWN`) or `SEASON_SERVICE_DATE` (the season service date, or `1970-01-01`, to a date-only
+    `input_datetime`). `boundary_entity_id` names the season-ended helper a date publication reads, and never writes;
+    the commit needs it exactly when the plan says `boundaryRequired`. No argument takes a value, a date to publish or
+    a ready flag: what is published stays derived from the phone's own records.
+
+    The commit answers `{binding}`, as `get_ha_publishing` answers it, and activates the publication on this phone;
+    while publishing is enabled, the phone may set the helper within seconds, while the Developer API screen is open.
+    Refusals, each writing nothing: an unknown asset is `no_such_asset` (404); a missing confirmation, or a
+    `confirmDestination` other than the plan's `entityId`, is `HA_PUBLISH_CONFIRMATION_REQUIRED` (422, `field` the
+    key); a plan the phone no longer holds — unknown, expired, already committed, made before the Developer API screen
+    was reopened, or whose connection, connection generation or binding moved since — is `STALE_PLAN` (409): plan
+    again; and `HA_PUBLISH_REFUSED` (409) names its reason in `problems` as `PublishRefused(reason=…)` —
+    `TARGET_IN_USE` (with the `holderAssetId`), `INBOUND_SOURCE`, `NOT_MAINTAINED_HERE`, `BAD_ENTITY_ID` (at
+    `boundaryEntityId`, or at `kind` for a target change on an asset with no publication of that kind) and
+    `BOUNDARY_IS_TARGET`. The commit is never re-sent on a dropped connection: read `get_ha_publishing` before running
+    it again. Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is
+    sent.
+    """
+
+
+def enable_ha_publishing(
+    asset_id: str,
+    kind: str,
+    entity_id: str,
+    boundary_entity_id: str | None = None,
+    plan_id: str | None = None,
+    confirm_destination: str | None = None,
+) -> dict[str, Any]:
+    return _ha_publishing_control(
+        "enable_ha_publishing", "ENABLE", asset_id, kind, entity_id, boundary_entity_id, plan_id, confirm_destination,
+    )
+
+
+enable_ha_publishing.__doc__ = (
+    """Enable one of an asset's two Home Assistant publications on a helper its Home Assistant administrator created:
+    the plan, then the action `ENABLE`. Enabling over an enabled date publication on another helper also owes the old
+    helper `1970-01-01`, which `get_ha_publishing` lists until it is delivered."""
+    + _HA_PUBLISHING_CONTROL_DOC
+)
+enable_ha_publishing = mcp.tool()(enable_ha_publishing)  # registered once its description is whole
+
+
+def change_ha_publishing_target(
+    asset_id: str,
+    kind: str,
+    entity_id: str,
+    boundary_entity_id: str | None = None,
+    plan_id: str | None = None,
+    confirm_destination: str | None = None,
+) -> dict[str, Any]:
+    return _ha_publishing_control(
+        "change_ha_publishing_target", "CHANGE_TARGET", asset_id, kind, entity_id, boundary_entity_id, plan_id,
+        confirm_destination,
+    )
+
+
+change_ha_publishing_target.__doc__ = (
+    """Move one of an asset's Home Assistant publications to another helper: the plan, then the action
+    `CHANGE_TARGET`, with `entity_id` the new helper. A date publication's old helper is owed `1970-01-01`, which
+    `get_ha_publishing` lists until it is delivered; the new helper starts with no published line."""
+    + _HA_PUBLISHING_CONTROL_DOC
+)
+change_ha_publishing_target = mcp.tool()(change_ha_publishing_target)  # registered once its description is whole
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

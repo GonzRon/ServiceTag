@@ -33,10 +33,12 @@ STATUS_21: dict = dict(STATUS_22, schemaVersion=21, backupFormatVersion=20)
 
 HA_PUBLISHING_TOOLS = (
     "get_season_readiness", "set_schedule_role", "list_ha_entities", "get_ha_publishing", "list_ha_publishing",
+    "enable_ha_publishing", "change_ha_publishing_target",
 )
 """The "#113/#114" block in C1's order, appended last after #16's (the R16-17 tail-pin precedent). A4 opens it with
 one tool, taking the registered total to **91**, A4w appends two, taking it to **93**, and B5 appends the publishing
-read, taking it to **94**, and B5r's collection read, **95**; each later brief appends its tools here and moves the pin."""
+read, taking it to **94**, B5r's collection read, **95**, and B5w1's Enable and Change target, **97**; each later
+brief appends its tools here and moves the pin."""
 
 READINESS_KEYS = {
     "assetId", "readyForSeason", "seasonServiceDoneOn", "reason", "roleScheduleId", "roleTarget", "roleSinceOn",
@@ -435,9 +437,10 @@ def test_list_ha_publishing_is_registered_guarded_listed_last_and_takes_nothing(
     assert tool is not None and tool.parameters.get("additionalProperties") is False
     assert list(inspect.signature(server_module.list_ha_publishing).parameters) == []
     assert set(tool.parameters.get("properties", {})) == set()
-    assert server_module.TOOL_NAMES[-1] == "list_ha_publishing"
-    assert server_module.TOOL_NAMES[-2] == "get_ha_publishing"
-    assert len(server_module.TOOL_NAMES) == 95
+    assert server_module.TOOL_NAMES[-3] == "list_ha_publishing"
+    assert server_module.TOOL_NAMES[-4] == "get_ha_publishing"
+    assert server_module.TOOL_NAMES[-len(HA_PUBLISHING_TOOLS):] == HA_PUBLISHING_TOOLS
+    assert len(server_module.TOOL_NAMES) == 97
 
 
 def test_the_collection_read_reads_the_route_once_and_answers_the_body_as_sent(phone22) -> None:

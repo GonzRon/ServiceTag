@@ -47,6 +47,12 @@ SCHEDULE_ACTION_FLAGS: tuple[str, ...] = ("unlinkHealthSubject", "seasonStartQui
 SCHEDULE_ROLE_KEYS: tuple[str, ...] = ("role", "sinceOn", "seasonStartQuickElected")
 """#114 (C29b): the Season Start role's own command, `POST /v1/schedules/{id}/role`."""
 
+HA_PUBLISHING_PLAN_KEYS: tuple[str, ...] = ("kind", "action", "entityId", "boundaryEntityId")
+"""#113/#114 (C35b): the publishing plan, `POST /v1/assets/{id}/ha-publishing-plan`."""
+
+HA_PUBLISHING_ACTION_KEYS: tuple[str, ...] = ("kind", "action", "planId", "confirmDestination")
+"""#113/#114 (C35b): a publishing control, `POST /v1/assets/{id}/ha-publishing`."""
+
 SCHEDULE_ROW_TO_COMMAND: Mapping[str, str] = MappingProxyType(
     {"assetId": "targetAssetId", "groupId": "targetGroupId"}
 )
@@ -102,7 +108,7 @@ season pair, which the replacement fills or ignores — each is a 400 there."""
 
 
 def vendored() -> dict[str, dict[str, Any]]:
-    """The eleven entries in the golden file's own shape, for the equality test."""
+    """The thirteen entries in the golden file's own shape, for the equality test."""
     return {
         "asset": {"keys": list(ASSET_KEYS)},
         "schedule": {
@@ -120,4 +126,6 @@ def vendored() -> dict[str, dict[str, Any]]:
         "replaceDraft": {"keys": list(REPLACE_DRAFT_KEYS)},
         "replaceSuccessor": {"keys": list(REPLACE_SUCCESSOR_KEYS)},
         "scheduleRole": {"keys": list(SCHEDULE_ROLE_KEYS)},
+        "haPublishingPlan": {"keys": list(HA_PUBLISHING_PLAN_KEYS)},
+        "haPublishingAction": {"keys": list(HA_PUBLISHING_ACTION_KEYS)},
     }
