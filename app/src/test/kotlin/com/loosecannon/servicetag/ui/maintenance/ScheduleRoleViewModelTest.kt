@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefusal
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
+import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -205,6 +206,56 @@ class ScheduleRoleViewModelTest {
         vm.onSinceOn("2026-04-01")
         assertNull(confirmed(vm).confirm)
         assertEquals("2026-04-01", graph.schedules.get(ScheduleId("quick"))!!.roleSinceOn)
+    }
+
+    /**
+     * A5b review, minor 4 (C10a, O-2): the schedule turns one-tap behind an open confirm on a FORM schedule. The confirm
+     * passed no election, so it is refused `QUICK_NOT_ELECTED` and stays open saying P114-5; the next confirm is the
+     * election, and the role is set.
+     */
+    @Test fun aScheduleTurnedOneTapBehindTheOpenConfirmMakesTheNextConfirmTheElection() = runTest {
+        heater()
+        val vm = roleModel("annual")
+        val open = vm.opened()
+        assertFalse(open.quickElected)
+        assertNull(open.quickNote)
+        graph.schedules.upsert(graph.schedules.get(ScheduleId("annual"))!!.copy(completionMode = CompletionMode.QUICK))
+
+        val refused = confirmed(vm).confirm
+        assertEquals(SeasonStartStrings.quickNote(), refused?.problem)
+        assertTrue("the next confirm is the election", refused!!.quickElected)
+        assertEquals(ScheduleRole.NONE, graph.schedules.get(ScheduleId("annual"))!!.role)
+
+        assertNull(confirmed(vm).confirm)
+        assertEquals(ScheduleRole.SEASON_START, graph.schedules.get(ScheduleId("annual"))!!.role)
+    }
+
+    /**
+     * A5b review, minor 5: a failure the confirm has no sentence for never closes it silently — it stays open as typed,
+     * nothing written, so the owner can try again or cancel. Only a schedule gone meanwhile closes it.
+     */
+    @Test fun anUnexpectedFailureKeepsTheConfirmOpen() = runTest {
+        heater()
+        val failing = object : com.loosecannon.servicetag.core.ports.AssetRepository by graph.assets {
+            override suspend fun all(): List<com.loosecannon.servicetag.core.model.Asset> = error("the store failed")
+        }
+        val setRole = SetScheduleRole(graph.schedules, failing, graph.groups, graph.transferRecords, graph.uow, graph.clock, graph.todayPort)
+        val vm = ScheduleRoleViewModel(graph.schedules, graph.assets, graph.groups, setRole, graph.todayPort, ScheduleId("annual"))
+        val open = vm.opened()
+
+        val after = confirmed(vm)
+        assertEquals("still open, as typed", open.sinceOn, after.confirm?.sinceOn)
+        assertFalse(after.busy)
+        assertEquals(ScheduleRole.NONE, graph.schedules.get(ScheduleId("annual"))!!.role)
+
+        // A schedule gone meanwhile (`NoSuchSchedule`) closes it: there is nothing left to confirm.
+        val vanished = object : com.loosecannon.servicetag.core.ports.ScheduleRepository by graph.schedules {
+            override suspend fun get(id: ScheduleId): com.loosecannon.servicetag.core.model.MaintenanceSchedule? = null
+        }
+        val goneRole = SetScheduleRole(vanished, graph.assets, graph.groups, graph.transferRecords, graph.uow, graph.clock, graph.todayPort)
+        val gone = ScheduleRoleViewModel(graph.schedules, graph.assets, graph.groups, goneRole, graph.todayPort, ScheduleId("annual"))
+        gone.opened()
+        assertNull(confirmed(gone).confirm)
     }
 
     /** Each refusal the confirm can meet keeps it open with its sentence (P114-17, -20, -21, -22, -23, -28, -5). */

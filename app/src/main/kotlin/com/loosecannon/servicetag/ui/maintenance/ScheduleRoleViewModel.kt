@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.SeasonStartBadDate
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefusal
 import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
@@ -168,8 +169,11 @@ class ScheduleRoleViewModel(
                 null -> null
                 is SeasonStartBadDate -> open.copy(problem = SeasonStartStrings.badDate())
                 is SeasonStartRefused -> refusedConfirm(open, failure.reason)
-                // NoSuchSchedule (gone meanwhile) and anything else: nothing was written, and the screen re-derives.
-                else -> null
+                // Gone meanwhile: there is nothing left to confirm, and the screen re-derives.
+                is NoSuchSchedule -> null
+                // Anything else wrote nothing either; the confirm stays open as typed — never a silent close — so the
+                // owner can try again or cancel. (A Throwable is not a sealed set: this arm is every other failure.)
+                else -> open
             }
             load()
             _state.update { it.copy(busy = false, confirm = next) }

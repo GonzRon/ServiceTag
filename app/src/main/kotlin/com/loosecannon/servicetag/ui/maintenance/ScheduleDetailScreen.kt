@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -439,7 +440,7 @@ private fun MemberRow(
 @Composable
 internal fun PostponeDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var dueOn by remember { mutableStateOf(initial) }
-    androidx.compose.material3.AlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(POSTPONE) },
         text = {
@@ -465,7 +466,7 @@ private fun SeasonStartConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    androidx.compose.material3.AlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         text = {
             Column(

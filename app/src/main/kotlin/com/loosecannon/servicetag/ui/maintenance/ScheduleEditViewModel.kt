@@ -662,11 +662,14 @@ class ScheduleEditViewModel(
      * `QUICK` must not silently clear a chosen one — only `onProfile(null)`, the picker's `None`
      * row, does that.
      */
-    fun onCompletionMode(value: CompletionMode) = clearing(
-        ScheduleField.COMPLETION_MODE,
-        ScheduleField.PROFILE,
-    ) { form ->
-        if (form.isGroup && value == CompletionMode.FORM) form else form.copy(completionMode = value)
+    fun onCompletionMode(value: CompletionMode) {
+        // #114 (O-2): every FORM → QUICK is the election again, so going back to FORM takes an earlier one back.
+        if (value == CompletionMode.FORM) quickElected = false
+        clearing(ScheduleField.COMPLETION_MODE, ScheduleField.PROFILE) { form ->
+            // #114: the last Season Start sentence (P114-43) is about the mode the owner has just changed.
+            (if (form.isGroup && value == CompletionMode.FORM) form else form.copy(completionMode = value))
+                .copy(seasonStartRefusal = null)
+        }
     }
 
     fun onProfile(value: ProfileId?) = clearing(ScheduleField.PROFILE) { form ->
@@ -750,7 +753,10 @@ class ScheduleEditViewModel(
     private var pendingElection: ScheduleCommand? = null
     private var electionRefusal: SeasonStartStrands? = null
 
-    /** #114: the owner confirmed P114-42 in this editor. Never set but by [electQuick]: the election is never defaulted. */
+    /**
+     * #114: the owner confirmed P114-42 in this editor. Never set but by [electQuick], and taken back by a switch to
+     * FORM ([onCompletionMode]), so every FORM → QUICK asks again: the election is never defaulted.
+     */
     private var quickElected = false
 
     /**

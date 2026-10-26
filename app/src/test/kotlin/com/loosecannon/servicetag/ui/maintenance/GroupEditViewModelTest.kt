@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
@@ -287,5 +288,32 @@ class GroupEditViewModelTest {
         )
         assertEquals(listOf(AssetId("heater")), openMembers("pre").map { it.assetId })
         assertNull(GroupEditState().seasonStartRefusal)
+    }
+
+    /**
+     * #114 (A5b review, minor 3): when the asset's row cannot be read at refusal time, P114-27 still names it — by the
+     * name the editor itself lists — so the refused save never draws no line at all.
+     */
+    @Test fun aRefusedMemberWhoseRowCannotBeReadIsStillNamedFromTheForm() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler"))
+        graph.groups.upsert(groupOf("pre", name = "Example pre-season", members = listOf(Triple("heater", "2026-01-01", null))))
+        graph.schedules.upsert(scheduleOf("pre-check", groupId = "pre", title = "Example pre-season check"))
+        graph.setScheduleRole.run(ScheduleId("pre-check"), ScheduleRole.SEASON_START, quickElected = true)
+        // The editor's reads of one asset fail from here on; the list and the save are untouched.
+        val unreadable = object : AssetRepository by graph.assets {
+            override suspend fun get(id: AssetId): Asset? = null
+        }
+
+        val vm = GroupEditViewModel(graph.groups, unreadable, graph.saveGroup, GroupId("pre"))
+        loaded(vm)
+        vm.toggle(AssetId("boiler"))
+        vm.save()
+        assertEquals(
+            "Example Boiler cannot join this group: the group's Season Start service would cover it, and it already has " +
+                "one or cannot have one.",
+            vm.state.first { !it.saving }.seasonStartRefusal,
+        )
+        assertEquals(listOf(AssetId("heater")), openMembers("pre").map { it.assetId })
     }
 }

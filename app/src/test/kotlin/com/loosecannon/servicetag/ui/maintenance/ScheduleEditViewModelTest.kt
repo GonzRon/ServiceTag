@@ -977,4 +977,48 @@ class ScheduleEditViewModelTest {
         assertEquals(ScheduleRole.SEASON_START, stored.role)
         assertNull(vm.state.value.seasonStartRefusal)
     }
+
+    /**
+     * #114 (O-2; A5b review, minors 1 and 2): every FORM → QUICK is asked again — an election made earlier in the same
+     * editor does not carry across a switch back to FORM — and P114-43 goes when the owner switches back to FORM.
+     */
+    @Test fun everySwitchToOneTapAsksAgainAndP114_43GoesWithFormAgain() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+        val vm = viewModel(scheduleId = "annual")
+        vm.state.first { it.loaded }
+
+        // Declined: P114-43 is drawn, and switching back to FORM takes it down.
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        vm.state.first { !it.saving && it.quickElection }
+        vm.cancelElection()
+        assertTrue(vm.state.value.seasonStartRefusal != null)
+        vm.onCompletionMode(CompletionMode.FORM)
+        assertNull("P114-43 is about the mode just changed back", vm.state.value.seasonStartRefusal)
+
+        // Elected once: saved QUICK with the role kept.
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        vm.state.first { !it.saving && it.quickElection }
+        val elected = savedId(vm)
+        vm.electQuick()
+        elected.await()
+        assertEquals(CompletionMode.QUICK, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+
+        // Back to FORM (no election needed), then QUICK again in the same editor: asked again, nothing written.
+        vm.onCompletionMode(CompletionMode.FORM)
+        val back = savedId(vm)
+        vm.save()
+        back.await()
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        assertTrue("the election is asked again", vm.state.first { !it.saving }.quickElection)
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+        assertEquals(ScheduleRole.SEASON_START, graph.schedules.get(ScheduleId("annual"))!!.role)
+    }
 }

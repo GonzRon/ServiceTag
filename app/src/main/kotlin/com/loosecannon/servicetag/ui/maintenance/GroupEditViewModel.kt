@@ -158,7 +158,11 @@ class GroupEditViewModel(
                 },
                 onFailure = { failure ->
                     val strands = failure as? SeasonStartStrands
-                    val name = strands?.assetId?.let { assets.get(it) }?.name
+                    // The asset's stored name, else the name this form lists for it (A5b review): a refused member is
+                    // always on the form, so P114-27 never comes out blank.
+                    val name = strands?.assetId?.let { refusedId ->
+                        assets.get(refusedId)?.name ?: current.candidates.firstOrNull { it.assetId == refusedId }?.name
+                    }
                     _state.update {
                         it.copy(
                             saving = false,
