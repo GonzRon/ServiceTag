@@ -129,7 +129,7 @@ class JournalDeviceProofTest {
 
             rule.awaitTag("value-ph")
             rule.onNodeWithTag("value-ph").performTextReplacement("7.5")
-            rule.saveEntry()
+            rule.onNodeWithText("Save entry").performScrollTo().performClick()
 
             // The edit pops back onto the entry it changed, which now reads 7.5. The form's own field holds 7.5 as
             // well, so the form is waited off the screen first: the 7.5 found after that is the saved one.
