@@ -107,6 +107,11 @@ class SeasonReadinessTest {
             ready("2026-09-18", phoneEnd("2026-04-20")),
             readiness("2026-09-20", events = listOf(done("2026-09-18"))),
         )
+        assertEquals(
+            ready("2026-09-18", phoneEnd("2026-04-20")),
+            readiness("2026-09-20", events = listOf(done("2026-09-18"), done("2026-09-17").copy(occurredOn = "2026-02-30"))),
+            "a malformed occurredOn is skipped, never thrown",
+        )
         // Services dated on or after the cutoff count: the END day itself is the first that does.
         assertEquals(
             ready("2026-04-20", phoneEnd("2026-04-20")),
@@ -217,6 +222,17 @@ class SeasonReadinessTest {
             ready("2026-09-18", ReadinessBoundary(on("2026-04-01"), BoundarySource.CALENDAR_WINDOW)),
             readiness("2026-10-25", asset = calendar, events = events, ha = HaBoundary.Fresh(on("2026-09-20"), readAt)),
             "a CALENDAR asset's window is never overridden by HA",
+        )
+        assertEquals(
+            ready("2026-09-18", commissioning("2026-06-01")),
+            readiness(
+                "2026-10-25",
+                asset = calendar,
+                schedules = listOf(roleOf(roleSchedule, "2026-06-01")),
+                events = events,
+                ha = HaBoundary.Unverified(on("2026-05-10"), since),
+            ),
+            "a CALENDAR asset ignores an Unverified boundary too: no unverifiedSince",
         )
     }
 
@@ -370,6 +386,16 @@ class SeasonReadinessTest {
                 "on $today",
             )
         }
+        assertEquals(
+            notReady(NotReadyReason.FUTURE_DATED, phoneEnd("2026-04-20")),
+            readiness("2026-10-22", events = listOf(advance, done("2026-10-25"))),
+            "future-dated outranks recorded-in-advance",
+        )
+        assertEquals(
+            notReady(NotReadyReason.RECORDED_IN_ADVANCE, phoneEnd("2026-04-20")),
+            readiness("2026-10-22", events = listOf(advance, done("2026-10-21", detailsPending = true))),
+            "recorded-in-advance outranks details-pending",
+        )
     }
 
     @Test
@@ -452,6 +478,20 @@ class SeasonReadinessTest {
         assertEquals(
             notReady(NotReadyReason.DETAILS_PENDING, phoneEnd("2026-04-20")),
             readiness("2026-09-20", events = listOf(done("2026-09-18", detailsPending = true))),
+        )
+        assertEquals(
+            notReady(NotReadyReason.DETAILS_PENDING, phoneEnd("2026-04-20")),
+            readiness("2026-09-20", events = listOf(done("2026-09-18", detailsPending = true), done("2026-09-10", imported = true))),
+            "details-pending outranks inherited-service-only",
+        )
+    }
+
+    @Test
+    fun anImportedCompletionWithDetailsPendingIsInheritedNeverDetailsPending() {
+        // O-20: an imported event never counts, so "fill in the details" must not be suggested for it.
+        assertEquals(
+            notReady(NotReadyReason.INHERITED_SERVICE_ONLY, phoneEnd("2026-04-20")),
+            readiness("2026-09-20", events = listOf(done("2026-09-18", detailsPending = true, imported = true))),
         )
     }
 
@@ -617,6 +657,11 @@ class SeasonReadinessTest {
             readiness("2026-09-20", schedules = listOf(roleSchedule.copy(roleSinceOn = null)), events = events),
             "a row that breaks R1 reads NO_ROLE, defensively",
         )
+        assertEquals(
+            notReady(NotReadyReason.NO_ROLE, null, null),
+            readiness("2026-09-20", schedules = listOf(roleSchedule.copy(roleSinceOn = "2026-13-01")), events = events),
+            "a malformed roleSinceOn reads NO_ROLE too",
+        )
     }
 
     @Test
@@ -626,6 +671,12 @@ class SeasonReadinessTest {
         assertEquals(
             notReady(NotReadyReason.SCHEDULE_ARCHIVED, null),
             readiness("2026-09-20", schedules = listOf(archived), events = events),
+        )
+        val yr = heater.copy(seasonMode = SeasonMode.YEAR_ROUND)
+        assertEquals(
+            notReady(NotReadyReason.SCHEDULE_ARCHIVED, null),
+            readiness("2026-09-20", asset = yr, schedules = listOf(archived), events = events),
+            "schedule-archived outranks role-not-allowed",
         )
         val live = roleOf(scheduleOf(id = "s-live", assetId = "heater"))
         assertEquals(
@@ -651,6 +702,12 @@ class SeasonReadinessTest {
             notReady(NotReadyReason.TWO_ROLES, null, null),
             readiness("2026-09-20", schedules = listOf(roleSchedule, second), events = events),
         )
+        val yr = heater.copy(seasonMode = SeasonMode.YEAR_ROUND)
+        assertEquals(
+            notReady(NotReadyReason.TWO_ROLES, null, null),
+            readiness("2026-09-20", asset = yr, schedules = listOf(roleSchedule, second), events = events),
+            "two-roles outranks role-not-allowed",
+        )
         val group = groupOf(id = "g1", members = listOf(Triple("heater", "2026-01-01", null)))
         val groupRole = roleOf(scheduleOf(id = "s-group", assetId = null, groupId = "g1"))
         assertEquals(
@@ -675,6 +732,11 @@ class SeasonReadinessTest {
             notReady(NotReadyReason.ROLE_NOT_ALLOWED, null),
             readiness("2026-09-20", asset = yearRound, events = events),
             "a YEAR_ROUND asset",
+        )
+        assertEquals(
+            notReady(NotReadyReason.ROLE_NOT_ALLOWED, null),
+            readiness("2026-09-20", asset = yearRound, schedules = listOf(roleSchedule.copy(roleSinceOn = null)), events = events),
+            "role-not-allowed outranks the R1 breach (ruling 2)",
         )
     }
 
@@ -755,6 +817,7 @@ class SeasonReadinessTest {
 
     @Test
     fun conditionHealthPhaseAndRemindersChangeNothing() {
+        // Condition is not an input: C9's signature has none (G8, I3).
         val events = listOf(done("2026-09-18"))
         val baseline = readiness("2026-10-10", events = events)
         assertEquals(ready("2026-09-18", phoneEnd("2026-04-20")), baseline)

@@ -2,7 +2,6 @@ package com.loosecannon.servicetag.core.season
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
-import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -85,8 +84,8 @@ enum class NotReadyReason {
  * `imported` (a Transfer Pack brought it), dated in `[cutoff, today]`, and written (its `updatedAt` in its own
  * `tzId`, else in [zone]) on or after the day it names (O-16). The latest qualifying date answers (O-3).
  *
- * Never read: condition, health, today's phase, reminders, closures, `occurrenceOn`, `createdAt`, and any name,
- * category, template or title (G22). A malformed `occurredOn` is skipped and an unresolvable `tzId` falls back to
+ * Never read: condition, health, today's phase, reminders, closures, `occurrenceOn`, `createdAt`, and any label
+ * an asset or a schedule carries (G22). A malformed `occurredOn` is skipped and an unresolvable `tzId` falls back to
  * [zone]; nothing here throws on stored data.
  */
 fun seasonReadiness(
@@ -112,7 +111,7 @@ fun seasonReadiness(
     }
     val s = covering.singleOrNull()
         ?: return Readiness.NotReady(if (covering.isEmpty()) NotReadyReason.NO_ROLE else NotReadyReason.TWO_ROLES, null, null)
-    val leafChild = asset.parentAssetId != null && AssetTree.children(assets, asset.id).isEmpty()
+    val leafChild = asset.parentAssetId != null && assets.none { it.parentAssetId == asset.id }
     if (asset.seasonMode == SeasonMode.YEAR_ROUND || leafChild) {
         return Readiness.NotReady(NotReadyReason.ROLE_NOT_ALLOWED, s.id, null)
     }
@@ -134,9 +133,9 @@ fun seasonReadiness(
         NotReadyReason.FUTURE_DATED
     } else if (counted.any { it.on in cutoff..today && writeDayOf(it.event, zone) < it.on }) {
         NotReadyReason.RECORDED_IN_ADVANCE
-    } else if (own.any { it.event.detailsPending && it.on >= cutoff }) {
+    } else if (own.any { it.event.detailsPending && !it.event.imported && it.on >= cutoff }) {
         NotReadyReason.DETAILS_PENDING
-    } else if (own.any { !it.event.detailsPending && it.event.imported && it.on in cutoff..today }) {
+    } else if (own.any { it.event.imported && it.on in cutoff..today }) {
         NotReadyReason.INHERITED_SERVICE_ONLY
     } else if (boundary.source == BoundarySource.COMMISSIONING) {
         NotReadyReason.NOT_DONE_SINCE_COMMISSIONING
