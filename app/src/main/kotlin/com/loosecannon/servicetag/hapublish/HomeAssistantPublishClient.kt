@@ -58,8 +58,8 @@ sealed interface CallOutcome {
  * #113/#114 (C22, C23) — the outbound Home Assistant client: one GET of a helper's state, or one POST of one of the
  * two allowlisted service actions ([HaServiceAction]; the path and the body's keys come from the enum alone), at the
  * stored connection's origin and nowhere else. Per call, on its own connection:
- * 1. the connection must be the stored one (its id and address), whose setting then governs, else `ENDPOINT_REFUSED`
- *    with nothing opened (#16's port rule, I10);
+ * 1. the connection must be the stored one (its id and address), else `ENDPOINT_REFUSED` with nothing opened (#16's
+ *    port rule, I10); the stored row's network setting then governs, and a caller's older copy cannot widen it;
  * 2. [HaRequestGate], #16's checks (C21); nothing is opened before it allows;
  * 3. redirects not followed, nothing cached, no proxy; the bearer, JSON, identity encoding, the fixed user agent and,
  *    for the POST alone, the JSON content type with a fixed-length body; no cookie;
@@ -85,8 +85,12 @@ class HomeAssistantPublishClient(
 ) {
     private val gate = HaRequestGate(networkPermissionGranted, currentNetwork, resolver, parse)
 
-    /** One `GET <base>/api/states/<entityId>`, through C16's mapper. */
+    /**
+     * One `GET <base>/api/states/<entityId>`, through C16's mapper. An [entityId] outside #16's shape is `MALFORMED`
+     * before anything is opened, so the path is that one helper's and no other endpoint's.
+     */
     suspend fun read(connection: HaConnection, entityId: String, token: Secret): RemoteRead {
+        if (!isValidEntityId(entityId)) return RemoteRead.Failed(PublishErrorKind.MALFORMED, null)
         val stored = storedAs(connection) ?: return RemoteRead.Failed(PublishErrorKind.ENDPOINT_REFUSED, null)
         return withTimeoutOrNull(CALL_MILLIS) {
             when (val answer = gate.check(stored, STATES_PATH + entityId)) {
@@ -198,7 +202,8 @@ class HomeAssistantPublishClient(
 
     /**
      * C23: the output stream connects (name, socket, TLS) and sends the head; once it is handed over, HA may have the
-     * request, so [transmission] is set before a byte of the body is written.
+     * request, so [transmission] is set before a byte of the body is written. The head alone cannot act: a fixed-length
+     * body is not complete until written, which is why a timeout before [transmission] is set reads `Refused(TIMED_OUT)`.
      */
     private fun exchangeOf(
         connection: HttpURLConnection,

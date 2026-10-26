@@ -319,7 +319,10 @@ class HomeAssistantPublishClientTest {
         assertEquals("the read-back sees what the call did", "UP", (readBack as RemoteRead.Answered).remote.state)
     }
 
-    /** C23: cancellation propagates and disconnects; the client never claims an outcome for a cancelled call. */
+    /**
+     * C23: cancellation propagates and disconnects; the client never claims an outcome for a cancelled call. Row 54a's
+     * `Unknown` is B4a's half: the client propagates the cancel (ruling 4), and the runner records the outcome.
+     */
     @Test
     fun cancellationAroundCompletion() = runBlocking {
         val h = Harness().apply {
@@ -573,6 +576,16 @@ class HomeAssistantPublishClientTest {
                 assertNotNull(expected.message)
             }
             assertEquals(emptyList<URL>(), h.ha.opened)
+        }
+    }
+
+    /** I10: a read reaches `/api/states/<helper>` and no other path; an id outside #16's shape opens nothing. */
+    @Test
+    fun aReadOfAMalformedEntityIdOpensNothing() = runBlocking {
+        for (entity in listOf("../services", "input_select.a/b")) {
+            val h = Harness()
+            assertEquals(entity, RemoteRead.Failed(PublishErrorKind.MALFORMED, null), h.client().read(HOME_HTTP, entity, TOKEN))
+            assertEquals(entity, emptyList<URL>(), h.ha.opened)
         }
     }
 
