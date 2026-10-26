@@ -362,13 +362,14 @@ class ApiReadsWriteNothingTest {
                 )
             },
         )
-        // #114 (C10, C29b; row 113): the role route writes the schedule row alone — no state, no event, no recompute.
+        // #114 (C10, C29b; row 113): the role route writes the schedule row and no event; since #124 (C41) the same write
+        // rebuilds the covered asset's derived state, which a schedule counting from its opening service reads.
         assertEquals(
-            setOf("maintenance_schedule"),
+            setOf("maintenance_schedule", "schedule_state"),
             tablesWrittenBy { api.call("POST", "/v1/schedules/$oilChange/role", """{"role":"SEASON_START","seasonStartQuickElected":true}""") },
         )
         assertEquals(
-            setOf("maintenance_schedule"),
+            setOf("maintenance_schedule", "schedule_state"),
             tablesWrittenBy { api.call("POST", "/v1/schedules/$oilChange/role", """{"role":"NONE"}""") },
         )
         val coolant = schedule(generator, "Coolant flush")

@@ -331,7 +331,8 @@ class AssetHealthReadModel(
             .mapNotNull { id ->
                 schedules.get(id)?.let { schedule ->
                     val state = recompute.readState(schedule)
-                    id to LinkedSchedule(schedule, ScheduleRecompute.policyInputsOf(schedule, state, zone()))
+                    val opened = recompute.openingServiceOf(schedule)
+                    id to LinkedSchedule(schedule, ScheduleRecompute.policyInputsOf(schedule, state, zone(), opened))
                 }
             }
             .toMap()

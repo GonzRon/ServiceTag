@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonInputs
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -24,6 +25,7 @@ import com.loosecannon.servicetag.core.schedule.GroupOccurrences
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.ServicePolicyEngine
+import com.loosecannon.servicetag.core.season.OpeningServiceReader
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -60,6 +62,13 @@ class RecomputeSchedules(
     private val activations: SeasonActivationRepository,
     private val today: Today,
     private val clock: Clock,
+    /**
+     * #124 (C41) — the qualifying opening-service day of a schedule's asset (C9's own answer for today), asked only
+     * for an asset-targeted schedule counting from it (`IN_SERVICE_AFTER_OPENING_SERVICE`). Defaulted so every shipped
+     * construction compiles unchanged (F-6); production passes the one reader, and placed before [zone] so the zone
+     * stays the trailing lambda.
+     */
+    private val openingService: OpeningServiceReader = OpeningServiceReader.NONE,
     /**
      * The owner's zone, read once per rebuild and handed to the engine beside `T`.
      *
@@ -153,6 +162,7 @@ class RecomputeSchedules(
             today = today.localDate(),
             zone = zone(),
             season = inputs.season,
+            openingServiceOn = openingServiceOf(schedule),
         )
         // `rebuild` leaves `computedAt` at 0 because it has no clock; this is where it is stamped.
         return state.copy(computedAt = clock.nowMillis())
@@ -184,10 +194,21 @@ class RecomputeSchedules(
         val state = readState(schedule)
         val season = seasonFor(schedule)
         return ServicePolicyEngine.evaluate(
-            inputs = ScheduleRecompute.policyInputsOf(schedule, state, zone()),
+            inputs = ScheduleRecompute.policyInputsOf(schedule, state, zone(), openingServiceOf(schedule)),
             season = season?.let(SeasonContext::of),
             at = today.localDate(),
         ).quietUntil
+    }
+
+    /**
+     * #124 (C41) — the day [schedule] counts from when it counts from its asset's opening service: the reader's answer
+     * for an asset-targeted schedule with `IN_SERVICE_AFTER_OPENING_SERVICE`, and null — the reader never asked — for
+     * every other schedule. The health read model's links ask here too, so every surface reads the same day.
+     */
+    suspend fun openingServiceOf(schedule: MaintenanceSchedule): LocalDate? {
+        if (schedule.servicePolicy != ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE) return null
+        val target = schedule.target as? ScheduleTarget.AssetTarget ?: return null
+        return openingService.openingServiceOn(target.assetId)
     }
 
     private suspend fun rebuild(schedule: MaintenanceSchedule) {

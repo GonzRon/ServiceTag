@@ -28,6 +28,8 @@ import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.season.OpeningServiceReader
+import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
@@ -457,6 +459,8 @@ class AppGraph(private val context: Context) {
      */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
         schedules, scheduleStates, events, closures, groups, assets, seasonActivations, today, clock,
+        // #124 (C41): asked at each rebuild, so the reader can sit below with the Home Assistant stores it reads.
+        openingService = { openingServiceReader.openingServiceOn(it) },
         zone = { ZoneId.systemDefault() },
     )
 
@@ -512,6 +516,15 @@ class AppGraph(private val context: Context) {
     val publishDecommissions: DecommissionRepository = RoomDecommissionRepository(db.haPublishDecommissionDao())
     val outboundTargets: OutboundTargets =
         PublishOutboundTargets(publishBindings, publishDeliveries, publishDecommissions, ids, clock)
+
+    /**
+     * #124 (C41): the one reader of an asset's opening-service day — C9 over exactly what [publishProjector] hands it,
+     * the date binding's Home Assistant boundary included — which [recomputeSchedules] feeds to the engine.
+     */
+    val openingServiceReader: OpeningServiceReader = SeasonReadinessReader(
+        assets, schedules, groups, events, seasonActivations, publishBindings, publishDeliveries, seasonSyncBindings,
+        haConnections, today, clock,
+    ) { ZoneId.systemDefault() }
 
     /** #16 (C18, R16-5): the Home Assistant token, sealed by a Keystore key in a file the platform never copies. */
     val secretStore: KeystoreSecretStore = KeystoreSecretStore.onDevice(context)
@@ -1129,7 +1142,7 @@ class AppGraph(private val context: Context) {
 
     // #114 (C10, C10a) — the passive Season Start role: its own command, never a schedule-form field (K11).
     val setScheduleRole: SetScheduleRole =
-        SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, today)
+        SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, today, recomputeSchedules)
 
     // 1.2 — the group operations. `saveGroup` is the only writer of a membership window, and the
     // only place `removed_at` is ever stamped; nothing anywhere clears one.

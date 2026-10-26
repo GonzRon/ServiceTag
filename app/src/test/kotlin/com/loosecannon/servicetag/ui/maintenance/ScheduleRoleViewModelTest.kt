@@ -239,7 +239,10 @@ class ScheduleRoleViewModelTest {
         val failing = object : com.loosecannon.servicetag.core.ports.AssetRepository by graph.assets {
             override suspend fun all(): List<com.loosecannon.servicetag.core.model.Asset> = error("the store failed")
         }
-        val setRole = SetScheduleRole(graph.schedules, failing, graph.groups, graph.transferRecords, graph.uow, graph.clock, graph.todayPort)
+        val setRole = SetScheduleRole(
+            graph.schedules, failing, graph.groups, graph.transferRecords, graph.uow, graph.clock, graph.todayPort,
+            graph.recomputeSchedules,
+        )
         val vm = ScheduleRoleViewModel(graph.schedules, graph.assets, graph.groups, setRole, graph.todayPort, ScheduleId("annual"))
         val open = vm.opened()
 
@@ -252,7 +255,10 @@ class ScheduleRoleViewModelTest {
         val vanished = object : com.loosecannon.servicetag.core.ports.ScheduleRepository by graph.schedules {
             override suspend fun get(id: ScheduleId): com.loosecannon.servicetag.core.model.MaintenanceSchedule? = null
         }
-        val goneRole = SetScheduleRole(vanished, graph.assets, graph.groups, graph.transferRecords, graph.uow, graph.clock, graph.todayPort)
+        val goneRole = SetScheduleRole(
+            vanished, graph.assets, graph.groups, graph.transferRecords, graph.uow, graph.clock, graph.todayPort,
+            graph.recomputeSchedules,
+        )
         val gone = ScheduleRoleViewModel(graph.schedules, graph.assets, graph.groups, goneRole, graph.todayPort, ScheduleId("annual"))
         gone.opened()
         assertNull(confirmed(gone).confirm)

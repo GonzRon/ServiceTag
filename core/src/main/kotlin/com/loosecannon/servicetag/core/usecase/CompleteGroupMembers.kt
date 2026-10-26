@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.ports.Clock
@@ -49,6 +50,7 @@ import com.loosecannon.servicetag.core.schedule.GroupOccurrence
  *   alone, because only an explicit edit moves the D-27 pin's floor (invariants 19, 25, 68, 69).
  *
  * A batch dated after [today] is [CompletionDateInFuture] (O-16, C39) before the write, so no member is written.
+ * When the schedule carries the Season Start role, the write also rebuilds each completed member's asset (#124, C41).
  */
 class CompleteGroupMembers(
     private val schedules: ScheduleRepository,
@@ -117,6 +119,9 @@ class CompleteGroupMembers(
                 schedules.upsert(schedule.copy(postponedDueOn = null))
             }
             recompute.forSchedule(schedule.id)
+            // #124 (C41): a role schedule's completion moves each completed member's readiness, which that member's own
+            // schedules counting from its opening service read.
+            if (schedule.role == ScheduleRole.SEASON_START) outstanding.forEach { recompute.forAsset(it) }
             written
         }
     }

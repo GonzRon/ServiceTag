@@ -23,9 +23,12 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.season.Readiness
+import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.season.seasonReadiness
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.testing.BackupInstall
+import com.loosecannon.servicetag.core.testing.InMemoryPublishBindingRepository
+import com.loosecannon.servicetag.core.testing.InMemoryPublishDeliveryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.groupOf
@@ -86,13 +89,22 @@ internal class SeasonStartHarness(today: String = ROLE_TODAY) {
         }
     }
 
+    val publishBindings = InMemoryPublishBindingRepository()
+    val publishDeliveries = InMemoryPublishDeliveryRepository(publishBindings)
+
+    /** #124 (C41): the one reader of C9's opening-service day, over these same stores. */
+    val openingServiceReader = SeasonReadinessReader(
+        assets, schedules, groups, raw.events, activations, publishBindings, publishDeliveries, raw.seasonSyncBindings,
+        raw.haConnections, todayPort, clock,
+    ) { ZoneOffset.UTC }
+
     val recompute = RecomputeSchedules(
-        schedules, states, raw.events, raw.closures, groups, assets, activations, todayPort, clock,
+        schedules, states, raw.events, raw.closures, groups, assets, activations, todayPort, clock, openingServiceReader,
     ) { ZoneOffset.UTC }
     private val guard = SeasonSyncGuard(raw.seasonSyncBindings)
     private val promote = PromoteCategory(raw.categories)
 
-    val setScheduleRole = SetScheduleRole(schedules, assets, groups, raw.transfers, raw.uow, clock, todayPort)
+    val setScheduleRole = SetScheduleRole(schedules, assets, groups, raw.transfers, raw.uow, clock, todayPort, recompute)
     val setSeasonMode =
         SetSeasonMode(assets, schedules, activations, raw.uow, ids, clock, todayPort, recompute, guard, groups)
     val updateAsset = UpdateAsset(assets, schedules, raw.uow, clock, recompute, promote, groups)

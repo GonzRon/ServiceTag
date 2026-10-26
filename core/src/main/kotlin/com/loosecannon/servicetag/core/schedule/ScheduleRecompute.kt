@@ -61,6 +61,9 @@ object ScheduleRecompute {
      * zone that is. It carries **no** default — a zone guessed inside a pure function is the drift
      * invariant 16 forbids, and a caller that does not say which calendar it means cannot be given
      * one silently.
+     *
+     * [openingServiceOn] is #124's day (C41), which only `IN_SERVICE_AFTER_OPENING_SERVICE` reads: the caller's, read
+     * by the one reader, and null for every other schedule.
      */
     fun rebuild(
         schedule: MaintenanceSchedule,
@@ -70,6 +73,7 @@ object ScheduleRecompute {
         today: LocalDate,
         zone: ZoneId,
         season: SeasonInputs? = null,
+        openingServiceOn: LocalDate? = null,
     ): ScheduleState {
         val completions = completionsOf(schedule, events)
         val newest = completions.maxWithOrNull(EventChronology)
@@ -126,7 +130,7 @@ object ScheduleRecompute {
         // The policy reads the occurrence the lines above derived and never writes back into it:
         // `computedDueOn` and `effectiveDueOn` are what they were for every policy (inv. 84, 10).
         val outcome = ServicePolicyEngine.evaluate(
-            inputs = policyInputsOf(schedule, raw, zone),
+            inputs = policyInputsOf(schedule, raw, zone, openingServiceOn),
             season = season?.let(SeasonContext::of),
             at = today,
         )
@@ -149,14 +153,23 @@ object ScheduleRecompute {
      * policy either: there is nothing to act on, which is how [statusOf] comes to answer `NO_DATA`.
      *
      * Public so the health clock can ask the policy about any day with the occurrence as it stands.
+     *
+     * [openingServiceOn] (#124, C41) is passed through as it came: the day `RecomputeSchedules` read for the schedule
+     * from its one reader, or null.
      */
-    fun policyInputsOf(schedule: MaintenanceSchedule, state: ScheduleState, zone: ZoneId): PolicyInputs =
+    fun policyInputsOf(
+        schedule: MaintenanceSchedule,
+        state: ScheduleState,
+        zone: ZoneId,
+        openingServiceOn: LocalDate? = null,
+    ): PolicyInputs =
         PolicyInputs(
             policy = schedule.servicePolicy,
             offsetDays = schedule.policyOffsetDays,
             rawDueOn = state.computedDueOn?.let(LocalDate::parse),
             postponedDueOn = if (state.computedDueOn == null) null else schedule.postponedDueOn?.let(LocalDate::parse),
             openedOn = state.lastTerminationEffectiveOn?.let(LocalDate::parse) ?: pinFloor(schedule, zone),
+            openingServiceOn = openingServiceOn,
         )
 
     /**

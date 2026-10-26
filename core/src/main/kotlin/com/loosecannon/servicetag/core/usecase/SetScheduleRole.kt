@@ -74,8 +74,10 @@ class SeasonStartBadDate(val field: String) : IllegalArgumentException("$field i
  *   already has, on the same day, writes nothing; a new date moves only `roleSinceOn`.
  *
  * The write moves `role`, `roleSinceOn` and `updatedAt` only — never `ruleChangedAt`, `postponedDueOn` or a provider
- * row — and recomputes nothing: the role changes no rule (C7, row 21). No event is touched, so clearing and setting
- * the role again never re-admits an imported service (B, row 21a).
+ * row. The role changes no rule, so the role schedule's own state is unchanged (C7, row 21); but it moves readiness, so
+ * the same write rebuilds each asset it covers — the target, or the group's open members — for the schedules counting
+ * from their opening service (#124, C41). No event is touched, so clearing and setting the role again never re-admits
+ * an imported service (B, row 21a).
  */
 class SetScheduleRole(
     private val schedules: ScheduleRepository,
@@ -85,6 +87,7 @@ class SetScheduleRole(
     private val uow: UnitOfWork,
     private val clock: Clock,
     private val today: Today,
+    private val recompute: RecomputeSchedules,
 ) {
     suspend fun run(
         id: ScheduleId,
@@ -110,7 +113,14 @@ class SetScheduleRole(
         if (schedule.role == role && schedule.roleSinceOn == sinceOn) return schedule
         val saved = schedule.copy(role = role, roleSinceOn = sinceOn, updatedAt = clock.nowMillis())
         schedules.upsert(saved)
+        coveredBy(saved).forEach { recompute.forAsset(it) }
         return saved
+    }
+
+    /** #124 (C41) — the assets [schedule]'s role covers, or covered: its asset, or its group's open members. */
+    private suspend fun coveredBy(schedule: MaintenanceSchedule): List<AssetId> = when (val target = schedule.target) {
+        is ScheduleTarget.AssetTarget -> listOf(target.assetId)
+        is ScheduleTarget.GroupTarget -> groups.get(target.groupId)?.openMembers().orEmpty().map { it.assetId }
     }
 
     /** C10's table in its order, but for the date (checked last); null when the schedule may take the role. */

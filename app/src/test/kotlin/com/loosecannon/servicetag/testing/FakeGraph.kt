@@ -12,6 +12,8 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.season.OpeningServiceReader
+import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.EditSeasonSyncEntity
 import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
@@ -354,6 +356,8 @@ class FakeGraph(
     /** The real recompute over the real tables, so an event write in a test rebuilds for real. */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
         schedules, scheduleStates, events, closures, groups, assets, seasonActivations, todayPort, clock,
+        // #124 (C41): as `AppGraph` wires it — asked at each rebuild, the reader below with its Home Assistant stores.
+        openingService = { openingServiceReader.openingServiceOn(it) },
         zone = { ZoneOffset.UTC },
     )
 
@@ -445,6 +449,12 @@ class FakeGraph(
     val publishDecommissions: DecommissionRepository = RoomDecommissionRepository(db.haPublishDecommissionDao())
     val outboundTargets: OutboundTargets =
         PublishOutboundTargets(publishBindings, publishDeliveries, publishDecommissions, ids, clock)
+
+    /** #124 (C41): the one reader of an asset's opening-service day, as `AppGraph` builds it. */
+    val openingServiceReader: OpeningServiceReader = SeasonReadinessReader(
+        assets, schedules, groups, events, seasonActivations, publishBindings, publishDeliveries, seasonSyncBindings,
+        haConnections, todayPort, clock,
+    ) { ZoneOffset.UTC }
 
     /** 1.4 — the season model's commands, mirroring `AppGraph`'s five fields by name (master plan §1). */
     val setSeasonMode: SetSeasonMode =
@@ -792,7 +802,7 @@ class FakeGraph(
     val archiveSchedule: ArchiveSchedule =
         ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock, groups, transferRecords)
     val setScheduleRole: SetScheduleRole =
-        SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, todayPort)
+        SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, todayPort, recomputeSchedules)
     val closeRound: CloseRound =
         CloseRound(schedules, closures, uow, ids, clock, todayPort, recomputeSchedules)
     val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, transferRecords)
