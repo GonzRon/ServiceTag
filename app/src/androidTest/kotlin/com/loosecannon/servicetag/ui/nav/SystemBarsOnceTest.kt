@@ -125,6 +125,7 @@ class SystemBarsOnceTest {
         seedTheCrates()
         open(Route.Assets)
         rule.awaitText(crate(1))
+        rule.waitUntil("the keyboard down", IME_TIMEOUT_MS) { windowInsets(WindowInsetsCompat.Type.ime()).bottom == 0 }
         val list = theOverflowingScrollNode()
 
         assertPx("the list's bottom: the bottom bar's top edge", bottomBarTop(), list.boundsInRoot.bottom)

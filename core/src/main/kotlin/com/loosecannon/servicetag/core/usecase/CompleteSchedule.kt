@@ -44,7 +44,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   A completion collected by the form (`viaForm`) is never minimal: it is held to the profile's
  *   required fields and never owes its details. It also owes the schedule's meter reading, as the
  *   quick prompt does, whether or not the profile carries that meter (#119); a meter rule whose
- *   definition has gone demands nothing.
+ *   definition has gone, or is archived, demands nothing.
  *
  * A group-targeted schedule is refused, and permanently: this operation takes no member list, so
  * obeying it would mean picking an Asset to write an event against — exactly what invariants 28 and
