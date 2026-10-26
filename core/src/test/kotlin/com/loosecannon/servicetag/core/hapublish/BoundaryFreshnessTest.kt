@@ -99,4 +99,12 @@ class BoundaryFreshnessTest {
         val statusBinding = dateBinding().copy(kind = PublishKind.EQUIPMENT_STATUS)
         assertEquals(HaBoundary.NotUsed, boundary(now = readAt, binding = statusBinding))
     }
+
+    /** Ruling (5): Stop publishing never hands the cutoff back to the phone; Disable moved the revision. */
+    @Test
+    fun aDisabledDateBindingStillLeavesTheBoundaryToHa() {
+        val disabled = dateBinding(revision = 5).copy(enabled = false)
+        assertEquals(HaBoundary.Unverified(seasonEnded, readAt), boundary(now = readAt, binding = disabled))
+        assertEquals(HaBoundary.NotUsed, boundary(now = readAt, binding = disabled.copy(boundaryEntityId = null)))
+    }
 }

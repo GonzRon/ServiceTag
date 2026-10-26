@@ -24,8 +24,9 @@ const val MIN_BOUNDARY_WINDOW_MILLIS: Long = 7L * 24 * 60 * 60 * 1000
  * - A `CALENDAR` or `YEAR_ROUND` asset → [HaBoundary.NotUsed]: its window decides, and Home Assistant's date never
  *   overrides it.
  * - A `MANUAL` asset decides by Home Assistant only with an enabled inbound #16 binding ([inboundEnabled]) **and** a
- *   season-ended helper named on its date [binding]; any other `MANUAL` asset → [HaBoundary.NotUsed] (the phone's
- *   END decides).
+ *   season-ended helper named on its date [binding], whether or not the date binding is enabled (Disable moves its
+ *   revision, so it reads Unverified at once); any other `MANUAL` asset → [HaBoundary.NotUsed] (the phone's END
+ *   decides).
  * - Such an asset is [HaBoundary.Fresh] while the [cache] holds a valid date read at the binding's **current**
  *   revision, no longer than max(a week, [cadence]) before [now], and not before the asset's newest activation row
  *   ([newestActivationCreatedAt]: an observation after the read may mean HA stamped a newer date).

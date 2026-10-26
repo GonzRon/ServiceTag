@@ -49,6 +49,8 @@ data class PublishBinding(
  * An error is **current** only while `(errorBindingRevision, errorDesiredRevision)` equals the binding's
  * `(revision, desiredRevision)` (A04); every write that moves the pair clears it. [needsDelivery] is an outstanding
  * delivery or repair (A05), [reconcilePending] a reconcile begun and not yet completed by a read (C).
+ * [attemptsAtRevision] counts POSTs begun at this desired revision: the write-ahead moves it, and a new desired
+ * revision resets it.
  * [lastRequestId] and [lastRequestAt] are written only by the API's request stamp (C35b), never by a delivery record.
  */
 data class PublishDelivery(

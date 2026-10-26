@@ -160,31 +160,33 @@ object DeliverySteps {
         DeliveryRecord(binding.revision, delivery.desiredRevision, delivery.copy(reconcilePending = true))
 
     /**
-     * After the helper's read. [delivery] is as this pass last recorded it. Equal → verified, not published; differs
-     * → the write-ahead (A05: `needsDelivery`, `outcomeUnknownSince`, `lastAttemptAt`, the contradicting read) and a
-     * POST; a validator failure → that kind and the validation cleared; a failed read → its kind at the pair.
-     * A completed read clears `reconcilePending` in the same write, unless [boundaryPending] says the boundary
-     * helper's read (C9a) has not completed.
+     * After the helper's read. [delivery] is as this pass last recorded it, and [value] the plan's
+     * ([DeliveryPlan.ReadFirst.value]). Equal → verified, not published; differs → the write-ahead (A05:
+     * `needsDelivery`, `outcomeUnknownSince`, `lastAttemptAt`, one more attempt, the contradicting read, and the old
+     * error cleared — the attempt supersedes it and its own outcome records the next) and a POST; a validator failure
+     * → that kind and the validation cleared; a failed read → its kind at the pair. A completed read clears
+     * `reconcilePending` in the same write, unless [boundaryPending] says the boundary helper's read (C9a) has not
+     * completed.
      */
     fun afterRead(
         binding: PublishBinding,
         delivery: PublishDelivery,
+        value: String,
         read: RemoteRead,
         now: Long,
         boundaryPending: Boolean = false,
     ): ReadStep {
-        val value = requireNotNull(delivery.desiredValue) { "a read is planned only for a desired value" }
         val remote = when (read) {
-            is RemoteRead.Failed -> return ReadStep.Record(errorRecord(binding, delivery, read.kind, read.detail, now))
+            is RemoteRead.Failed -> return ReadStep.Record(failed(binding, delivery, read.kind, read.detail, now))
             is RemoteRead.Answered -> read.remote
         }
         val seen = delivery.copy(remoteValue = remote.state, remoteReadAt = now)
         validateTarget(binding.kind, binding.entityId, remote)?.let { kind ->
-            return ReadStep.Record(errorRecord(binding, seen, kind, null, now, clearValidation = true))
+            return ReadStep.Record(failed(binding, seen, kind, null, now, clearValidation = true))
         }
-        val completed = if (boundaryPending) delivery.reconcilePending else false
+        val stillPending = if (boundaryPending) delivery.reconcilePending else false
         if (remoteMatches(binding.kind, remote, value)) {
-            val verified = seen.verifiedAs(binding, value, now).copy(reconcilePending = completed)
+            val verified = seen.verifiedAs(binding, value, now).copy(reconcilePending = stillPending)
             return ReadStep.Record(recordOf(binding, verified))
         }
         val writeAhead = seen.copy(
@@ -192,36 +194,41 @@ object DeliverySteps {
             outcomeUnknownSince = now,
             lastAttemptAt = now,
             attemptsAtRevision = delivery.attemptsAtRevision + 1,
-            reconcilePending = completed,
+            reconcilePending = stillPending,
+            errorKind = null,
+            errorDetail = null,
+            errorAt = null,
+            errorBindingRevision = null,
+            errorDesiredRevision = null,
         )
         return ReadStep.Post(recordOf(binding, writeAhead), actionOf(binding.kind), value)
     }
 
     /**
-     * After a POST that HA accepted (200), from the write-ahead [delivery] and the read-back: equal → published and
-     * verified; differs → `REMOTE_DIFFERS`; a validator failure → that kind and the validation cleared; a failed
-     * read-back → `OUTCOME_UNKNOWN`.
+     * After a POST of [value] ([ReadStep.Post.value]) that HA accepted (200), from the write-ahead [delivery] and the
+     * read-back: equal → published and verified; differs → `REMOTE_DIFFERS`; a validator failure → that kind and the
+     * validation cleared; a failed read-back → `OUTCOME_UNKNOWN`.
      */
     fun afterPostAccepted(
         binding: PublishBinding,
         delivery: PublishDelivery,
+        value: String,
         readBack: RemoteRead,
         now: Long,
     ): DeliveryRecord {
-        val value = requireNotNull(delivery.desiredValue) { "a POST is made only for a desired value" }
         val remote = when (readBack) {
             // The POST may have acted: the next attempt reads first (outcomeUnknownSince kept from the write-ahead).
             is RemoteRead.Failed ->
-                return errorRecord(binding, delivery, PublishErrorKind.OUTCOME_UNKNOWN, readBack.detail, now)
+                return failed(binding, delivery, PublishErrorKind.OUTCOME_UNKNOWN, readBack.detail, now)
             is RemoteRead.Answered -> readBack.remote
         }
         // HA answered the POST, so its outcome is known; the read-back says what it came to.
         val seen = delivery.copy(remoteValue = remote.state, remoteReadAt = now, outcomeUnknownSince = null)
         validateTarget(binding.kind, binding.entityId, remote)?.let { kind ->
-            return errorRecord(binding, seen, kind, null, now, clearValidation = true)
+            return failed(binding, seen, kind, null, now, clearValidation = true)
         }
         if (!remoteMatches(binding.kind, remote, value)) {
-            return errorRecord(binding, seen, PublishErrorKind.REMOTE_DIFFERS, null, now)
+            return failed(binding, seen, PublishErrorKind.REMOTE_DIFFERS, null, now)
         }
         val published = seen.verifiedAs(binding, value, now).copy(
             lastPublishedValue = value,
@@ -239,7 +246,7 @@ object DeliverySteps {
         kind: PublishErrorKind,
         detail: String?,
         now: Long,
-    ): DeliveryRecord = errorRecord(binding, delivery.copy(outcomeUnknownSince = null), kind, detail, now)
+    ): DeliveryRecord = failed(binding, delivery.copy(outcomeUnknownSince = null), kind, detail, now)
 
     /** After a POST that may have acted (C23): `OUTCOME_UNKNOWN` at the pair; the next attempt reads first. */
     fun afterPostUnknown(
@@ -247,7 +254,7 @@ object DeliverySteps {
         delivery: PublishDelivery,
         detail: String?,
         now: Long,
-    ): DeliveryRecord = errorRecord(binding, delivery, PublishErrorKind.OUTCOME_UNKNOWN, detail, now)
+    ): DeliveryRecord = failed(binding, delivery, PublishErrorKind.OUTCOME_UNKNOWN, detail, now)
 
     /**
      * The compare-and-set every record is written under: a moved generation or a newer desired value drops [record]
@@ -288,8 +295,12 @@ object DeliverySteps {
         errorDesiredRevision = null,
     )
 
-    /** A04 — an error recorded **with its pair**; everything else as [delivery] holds it. */
-    private fun errorRecord(
+    /**
+     * A04 — [kind] recorded **with its pair**; everything else as [delivery] holds it, and [clearValidation] clears the
+     * binding's `validatedRevision` in the same write. Also the boundary helper's failed read (C9a: `reconcilePending`
+     * kept) or its validator failure (`clearValidation = true`).
+     */
+    fun failed(
         binding: PublishBinding,
         delivery: PublishDelivery,
         kind: PublishErrorKind,

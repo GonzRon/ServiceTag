@@ -141,7 +141,7 @@ class DeliveryStepsTest {
             if (!store.commit(ahead)) return
             d = ahead.delivery
         }
-        when (val step = DeliverySteps.afterRead(b, d, helper.read(), at)) {
+        when (val step = DeliverySteps.afterRead(b, d, readFirst.value, helper.read(), at)) {
             is ReadStep.Record -> store.commit(step.record)
             is ReadStep.Post -> {
                 if (!store.commit(step.writeAhead)) return
@@ -151,9 +151,10 @@ class DeliveryStepsTest {
                     PostScript.APPLY -> {
                         helper.state = step.value
                         helper.optionsAfterPost?.let { helper.options = it }
-                        DeliverySteps.afterPostAccepted(b, ahead, helper.read(back = true), at)
+                        DeliverySteps.afterPostAccepted(b, ahead, step.value, helper.read(back = true), at)
                     }
-                    PostScript.ACCEPT_IGNORED -> DeliverySteps.afterPostAccepted(b, ahead, helper.read(back = true), at)
+                    PostScript.ACCEPT_IGNORED ->
+                        DeliverySteps.afterPostAccepted(b, ahead, step.value, helper.read(back = true), at)
                     PostScript.REFUSE_FORBIDDEN ->
                         DeliverySteps.afterPostRefused(b, ahead, PublishErrorKind.WRITE_FORBIDDEN, "403", at)
                     PostScript.UNKNOWN_APPLIED -> {
@@ -376,7 +377,7 @@ class DeliveryStepsTest {
     fun aStaleReplyAtAMovedGenerationRecordsNothing() {
         val b = binding()
         val d = delivery("UP")
-        val matched = assertIs<ReadStep.Record>(DeliverySteps.afterRead(b, d, RemoteRead.Answered(entity("UP")), now))
+        val matched = assertIs<ReadStep.Record>(DeliverySteps.afterRead(b, d, "UP", RemoteRead.Answered(entity("UP")), now))
         assertNotNull(DeliverySteps.commit(b, d, matched.record), "the control: at the snapshot's pair it lands")
 
         val disabled = b.copy(enabled = false, revision = 2)
@@ -386,7 +387,7 @@ class DeliveryStepsTest {
 
         // The POST path: a write-ahead that cannot land abandons the attempt, and the stored rows stay as they were.
         val store = Store(b, d)
-        val post = assertIs<ReadStep.Post>(DeliverySteps.afterRead(b, d, RemoteRead.Answered(entity("DOWN")), now))
+        val post = assertIs<ReadStep.Post>(DeliverySteps.afterRead(b, d, "UP", RemoteRead.Answered(entity("DOWN")), now))
         store.binding = disabled
         assertFalse(store.commit(post.writeAhead))
         assertEquals(d, store.delivery)
@@ -397,7 +398,7 @@ class DeliveryStepsTest {
     fun aReplyForAnOlderDesiredRevisionRecordsNothing() {
         val b = binding()
         val d = delivery("UP", dRev = 7).copy(needsDelivery = true, outcomeUnknownSince = now)
-        val published = DeliverySteps.afterPostAccepted(b, d, RemoteRead.Answered(entity("UP")), now)
+        val published = DeliverySteps.afterPostAccepted(b, d, "UP", RemoteRead.Answered(entity("UP")), now)
         assertNotNull(DeliverySteps.commit(b, d, published), "the control")
         val newer = d.copy(desiredValue = "DOWN", desiredRevision = 8)
         assertNull(DeliverySteps.commit(b, newer, published))
@@ -541,7 +542,7 @@ class DeliveryStepsTest {
         assertTrue(ahead.delivery.reconcilePending)
         assertEquals(1L to 1L, ahead.bindingRevision to ahead.desiredRevision)
 
-        val post = assertIs<ReadStep.Post>(DeliverySteps.afterRead(b, ahead.delivery, RemoteRead.Answered(entity("DOWN")), now))
+        val post = assertIs<ReadStep.Post>(DeliverySteps.afterRead(b, ahead.delivery, "UP", RemoteRead.Answered(entity("DOWN")), now))
         with(post.writeAhead.delivery) {
             assertFalse(reconcilePending)
             assertTrue(needsDelivery)
@@ -554,7 +555,7 @@ class DeliveryStepsTest {
 
         // The boundary helper's read still owed (C9a): the flag stays.
         val owed = assertIs<ReadStep.Record>(
-            DeliverySteps.afterRead(b, ahead.delivery, RemoteRead.Answered(entity("UP")), now, boundaryPending = true),
+            DeliverySteps.afterRead(b, ahead.delivery, "UP", RemoteRead.Answered(entity("UP")), now, boundaryPending = true),
         )
         assertTrue(owed.record.delivery.reconcilePending)
         assertEquals("UP", owed.record.delivery.lastVerifiedValue)
@@ -564,6 +565,43 @@ class DeliveryStepsTest {
         assertTrue(refused.delivery.needsDelivery)
         assertNull(refused.delivery.outcomeUnknownSince)
         assertFalse(refused.delivery.reconcilePending)
+        assertEquals(1, refused.delivery.attemptsAtRevision, "counted once, at the write-ahead; a refusal adds none")
+    }
+
+    /** B3's Room record copies this rule: a record never writes the boundary cache or the request stamp. */
+    @Test
+    fun aRecordNeverWritesTheBoundaryCacheOrTheRequestStamp() {
+        val b = binding(kind = PublishKind.SEASON_SERVICE_DATE)
+        val d = delivery("2026-09-30")
+        val helper = RemoteEntity(dateId, "2026-09-30", null, true, false)
+        val verified = assertIs<ReadStep.Record>(DeliverySteps.afterRead(b, d, "2026-09-30", RemoteRead.Answered(helper), now))
+        // Between the snapshot and the record, the boundary step and the API stamp wrote their own columns.
+        val stored = d.copy(
+            boundaryValue = "2026-05-10",
+            boundaryReadAt = 40L,
+            boundaryBindingRevision = 1,
+            lastRequestId = "request-1",
+            lastRequestAt = 45L,
+        )
+
+        val written = assertNotNull(DeliverySteps.commit(b, stored, verified.record)).delivery
+        assertEquals(stored.boundaryCache, written.boundaryCache)
+        assertEquals("request-1" to 45L, written.lastRequestId to written.lastRequestAt)
+        assertEquals("2026-09-30", written.lastVerifiedValue, "the record's own columns land")
+    }
+
+    /** C9a — the boundary helper's validator failure: its kind at the pair, the validation cleared, the flag kept. */
+    @Test
+    fun aBoundaryHelperFailureIsRecordedAtThePairAndKeepsTheReconcile() {
+        val b = binding(kind = PublishKind.SEASON_SERVICE_DATE)
+        val d = delivery("2026-09-30").copy(reconcilePending = true)
+
+        val record = DeliverySteps.failed(b, d, PublishErrorKind.NOT_DATE_ONLY, null, now, clearValidation = true)
+        val committed = assertNotNull(DeliverySteps.commit(b, d, record))
+        assertNull(committed.binding.validatedRevision)
+        assertTrue(committed.delivery.errorIsCurrent(b))
+        assertEquals(PublishErrorKind.NOT_DATE_ONLY, committed.delivery.errorKind)
+        assertTrue(committed.delivery.reconcilePending)
     }
 
     // Row 42a — R-2, keyed to the persisted error pair (A04).
@@ -607,6 +645,30 @@ class DeliveryStepsTest {
         // TRANSIENT: never skipped.
         val unreachable = d.copy(errorKind = PublishErrorKind.UNREACHABLE, errorDetail = null)
         for (trigger in DeliveryTrigger.entries) assertTrue(DeliverySteps.selects(b, unreachable, trigger), "$trigger")
+    }
+
+    /** The table's cancelled row: the attempt supersedes the old error, so the next ordinary drain reads first. */
+    @Test
+    fun aCancelledRepairAfterANeedsOwnerErrorIsReadByTheNextDrain() {
+        val b = binding(revision = 1)
+        val d = delivery("UP", dRev = 7).copy(
+            needsDelivery = true,
+            errorKind = PublishErrorKind.WRITE_FORBIDDEN,
+            errorDetail = "403",
+            errorAt = 30L,
+            errorBindingRevision = 1,
+            errorDesiredRevision = 7,
+        )
+        val store = Store(b, d)
+        assertTrue(store.commit(DeliverySteps.reconcileWriteAhead(b, d)))
+        val post = assertIs<ReadStep.Post>(DeliverySteps.afterRead(b, store.delivery, "UP", RemoteRead.Answered(entity("DOWN")), now))
+        assertTrue(store.commit(post.writeAhead))
+        // The POST is cancelled, or the process dies: nothing more is recorded.
+
+        assertFalse(store.delivery.errorIsCurrent(store.binding), "the attempt superseded the old error")
+        assertTrue(DeliverySteps.selects(store.binding, store.delivery, CHANGE))
+        assertTrue(DeliverySteps.selects(store.binding, store.delivery, SCHEDULED))
+        assertEquals(DeliveryPlan.ReadFirst("UP", reconcile = false), DeliverySteps.plan(snap(store.binding, store.delivery), CHANGE))
     }
 
     // Row 45a — F-1: the verified pair decides, never the value alone.
