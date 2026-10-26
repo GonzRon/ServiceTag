@@ -43,7 +43,10 @@ class SeasonStartStrandRoutesTest {
         )
     }
 
-    /** [method] [path] [body] answers the strand for [cause], naming [schedules] as `(id, title)`; nothing moves. */
+    /**
+     * [method] [path] [body] answers the strand for [cause], naming [schedules] as `(id, title)`, and for a restore the
+     * asset cannot take, the [reason] it fails; nothing moves.
+     */
     private fun assertStranded(
         method: String,
         path: String,
@@ -51,6 +54,7 @@ class SeasonStartStrandRoutesTest {
         cause: SeasonStartStrandCause,
         assetId: String?,
         schedules: List<Pair<String, String>>,
+        reason: String? = null,
     ) {
         graph.now += 86_400_000L
         val before = snapshot()
@@ -59,7 +63,8 @@ class SeasonStartStrandRoutesTest {
         val error = response.errorDetail()
         assertEquals("SEASON_START_STRANDED", error.code)
         assertNull(error.field)
-        val first = "SeasonStartStrands(cause=${cause.name}" + (assetId?.let { ", assetId=$it" } ?: "") + ")"
+        val first = "SeasonStartStrands(cause=${cause.name}" + (assetId?.let { ", assetId=$it" } ?: "") +
+            (reason?.let { ", reason=$it" } ?: "") + ")"
         assertEquals(
             listOf(first) + schedules.map { (id, title) -> "StrandedSchedule(id=$id, title=$title)" },
             error.problems,
@@ -209,7 +214,10 @@ class SeasonStartStrandRoutesTest {
         )
     }
 
-    /** A role group restored over a member that has since gone year-round would cover an asset C10 refuses. */
+    /**
+     * A role group restored over a member that has since gone year-round would cover an asset C10 refuses; the wire
+     * says which rule (A4w review M2), as the phone does.
+     */
     @Test fun aRestoredRoleGroupWithAnIneligibleMemberIsStranded() {
         val boiler = calendarAsset("Example Boiler")
         val group = api.ok(
@@ -223,6 +231,7 @@ class SeasonStartStrandRoutesTest {
         assertStranded(
             "POST", "/v1/groups/${group.id}/archive", """{"archived":false}""",
             SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE, boiler, listOf(check to "Example pre-season check"),
+            reason = "YEAR_ROUND",
         )
     }
 }

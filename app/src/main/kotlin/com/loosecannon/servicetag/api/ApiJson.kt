@@ -549,11 +549,13 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         listOf(seasonStartRefusalName(e.reason)),
     )
     // #114 (C2, C11): a hooked shipped command would leave a Season Start role where it may not stand; the cause and
-    // the role schedules, as `SEASON_MODE_STRANDS_POLICY` names its schedules.
+    // the role schedules, as `SEASON_MODE_STRANDS_POLICY` names its schedules. A restore the asset may not take
+    // (`RESTORE_NOT_ELIGIBLE`) names the rule it fails, as the phone does (A4w review M2).
     is SeasonStartStrands -> errorResponse(
         409, "Conflict", "SEASON_START_STRANDED", seasonStartStrandMessage(e.strandCause),
         listOf(
-            "SeasonStartStrands(cause=${e.strandCause.name}" + (e.assetId?.let { ", assetId=${it.value}" } ?: "") + ")",
+            "SeasonStartStrands(cause=${e.strandCause.name}" + (e.assetId?.let { ", assetId=${it.value}" } ?: "") +
+                (e.refusal?.let { ", reason=${refusalReasonOf(it)}" } ?: "") + ")",
         ) + e.schedules.map(::strandedName),
     )
     // #114 (C10, C29b): the role route's `sinceOn` is not an ISO `YYYY-MM-DD` date; nothing was written.
@@ -657,6 +659,19 @@ private fun seasonStartRefusalName(reason: SeasonStartRefusal): String = when (r
     SeasonStartRefusal.GroupArchived -> "SeasonStartRefused(reason=GROUP_ARCHIVED)"
     SeasonStartRefusal.GroupHasNoMembers -> "SeasonStartRefused(reason=GROUP_HAS_NO_MEMBERS)"
     SeasonStartRefusal.DateInFuture -> "SeasonStartRefused(reason=DATE_IN_FUTURE)"
+}
+
+/** #114 (A4w review M2): a [SeasonStartRefusal]'s bare upper-snake name, as a strand's `reason=…` carries it. */
+private fun refusalReasonOf(reason: SeasonStartRefusal): String = when (reason) {
+    SeasonStartRefusal.ScheduleArchived -> "SCHEDULE_ARCHIVED"
+    SeasonStartRefusal.QuickNotElected -> "QUICK_NOT_ELECTED"
+    is SeasonStartRefusal.NotMaintainedHere -> "NOT_MAINTAINED_HERE"
+    is SeasonStartRefusal.YearRound -> "YEAR_ROUND"
+    is SeasonStartRefusal.LeafChild -> "LEAF_CHILD"
+    is SeasonStartRefusal.AlreadyCovered -> "ALREADY_COVERED"
+    SeasonStartRefusal.GroupArchived -> "GROUP_ARCHIVED"
+    SeasonStartRefusal.GroupHasNoMembers -> "GROUP_HAS_NO_MEMBERS"
+    SeasonStartRefusal.DateInFuture -> "DATE_IN_FUTURE"
 }
 
 /** #114 (C2): one developer sentence per [SeasonStartRefusal]; the phone's sentences are §5's, not these. */

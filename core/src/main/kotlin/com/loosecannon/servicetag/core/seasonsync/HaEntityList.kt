@@ -85,14 +85,15 @@ fun mapHaStatesAnswer(answer: HaHttpAnswer): HaListOutcome {
 /**
  * #113/#114 (C29b) — a helper's shape for the two domains a publication writes, and null for every other id: an
  * `input_select` keeps its options (C16's bounds, but never cut: more than [MAX_LISTED_OPTIONS], none, or anything
- * but strings is null), an `input_datetime` its `has_date` / `has_time` JSON booleans.
+ * but strings is null), an `input_datetime` its `has_date` / `has_time` JSON booleans. Exhaustive over the resolved
+ * [EntityScope], so a scope added later must say what shape it keeps (A4w review N3).
  */
 private fun helperAttributesOf(id: String, attributes: JsonObject?): HelperAttributes? =
-    when (id.substringBefore('.')) {
-        EntityScope.INPUT_SELECTS.domain -> HelperAttributes(attributes?.let(::listedOptionsOf), null, null)
-        EntityScope.INPUT_DATETIMES.domain ->
+    when (EntityScope.entries.firstOrNull { it.domain == id.substringBefore('.') }) {
+        EntityScope.INPUT_SELECTS -> HelperAttributes(attributes?.let(::listedOptionsOf), null, null)
+        EntityScope.INPUT_DATETIMES ->
             HelperAttributes(null, attributes?.flagOrNull("has_date"), attributes?.flagOrNull("has_time"))
-        else -> null
+        EntityScope.INPUT_BOOLEANS, null -> null
     }
 
 private fun listedOptionsOf(attributes: JsonObject): List<String>? {

@@ -1959,7 +1959,9 @@ def update_schedule(
     title. **`season_start_quick_elected=True`** is the owner's explicit election for that `FORM` to `QUICK` edit
     (O-2): it sends the action flag `seasonStartQuickElected: true`, and the edit is saved with the role kept. Pass it
     only when the owner has said that one-tap completions of this schedule count as the season's service; `None` and
-    `False` send no flag, so the election is never made by default.
+    `False` send no flag, so the election is never made by default. `True` needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is read or sent. Without it the tool reaches any phone
+    it always did.
     """
     arguments = _arguments(
         locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject", "season_start_quick_elected"),
@@ -1968,6 +1970,8 @@ def update_schedule(
     legacy = _refuse_mixed_forms(arguments, to_clear)
 
     path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}"
+    if season_start_quick_elected is True:
+        _require_ha_publishing_schema("update_schedule")
     current = _field(_read_for_write(path), "schedule", of="the schedule lookup")
     body = _overlay_command(
         current, _schedule_command_keys(legacy), arguments, to_clear,

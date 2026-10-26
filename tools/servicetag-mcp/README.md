@@ -353,7 +353,8 @@ the Season Start role (#114)** section is the contract.
 **The Season Start role (#114; needs schema 22)** — `set_schedule_role`: `POST /v1/schedules/{id}/role`, `role`
 `SEASON_START` with its commissioning boundary `since_on` (today when omitted), or `NONE`. A `QUICK` schedule takes
 the role only with `season_start_quick_elected=True`, the owner's explicit election that its one-tap completions
-count, asked again on every set; `update_schedule` takes the same flag for a role schedule's `FORM` to `QUICK` edit.
+count, asked again on every set; `update_schedule` takes the same flag for a role schedule's `FORM` to `QUICK` edit,
+and with it `True` needs schema 22 too (`APP_SCHEMA_TOO_OLD` before any read).
 Neither tool ever sends the flag by default. Refusals are `SEASON_START_REFUSED` (409, by reason) and
 `SEASON_START_DATE_INVALID` (422); the write is never re-sent on a dropped connection.
 

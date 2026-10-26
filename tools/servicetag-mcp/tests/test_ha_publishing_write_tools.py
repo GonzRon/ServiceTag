@@ -178,6 +178,7 @@ def test_set_schedule_role_documents_the_codes_and_the_election() -> None:
     for code in ("SEASON_START_REFUSED", "QUICK_NOT_ELECTED", "SEASON_START_DATE_INVALID", "NO_SUCH_SCHEDULE"):
         assert f"`{code}`" in doc, code
     assert "season_start_quick_elected" in doc and "never" in doc
+    assert "a boundary move included" in doc
     assert "APP_SCHEMA_TOO_OLD" in doc
     lowered = doc.lower()
     assert not any(word in lowered for word in NEVER_SAID), doc
@@ -198,11 +199,27 @@ def test_update_schedule_sends_the_election_only_when_true(phone22) -> None:
         assert "seasonStartQuickElected" not in body_of(phone22.last()), not_elected
 
 
+def test_update_schedule_refuses_the_election_on_a_schema_21_phone_with_nothing_sent(paired) -> None:
+    # A4w review M4: the flag is #113/#114's, so a True election is gated at schema 22 before the read; without it
+    # the tool reaches a schema-21 phone exactly as it always did.
+    paired.reply("GET", "/v1/status", 200, STATUS_21)
+    paired.reply("GET", "/v1/schedules/s1", 200, role_detail(completionMode="FORM", profileId="p1"))
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as refused:
+        server_module.update_schedule(schedule_id="s1", completion_mode="QUICK", season_start_quick_elected=True)
+    assert "update_schedule needs schema 22" in str(refused.value)
+    assert paths(paired) == [("GET", "/v1/status")]
+    for not_elected in (False, None):
+        paired.requests.clear()
+        server_module.update_schedule(schedule_id="s1", title="Example annual service", season_start_quick_elected=not_elected)
+        assert ("PATCH", "/v1/schedules/s1") in paths(paired), not_elected
+
+
 def test_update_schedule_names_the_flag_its_strand_asks_for() -> None:
     doc = flat(server_module.update_schedule.__doc__)
     assert "season_start_quick_elected=True" in doc
     assert "`seasonStartQuickElected: true`" in doc
     assert "`QUICK_NEEDS_ELECTION`" in doc
+    assert "schema 22 or later" in doc
 
 
 def test_the_flag_is_a_vendored_schedule_action_flag() -> None:

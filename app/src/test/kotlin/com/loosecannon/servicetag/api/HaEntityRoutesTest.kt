@@ -1,5 +1,9 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.hapublish.FIELD_ENTITY_ID
+import com.loosecannon.servicetag.core.hapublish.PublishRefusal
+import com.loosecannon.servicetag.core.hapublish.PublishRefused
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
@@ -159,6 +163,28 @@ class HaEntityRoutesTest {
             assertEquals(listOf(problem), error.problems)
             assertNull(error.field)
         }
+    }
+
+    /** A4w review M1: `STALE_PLAN` is its own 409 — the caller plans again — and keeps its refused key. */
+    @Test fun thePublishRefusedArmGivesStalePlanItsOwnCode() {
+        val response = mapDomainFailure(PublishRefused(PublishRefusal.STALE_PLAN, "planId"))
+        assertEquals(409, response.status)
+        val error = response.errorDetail()
+        assertEquals("STALE_PLAN", error.code)
+        assertEquals(listOf("PublishRefused(reason=STALE_PLAN)"), error.problems)
+        assertEquals("planId", error.field)
+    }
+
+    /** A4w review M1: `TARGET_IN_USE` names the asset that holds the helper, under the shared refusal code. */
+    @Test fun thePublishRefusedArmNamesTheHolderOfATargetInUse() {
+        val response = mapDomainFailure(
+            PublishRefused(PublishRefusal.TARGET_IN_USE, FIELD_ENTITY_ID, AssetId("example-holder")),
+        )
+        assertEquals(409, response.status)
+        val error = response.errorDetail()
+        assertEquals("HA_PUBLISH_REFUSED", error.code)
+        assertEquals(listOf("PublishRefused(reason=TARGET_IN_USE, holderAssetId=example-holder)"), error.problems)
+        assertEquals("entityId", error.field)
     }
 
     @Test fun twoCallsAreTwoReads() {
