@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.transfer.DroppedRows
 import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.merge.MergePlan
 import com.loosecannon.servicetag.core.merge.MergeReport
+import com.loosecannon.servicetag.core.merge.ReturnCarry
 import com.loosecannon.servicetag.core.merge.mergePlanOf
 import com.loosecannon.servicetag.core.merge.mergeSnapshotOf
 import com.loosecannon.servicetag.core.merge.storedBytesOf
@@ -178,7 +179,8 @@ class ApplyBackupMergePlan(
                 ),
                 returning,
             )
-            val fresh = mergePlanOf(plan.backup, scope.snapshot, returning)
+            // #114 (C20, A01, A): the preview's context and this snapshot's return carry, never re-derived.
+            val fresh = mergePlanOf(plan.backup, scope.snapshot, returning, plan.context, scope.carry)
             // Order matters — see the class KDoc.
             if (!fresh.applicable) throw MergeRefused(fresh.report())
             if (fresh.fingerprint != plan.fingerprint) throw MergePlanStale(fresh.report())
@@ -264,6 +266,10 @@ class AppliedMerge(val report: MergeReport, val removedLocators: List<String>)
  * A staying row that names a removed one would be changed by those cascades, and a removed group that also names a
  * staying asset would take its rows with it (mn-1), so either refuses the return ([IllegalStateException]) — at the
  * preview, before anything is staged or written (P77-52).
+ *
+ * #114 (C20, A): [carry] is the returning asset's own provenance, read from exactly the schedules and events this scope
+ * removes — each schedule's local role and boundary, each event's local `imported` marker — so the planner writes
+ * them back on the pack's inserted rows instead of re-dating the role or marking the owner's own service imported.
  */
 internal class ReturnScope private constructor(
     val snapshot: MergeSnapshot,
@@ -275,12 +281,14 @@ internal class ReturnScope private constructor(
     val keptLoans: List<AssetLoan>,
     val keptSuccessions: List<AssetSuccession>,
     val locators: List<String>,
+    val carry: ReturnCarry,
 ) {
     companion object {
         fun of(full: MergeSnapshot, returning: Set<AssetId>): ReturnScope {
             if (returning.isEmpty()) {
                 return ReturnScope(
                     full, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+                    ReturnCarry.NONE,
                 )
             }
             val groups = full.groups.filter { g -> g.members.any { it.assetId in returning } }
@@ -378,6 +386,10 @@ internal class ReturnScope private constructor(
                 keptLoans = full.loans.filter { it.assetId in returning },
                 keptSuccessions = full.successions.filter { it.predecessorAssetId in returning || it.successorAssetId in returning },
                 locators = attachments.map { it.storageLocator },
+                carry = ReturnCarry(
+                    roles = full.schedules.filter { it.id in schedules }.associate { it.id to (it.role to it.roleSinceOn) },
+                    eventImported = full.events.filter { it.id in events }.associate { it.id to it.imported },
+                ),
             )
         }
     }

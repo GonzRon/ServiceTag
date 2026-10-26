@@ -280,8 +280,10 @@ class BackupFormat6Test {
         assertFalse("updatedAt" in OccurrenceClosureDto.serializer().descriptor.elementNames)
 
         val eventFields = AssetEventDto.serializer().descriptor.elementNames.toList()
-        assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.takeLast(3))
-        assertEquals(18, eventFields.size)
+        assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.subList(15, 18))
+        // Format 21 (#114) appends the Transfer Pack marker after them (`BackupFormat21Test`).
+        assertEquals("imported", eventFields.last())
+        assertEquals(19, eventFields.size)
         val tables = BackupData.serializer().descriptor.elementNames.toList()
         // By position, not `takeLast`: formats 7, 8, 9, 12, 13 and 14 append their tables after these three, and
         // where format 6's tables sit is the claim this line makes.
@@ -360,7 +362,7 @@ class BackupFormat6Test {
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
         // What a 1.1.x build sees: 14 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(20, BackupCodec.FORMAT_VERSION)
+        assertEquals(21, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 

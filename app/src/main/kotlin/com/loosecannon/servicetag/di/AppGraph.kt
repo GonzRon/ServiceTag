@@ -845,7 +845,7 @@ class AppGraph(private val context: Context) {
      * and read only that copy.
      */
     val importTransferPack: ImportTransferPack = ImportTransferPack(
-        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock,
+        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock, today,
     )
     val transferPackInbox: TransferPackInbox =
         CacheTransferPackInbox(File(context.applicationContext.cacheDir, "transfer-in"), ids)

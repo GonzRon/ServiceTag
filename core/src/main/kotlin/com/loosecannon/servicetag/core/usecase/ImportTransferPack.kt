@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.toDto
+import com.loosecannon.servicetag.core.merge.ImportContext
 import com.loosecannon.servicetag.core.merge.MergePlan
 import com.loosecannon.servicetag.core.merge.MergeReason
 import com.loosecannon.servicetag.core.merge.MergeReport
@@ -21,6 +22,7 @@ import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.transfer.TransferPack
@@ -146,6 +148,10 @@ class TransferStagingMismatch(val locator: String) : IOException("the staged byt
  *
  * An IN record's id is derived from the pack and the asset, and a re-import reuses the IN already here, so importing
  * one pack twice plans every row IDENTICAL (P77-43).
+ *
+ * #114 (C20, A01): [preview] captures one [ImportContext] — [today]'s date — and plans with it; the plan carries it to
+ * the apply's replan, so an import accepted after local midnight writes the day the owner saw. Under it an inserted
+ * Season Start role is recommissioned on that day and every inserted event is marked `imported` (O-8, B).
  */
 class ImportTransferPack(
     private val build: BuildBackupMergePlan,
@@ -156,6 +162,8 @@ class ImportTransferPack(
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     private val clock: Clock,
+    /** #114 (C20, A01): the recipient's calendar date, read once per preview into its [ImportContext]. */
+    private val today: Today,
 ) {
     suspend fun preview(open: () -> InputStream): TransferImportPreview {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -178,6 +186,8 @@ class ImportTransferPack(
             return TransferImportPreview.NoAttachmentFolder
         }
         val packSha256 = TransferPack.hex(digest.digest())
+        // #114 (C20, A01): captured once, here, and never re-derived — the apply replans with the plan's own.
+        val context = ImportContext(today.localDate())
         val (local, localAssets, localTags) = uow.read { Triple(transfers.all(), assets.all(), tags.all()) }
         val data = pack.backup.data
         val names = data.assets.associate { it.id to it.name }
@@ -205,7 +215,7 @@ class ImportTransferPack(
         val backup = pack.backup.copy(data = data.copy(transferRecords = ins.map { it.toDto() }))
         // A pack that leaves any held asset behind is never imported (P77-67), so its plan is not a return's: the
         // replaced graph is computed — and mn-1's refusal checked — only for a pack that can come back whole.
-        val plan = build.run(backup, incoming, if (refused.isEmpty()) returning else emptySet())
+        val plan = build.run(backup, incoming, if (refused.isEmpty()) returning else emptySet(), context)
 
         val assetNames = localAssets.associate { it.id.value to it.name }
         val tagsById = localTags.associateBy { it.id.value }

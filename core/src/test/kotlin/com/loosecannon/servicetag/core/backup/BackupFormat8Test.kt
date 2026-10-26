@@ -192,6 +192,8 @@ class BackupFormat8Test {
                 "anchorMeter", "meterLead", "servicePolicy", "policyOffsetDays", "completionMode",
                 "profileId", "remindersEnabled", "status", "postponedDueOn", "createdAt", "updatedAt",
                 "ruleChangedAt", "providers",
+                // Format 21 (#114) appends the Season Start role and its boundary (`BackupFormat21Test`).
+                "role", "roleSinceOn",
             ),
             MaintenanceScheduleDto.serializer().descriptor.names,
         )
@@ -267,18 +269,18 @@ class BackupFormat8Test {
     // --- direction -------------------------------------------------------------------------------
 
     /**
-     * Hazard: a newer archive half-read. A manifest one format past this build's (21, since #69 made
-     * the build's own 20) over a `data.json` that no format could read is refused as **newer**, not as
+     * Hazard: a newer archive half-read. A manifest one format past this build's (22, since #114 made
+     * the build's own 21) over a `data.json` that no format could read is refused as **newer**, not as
      * corrupt — so the gate ran before a single row was parsed.
      */
     @Test
     fun aFormatPastThisBuildsIsRefusedBeforeAnyRow() {
         val unreadable = dataTreeOf(archiveOf(fixture())).editRows("healthSubjects") { it.with("weight", JsonPrimitive("heavy")) }
-        val bytes = sealed(unreadable, formatVersion = 21)
+        val bytes = sealed(unreadable, formatVersion = 22)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
-        assertEquals(21, refusal.found)
-        assertEquals(20, refusal.supported)
+        assertEquals(22, refusal.found)
+        assertEquals(21, refusal.supported)
         // The same tree at a format this build reads *is* parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 8)) }
     }

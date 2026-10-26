@@ -9,6 +9,8 @@ import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
@@ -21,6 +23,7 @@ import com.loosecannon.servicetag.core.transfer.OwnerRef
 import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.transfer.TransferOwnership
 import com.loosecannon.servicetag.core.transfer.TransferRetention
+import com.loosecannon.servicetag.core.usecase.seasonStartRolesCovering
 import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
 import com.loosecannon.servicetag.core.backup.AssetReferenceDto
@@ -291,6 +294,15 @@ internal fun mergePlanOf(
      * hands a [snapshot] without their stale local graph. Empty for every other merge, which is unchanged.
      */
     returning: Set<AssetId> = emptySet(),
+    /**
+     * #114 (C20, A01) — a Transfer Pack's import context, captured once by its preview; its presence is what says "a
+     * Transfer Pack" here: every inserted `SEASON_START` schedule is recommissioned on its day and every inserted event
+     * is marked `imported`, and a row matched to a local id compares without the role fields and the marker. Null for
+     * every other merge, which writes the archive's values verbatim (O-20).
+     */
+    context: ImportContext? = null,
+    /** #114 (C20, A) — a return's own rows' local role fields and markers, which an inserted row it names keeps. */
+    carry: ReturnCarry = ReturnCarry.NONE,
 ): MergePlan {
     val data = backup.data
     val decisions = mutableListOf<MergeDecision>()
@@ -644,9 +656,13 @@ internal fun mergePlanOf(
         supplyLinksCompared || here.consumables.none { it.supplyId != null } -> incoming.ordered() == here.ordered()
         else -> incoming.ordered() == here.withoutLinks().copy(updatedAt = incoming.updatedAt).ordered()
     }
+    // #114 (C19, B): an event compares **without `imported` at every format** — a matched row keeps the local marker:
+    // provenance belongs to the installation, never to the archive, so a re-imported pack stays IDENTICAL.
     fun sameEvent(incoming: AssetEventDto, here: AssetEventDto): Boolean = when {
-        supplyLinksCompared || here.consumables.none { it.supplyId != null } -> incoming.ordered() == here.ordered()
-        else -> incoming.ordered() == here.withoutLinks().copy(updatedAt = incoming.updatedAt).ordered()
+        supplyLinksCompared || here.consumables.none { it.supplyId != null } ->
+            incoming.copy(imported = here.imported).ordered() == here.ordered()
+        else -> incoming.copy(imported = here.imported).ordered() ==
+            here.withoutLinks().copy(updatedAt = incoming.updatedAt).ordered()
     }
 
     // --- installed components (#47, C12) --------------------------------------------------------------
@@ -753,6 +769,55 @@ internal fun mergePlanOf(
     // Four references and one shape rule. The shape rule is read off the **DTO's** two target
     // columns and not off a domain value, because `toDomain()` throws on a row naming both targets
     // or neither — and the whole point of `SCHEDULE_TARGET_INVALID` is to *report* such a row.
+    //
+    // #114 (C19): against an archive older than format 21 a row here with a role compares without `role`,
+    // `roleSinceOn` and the stamp the role write moved (the reference role's shape), so this phone's own pre-role export
+    // re-merges IDENTICAL; one without a role compares as always, and a format-21 archive compares everything. A
+    // Transfer Pack's row (C20) compares without the role fields at every format: the import re-dated them here.
+    val scheduleRolesCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_SCHEDULE_ROLE_FORMAT
+    val noRole = ScheduleRole.NONE.name
+    fun sameSchedule(incoming: MaintenanceScheduleDto, here: MaintenanceScheduleDto): Boolean = when {
+        context != null -> incoming.copy(role = here.role, roleSinceOn = here.roleSinceOn).ordered() == here.ordered()
+        scheduleRolesCompared -> incoming.ordered() == here.ordered()
+        here.role == noRole && here.roleSinceOn == null ->
+            incoming.copy(role = noRole, roleSinceOn = null).ordered() == here.ordered()
+        else -> incoming.copy(role = noRole, roleSinceOn = null, updatedAt = here.updatedAt).ordered() ==
+            here.copy(role = noRole, roleSinceOn = null).ordered()
+    }
+    // #114 (C20): the row an INSERT writes — a carried row keeps this phone's role and boundary whatever the pack says
+    // (A), and under a context any other `SEASON_START` row is recommissioned on the import day (O-8).
+    fun insertedSchedule(dto: MaintenanceScheduleDto): MaintenanceSchedule {
+        val row = dto.toDomain()
+        val carried = carry.roles[row.id]
+        return when {
+            carried != null -> row.copy(role = carried.first, roleSinceOn = carried.second)
+            context != null && row.role == ScheduleRole.SEASON_START ->
+                row.copy(roleSinceOn = context.importDay.toString())
+            else -> row
+        }
+    }
+    // #114 (C19, O-9): one live Season Start role per asset, by C9's coverage (`seasonStartRolesCovering`) over this
+    // phone's rows and this plan's accepted groups and members. The claim map is seeded from the destination's live
+    // roles and gains each accepted role's assets, so a second coverage from either side is a CONFLICT, never a
+    // silent correction. Value = the schedule id holding the claim.
+    val coverageGroups = snapshot.groups + groupWrites
+    val claimedSeasonStartAssets = snapshot.assets
+        .mapNotNull { asset ->
+            seasonStartRolesCovering(asset.id, snapshot.schedules, snapshot.groups).firstOrNull()
+                ?.let { asset.id.value to it.id.value }
+        }
+        .toMap(mutableMapOf())
+    fun seasonStartCoverage(row: MaintenanceSchedule): List<String> {
+        if (row.role != ScheduleRole.SEASON_START) return emptyList()
+        val candidates = when (val target = row.target) {
+            is ScheduleTarget.AssetTarget -> listOf(target.assetId)
+            is ScheduleTarget.GroupTarget ->
+                coverageGroups.filter { it.id == target.groupId }.flatMap { group -> group.members.map { it.assetId } }
+        }
+        return candidates.distinct()
+            .filter { seasonStartRolesCovering(it, listOf(row), coverageGroups).isNotEmpty() }
+            .map { it.value }
+    }
     val scheduleWrites = mutableListOf<MaintenanceSchedule>()
     val acceptedSchedules = mutableSetOf<String>()
     for (dto in data.maintenanceSchedules) {
@@ -776,8 +841,11 @@ internal fun mergePlanOf(
             dto.providers.map { id to it.provider },
             claimedProviderPairs,
         )
+        val inserted = if (local == null && !targetInvalid) insertedSchedule(dto) else null
+        val covered = inserted?.let(::seasonStartCoverage).orEmpty()
+        val seasonStartHolder = covered.firstNotNullOfOrNull { claimedSeasonStartAssets[it] }
         decisions += when {
-            local != null && dto.ordered() == local.toDto().ordered() ->
+            local != null && sameSchedule(dto, local.toDto()) ->
                 MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
@@ -787,10 +855,22 @@ internal fun mergePlanOf(
                 MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingOwner)
             takenProvider != null ->
                 MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, takenProvider.second)
+            seasonStartHolder != null && seasonStartHolder in localSchedules ->
+                MergeDecision(
+                    MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT,
+                    MergeReason.SEASON_START_HELD_BY_A_LOCAL_ROW, seasonStartHolder,
+                )
+            // No local role holds it, so any holder left is another row of this archive.
+            seasonStartHolder != null ->
+                MergeDecision(
+                    MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT,
+                    MergeReason.SEASON_START_DUPLICATED_IN_ARCHIVE, seasonStartHolder,
+                )
             else -> {
-                scheduleWrites += dto.toDomain()
+                scheduleWrites += checkNotNull(inserted)
                 acceptedSchedules += id
                 dto.providers.forEach { claimedProviderPairs[id to it.provider] = id }
+                covered.forEach { claimedSeasonStartAssets[it] = id }
                 MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.INSERT)
             }
         }
@@ -962,7 +1042,14 @@ internal fun mergePlanOf(
             takenChild != null ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.CHILD_ROW_ID_TAKEN, takenChild)
             else -> {
-                eventWrites += row
+                // #114 (C20, B): under a context every inserted event is a Transfer Pack's — `imported`, unless the
+                // return carries this phone's own marker for it (A); a backup merge writes the archive's verbatim.
+                val carried = carry.eventImported[row.id]
+                eventWrites += when {
+                    carried != null -> row.copy(imported = carried)
+                    context != null -> row.copy(imported = true)
+                    else -> row
+                }
                 acceptedEvents += id
                 dto.sourceRef?.let { claimedSourceRefs[dto.source to it] = id }
                 occurrenceKey?.let { claimedOccurrences[it] = id }
@@ -1497,6 +1584,7 @@ internal fun mergePlanOf(
     val hasConflict = ordered.any { it.verdict == MergeVerdict.CONFLICT }
     return MergePlan(
         backup = backup,
+        context = context,
         decisions = ordered,
         // No partial merge, made structural rather than remembered.
         writes = if (hasConflict) {
@@ -1529,6 +1617,7 @@ internal fun mergePlanOf(
             )
         },
         duplicateCandidates = candidates,
+        carry = carry,
     )
 }
 

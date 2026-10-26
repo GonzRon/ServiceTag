@@ -71,7 +71,7 @@ class BackupFormat18Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(20, decoded.manifest.formatVersion)
+        assertEquals(21, decoded.manifest.formatVersion)
         assertEquals(listOf(SupplyEstate.prefilter, SupplyEstate.membrane), decoded.data.supplyItems.map { it.toDomain() })
         assertEquals(
             listOf(SupplyEstate.prefilterOnSystem, SupplyEstate.membraneOnSoftener),
@@ -340,13 +340,13 @@ class BackupFormat18Test {
 
     /** One format past this build's, over a tree no format could read: refused as newer before a row is parsed. */
     @Test
-    fun aFormat21ArchiveIsRefusedAsNewer() {
+    fun aFormat22ArchiveIsRefusedAsNewer() {
         val unreadable = dataTreeOf(archiveOf(estate)).editRows("supplyItems") { it.with("name", JsonNull) }
-        val bytes = sealed(unreadable, formatVersion = 21)
+        val bytes = sealed(unreadable, formatVersion = 22)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
 
-        assertEquals(21, refusal.found)
-        assertEquals(20, refusal.supported)
+        assertEquals(22, refusal.found)
+        assertEquals(21, refusal.supported)
     }
 }

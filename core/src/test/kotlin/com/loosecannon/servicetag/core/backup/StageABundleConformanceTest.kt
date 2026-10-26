@@ -146,7 +146,7 @@ class StageABundleConformanceTest {
         assertKeysMatch(
             "assetEvents",
             events,
-            AssetEventDto.serializer().descriptor.elementNames.toSet() - FORMAT_6_EVENT_FIELDS,
+            AssetEventDto.serializer().descriptor.elementNames.toSet() - FORMAT_6_EVENT_FIELDS - FORMAT_21_EVENT_FIELDS,
         )
         events.forEach { event ->
             assertKeysMatch(
@@ -189,6 +189,9 @@ class StageABundleConformanceTest {
         private val FORMAT_6_TABLES =
             setOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures")
         private val FORMAT_6_EVENT_FIELDS = setOf("scheduleId", "occurrenceOn", "detailsPending")
+
+        /** What format 21 appended to every event (#114, B), named for the same reason. */
+        private val FORMAT_21_EVENT_FIELDS = setOf("imported")
 
         /** What format 18 appended to both material lines (#15), named for the same reason. */
         private val FORMAT_18_LINE_FIELDS = setOf("supplyId")

@@ -62,6 +62,7 @@ import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonAction
@@ -87,6 +88,7 @@ import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.references.accepts
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 /**
  * What the backup says about itself. `dataSha256` is the hex SHA-256 of the exact
@@ -294,6 +296,11 @@ data class AssetEventDto(
     val occurrenceOn: String? = null,
     /** Format 6. A minimal completion against a FORM schedule still owes its details. */
     val detailsPending: Boolean = false,
+    /**
+     * Format 21 (#114, B). A Transfer Pack import inserted this event here: written as an explicit value, defaulting
+     * to false, so a format ≤20 archive decodes with none; a format ≤20 archive carrying `true` was built by hand.
+     */
+    val imported: Boolean = false,
 )
 
 /**
@@ -365,6 +372,13 @@ data class MaintenanceScheduleDto(
     /** The pin's floor: it moves only on a rule change (inv. 87), so it travels as it is. */
     val ruleChangedAt: Long,
     val providers: List<ScheduleProviderDto>,
+    /**
+     * Format 21 (#114, C18). The passive Season Start role, a [ScheduleRole] name, and its commissioning boundary
+     * (`YYYY-MM-DD`), non-null exactly when the role is `SEASON_START` (R1). Both written as explicit values and
+     * defaulting to `NONE` and null, so a format ≤20 archive decodes with no role; one carrying a role was built by hand.
+     */
+    val role: String = "NONE",
+    val roleSinceOn: String? = null,
 )
 
 /**
@@ -1110,6 +1124,7 @@ fun AssetEvent.toDto(): AssetEventDto = AssetEventDto(
     scheduleId = scheduleId?.value,
     occurrenceOn = occurrenceOn,
     detailsPending = detailsPending,
+    imported = imported,
 )
 
 fun AssetEventDto.toDomain(): AssetEvent = AssetEvent(
@@ -1131,6 +1146,7 @@ fun AssetEventDto.toDomain(): AssetEvent = AssetEvent(
     scheduleId = scheduleId?.let(::ScheduleId),
     occurrenceOn = occurrenceOn,
     detailsPending = detailsPending,
+    imported = imported,
 )
 
 fun Attachment.toDto(): AttachmentDto = AttachmentDto(
@@ -1281,6 +1297,8 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto
         updatedAt = updatedAt,
         ruleChangedAt = ruleChangedAt,
         providers = providers.map { it.toDto() },
+        role = role.name,
+        roleSinceOn = roleSinceOn,
     )
 
 /**
@@ -1292,10 +1310,25 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto
  * [MaintenanceScheduleDto.ruleChangedAt] is read as it is and never re-seeded from `updatedAt`: a
  * backup round trip must not move the pin's floor (inv. 87). Only a format ≤7 file, which cannot
  * carry the field, has it seeded — on its tree, by [LegacyArchive].
+ *
+ * #114 (C18): the role must be one of [ScheduleRole]'s names, and R1 must hold — `roleSinceOn` an ISO date exactly
+ * when the role is `SEASON_START`, null otherwise — or the row is refused before any import begins.
  */
 fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
     if ((assetId == null) == (groupId == null)) {
         throw BackupCorrupt("schedule $id must name exactly one target, an asset or a group")
+    }
+    val scheduleRole = enumOrCorrupt<ScheduleRole>(role, "schedule role", "schedule $id")
+    val boundaryShaped = roleSinceOn != null && runCatching { LocalDate.parse(roleSinceOn) }.isSuccess
+    val holdsR1 = when (scheduleRole) {
+        ScheduleRole.NONE -> roleSinceOn == null
+        ScheduleRole.SEASON_START -> boundaryShaped
+    }
+    if (!holdsR1) {
+        throw BackupCorrupt(
+            "schedule $id carries role $role with roleSinceOn $roleSinceOn; a Season Start role carries an ISO date " +
+                "and no other role carries one",
+        )
     }
     return MaintenanceSchedule(
         id = ScheduleId(id),
@@ -1323,6 +1356,8 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
         updatedAt = updatedAt,
         ruleChangedAt = ruleChangedAt,
         providers = providers.map { it.toDomain() },
+        role = scheduleRole,
+        roleSinceOn = roleSinceOn,
     )
 }
 

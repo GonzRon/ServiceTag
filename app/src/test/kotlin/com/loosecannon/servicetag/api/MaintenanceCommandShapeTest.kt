@@ -160,7 +160,8 @@ class MaintenanceCommandShapeTest {
      */
     @Test fun theScheduleRowIsTheArchiveRowPlusTheDerivedTriple() {
         assertEquals(
-            MaintenanceScheduleDto.serializer().descriptor.names +
+            // #114: format 21's two role fields reach the `/v1` row with A4 (C29), which drops this subtraction.
+            MaintenanceScheduleDto.serializer().descriptor.names.filterNot { it in setOf("role", "roleSinceOn") } +
                 listOf("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays"),
             ScheduleRowResponse.serializer().descriptor.names,
         )

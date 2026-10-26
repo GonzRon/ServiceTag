@@ -661,7 +661,7 @@ class FakeGraph(
 
     /** #77 (C14, C15) — the Transfer Pack import over the same guarded stores, mirroring `AppGraph`'s fields by name. */
     val importTransferPack: ImportTransferPack = ImportTransferPack(
-        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock,
+        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock, todayPort,
     )
 
     /** `cache/transfer-in/`, in a temporary directory of its own. */

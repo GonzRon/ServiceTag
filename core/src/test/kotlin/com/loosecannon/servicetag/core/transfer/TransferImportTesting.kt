@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.lineageFor
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
@@ -27,6 +28,9 @@ import com.loosecannon.servicetag.core.usecase.readSnapshot
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.assertIs
 
 /** A sealed Transfer Pack: the file's bytes, and what the ready screen hands marking. */
@@ -44,6 +48,9 @@ internal class TransferInstall(
     /** The folder the merge and the import see; a test wraps the raw one to rig a failure. */
     storageOf: (AttachmentStorage) -> AttachmentStorage = { it },
 ) {
+    /** #114 (C20, A01): the recipient's calendar date, which a test moves between the preview and the import. */
+    var today: LocalDate = Instant.ofEpochMilli(now).atZone(ZoneOffset.UTC).toLocalDate()
+
     val raw = BackupInstall(setId)
     val storage: AttachmentStorage = storageOf(raw.storage)
     private val guard = HeldWriteGuard(
@@ -89,7 +96,7 @@ internal class TransferInstall(
         raw.successions, raw.supplyItems, assetSupplies, installedComponents, storage, raw.uow,
         rebuildAll = { rebuilds += 1 },
     )
-    val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, storage, raw.uow, Clock { now })
+    val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, storage, raw.uow, Clock { now }, Today { today })
 
     private var recordIds = 0
 

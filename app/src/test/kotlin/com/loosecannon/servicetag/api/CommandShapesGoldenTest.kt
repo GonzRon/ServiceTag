@@ -129,21 +129,21 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat20AndTwentyThreeTables() {
+    @Test fun theContractDocumentNamesFormat21AndTwentyThreeTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
         assertEquals(
-            "the import range reads 1–20 at both sites",
+            "the import range reads 1–21 at both sites",
             2,
-            lines.count { "format **1–20**" in it || "**format 1–20**" in it },
+            lines.count { "format **1–21**" in it || "**format 1–21**" in it },
         )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
                 listOf(
-                    "1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17", "1–18", "1–19",
+                    "1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17", "1–18", "1–19", "1–20",
                 ).any {
                     "format **$it**" in line || "**format $it**" in line
                 }
