@@ -274,6 +274,11 @@ data class ScheduleEditState(
     val meterLead: String = "",
     /** The target asset's season and break, read once; null for a group target, which has neither. */
     val season: SeasonInputs? = null,
+    /**
+     * #124 (C43, the fold ruling after #125): the target **asset's** own season mode, read once; null for a group target.
+     * P124-1 reads it, never [season], which for a schedule following its own Home Assistant season is that season's.
+     */
+    val assetSeasonMode: SeasonMode? = null,
     /** The answer to S65; null while it stands unanswered. */
     val policyOption: PolicyOption? = PolicyOption.WHENEVER_DUE,
     val startCountingFrom: StartCountingFrom = StartCountingFrom.SEASON_START,
@@ -352,10 +357,11 @@ data class ScheduleEditState(
     val questionDrawn: Boolean get() = policyOptions.isNotEmpty()
 
     /**
-     * S73's answers under S67, in order: S74, S75 and #124's P124-1, "The Season Start service". S67 is offered only for
-     * an asset target on a CALENDAR or MANUAL asset, so P124-1 is never offered on a YEAR_ROUND asset or a group (inv.
-     * 106); and it is offered only with a time rule, because a meter-only schedule stays phase-only (N1 review M-2).
-     * Empty while S67 is not one of the options.
+     * S73's answers under S67, in order: S74, S75 and #124's P124-1, "The Season Start service". P124-1 is offered only for
+     * an asset target whose **asset** is CALENDAR or MANUAL ([assetSeasonMode]), so never on a YEAR_ROUND asset or a group
+     * (inv. 106) — not even for a schedule following its own Home Assistant season, whose own season offers S67 (#125):
+     * the Season Start role it counts from needs the asset's seasons (the fold ruling); and it is offered only with a
+     * time rule, because a meter-only schedule stays phase-only (N1 review M-2). Empty while S67 is not one of the options.
      */
     val startCountingOptions: List<StartCountingFrom>
         get() = if (PolicyOption.WHEN_SEASON_STARTS !in policyOptions) {
@@ -364,8 +370,15 @@ data class ScheduleEditState(
             listOfNotNull(
                 StartCountingFrom.SEASON_START,
                 StartCountingFrom.OWN_DATE,
-                StartCountingFrom.OPENING_SERVICE.takeIf { hasTimeRule },
+                StartCountingFrom.OPENING_SERVICE.takeIf { hasTimeRule && assetHasSeasons },
             )
+        }
+
+    /** Whether the target asset itself has seasons, as the Season Start role needs (C10, NEEDS_SEASONS). */
+    private val assetHasSeasons: Boolean
+        get() = when (assetSeasonMode) {
+            SeasonMode.CALENDAR, SeasonMode.MANUAL -> true
+            SeasonMode.YEAR_ROUND, null -> false
         }
 
     /** The policy the chosen answer means; null while the question is drawn and unanswered. */
@@ -466,6 +479,14 @@ data class ScheduleEditState(
         policyOption == PolicyOption.WHEN_SEASON_STARTS && startCountingFrom !in startCountingOptions ->
             copy(policyOption = null, startCountingFrom = StartCountingFrom.SEASON_START)
         else -> this
+    }.let { form ->
+        // N3 review I1: P124-1 never rides, hidden, behind another answer — without a time rule S73 goes back to S74, so
+        // picking S67 again on a meter-only schedule never brings back an answer that is not offered.
+        if (form.startCountingFrom == StartCountingFrom.OPENING_SERVICE && !form.hasTimeRule) {
+            form.copy(startCountingFrom = StartCountingFrom.SEASON_START)
+        } else {
+            form
+        }
     }
 
     /**
@@ -566,6 +587,7 @@ class ScheduleEditViewModel(
                     target = target,
                     targetName = nameOf(target),
                     season = season,
+                    assetSeasonMode = assetId?.let { assets.get(it) }?.seasonMode,
                     todayOn = todayOn,
                     // A group target is offered neither, so nothing is read for one (D-12).
                     meters = assetId?.let { definitions.forAsset(it).filter { d -> d.isMeter && d.archivedAt == null } }

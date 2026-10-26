@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -154,6 +155,8 @@ data class ScheduleDetailState(
     val isGroup: Boolean = false,
     val hasTimeRule: Boolean = false,
     val status: DueStatus? = null,
+    /** #124 (C43, N3 review I2): why the policy put [status] where it is; a waiting schedule says P124-9 by it. */
+    val policyReason: PolicyReason = PolicyReason.NONE,
     val requiredSetEmpty: Boolean = false,
     val effectiveDueOn: String? = null,
     /** The schedule's own lead, in days. 1.2.1: `canClose`'s fifth question reads it too. */
@@ -189,7 +192,7 @@ data class ScheduleDetailState(
      * The RATIFIED status word, withheld for a round that obliges nobody — "NO BASELINE" belongs to
      * the repairable missing-meter form alone and nothing here may lend it to the other one.
      */
-    val statusWord: String? get() = status?.takeIf { !requiredSetEmpty }?.let(::statusLabel)
+    val statusWord: String? get() = status?.takeIf { !requiredSetEmpty }?.let { statusWordOf(it, policyReason) }
 
     /**
      * **Complete** is offered while the schedule can still be acted on: not archived, and a group
@@ -404,6 +407,7 @@ class ScheduleDetailViewModel(
             isGroup = isGroup,
             hasTimeRule = schedule.timeInterval != null,
             status = statusOf(schedule, derived, t),
+            policyReason = derived.policyReason,
             requiredSetEmpty = requiredSetEmpty,
             effectiveDueOn = derived.effectiveDueOn,
             leadDays = schedule.leadDays,

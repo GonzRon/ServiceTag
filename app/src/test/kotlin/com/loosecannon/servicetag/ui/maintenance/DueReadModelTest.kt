@@ -440,6 +440,25 @@ class DueReadModelTest {
     }
 
     /**
+     * #124 (C43; N3 review M2): out of season the dependent is the shipped DORMANT row, never the waiting one — on
+     * 1 December, after the season ended on 31 October, it is in OUT OF SEASON until the next start, 1 April 2027, and
+     * reads "OUT OF SEASON" with S89's line, on the real engine.
+     */
+    @Test fun anOutOfSeasonDependentStillReadsOutOfSeason() = runTest {
+        graph.today = LocalDate.parse("2026-12-01")
+        graph.now = dayMillis("2026-12-01") + 12 * 60 * 60 * 1000L
+        aDependentOfTheSeasonStartService()
+
+        val dormant = readModel().items().single { it.scheduleId.value == "filter" }
+        assertTrue(dormant.policyReason != PolicyReason.AWAITING_OPENING_SERVICE)
+        assertEquals(DueStatus.INACTIVE_SEASON, dormant.status)
+        assertEquals(AttentionSection.OUT_OF_SEASON, dormant.section)
+        assertEquals(LocalDate.parse("2027-04-01"), dormant.dormantUntil)
+        assertEquals("OUT OF SEASON", rowStatusLabel(dormant))
+        assertEquals("Out of season until 1 Apr 2027", whyLine(dormant, ::displayDate))
+    }
+
+    /**
      * #124 row 151 (C43): the opening service done on 10 April, after the cycle's start, moves the dependent to seven
      * days after it, and its line says so (P124-4) from the date it was moved from.
      */

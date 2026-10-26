@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -1017,6 +1018,7 @@ class ScheduleEditViewModelTest {
         )
         val meterOnly = viewModel(scheduleId = "s-meter").state.first { it.loaded }
         assertNull(meterOnly.policyOption)
+        assertNull(meterOnly.servicePolicy)
         assertFalse(meterOnly.canSave)
 
         assertEquals("The Season Start service", startCountingLabel(StartCountingFrom.OPENING_SERVICE))
@@ -1044,6 +1046,70 @@ class ScheduleEditViewModelTest {
                 assertEquals(target, emptyList<StartCountingFrom>(), vm.state.value.startCountingOptions)
                 assertTrue(target, vm.state.value.servicePolicy != ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE)
             }
+        }
+    }
+
+    /**
+     * #124 (C43; N3 review I1): P124-1 never comes back hidden behind another answer. Chosen, then S65 moved to S68 or to
+     * "Before the season", the time rule cleared and S67 picked again: S73 reads S74 and the policy is
+     * `IN_SERVICE_AT_START`, never the opening-service value on a schedule with no time rule.
+     */
+    @Test fun aWithdrawnOpeningServiceAnswerNeverComesBackHidden() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        for (via in listOf(PolicyOption.WHENEVER_DUE, PolicyOption.BEFORE_SEASON)) {
+            val vm = viewModel(targetAssetId = "heater")
+            vm.state.first { it.loaded }
+            vm.onInterval("1")
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(via.name, ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, vm.state.value.servicePolicy)
+            vm.onPolicy(via)
+            vm.onInterval("")
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+
+            assertEquals(via.name, StartCountingFrom.SEASON_START, vm.state.value.startCountingFrom)
+            assertEquals(via.name, ServicePolicy.IN_SERVICE_AT_START, vm.state.value.servicePolicy)
+        }
+    }
+
+    /**
+     * #124 (C43; the controller's fold ruling after #125): P124-1 reads the **asset's** season, never the schedule's own. A
+     * schedule following its own Home Assistant season is offered S67 by that season, yet on a YEAR_ROUND asset never
+     * P124-1 — the Season Start role it would count from needs the asset's seasons (NEEDS_SEASONS); on a CALENDAR asset
+     * its own-season schedule is offered it.
+     */
+    @Test fun theOpeningServiceAnswerReadsTheAssetsSeasonNeverAnOwnSeason() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Example Pump"))
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        for ((asset, offered) in listOf("pump" to false, "heater" to true)) {
+            graph.schedules.upsert(
+                scheduleOf("own-$asset", assetId = asset, title = "Example own-season check")
+                    .copy(seasonSource = ScheduleSeasonSource.OWN),
+            )
+            val vm = ScheduleEditViewModel(
+                schedules = graph.schedules,
+                assets = graph.assets,
+                groups = graph.groups,
+                definitions = graph.definitions,
+                profiles = graph.profiles,
+                saveSchedule = graph.saveSchedule,
+                notifications = permission,
+                today = graph.todayPort,
+                scheduleId = ScheduleId("own-$asset"),
+                targetAssetId = null,
+                targetGroupId = null,
+                recompute = graph.recomputeSchedules,
+            )
+            val opened = vm.state.first { it.loaded }
+            assertTrue(asset, PolicyOption.WHEN_SEASON_STARTS in opened.policyOptions)
+            assertEquals(asset, offered, StartCountingFrom.OPENING_SERVICE in opened.startCountingOptions)
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(asset, offered, vm.state.value.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE)
         }
     }
 

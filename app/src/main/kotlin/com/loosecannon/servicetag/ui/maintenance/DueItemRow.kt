@@ -67,16 +67,21 @@ fun statusLabel(status: DueStatus): String = when (status) {
 }
 
 /**
- * The status word a schedule row draws: [statusLabel] of its status, except #124's waiting row — `INACTIVE_SEASON` and
- * `AWAITING_OPENING_SERVICE`, its asset in season and waiting for this season's opening service — which reads P124-9,
- * "Waiting", never "OUT OF SEASON" (C43). [StatusBadge] upper-cases it, as it does the shipped words.
+ * The status word for [status] and its [reason]: [statusLabel] of the status, except #124's waiting schedule —
+ * `INACTIVE_SEASON` and `AWAITING_OPENING_SERVICE`, its asset in season and waiting for this season's opening service —
+ * which reads P124-9, "Waiting", never "OUT OF SEASON" (C43). The due row and the schedule's own detail both say it
+ * through here, so a tap on a waiting row never lands on "OUT OF SEASON" (N3 review I2). [StatusBadge] upper-cases it,
+ * as it does the shipped words.
  */
-fun rowStatusLabel(item: DueItem): String =
-    if (item.status == DueStatus.INACTIVE_SEASON && item.policyReason == PolicyReason.AWAITING_OPENING_SERVICE) {
+fun statusWordOf(status: DueStatus, reason: PolicyReason): String =
+    if (status == DueStatus.INACTIVE_SEASON && reason == PolicyReason.AWAITING_OPENING_SERVICE) {
         localized(R.string.season_start_status_waiting)
     } else {
-        statusLabel(item.status)
+        statusLabel(status)
     }
+
+/** The status word a schedule row draws: [statusWordOf] its status and its policy's reason. */
+fun rowStatusLabel(item: DueItem): String = statusWordOf(item.status, item.policyReason)
 
 /** The RATIFIED dashboard section labels (D12 §10 `:706-707`; 1.4 spec §10.7 S93 for Deferred). */
 fun sectionLabel(section: AttentionSection): String = when (section) {

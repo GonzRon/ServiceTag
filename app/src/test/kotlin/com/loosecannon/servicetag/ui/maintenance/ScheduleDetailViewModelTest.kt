@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
@@ -15,6 +16,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -31,11 +33,13 @@ import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
 import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.reminders.DeliveryInput
 import com.loosecannon.servicetag.reminders.DigestPolicy
 import com.loosecannon.servicetag.reminders.Fixture
 import com.loosecannon.servicetag.reminders.ItemPost
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.meterDefinitionOf
@@ -206,6 +210,41 @@ class ScheduleDetailViewModelTest {
      * Matrix row **"the five operations collapsing"** — *complete*: it writes the event and clears
      * the postponement **only if it was set**, and touches no rule column.
      */
+    /**
+     * #124 (C43, AC124-3; N3 review I2): a schedule counting from the Season Start service says on its own screen what its
+     * due row says. "Example Heater" is in season 1 April – 31 October; on 15 April, with no opening service yet, the
+     * dependent's word is P124-9, never "OUT OF SEASON" (its asset is in season); on 1 December, out of season, it is the
+     * shipped "OUT OF SEASON".
+     */
+    @Test fun aWaitingScheduleSaysWaitingOnItsOwnScreenAndOutOfSeasonOutOfIt() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", anchorOn = "2025-06-01")
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        graph.schedules.upsert(
+            scheduleOf(
+                "filter", assetId = "heater", title = "Example filter check", anchorOn = "2026-01-01",
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 7,
+            ),
+        )
+        graph.recomputeSchedules.forAsset(AssetId("heater"))
+
+        val inSeason = viewModel(ScheduleId("filter")).state.first { it.loaded }
+        assertEquals(DueStatus.INACTIVE_SEASON, inSeason.status)
+        assertEquals(localized(R.string.season_start_status_waiting), inSeason.statusWord)
+
+        graph.today = LocalDate.parse("2026-12-01")
+        graph.now = dayMillis("2026-12-01")
+        graph.recomputeSchedules.forAsset(AssetId("heater"))
+
+        val outOfSeason = viewModel(ScheduleId("filter")).state.first { it.loaded }
+        assertEquals(DueStatus.INACTIVE_SEASON, outOfSeason.status)
+        assertEquals(localized(R.string.maintenance_status_out_of_season), outOfSeason.statusWord)
+    }
+
     @Test fun completeWritesTheEventAndClearsThePostponementOnlyIfSet() = runTest {
         val (_, id) = anAssetSchedule()
         val before = graph.schedules.get(id)!!
