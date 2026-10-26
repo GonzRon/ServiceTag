@@ -396,7 +396,7 @@ class HeldWriteGuardTest {
         refused(
             heater,
             "LogEvent" to { log.run(note(heater)) },
-            "UpdateEvent" to { UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute).run(EventId("e3"), note(heater)) },
+            "UpdateEvent" to { UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today).run(EventId("e3"), note(heater)) },
             "DeleteEvent" to { DeleteEvent(events, attachments, install.storage, uow, recompute).run(EventId("e3")) },
             "RecordCondition" to { recordCondition.run(heater, ConditionCommand(OperationalCondition.OPERATIONAL, tzId = "UTC")) },
             "RecordConditionWithIncident" to {
@@ -459,11 +459,11 @@ class HeldWriteGuardTest {
                 ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock).run(ScheduleId("s1"), archived = true)
             },
             "CompleteSchedule" to {
-                CompleteSchedule(schedules, events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute)
+                CompleteSchedule(schedules, events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today)
                     .run(ScheduleId("s1"), CompletionCommand(occurredOn = "2026-09-24", tzId = "UTC"))
             },
             "CompleteGroupMembers" to {
-                CompleteGroupMembers(schedules, groups, events, closures, definitions, profiles, install.supplyItems, uow, ids, clock, recompute)
+                CompleteGroupMembers(schedules, groups, events, closures, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today)
                     .run(ScheduleId("sg"), listOf(heater), CompletionCommand(occurredOn = "2026-09-24", tzId = "UTC"))
             },
             "CloseRound" to { CloseRound(schedules, closures, uow, ids, clock, today, recompute).run(ScheduleId("sg")) },
@@ -765,7 +765,7 @@ class HeldWriteGuardTest {
     fun anEditKeepingAnEarlierReferencePasses() = runTest {
         seed()
         install.events.upsert(install.events.get(EventId("ex"))!!.copy(scheduleId = ScheduleId("s1"), occurrenceOn = "2026-02-01"))
-        val edited = UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute).run(
+        val edited = UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today).run(
             EventId("ex"), note(compressor).copy(title = "Example edited note", occurredOn = "2026-09-20"),
         )
         assertEquals("Example edited note", install.events.get(EventId("ex"))!!.title)

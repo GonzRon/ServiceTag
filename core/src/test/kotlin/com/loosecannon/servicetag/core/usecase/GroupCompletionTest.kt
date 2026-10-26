@@ -93,6 +93,7 @@ class GroupCompletionTest {
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val completeMembers = CompleteGroupMembers(
         countedSchedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
+        todayPort,
     )
     private val closeRound =
         CloseRound(countedSchedules, closures, uow, ids, clock, todayPort, recompute)
@@ -378,6 +379,7 @@ class GroupCompletionTest {
         assertEquals("2026-05-01", assertNotNull(schedules.get(schedule.id)).postponedDueOn)
         assertEquals(writesBefore, scheduleWrites, "a partial completion writes no schedule column")
 
+        today = LocalDate.parse("2026-04-16")
         val second = completeMembers.run(schedule.id, listOf(a2), completion("2026-04-16")).single()
         assertEquals("2026-01-01", second.occurrenceOn)
         val after = assertNotNull(schedules.get(schedule.id))

@@ -947,8 +947,10 @@ class MaintenanceRoutesTest {
         assertEquals(422, malformed.status)
         assertTrue(malformed.problems().toString(), malformed.problems().any { it.contains("BadDate") })
 
+        // O-16 as amended (C39): a completion is now bounded above by the phone's today.
         val future = call("POST", "/v1/schedules/$schedule/complete", completionBody(occurredOn = "2099-01-01"))
-        assertEquals("no use case bounds occurredOn above", 201, future.status)
+        assertEquals(future.text(), 422, future.status)
+        assertEquals("COMPLETION_DATE_IN_FUTURE", future.code())
     }
 
     // --- GET /v1/schedules/{id} and the derived read projection ---------------------------------

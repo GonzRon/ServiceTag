@@ -1723,4 +1723,48 @@ class EventEntryViewModelTest {
 
         assertEquals(listOf(mower.edge.id to true), fields.drawn())
     }
+
+    // --- O-16 as amended (C39, row 130): a completion dated after today --------------------------------------------
+
+    /** A schedule's form completion dated tomorrow: S25 as the first problem, nothing written, no sweep. */
+    @Test fun aFormCompletionDatedTomorrowSaysS25AndWritesNothing() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val dueBefore = dueOf(schedule.id)
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        vm.typeWaterTest(spa)
+        vm.onDate("2026-02-11")
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, refused.firstProblem)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+        assertEquals(dueBefore, dueOf(schedule.id))
+        assertEquals("nothing written, nothing swept", 0, reconciles)
+    }
+
+    /** An edit that moves a completion to tomorrow: S25 as the first problem, the stored row unchanged, no sweep. */
+    @Test fun anEditMovingACompletionToTomorrowSaysS25AndWritesNothing() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val done = graph.completeSchedule.run(
+            schedule.id,
+            CompletionCommand(
+                occurredOn = "2026-02-10", tzId = "UTC",
+                values = mapOf(spa.def("ph").id to "7.4", spa.def("free_chlorine").id to "2.0"),
+            ),
+        )
+        val storedBefore = graph.events.get(done.id)
+        val vm = formModel(spa.id, null, scheduleId = null, eventId = done.id)
+        vm.state.first { it.loaded }
+        vm.onDate("2026-02-11")
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, refused.firstProblem)
+        assertEquals(storedBefore, graph.events.get(done.id))
+        assertEquals("an edit never sweeps", 0, reconciles)
+    }
 }

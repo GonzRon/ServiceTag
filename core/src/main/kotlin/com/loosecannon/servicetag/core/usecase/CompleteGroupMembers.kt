@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 
@@ -46,6 +47,8 @@ import com.loosecannon.servicetag.core.schedule.GroupOccurrence
  *   leaves it, because the date the owner agreed still governs the members who have not been round
  *   yet; and when the round does finish, the clear writes that one column and leaves `updated_at`
  *   alone, because only an explicit edit moves the D-27 pin's floor (invariants 19, 25, 68, 69).
+ *
+ * A batch dated after [today] is [CompletionDateInFuture] (O-16, C39) before the write, so no member is written.
  */
 class CompleteGroupMembers(
     private val schedules: ScheduleRepository,
@@ -59,6 +62,7 @@ class CompleteGroupMembers(
     private val ids: IdGenerator,
     private val clock: Clock,
     private val recompute: RecomputeSchedules,
+    private val today: Today,
 ) {
     /** "Complete selected": exactly the members named, minus any already done. */
     suspend fun run(id: ScheduleId, assetIds: List<AssetId>, cmd: CompletionCommand): List<AssetEvent> {
@@ -93,6 +97,9 @@ class CompleteGroupMembers(
             if (assetId !in everAMember) throw NotAGroupMember(schedule.id, assetId)
             if (assetId !in occurrence.required) throw NotARequiredMember(schedule.id, assetId)
         }
+        // O-16 (C39): the whole batch, before the write and before "nothing left to record", so a date after today is
+        // refused however many of the named members are already done.
+        refuseFutureCompletion(cmd.occurredOn, today.localDate())
 
         val outstanding = assetIds.distinct().filterNot { it in occurrence.completed }
         // Nothing to record is not an error: the members named are already done, which is the

@@ -32,15 +32,16 @@ class EventUseCasesTest {
     private val closures = InMemoryClosureRepository()
     private val states = InMemoryScheduleStateRepository()
     private val schedules = InMemoryScheduleRepository(closures, states)
+    private val todayPort = com.loosecannon.servicetag.core.ports.Today { java.time.LocalDate.parse("2026-02-10") }
     private val recompute = RecomputeSchedules(
         schedules, states, events, closures, groups, assets,
         com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository(),
-        com.loosecannon.servicetag.core.ports.Today { java.time.LocalDate.parse("2026-02-10") }, clock,
+        todayPort, clock,
         zone = { java.time.ZoneOffset.UTC },
     )
     private val supplyItems = InMemorySupplyItemRepository()
     private val logEvent = LogEvent(events, defs, profiles, assets, supplyItems, uow, ids, clock, recompute)
-    private val updateEvent = UpdateEvent(events, defs, profiles, supplyItems, uow, ids, clock, recompute)
+    private val updateEvent = UpdateEvent(events, defs, profiles, supplyItems, uow, ids, clock, recompute, todayPort)
     private val deleteEvent = DeleteEvent(events, attachments, storage, uow, recompute)
 
     private suspend fun asset(id: String, name: String): Asset =
@@ -443,7 +444,7 @@ class EventUseCasesTest {
     private val saveProfile = SaveProfile(profiles, defs, assets, supplyItems, uow, ids, clock)
     private val saveSupplyItem = SaveSupplyItem(supplyItems, uow, ids, clock)
     private val archiveSupplyItem = ArchiveSupplyItem(supplyItems, uow, clock)
-    private val completeSchedule = CompleteSchedule(schedules, events, defs, profiles, supplyItems, uow, ids, clock, recompute)
+    private val completeSchedule = CompleteSchedule(schedules, events, defs, profiles, supplyItems, uow, ids, clock, recompute, todayPort)
 
     private suspend fun filterAsset(): AssetId = asset("a9", "Example Spa").id
 
@@ -543,7 +544,7 @@ class EventUseCasesTest {
         val completionRefused = assertFailsWith<EventValidation> {
             completeSchedule.run(
                 ScheduleId("sch-filter"),
-                CompletionCommand(occurredOn = "2026-03-30", tzId = "UTC", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-gone")))),
+                CompletionCommand(occurredOn = "2026-02-10", tzId = "UTC", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-gone")))),
             )
         }
         assertEquals(listOf(FieldProblem.UnknownSupplyItem(0)), completionRefused.problems)
@@ -568,7 +569,7 @@ class EventUseCasesTest {
         )
         val completed = completeSchedule.run(
             ScheduleId("sch-filter"),
-            CompletionCommand(occurredOn = "2026-03-30", tzId = "UTC", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-old")))),
+            CompletionCommand(occurredOn = "2026-02-10", tzId = "UTC", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-old")))),
         )
 
         assertEquals(SupplyId("s-old"), events.get(logged.id)!!.consumables.single().supplyId)

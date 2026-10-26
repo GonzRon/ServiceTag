@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -51,6 +52,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * 29 forbid. A group round is completed by naming its members, through [CompleteGroupMembers], and
  * the route that serves both kinds of target dispatches on the target rather than on the body.
  *
+ * A completion dated after [today] is [CompletionDateInFuture] (O-16, C39), whichever way it was collected — QUICK,
+ * a minimal one against a `FORM` schedule, or the form's own (`viaForm`) — and nothing is written. An ordinary
+ * journal entry keeps any date; a schedule's completion is a service attestation, and one recorded in advance must
+ * never become valid when midnight arrives.
+ *
  * One `uow.write` covering the event, the conditional clear and the recompute.
  */
 class CompleteSchedule(
@@ -63,6 +69,7 @@ class CompleteSchedule(
     private val ids: IdGenerator,
     private val clock: Clock,
     private val recompute: RecomputeSchedules,
+    private val today: Today,
 ) {
     suspend fun run(id: ScheduleId, cmd: CompletionCommand): AssetEvent {
         val schedule = schedules.get(id) ?: throw NoSuchSchedule(id)
@@ -74,6 +81,7 @@ class CompleteSchedule(
                 "schedule ${id.value} is for asset ${target.assetId.value}, not ${cmd.assetId.value}",
             )
         }
+        refuseFutureCompletion(cmd.occurredOn, today.localDate())
 
         val profileRow = schedule.profileId?.let { profiles.get(it) }
         val minimal = cmd.values.isEmpty() && cmd.consumables.isEmpty()

@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.usecase.BadScheduleDate
 import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.CloseNotSupported
 import com.loosecannon.servicetag.core.usecase.ClosedOnOutOfRange
+import com.loosecannon.servicetag.core.usecase.CompletionDateInFuture
 import com.loosecannon.servicetag.core.usecase.ConditionProblem
 import com.loosecannon.servicetag.core.usecase.ConditionValidation
 import com.loosecannon.servicetag.core.usecase.DefinitionInUse
@@ -327,6 +328,13 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     )
     is BadScheduleDate -> errorResponse(
         422, "Unprocessable Content", "BAD_DATE", "that is not an ISO YYYY-MM-DD date",
+    )
+    // O-16 as amended (C39): a schedule's completion dated after the phone's today, from the complete route (both
+    // target kinds) and an event PATCH whose result names a schedule. `CONDITION_DATE_IN_FUTURE`'s shape.
+    is CompletionDateInFuture -> errorResponse(
+        422, "Unprocessable Content", "COMPLETION_DATE_IN_FUTURE",
+        "occurredOn may not be later than today for a schedule's completion",
+        listOf("CompletionDateInFuture(occurredOn=${e.occurredOn}, today=${e.today})"), "occurredOn",
     )
     // Both are the completion command's `assetId` naming the wrong asset, so both are 422 and not
     // 409: what was asked for describes a completion that cannot exist (§9.2's "validated as a

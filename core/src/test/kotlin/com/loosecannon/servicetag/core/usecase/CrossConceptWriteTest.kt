@@ -292,7 +292,7 @@ class CrossConceptWriteTest {
     private val renameCategory = RenameCategory(categories, assets, uow, clock)
     private val deleteCategory = DeleteCategory(categories, assets, uow)
     private val logEvent = LogEvent(events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
-    private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
+    private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute, today)
     private val openServiceCase = OpenServiceCase(assets, events, serviceCases, uow, ids, clock, today)
     private val updateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, today)
     private val addServiceCaseEntry = AddServiceCaseEntry(serviceCases, caseEntries, uow, ids, clock, today)

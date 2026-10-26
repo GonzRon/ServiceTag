@@ -79,6 +79,7 @@ class GroupMembershipTest {
         )
     private val completeMembers = CompleteGroupMembers(
         schedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
+        todayPort,
     )
     private val archiveAsset = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
     private val retireAsset = RetireAsset(assets, uow, clock) { recompute.forAsset(it) }

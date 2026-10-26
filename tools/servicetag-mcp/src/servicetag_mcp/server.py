@@ -1249,7 +1249,8 @@ def update_event(
     `notes=""` for none, `profile_id=None` to unlink the event from its quick action, and
     `values={}` / `consumables=[]` to clear the event's readings or consumables on purpose rather
     than by accident. `asset_id` must be the asset the event already belongs to — an edit never
-    re-parents.
+    re-parents. An edit of a schedule's completion dated after the phone's own today is refused with 422
+    `COMPLETION_DATE_IN_FUTURE` and nothing is written; an ordinary event keeps any date.
 
     Each `consumables` line is `{"name", "quantity", "unit"}`, and since #15 may carry `"supplyId"` on
     `log_event`'s terms. Lines are matched by position and the whole list is replaced, so a line sent without
@@ -2008,7 +2009,8 @@ def complete_schedule(
     that schedule's own asset.
 
     `occurred_on` is ISO `YYYY-MM-DD` and may be any past date — the date you send is the date
-    stored, so a job done last Tuesday is logged as last Tuesday. `occurred_time` is `HH:MM`.
+    stored, so a job done last Tuesday is logged as last Tuesday. A date after the phone's own today is
+    refused with 422 `COMPLETION_DATE_IN_FUTURE` and nothing is written. `occurred_time` is `HH:MM`.
     `values` is keyed by definition id, the text a person would type; `consumables` is
     `{"name", "quantity", "unit"}`. You never send the occurrence key: the app stamps it from the
     schedule's own computed due date, which is what makes a repeat harmless rather than a duplicate.

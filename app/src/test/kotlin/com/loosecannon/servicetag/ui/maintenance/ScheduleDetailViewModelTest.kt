@@ -223,6 +223,7 @@ class ScheduleDetailViewModelTest {
         val postponed = graph.schedules.get(id)!!
         vm.refresh()
         vm.state.first { it.postponedDueOn == "2026-08-20" }
+        graph.today = LocalDate.parse("2026-07-02")
         vm.complete()
         answer("2026-07-02")
         vm.state.first { !it.busy && it.history.size == 2 }
@@ -344,6 +345,7 @@ class ScheduleDetailViewModelTest {
         // The occurrence key itself did not move (invariant 21).
         assertEquals("2026-04-01", postponed.currentOccurrenceOn)
 
+        graph.today = LocalDate.parse("2026-04-20")
         vm.complete()
         answer("2026-04-20")
         vm.state.first { !it.busy && it.history.isNotEmpty() }

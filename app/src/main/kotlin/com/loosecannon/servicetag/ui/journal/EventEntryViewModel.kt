@@ -35,6 +35,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.CompletionDateInFuture
 import com.loosecannon.servicetag.core.usecase.ConditionCommand
 import com.loosecannon.servicetag.core.usecase.ConditionProblem
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
@@ -610,6 +611,10 @@ class EventEntryViewModel(
                 }
             } catch (e: EventValidation) {
                 markProblems(e.problems, submitted.map { it.first })
+            } catch (e: CompletionDateInFuture) {
+                // O-16 (C39): a schedule's completion — this form's, or an edit of one — dated after today. Nothing
+                // was written and no sweep ran; S25 is the line, as the combined save draws it.
+                _state.update { it.copy(saving = false, firstProblem = DATE_NOT_LATER_THAN_TODAY) }
             } catch (e: EventOwnership) {
                 refuse(e)
             } catch (e: NoSuchEvent) {

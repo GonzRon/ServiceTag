@@ -116,14 +116,14 @@ class ScheduleOperationsTest {
             InMemoryHealthSubjectRepository(),
         )
     private val complete =
-        CompleteSchedule(countedSchedules, events, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
+        CompleteSchedule(countedSchedules, events, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute, todayPort)
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val pause = PauseSchedule(countedSchedules, uow, recompute)
     private val archive = ArchiveSchedule(
         countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock,
     )
     private val logEvent = LogEvent(events, defs, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
-    private val updateEvent = UpdateEvent(events, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
+    private val updateEvent = UpdateEvent(events, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute, todayPort)
     private val deleteEvent = DeleteEvent(events, attachments, storage, uow, recompute)
 
     private suspend fun seedAsset(id: String = "a1"): AssetId {
@@ -363,6 +363,7 @@ class ScheduleOperationsTest {
             ),
         )
 
+        today = LocalDate.parse("2026-11-02")
         val first = complete.run(schedule.id, completion("2026-08-20", mapOf(meterId to "172")))
         val second = complete.run(schedule.id, completion("2026-11-02", mapOf(meterId to "225")))
 
@@ -696,6 +697,7 @@ class ScheduleOperationsTest {
         assertEquals(profileId, minimal.profileId)
         assertEquals(EventKind.INSPECTION, minimal.kind)
 
+        today = LocalDate.parse("2026-07-02")
         val full = complete.run(schedule.id, completion("2026-07-02", mapOf(meterId to "18.5")))
         assertEquals(false, full.detailsPending)
         assertEquals(18.5, full.measurements.single().valueNum)
@@ -756,6 +758,7 @@ class ScheduleOperationsTest {
         val named = complete.run(schedule.id, completion("2026-03-20").copy(title = "Blade swap", viaForm = true))
         assertEquals("Blade swap", named.title)
 
+        today = LocalDate.parse("2026-07-02")
         val unnamed = complete.run(schedule.id, completion("2026-07-02").copy(viaForm = true))
         assertEquals("Quarterly inspection", unnamed.title)
     }
@@ -886,6 +889,7 @@ class ScheduleOperationsTest {
         assertTrue(minimal.detailsPending)
         assertEquals(emptyList(), minimal.measurements)
 
+        today = LocalDate.parse("2026-07-02")
         val api = complete.run(form.id, completion("2026-07-02", mapOf(edgeId to "3")))
         assertEquals(false, api.detailsPending)
         assertEquals(listOf(edgeId), api.measurements.map { it.definitionId })
@@ -925,6 +929,7 @@ class ScheduleOperationsTest {
         val blank = complete.run(schedule.id, viaForm("2026-03-20", mapOf(edgeId to "3")))
         assertEquals(listOf(edgeId), blank.measurements.map { it.definitionId })
 
+        today = LocalDate.parse("2026-07-02")
         val carried = complete.run(schedule.id, viaForm("2026-07-02", mapOf(edgeId to "3", meterId to "130")))
         assertEquals(listOf(edgeId, meterId), carried.measurements.map { it.definitionId })
         assertEquals(130.0, carried.measurements.single { it.definitionId == meterId }.valueNum)

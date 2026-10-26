@@ -86,6 +86,7 @@ class ScheduleCommandRulesTest {
         )
     private val completeMembers = CompleteGroupMembers(
         schedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
+        todayPort,
     )
 
     private suspend fun seedAsset(id: String): AssetId {
@@ -275,7 +276,7 @@ class ScheduleCommandRulesTest {
 
         val written = completeMembers.all(
             schedule.id,
-            CompletionCommand(occurredOn = "2026-04-01", tzId = "UTC"),
+            CompletionCommand(occurredOn = "2026-02-10", tzId = "UTC"),
         )
         assertEquals(1, written.size)
         assertEquals(
