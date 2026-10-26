@@ -43,7 +43,7 @@ class AssetUseCasesTest {
         schedules, states, InMemoryEventRepository(), closures, InMemoryGroupRepository(), assets,
         InMemorySeasonActivationRepository(), Today { LocalDate.parse("2026-01-01") }, clock,
     ) { ZoneOffset.UTC }
-    private val update = UpdateAsset(assets, schedules, uow, clock, recompute, PromoteCategory(categories))
+    private val update = UpdateAsset(assets, schedules, uow, clock, recompute, PromoteCategory(categories), InMemoryGroupRepository())
     // No scheduling fakes here, so the lifecycle rebuild is explicitly nothing: the seam has
     // no default, so a graph that forgot to wire it would not compile.
     private val archive = ArchiveAsset(assets, uow, clock) { }

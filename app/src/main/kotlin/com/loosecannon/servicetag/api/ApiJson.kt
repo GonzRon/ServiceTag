@@ -71,6 +71,10 @@ import com.loosecannon.servicetag.core.usecase.ScheduleValidation
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyEnded
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefusal
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
@@ -535,6 +539,20 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         409, "Conflict", "PRE_SERVICE_NEEDS_DATES",
         "this asset has neither a calendar season nor a maintenance break for PRE_SERVICE to count back from",
     )
+    // #114 (C2, C10): the role command's refusal, naming the `SeasonStartRefusal`; nothing was written. Reached over
+    // `/v1` by A4w's role route.
+    is SeasonStartRefused -> errorResponse(
+        409, "Conflict", "SEASON_START_REFUSED", seasonStartRefusalMessage(e.reason),
+        listOf(seasonStartRefusalName(e.reason)),
+    )
+    // #114 (C2, C11): a hooked shipped command would leave a Season Start role where it may not stand; the cause and
+    // the role schedules, as `SEASON_MODE_STRANDS_POLICY` names its schedules.
+    is SeasonStartStrands -> errorResponse(
+        409, "Conflict", "SEASON_START_STRANDED", seasonStartStrandMessage(e.strandCause),
+        listOf(
+            "SeasonStartStrands(cause=${e.strandCause.name}" + (e.assetId?.let { ", assetId=${it.value}" } ?: "") + ")",
+        ) + e.schedules.map(::strandedName),
+    )
     is HealthScheduleTaken -> errorResponse(
         409, "Conflict", "HEALTH_SCHEDULE_TAKEN", "that schedule already drives another health subject",
         listOf("HealthScheduleTaken(scheduleId=${e.scheduleId.value}, heldBy=${e.heldBy.value})"),
@@ -611,6 +629,51 @@ private fun unprocessable(refusal: Refusal, problems: List<String>): ApiResponse
 /** A stranded schedule as a refusal names it: the id to fix, and the title a person recognises. */
 private fun strandedName(schedule: StrandedSchedule): String =
     "StrandedSchedule(id=${schedule.id.value}, title=${schedule.title})"
+
+/** #114 (C2): a [SeasonStartRefusal] as `problems` names it — its upper-snake name, then whatever it carries. */
+private fun seasonStartRefusalName(reason: SeasonStartRefusal): String = when (reason) {
+    SeasonStartRefusal.ScheduleArchived -> "SeasonStartRefused(reason=SCHEDULE_ARCHIVED)"
+    SeasonStartRefusal.QuickNotElected -> "SeasonStartRefused(reason=QUICK_NOT_ELECTED)"
+    is SeasonStartRefusal.NotMaintainedHere -> "SeasonStartRefused(reason=NOT_MAINTAINED_HERE, assetId=${reason.assetId.value})"
+    is SeasonStartRefusal.YearRound -> "SeasonStartRefused(reason=YEAR_ROUND, assetId=${reason.assetId.value})"
+    is SeasonStartRefusal.LeafChild -> "SeasonStartRefused(reason=LEAF_CHILD, assetId=${reason.assetId.value})"
+    is SeasonStartRefusal.AlreadyCovered -> "SeasonStartRefused(reason=ALREADY_COVERED, assetId=${reason.assetId.value}, " +
+        "scheduleId=${reason.scheduleId.value}, title=${reason.title})"
+    SeasonStartRefusal.GroupArchived -> "SeasonStartRefused(reason=GROUP_ARCHIVED)"
+    SeasonStartRefusal.GroupHasNoMembers -> "SeasonStartRefused(reason=GROUP_HAS_NO_MEMBERS)"
+    SeasonStartRefusal.DateInFuture -> "SeasonStartRefused(reason=DATE_IN_FUTURE)"
+}
+
+/** #114 (C2): one developer sentence per [SeasonStartRefusal]; the phone's sentences are §5's, not these. */
+private fun seasonStartRefusalMessage(reason: SeasonStartRefusal): String = when (reason) {
+    SeasonStartRefusal.ScheduleArchived -> "this schedule is archived; restore it first"
+    SeasonStartRefusal.QuickNotElected ->
+        "this schedule is completed with one tap; elect one-tap completions to count before it becomes the Season Start service"
+    is SeasonStartRefusal.NotMaintainedHere -> "the asset is archived, retired or transferred out, so it cannot have a Season Start service"
+    is SeasonStartRefusal.YearRound -> "the asset is in use all year, so it has no season to start; give it a season first"
+    is SeasonStartRefusal.LeafChild ->
+        "the asset is a child with no child assets of its own, so it cannot have a Season Start service"
+    is SeasonStartRefusal.AlreadyCovered -> "the asset already has a Season Start service; stop using that one first"
+    SeasonStartRefusal.GroupArchived -> "this group is archived, so it has no assets to mark ready"
+    SeasonStartRefusal.GroupHasNoMembers -> "this group has no assets to mark ready"
+    SeasonStartRefusal.DateInFuture -> "sinceOn may not be later than today"
+}
+
+/** #114 (C2): one developer sentence per [SeasonStartStrandCause]; the remedy is always the role first. */
+private fun seasonStartStrandMessage(cause: SeasonStartStrandCause): String = when (cause) {
+    SeasonStartStrandCause.NEEDS_SEASONS ->
+        "a Season Start service covers this asset, so it needs seasons; clear that schedule's role first"
+    SeasonStartStrandCause.WOULD_BE_LEAF_CHILD ->
+        "this change would leave an asset with a Season Start service a child with no child assets; clear that schedule's role first"
+    SeasonStartStrandCause.ROLE_SCHEDULE_RETARGET ->
+        "this schedule is a Season Start service, so its asset or group cannot change; clear its role first"
+    SeasonStartStrandCause.QUICK_NEEDS_ELECTION ->
+        "this schedule is a Season Start service; changing it to one-tap completion needs seasonStartQuickElected: true"
+    SeasonStartStrandCause.MEMBER_NOT_ELIGIBLE ->
+        "the group's Season Start service would cover this asset, which cannot have one"
+    SeasonStartStrandCause.MEMBER_ALREADY_COVERED ->
+        "the group's Season Start service would cover this asset, which already has one"
+}
 
 /**
  * The code a malformed value answers with: **the shipped validation shape** (spec §9.2) — 1.1.0's

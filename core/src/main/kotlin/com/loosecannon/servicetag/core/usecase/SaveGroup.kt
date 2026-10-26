@@ -4,10 +4,14 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -39,11 +43,49 @@ class SaveGroup(
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
+    private val schedules: ScheduleRepository,
+    private val transfers: TransferRecordRepository,
 ) {
     suspend fun run(id: GroupId?, cmd: GroupCommand): MaintenanceGroup {
         val saved = prepare(id, cmd)
-        uow.write { groups.upsert(saved) }
+        uow.write {
+            seasonStartStrandOf(saved)?.let { throw it }
+            groups.upsert(saved)
+        }
         return saved
+    }
+
+    /**
+     * #114 (C11) — a member this save adds to a group a live (not ARCHIVED) Season Start role schedule targets must
+     * pass C10's asset rule (`MEMBER_NOT_ELIGIBLE`) and have no other role covering it (`MEMBER_ALREADY_COVERED`); the
+     * first failing one by name then id is named. A kept or removed member is never checked here: removing one, and
+     * every indirect break, is read by readiness (C9). `ReplaceAsset`'s in-transaction add is not hooked.
+     */
+    private suspend fun seasonStartStrandOf(saved: MaintenanceGroup): SeasonStartStrands? {
+        val roles = schedules.forGroup(saved.id)
+            .filter { it.role == ScheduleRole.SEASON_START && it.status != ScheduleStatus.ARCHIVED }
+        if (roles.isEmpty()) return null
+        val known = groups.get(saved.id)?.members.orEmpty().map { it.id }.toSet()
+        val added = saved.members.filter { it.id !in known && it.removedAt == null }.map { it.assetId }.toSet()
+        if (added.isEmpty()) return null
+        val all = assets.all()
+        val held = transfers.heldIds()
+        val everySchedule = schedules.all()
+        val everyGroup = groups.all()
+        return all.filter { it.id in added }
+            .sortedWith(compareBy({ it.name }, { it.id.value }))
+            .firstNotNullOfOrNull { asset ->
+                val covering = seasonStartRolesCovering(asset.id, everySchedule, everyGroup)
+                val cause = if (seasonStartAssetRefusal(asset, all, held) != null) {
+                    SeasonStartStrandCause.MEMBER_NOT_ELIGIBLE
+                } else if (covering.isNotEmpty()) {
+                    SeasonStartStrandCause.MEMBER_ALREADY_COVERED
+                } else {
+                    return@firstNotNullOfOrNull null
+                }
+                val named = (roles + covering).distinctBy { it.id }.sortedWith(compareBy({ it.title }, { it.id.value }))
+                SeasonStartStrands(asset.id, cause, named.map { StrandedSchedule(it.id, it.title) })
+            }
     }
 
     /**

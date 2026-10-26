@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
@@ -20,7 +21,9 @@ import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
  * - 422 [SeasonValidation] for the body ([seasonModeProblems]);
  * - 409 [SeasonModeStrandsPolicy] when the change would remove or re-kind the boundary a PRE_SERVICE
  *   schedule counts back from ([strandedBy]), naming those schedules;
- * - #16 (C15): before that, 409 [SeasonSyncOwnsSeason] while an enabled binding owns the season — a change only.
+ * - #16 (C15): before that, 409 [SeasonSyncOwnsSeason] while an enabled binding owns the season — a change only;
+ * - #114 (C11): after the strands rule, 409 [SeasonStartStrands] (`NEEDS_SEASONS`) for a change into YEAR_ROUND of
+ *   an asset a live Season Start role covers ([seasonStartStrandedBy]).
  *
  * **A switch into MANUAL** writes exactly one activation dated today, in the same transaction: START
  * for IN_SEASON, END for OUT_OF_SEASON — even when the latest historical row already says the same,
@@ -44,6 +47,12 @@ class SetSeasonMode(
     private val today: Today,
     private val recompute: RecomputeSchedules,
     private val seasonSync: SeasonSyncGuard,
+    /**
+     * #114 (C11): where the Season Start strand rule reads group roles from. Trailing and defaulted, as G3 asks of the
+     * #16 commands, so `CT/seasonsync`'s shipped constructions stay byte-identical; null reads no group (an asset's
+     * own roles only) and production never uses it (`AppGraph` passes the graph's groups).
+     */
+    private val groups: GroupRepository? = null,
 ) {
     suspend fun run(assetId: AssetId, cmd: SeasonModeCommand): Asset = uow.write {
         setInTransaction(assetId, cmd, guarded = true)
@@ -80,6 +89,8 @@ class SetSeasonMode(
         )
         val stranded = strandedBy(current, next, schedules.forAsset(assetId))
         if (stranded.isNotEmpty()) throw SeasonModeStrandsPolicy(assetId, stranded)
+        // #114 (C11): after the PRE_SERVICE strands, a covered asset may not leave its seasons.
+        seasonStartStrandedBy(current, next, assets.all(), schedules.all(), groups?.all().orEmpty())?.let { throw it }
 
         assets.upsert(next)
         manualSwitchActivation(assetId, current.seasonMode, clean, today.localDate(), now, ids)

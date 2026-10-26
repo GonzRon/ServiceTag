@@ -31,6 +31,7 @@ import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
+import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -392,7 +393,7 @@ class FakeGraph(
     val deleteCategory: DeleteCategory = DeleteCategory(categories, assets, uow)
 
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)
-    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory)
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory, groups)
 
     /** #16: the Home Assistant connection and the season bindings, over the real tables, as `AppGraph` builds them; one
      * instance each, ahead of the five season writers whose guard reads [seasonSyncBindings] (C15). */
@@ -403,7 +404,7 @@ class FakeGraph(
     val setSeasonMode: SetSeasonMode =
         SetSeasonMode(
             assets, schedules, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-            SeasonSyncGuard(seasonSyncBindings),
+            SeasonSyncGuard(seasonSyncBindings), groups,
         )
     val setMaintenanceBreak: SetMaintenanceBreak =
         SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
@@ -483,7 +484,7 @@ class FakeGraph(
     val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-        applyTemplate, promoteCategory, SeasonSyncGuard(seasonSyncBindings),
+        applyTemplate, promoteCategory, SeasonSyncGuard(seasonSyncBindings), groups,
     )
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
@@ -655,9 +656,11 @@ class FakeGraph(
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
     val archiveSchedule: ArchiveSchedule =
         ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock)
+    val setScheduleRole: SetScheduleRole =
+        SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, todayPort)
     val closeRound: CloseRound =
         CloseRound(schedules, closures, uow, ids, clock, todayPort, recomputeSchedules)
-    val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, transferRecords)
 
     /** #86 (C18): the tag retarget `ReplaceAsset` calls in-transaction, from exactly the members `AppGraph` builds it from. */
     val bindTag: BindTag = BindTag(tags, assets, uow, clock)

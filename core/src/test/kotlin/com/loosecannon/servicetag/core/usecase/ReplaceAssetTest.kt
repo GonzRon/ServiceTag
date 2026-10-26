@@ -963,10 +963,10 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
         SaveAssetSettings(
             assets, schedules, subjects, activations, raw.uow, ids, clock, todayPort, recompute,
             ApplyTemplate(definitions, profiles, assets, raw.uow, ids, clock), PromoteCategory(raw.categories),
-            SeasonSyncGuard(raw.seasonSyncBindings),
+            SeasonSyncGuard(raw.seasonSyncBindings), groups,
         ),
         SaveSchedule(schedules, assets, groups, definitions, profiles, raw.uow, ids, clock, recompute, subjects),
-        SaveGroup(groups, assets, raw.uow, ids, clock),
+        SaveGroup(groups, assets, raw.uow, ids, clock, schedules, raw.transfers),
         BindTag(tags, assets, raw.uow, clock),
     )
 

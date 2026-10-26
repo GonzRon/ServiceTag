@@ -62,7 +62,7 @@ class AssetSettingsFormTest {
         saveSettings = SaveAssetSettings(
             written, graph.schedules, graph.healthSubjects, graph.seasonActivations, graph.uow, graph.ids,
             graph.clock, graph.todayPort, graph.recomputeSchedules, graph.applyTemplate, graph.promoteCategory,
-            SeasonSyncGuard(graph.seasonSyncBindings),
+            SeasonSyncGuard(graph.seasonSyncBindings), graph.groups,
         )
     }
 

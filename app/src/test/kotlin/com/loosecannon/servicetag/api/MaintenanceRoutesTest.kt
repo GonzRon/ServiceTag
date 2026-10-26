@@ -1631,7 +1631,7 @@ class MaintenanceRoutesTest {
             val disjoint = IdGenerator { "00000000-0000-4000-8000-9000%08d".format(++n) }
             val createAsset =
                 CreateAsset(donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory)
-            val saveGroup = SaveGroup(donor.groups, donor.assets, donor.uow, disjoint, donor.clock)
+            val saveGroup = SaveGroup(donor.groups, donor.assets, donor.uow, disjoint, donor.clock, donor.schedules, donor.transferRecords)
             val saveSchedule = SaveSchedule(
                 donor.schedules, donor.assets, donor.groups, donor.definitions, donor.profiles,
                 donor.uow, disjoint, donor.clock, donor.recomputeSchedules, donor.healthSubjects,

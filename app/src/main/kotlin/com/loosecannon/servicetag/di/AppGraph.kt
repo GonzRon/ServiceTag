@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
+import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
 import com.loosecannon.servicetag.core.fetch.FetchDocument
 import com.loosecannon.servicetag.core.fetch.HopPolicy
@@ -860,7 +861,7 @@ class AppGraph(private val context: Context) {
     // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
     // 1.4: a changed season pair goes through the season-mode rules, which read the asset's schedules
     // (the strands rule) and rebuild them (spec §3.2).
-    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory)
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory, groups)
 
     // 1.4 — the season model's commands (master plan §7.2). One use case per write, so the editors,
     // the API and the offers refuse the same things; each season or break write rebuilds the asset's
@@ -868,7 +869,7 @@ class AppGraph(private val context: Context) {
     val setSeasonMode: SetSeasonMode =
         SetSeasonMode(
             assets, schedules, seasonActivations, uow, ids, clock, today, recomputeSchedules,
-            SeasonSyncGuard(seasonSyncBindings),
+            SeasonSyncGuard(seasonSyncBindings), groups,
         )
     val setMaintenanceBreak: SetMaintenanceBreak =
         SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
@@ -965,7 +966,7 @@ class AppGraph(private val context: Context) {
     ) { reason -> Log.w("PickedContact", reason) }
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
-        promoteCategory, SeasonSyncGuard(seasonSyncBindings),
+        promoteCategory, SeasonSyncGuard(seasonSyncBindings), groups,
     )
 
     val archiveAsset: ArchiveAsset =
@@ -1016,9 +1017,13 @@ class AppGraph(private val context: Context) {
     val archiveSchedule: ArchiveSchedule =
         ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock)
 
+    // #114 (C10, C10a) — the passive Season Start role: its own command, never a schedule-form field (K11).
+    val setScheduleRole: SetScheduleRole =
+        SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, today)
+
     // 1.2 — the group operations. `saveGroup` is the only writer of a membership window, and the
     // only place `removed_at` is ever stamped; nothing anywhere clears one.
-    val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, transferRecords)
 
     /**
      * #86 (C18): Replace asset — one write over the guarded ports (the successions' included), calling the five

@@ -312,12 +312,12 @@ class HeldWriteGuardTest {
     @Test
     fun theAssetUseCasesAreRefused() = runTest {
         seed()
-        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote)
+        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote, groups)
         val archive = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
         val retire = RetireAsset(assets, uow, clock) { recompute.forAsset(it) }
         val settings = SaveAssetSettings(
             assets, schedules, subjects, activations, uow, ids, clock, today, recompute, applyTemplate, promote,
-            SeasonSyncGuard(install.seasonSyncBindings),
+            SeasonSyncGuard(install.seasonSyncBindings), groups,
         )
         val create = CreateAsset(assets, uow, ids, clock, applyTemplate, promote)
         refused(
@@ -338,7 +338,7 @@ class HeldWriteGuardTest {
             },
             "SetWarrantyReminder" to { SetWarrantyReminder(assets, uow, clock).run(heater, com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand(14)) },
             "SetSeasonMode" to {
-                SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(install.seasonSyncBindings))
+                SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(install.seasonSyncBindings), groups)
                     .run(heater, SeasonModeCommand(SeasonMode.CALENDAR, "11-01", "03-31"))
             },
             "SetMaintenanceBreak" to {
@@ -468,7 +468,7 @@ class HeldWriteGuardTest {
             },
             "CloseRound" to { CloseRound(schedules, closures, uow, ids, clock, today, recompute).run(ScheduleId("sg")) },
             "SaveGroup" to {
-                SaveGroup(groups, assets, uow, ids, clock).run(
+                SaveGroup(groups, assets, uow, ids, clock, schedules, install.transfers).run(
                     GroupId("G1"),
                     GroupCommand(
                         "Example Flush Round 2",
@@ -577,7 +577,7 @@ class HeldWriteGuardTest {
         refused(
             heater,
             "SaveGroup (omitting h1)" to {
-                SaveGroup(groups, assets, uow, ids, clock).run(GroupId("G3"), GroupCommand("Example Mixed Round", members = listOf(GroupMemberInput(compressor, id = "G3-m1"))))
+                SaveGroup(groups, assets, uow, ids, clock, schedules, install.transfers).run(GroupId("G3"), GroupCommand("Example Mixed Round", members = listOf(GroupMemberInput(compressor, id = "G3-m1"))))
             },
         )
         assertTrue(install.groups.get(GroupId("G3"))!!.members.all { it.removedAt == null }, "nothing was stamped")
@@ -615,7 +615,7 @@ class HeldWriteGuardTest {
     @Test
     fun aCategoryOnlyEditOfAHeldAssetIsRefused() = runTest {
         seed()
-        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote)
+        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote, groups)
         refused(
             heater,
             "UpdateAsset (the category alone)" to {

@@ -2,10 +2,14 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
@@ -98,6 +102,38 @@ class SeasonModeStrandsPolicy(val assetId: AssetId, val schedules: List<Stranded
 /** 409: the break change would remove or re-kind the boundary [schedules] count back from (spec §4.4). */
 class BreakStrandsPolicy(val assetId: AssetId, val schedules: List<StrandedSchedule>) :
     IllegalStateException("maintenance break of ${assetId.value} would strand ${schedules.map { it.id.value }}")
+
+/** #114 (C11): what a refused change would have broken under a live Season Start role (P114-24…27, P114-43). */
+enum class SeasonStartStrandCause {
+    /** A covered asset's season mode would become YEAR_ROUND. */
+    NEEDS_SEASONS,
+
+    /** A covered asset would be left a child with no child row: the moved asset, or its old parent. */
+    WOULD_BE_LEAF_CHILD,
+
+    /** A role schedule's target would change (O-6): clear the role first. */
+    ROLE_SCHEDULE_RETARGET,
+
+    /** A role schedule's FORM → QUICK edit without the owner's election (O-2, F-22). */
+    QUICK_NEEDS_ELECTION,
+
+    /** A member added to a role group fails C10's asset rule. */
+    MEMBER_NOT_ELIGIBLE,
+
+    /** A member added to a role group is already covered by another role. */
+    MEMBER_ALREADY_COVERED,
+}
+
+/**
+ * #114 (C11) — 409: the change would leave a Season Start role where it may not stand ([strandCause]; the plan's
+ * `cause`, which `Throwable` already names). [assetId] is the asset it would strand — null when it is a group
+ * schedule's own edit — and [schedules] the role schedules involved, by title then id. Nothing was written.
+ */
+class SeasonStartStrands(
+    val assetId: AssetId?,
+    val strandCause: SeasonStartStrandCause,
+    val schedules: List<StrandedSchedule>,
+) : IllegalStateException("the change would strand a Season Start role: $strandCause")
 
 /** 409: an activation was aimed at an asset whose season is not MANUAL. */
 class SeasonNotManual(val assetId: AssetId) :
@@ -269,6 +305,68 @@ internal fun strandedBy(before: Asset, after: Asset, targeting: List<Maintenance
         .filter { it.servicePolicy == ServicePolicy.PRE_SERVICE }
         .sortedWith(compareBy({ it.title }, { it.id.value }))
         .map { StrandedSchedule(it.id, it.title) }
+}
+
+/**
+ * #114 (C11) — **the Season Start strand rule**, for the season-mode and parent writers (`SetSeasonMode`,
+ * `UpdateAsset`, `SaveAssetSettings`), called **after** [strandedBy] so a PRE_SERVICE refusal keeps priority. Null
+ * when the change from [before] to [after] leaves every live role standing; otherwise the first strand found:
+ *
+ * - [SeasonStartStrandCause.NEEDS_SEASONS]: a change **into** YEAR_ROUND of an asset a live role covers;
+ * - [SeasonStartStrandCause.WOULD_BE_LEAF_CHILD]: a changed parent that leaves a covered asset with a parent and no
+ *   child row (O-5: any child row counts) — the moved asset itself, then its old parent losing its last child.
+ *
+ * [assets] is the stored tree ([after] replaces its own row in it); [schedules] and [groups] are every row, read
+ * through C9's coverage ([seasonStartRolesCovering]). Pure: it reads no store and throws nothing.
+ */
+internal fun seasonStartStrandedBy(
+    before: Asset,
+    after: Asset,
+    assets: Collection<Asset>,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+): SeasonStartStrands? {
+    fun strands(asset: Asset, cause: SeasonStartStrandCause): SeasonStartStrands? =
+        seasonStartRolesCovering(asset.id, schedules, groups)
+            .takeIf { it.isNotEmpty() }
+            ?.let { roles -> SeasonStartStrands(asset.id, cause, roles.map { StrandedSchedule(it.id, it.title) }) }
+
+    if (before.seasonMode != SeasonMode.YEAR_ROUND && after.seasonMode == SeasonMode.YEAR_ROUND) {
+        strands(after, SeasonStartStrandCause.NEEDS_SEASONS)?.let { return it }
+    }
+    if (before.parentAssetId == after.parentAssetId) return null
+    val tree = assets.filter { it.id != after.id } + after
+    val oldParent = before.parentAssetId?.let { id -> tree.firstOrNull { it.id == id } }
+    return listOfNotNull(after, oldParent)
+        .filter { it.parentAssetId != null && AssetTree.children(tree, it.id).isEmpty() }
+        .firstNotNullOfOrNull { strands(it, SeasonStartStrandCause.WOULD_BE_LEAF_CHILD) }
+}
+
+/**
+ * #114 — C9's coverage, for the commands: the live `SEASON_START` schedules covering [assetId] — not ARCHIVED (PAUSED
+ * is live), aimed at it or at a non-archived group it is an open member of — by title then id, [excluding] left out.
+ * The same rule `seasonReadiness` reads, so a command never admits a second role that readiness would read as
+ * `TWO_ROLES`.
+ */
+internal fun seasonStartRolesCovering(
+    assetId: AssetId,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+    excluding: ScheduleId? = null,
+): List<MaintenanceSchedule> {
+    val liveGroups = groups
+        .filter { group -> group.archivedAt == null && group.members.any { it.assetId == assetId && it.removedAt == null } }
+        .map { it.id }
+        .toSet()
+    return schedules
+        .filter { it.role == ScheduleRole.SEASON_START && it.status != ScheduleStatus.ARCHIVED && it.id != excluding }
+        .filter { schedule ->
+            when (val target = schedule.target) {
+                is ScheduleTarget.AssetTarget -> target.assetId == assetId
+                is ScheduleTarget.GroupTarget -> target.groupId in liveGroups
+            }
+        }
+        .sortedWith(compareBy({ it.title }, { it.id.value }))
 }
 
 /** The order every activation list is read in: `(occurredOn, createdAt, id)` (spec §3.3). */

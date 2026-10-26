@@ -272,7 +272,7 @@ class CrossConceptWriteTest {
     private val recordSeasonActivation =
         RecordSeasonActivation(assets, events, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     private val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, today, SeasonSyncGuard(InMemorySeasonSyncRepository()))
-    private val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
+    private val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()), groups)
     private val setMaintenanceBreak = SetMaintenanceBreak(assets, schedules, uow, clock, recompute)
     private val setHealthPolicy = SetHealthPolicy(assets, subjects, uow, clock)
     private val setWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
@@ -285,10 +285,11 @@ class CrossConceptWriteTest {
     private val saveAssetSettings = SaveAssetSettings(
         assets, schedules, subjects, activations, uow, ids, clock, today, recompute,
         ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory, SeasonSyncGuard(InMemorySeasonSyncRepository()),
+        groups,
     )
     private val createAsset =
         CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory)
-    private val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
+    private val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory, groups)
     private val renameCategory = RenameCategory(categories, assets, uow, clock)
     private val deleteCategory = DeleteCategory(categories, assets, uow)
     private val logEvent = LogEvent(events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)

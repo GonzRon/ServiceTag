@@ -304,5 +304,7 @@ internal suspend fun buildEvent(
         occurrenceOn = existing?.occurrenceOn ?: cmd.occurrenceOn,
         // An edit that supplies the owed details clears the flag, which is the badge going away.
         detailsPending = cmd.detailsPending,
+        // #114 (B, C12): only a Transfer Pack import sets the marker, and no edit clears it.
+        imported = existing?.imported ?: false,
     )
 }

@@ -2728,7 +2728,7 @@ class AssetViewModelsTest {
     private fun saveSettingsOver(assets: AssetRepository) = SaveAssetSettings(
         assets, graph.schedules, graph.healthSubjects, graph.seasonActivations, graph.uow, graph.ids,
         graph.clock, graph.todayPort, graph.recomputeSchedules, graph.applyTemplate, graph.promoteCategory,
-        SeasonSyncGuard(graph.seasonSyncBindings),
+        SeasonSyncGuard(graph.seasonSyncBindings), graph.groups,
     )
 
     /** `SaveAssetSettings.run` reads every asset first, and nothing else here goes through this port. */

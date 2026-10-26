@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
@@ -43,6 +44,9 @@ data class AssetSettingsCommand(
  *   the save against the kind after the mode **and** the break both apply ([strandedBy]). A refusal is
  *   [SeasonModeStrandsPolicy] when the change leaves or enters a calendar season, which is what
  *   re-kinds the boundary then, and [BreakStrandsPolicy] otherwise.
+ * - **#114 (C11):** after the strands rule, 409 [SeasonStartStrands] for an edit that would leave a live Season
+ *   Start role where it may not stand ([seasonStartStrandedBy]): YEAR_ROUND on a covered asset, or a new parent that
+ *   leaves a covered asset — this one or its old parent — a child with no child. A create strands nothing.
  * - **A switch into MANUAL** writes exactly one activation dated today, as [SetSeasonMode] does
  *   (inv. 92); a create counts as coming from YEAR_ROUND, so creating a MANUAL asset writes its first row.
  * - **#16 (C15):** a save that changes the season mode or window is refused with [SeasonSyncOwnsSeason], first
@@ -74,6 +78,12 @@ class SaveAssetSettings(
     private val applyTemplate: ApplyTemplate,
     private val promoteCategory: PromoteCategory,
     private val seasonSync: SeasonSyncGuard,
+    /**
+     * #114 (C11): where the Season Start strand rule reads group roles from. Trailing and defaulted, as G3 asks of the
+     * #16 commands, so `CT/seasonsync`'s shipped constructions stay byte-identical; null reads no group (an asset's
+     * own roles only) and production never uses it (`AppGraph` passes the graph's groups).
+     */
+    private val groups: GroupRepository? = null,
 ) {
     suspend fun run(id: AssetId?, cmd: AssetSettingsCommand, templateKey: String? = null): Asset = uow.write {
         saveInTransaction(id, cmd, templateKey, today.localDate())
@@ -152,6 +162,8 @@ class SaveAssetSettings(
                     BreakStrandsPolicy(current.id, stranded)
                 }
             }
+            // #114 (C11): after the strands rule, a covered asset keeps its seasons and its place as a parent.
+            seasonStartStrandedBy(current, next, all, schedules.all(), groups?.all().orEmpty())?.let { throw it }
         }
 
         assets.upsert(next)

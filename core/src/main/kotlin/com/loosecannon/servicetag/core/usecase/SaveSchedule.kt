@@ -1,8 +1,10 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -63,6 +65,10 @@ import com.loosecannon.servicetag.core.schedule.BoundaryKind
  * the flag with nothing to unlink changes nothing. The guard's 422 comes after every bad-rule problem
  * and the target's 404, and before the 409s.
  *
+ * **The Season Start role** (#114, C11, C12). The form carries no role, so a save keeps the stored role and its
+ * boundary and a create has none. An edit of a role schedule that changes its target, or its completion mode from
+ * FORM to QUICK without [run]'s `seasonStartQuickElected`, is 409 [SeasonStartStrands], after the PRE_SERVICE 409.
+ *
  * One `uow.write`: the guard's read of the subjects, the row, any unlinked subject and the recompute
  * commit together or not at all.
  */
@@ -78,9 +84,14 @@ class SaveSchedule(
     private val recompute: RecomputeSchedules,
     private val healthSubjects: HealthSubjectRepository,
 ) {
-    suspend fun run(id: ScheduleId?, cmd: ScheduleCommand, unlinkHealthSubject: Boolean = false): MaintenanceSchedule {
+    suspend fun run(
+        id: ScheduleId?,
+        cmd: ScheduleCommand,
+        unlinkHealthSubject: Boolean = false,
+        seasonStartQuickElected: Boolean = false,
+    ): MaintenanceSchedule {
         val prepared = prepare(id, cmd)
-        return uow.write { commit(prepared, cmd, unlinkHealthSubject) }
+        return uow.write { commit(prepared, cmd, unlinkHealthSubject, seasonStartQuickElected) }
     }
 
     /**
@@ -88,7 +99,7 @@ class SaveSchedule(
      * transaction, so `ReplaceAsset` copies a schedule in its own one write.
      */
     internal suspend fun createInTransaction(cmd: ScheduleCommand): MaintenanceSchedule =
-        commit(prepare(null, cmd), cmd, unlinkHealthSubject = false)
+        commit(prepare(null, cmd), cmd, unlinkHealthSubject = false, seasonStartQuickElected = false)
 
     /** What [run] reads and decides before its write: the stored row, the target asset and the row to save. */
     private class Prepared(
@@ -177,6 +188,10 @@ class SaveSchedule(
             // it changed the rule, just below.
             ruleChangedAt = existing?.ruleChangedAt ?: now,
             providers = cmd.providers.sortedBy { it.provider },
+            // #114 (C12): the command never carries a role (K11), so a save keeps the stored one and a create —
+            // `ReplaceAsset`'s copy among them — has none.
+            role = existing?.role ?: ScheduleRole.NONE,
+            roleSinceOn = existing?.roleSinceOn,
         )
         val saved = if (existing != null && ruleChanged(existing, candidate)) {
             candidate.copy(postponedDueOn = null, ruleChangedAt = now)
@@ -191,6 +206,7 @@ class SaveSchedule(
         prepared: Prepared,
         cmd: ScheduleCommand,
         unlinkHealthSubject: Boolean,
+        seasonStartQuickElected: Boolean,
     ): MaintenanceSchedule {
         val existing = prepared.existing
         val targetAsset = prepared.targetAsset
@@ -208,10 +224,33 @@ class SaveSchedule(
         ) {
             throw PreServiceNeedsDates(targetAsset.id)
         }
+        if (existing != null) seasonStartStrandOf(existing, saved, seasonStartQuickElected)?.let { throw it }
         unlinkDriven(driven, assets, healthSubjects, prepared.now)
         schedules.upsert(saved)
         recompute.forSchedule(saved.id)
         return saved
+    }
+
+    /**
+     * #114 (C11) — what an edit of a live or archived role schedule may not do: change its target (O-6,
+     * `ROLE_SCHEDULE_RETARGET`; clear the role first), or go from FORM to QUICK without the owner's election (O-2,
+     * F-22, `QUICK_NEEDS_ELECTION`). Null for any other edit, and for every edit of a schedule with no role.
+     */
+    private fun seasonStartStrandOf(
+        before: MaintenanceSchedule,
+        after: MaintenanceSchedule,
+        quickElected: Boolean,
+    ): SeasonStartStrands? {
+        if (before.role != ScheduleRole.SEASON_START) return null
+        val cause = if (before.target != after.target) {
+            SeasonStartStrandCause.ROLE_SCHEDULE_RETARGET
+        } else if (before.completionMode == CompletionMode.FORM && after.completionMode == CompletionMode.QUICK && !quickElected) {
+            SeasonStartStrandCause.QUICK_NEEDS_ELECTION
+        } else {
+            return null
+        }
+        val assetId = (before.target as? ScheduleTarget.AssetTarget)?.assetId
+        return SeasonStartStrands(assetId, cause, listOf(StrandedSchedule(before.id, before.title)))
     }
 
     /**
