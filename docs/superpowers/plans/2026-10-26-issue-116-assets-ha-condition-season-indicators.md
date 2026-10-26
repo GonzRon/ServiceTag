@@ -223,7 +223,7 @@ health read model; `share/**`; `InsetsContractTest.kt`, `FormInsets.kt`; `app/sc
 
 ## 5. Strings
 
-**Pending — for the owner's one small string ruling (the controller's ruling 4, 2026-10-26); U2 runs only once they
+**RATIFIED 2026-10-26 by the owner, verbatim (was pending — the owner's one small string ruling, the controller's ruling 4); U2 runs only once they
 are ratified.** Homes: `strings_asset_detail.xml` beside P73-1…11, ids in the XML comments.
 
 | id | proposed wording | where |

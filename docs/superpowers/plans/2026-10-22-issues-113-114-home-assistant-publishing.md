@@ -2589,7 +2589,7 @@ reasons, the strand causes, the HA-screen lines and the boundary, cutoff and inh
 is A0's refusal on the "When was this done?" dialog and the entry form (C39), exactly as the entry form already draws
 it for a held condition's date (`EventEntryViewModel.kt:690`); no new string for the refusal.
 
-**Pending (rev 6) — for one small owner string ruling (the controller's ruling 4, 2026-10-26); A5a draws it only once
+**RATIFIED 2026-10-26 by the owner, verbatim (was pending, rev 6) — for one small owner string ruling (the controller's ruling 4, 2026-10-26); A5a draws it only once
 ratified:**
 
 | id | proposed wording | where · state |
@@ -2598,7 +2598,7 @@ ratified:**
 
 With it the count becomes **90 strings and one plural**.
 
-**Pending (rev 6.1, #124) — in the same owner batch; N1, N2b and N3 draw them only once ratified.** Homes:
+**RATIFIED 2026-10-26 by the owner, verbatim (was pending, rev 6.1, #124) — in the same owner batch; N1, N2b and N3 draw them only once ratified.** Homes:
 `strings_maintenance.xml` beside S65–S78 (P124-1…4, P124-9) and `strings_season_start.xml` (P124-5…8).
 
 | id | proposed wording | where · state |
@@ -2680,7 +2680,7 @@ C35b; A4w, B5w1, B5w2 — twenty-two dispatches in twelve waves, §4; rows 112�
 | R-N3 | RATIFIED 2026-10-26 | 403 on a write is its own kind and sentence (`WRITE_FORBIDDEN`, P113-18); 404 on a service call is `HTTP_ERROR`; a missing entity is found by the readback. *Alt.:* the audit's 401/403 → `AUTH_REFUSED`, 404 → `ENTITY_NOT_FOUND`. | C23, row 53 |
 | R-N4 | RATIFIED 2026-10-26 | A periodic `"ha-publish-reconcile"` at the connection's cadence repairs HA resets while the app is closed (#113's "periodic reconciliation"); no expedited work. *Alt.:* reconcile only at start, resume and Publish now. | C32 |
 | R-N5 | RATIFIED 2026-10-26 | An enabled status binding on an asset that stops being maintained here resumes on its own when it returns (#16's R16-18 shape). *Alt.:* disable it. | C25, row 74 |
-| R-N6 | **RATIFIED 2026-10-26**: 89 strings and one plural; P114-54 (rev 6) pending (§5) | The strings of §5 as proposed (89 and one plural; P113-44 is rev 5's and not covered by the recommendation); approved **recommended to the owner 2026-10-22, pending the owner's word** except P114-4/4g ("Services dated on or after %3$s count.") and P114-9 ("Not ready: no qualifying service dated on or after %s."), which §5 now carries; P114-44…48 (new in rev 3) and P114-44/45/46 as reworded and P114-50…53 (rev 4) are not covered by that recommendation. *Alt.:* the owner rewrites them one by one. | §5 |
+| R-N6 | **RATIFIED 2026-10-26**: 89 strings and one plural; then P114-54, P124-1…9, P116-1…4 and P125-1…7 RATIFIED 2026-10-26, verbatim (1.9.0 = 110 strings + 1 plural) | The strings of §5 as proposed (89 and one plural; P113-44 is rev 5's and not covered by the recommendation); approved **recommended to the owner 2026-10-22, pending the owner's word** except P114-4/4g ("Services dated on or after %3$s count.") and P114-9 ("Not ready: no qualifying service dated on or after %s."), which §5 now carries; P114-44…48 (new in rev 3) and P114-44/45/46 as reworded and P114-50…53 (rev 4) are not covered by that recommendation. *Alt.:* the owner rewrites them one by one. | §5 |
 | **R-N7 (F-18)** | RATIFIED 2026-10-26, recorded | **"Publication not verified" is not a card reason** (#114 §3 lists it): the season card shows only readiness reasons; the date block carries verification and the "may still allow starts" lines. *Alt.:* the card line gains a "not yet confirmed in Home Assistant" suffix while the date binding's state is not PUBLISHED or MATCHES. | C29, C33, C36 |
 | **R-N8 (Q5)** | RATIFIED 2026-10-26 | **D1 rewrites "reads, and only reads" and the outbound inventory texts in this same branch:** the docs ship with the code that makes them true; #113's "only when it ships" forbids changing them before the feature exists in the tree, which on this branch it does. *Alt.:* hold the wording for the release that carries the feature. | C38, D1 |
 

@@ -312,7 +312,7 @@ graph's last edit, `A/api`, `M/`). H4 sits beside D1, which moves to wave 16 (UI
 
 ## 5. Strings
 
-**Pending, for the owner's one batch (the controller, 2026-10-26).** Home: `strings_maintenance.xml`.
+**RATIFIED 2026-10-26 by the owner, verbatim (was pending, for the owner's one batch).** Home: `strings_maintenance.xml`.
 
 | id | proposed wording | where |
 |---|---|---|
