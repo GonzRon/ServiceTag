@@ -17,14 +17,14 @@ import java.time.Duration
  * #113/#114 (C32) — what the one-time **`"ha-publish"`** work is asked to be, decided here and nowhere else, so a JVM
  * test reads the decision the real seam carries out: any connected network, an exponential backoff from 30 seconds
  * (capped by the platform), [ExistingWorkPolicy.APPEND_OR_REPLACE] (F-26: a run whose snapshot predates a newer
- * desired value is followed by another, never dropped), and **never expedited** (G16: no foreground work).
+ * desired value is followed by another, never dropped), and **never expedited** (G16: no foreground work; R6's
+ * `setExpedited` grep and B7's row 92 hold it, since [PublishWork]'s seam sets no such flag).
  */
 data class PublishOnceRequest(
     val networkType: NetworkType,
     val backoffPolicy: BackoffPolicy,
     val backoffDelay: Duration,
     val existingPolicy: ExistingWorkPolicy,
-    val expedited: Boolean,
 ) {
     companion object {
         val C32: PublishOnceRequest = PublishOnceRequest(
@@ -32,7 +32,6 @@ data class PublishOnceRequest(
             backoffPolicy = BackoffPolicy.EXPONENTIAL,
             backoffDelay = Duration.ofSeconds(30),
             existingPolicy = ExistingWorkPolicy.APPEND_OR_REPLACE,
-            expedited = false,
         )
     }
 }

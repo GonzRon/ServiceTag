@@ -7,11 +7,11 @@ import com.loosecannon.servicetag.core.seasonsync.EndpointCheck
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.HaEndpointPolicy
-import com.loosecannon.servicetag.core.seasonsync.HaScheme
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.eligibleNow
 import com.loosecannon.servicetag.seasonsync.CurrentNetworkReader
 import com.loosecannon.servicetag.seasonsync.SeasonSyncSchedule
+import com.loosecannon.servicetag.seasonsync.homeNetworkRequired
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -54,7 +54,11 @@ class PublishDispatch(
     private val log: (String) -> Unit = { Log.w(TAG, it) },
 ) : DeliveryRequester {
 
-    /** Serializes every read-and-act on the two works, so a stale rule never acts after a newer one. */
+    /**
+     * Serializes [reschedule]'s read-and-act on the two works, so two of them never interleave. A hand-off
+     * ([drainNow], [readBack]) acts on a rule read outside it, so a drain begun under PERIODIC may still enqueue the
+     * one-time work after a newer request cancelled both; that run re-reads the rule ([oncePass]) and sends nothing.
+     */
     private val scheduleLock = Mutex()
 
     override fun requestDelivery() {
@@ -75,7 +79,9 @@ class PublishDispatch(
     /**
      * Reconcile mode for the start and resume passes (C31, F-3): every enabled helper read back in process while the
      * network rule allows a request now; otherwise nothing is read and, while the rule answers PERIODIC, the one-time
-     * work takes the delivery. TRANSIENT work a read-back leaves goes the same way. Null when nothing was read.
+     * work takes the delivery. TRANSIENT work a read-back leaves goes the same way. Null when nothing was read. Work
+     * handed off away from home runs on the same network (`CONNECTED` is met), so the gate refuses it and the pass
+     * records `NOT_ON_LOCAL_NETWORK`, a WAIT error the next start, resume, commit or periodic reconcile retries (C32).
      */
     suspend fun readBack(): PublishPass? {
         val schedule = runner.schedule(backgroundAllowed())
@@ -135,22 +141,16 @@ class PublishDispatch(
 
     /**
      * The connection's network rule, now: any network in the any-network mode for an https address; the captured
-     * home Wi-Fi in the home-network mode **or for any `http` address whatever the stored setting** (the request
-     * gate's fail-closed rule, C21). An address the rule refuses allows nothing. The gate still checks every request.
+     * home Wi-Fi in the home-network mode **or for any `http` address whatever the stored setting** — the request
+     * gate's own [homeNetworkRequired] (C21). An address the rule refuses allows nothing. The gate still checks every
+     * request.
      */
     private suspend fun allowsRequestNow(connection: HaConnection): Boolean {
         val scheme = when (val check = HaEndpointPolicy.classify(connection.baseUrl)) {
             is EndpointCheck.Allowed -> check.endpoint.scheme
             is EndpointCheck.Refused -> return false
         }
-        val homeOnly = when (scheme) {
-            HaScheme.HTTP -> true
-            HaScheme.HTTPS -> when (connection.networkEligibility) {
-                NetworkEligibility.HOME_NETWORK_ONLY -> true
-                NetworkEligibility.ANY_NETWORK -> false
-            }
-        }
-        if (!homeOnly) return true
+        if (!homeNetworkRequired(scheme, connection.networkEligibility)) return true
         val asHome = connection.copy(networkEligibility = NetworkEligibility.HOME_NETWORK_ONLY)
         return eligibleNow(asHome, currentNetwork.read().network)
     }

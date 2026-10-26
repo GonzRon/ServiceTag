@@ -566,7 +566,8 @@ class FakeGraph(
     val publishControls: PublishControls = PublishControls(
         enablePublishing, changePublishTarget, disablePublishing, revalidatePublishing, dismissDecommission,
         saveHaConnection, forgetHaConnection, publishBindings, publishDeliveries, haConnections, secretStore, assets,
-        transferRecords, installationIdentity::id, publishRunner, deliveryRequester, uow, ids, clock, dispatchScope,
+        transferRecords, installationIdentity::id, publishRunner, desiredStateReconciler, todayPort, deliveryRequester,
+        uow, ids, clock, dispatchScope,
         log = { publishLogged += it },
     )
 
@@ -1038,8 +1039,8 @@ class ScriptedHaPublish(private val openTransactions: () -> Int = { 0 }) : HaPub
 }
 
 /**
- * #113/#114 (C32) — the two publish works as a record: each call in [calls], what is queued now in [onceQueued] (each
- * one-time enqueue appends, as APPEND_OR_REPLACE does) and [reconcile] (the periodic request, null when cancelled).
+ * #113/#114 (C32) — the two publish works as a record: each call in [calls], in order, and [reconcile] (the periodic
+ * request ensured now, null when cancelled).
  */
 class RecordingPublishWork : PublishWork {
     sealed interface Call {
@@ -1052,13 +1053,10 @@ class RecordingPublishWork : PublishWork {
 
     val calls: MutableList<Call> = java.util.Collections.synchronizedList(mutableListOf())
 
-    @Volatile var onceQueued: Int = 0
-
     @Volatile var reconcile: PublishReconcileRequest? = null
 
     override fun enqueueOnce() {
         calls += Call.EnqueueOnce
-        onceQueued += 1
     }
 
     override fun ensureReconcile(request: PublishReconcileRequest) {
@@ -1068,7 +1066,6 @@ class RecordingPublishWork : PublishWork {
 
     override fun cancel() {
         calls += Call.Cancel
-        onceQueued = 0
         reconcile = null
     }
 }

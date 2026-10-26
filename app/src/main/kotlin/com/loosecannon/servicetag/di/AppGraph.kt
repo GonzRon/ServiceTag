@@ -1015,7 +1015,8 @@ class AppGraph(private val context: Context) {
     val publishControls: PublishControls = PublishControls(
         enablePublishing, changePublishTarget, disablePublishing, revalidatePublishing, dismissDecommission,
         saveHaConnection, forgetHaConnection, publishBindings, publishDeliveries, haConnections, secretStore, assets,
-        transferRecords, installationIdentity::id, publishRunner, deliveryRequester, uow, ids, clock, appScope,
+        transferRecords, installationIdentity::id, publishRunner, publishProjector, today, deliveryRequester, uow, ids,
+        clock, appScope,
     )
     val publishInputs: PublishInputs = PublishInputs(
         conditions, assets, schedules, groups, transferRecords, events, seasonActivations,

@@ -51,14 +51,7 @@ internal class HaRequestGate(
             is EndpointCheck.Refused -> return refused(SyncErrorKind.ENDPOINT_REFUSED)
         }
         if (!networkPermissionGranted()) return refused(SyncErrorKind.DENIED)
-        val homeOnly = when (endpoint.scheme) {
-            HaScheme.HTTP -> true
-            HaScheme.HTTPS -> when (connection.networkEligibility) {
-                NetworkEligibility.HOME_NETWORK_ONLY -> true
-                NetworkEligibility.ANY_NETWORK -> false
-            }
-        }
-        if (homeOnly) {
+        if (homeNetworkRequired(endpoint.scheme, connection.networkEligibility)) {
             val reading = currentNetwork.read()
             val asHome = connection.copy(networkEligibility = NetworkEligibility.HOME_NETWORK_ONLY)
             if (!eligibleNow(asHome, reading.network)) {
@@ -97,6 +90,19 @@ internal class HaRequestGate(
             fun lower(c: Char) = if (c in 'A'..'Z') c + ('a' - 'A') else c
             return a.length == b.length && a.indices.all { lower(a[it]) == lower(b[it]) }
         }
+    }
+}
+
+/**
+ * C21's network rule (C-5): a request needs the captured home Wi-Fi in the home-network mode, **or for any `http`
+ * address whatever the stored setting** (fail closed). The gate's own rule; the publish dispatch reads it too, so its
+ * in-process decision never drifts from what the gate will allow (B4b2 review M2).
+ */
+internal fun homeNetworkRequired(scheme: HaScheme, eligibility: NetworkEligibility): Boolean = when (scheme) {
+    HaScheme.HTTP -> true
+    HaScheme.HTTPS -> when (eligibility) {
+        NetworkEligibility.HOME_NETWORK_ONLY -> true
+        NetworkEligibility.ANY_NETWORK -> false
     }
 }
 

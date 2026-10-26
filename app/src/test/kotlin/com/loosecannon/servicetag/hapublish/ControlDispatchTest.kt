@@ -174,7 +174,8 @@ class ControlDispatchTest {
 
         reading.await() // the pass is under way, Home Assistant held
         delay(OBSERVER_SETTLES)
-        assertEquals("the stamp triggers no projection", projections, graph.desiredStateReconciler.days.size)
+        // M1 (I18): the pass's own projection before its read-back, and none from the stamp.
+        assertEquals("the stamp triggers no projection", projections + 1, graph.desiredStateReconciler.days.size)
         held.complete(Unit)
         graph.awaitDispatched()
         observer.cancel()
@@ -182,6 +183,34 @@ class ControlDispatchTest {
 
         val none = graph.publishControls.requestPublishNow(AssetId("example-no-such-asset"))
         assertTrue("no covered binding: nothing stamped", none.bindings.isEmpty())
+    }
+
+    /**
+     * B4b2 review M1, I18 (the owner's "reports facts"): Publish now projects before it reads back, so a time-only move
+     * is never sent stale. The heater's window ends at midnight and no tick runs; Publish now on the first out-of-season
+     * day posts `1970-01-01`, where the stored desired value still read `2026-03-15`.
+     */
+    @Test
+    fun publishNowProjectsFirstSoATimeOnlyMoveIsNeverSentStale() = rig.run {
+        on("2026-10-31")
+        calendar()
+        role("2025-09-01")
+        complete("2026-03-15") // after last season's end (2025-11-01): ready through 31 October
+        connect()
+        ha.helpers[DATE] = dateHelper(DATE, INVALID_SERVICE_DATE)
+        val binding = enable(PublishKind.SEASON_SERVICE_DATE)
+        graph.publishProjector.reconcileDesired(graph.today)
+        graph.publishRunner.publishNow(heater)
+        assertEquals("2026-03-15", ha.state(DATE))
+        on("2026-11-01") // the window ended at midnight; no tick ran
+        assertEquals("2026-03-15", delivery(binding).desiredValue)
+        ha.log.clear()
+
+        graph.publishControls.requestPublishNow(heater)
+        graph.awaitDispatched()
+
+        assertEquals(listOf("GET $DATE", "POST $DATE=$INVALID_SERVICE_DATE", "GET $DATE"), ha.log)
+        assertEquals(INVALID_SERVICE_DATE, ha.state(DATE))
     }
 
     private companion object {

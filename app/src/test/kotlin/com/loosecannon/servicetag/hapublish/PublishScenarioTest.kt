@@ -171,8 +171,9 @@ class PublishScenarioTest {
 
     /**
      * C30's rule on the triggers that do not depend on a flow (the controller's addition to B4b2): away from the home
-     * Wi-Fi, the start, resume and midnight passes send nothing in process; under FOREGROUND_ONLY nothing is queued
-     * either, and under PERIODIC the one-time work takes the delivery.
+     * Wi-Fi, the start, the in-window resume and the midnight passes send nothing in process, though a drain is owed;
+     * under FOREGROUND_ONLY nothing is queued either, and under PERIODIC each hands the delivery to the one-time work.
+     * The owed drain is a new desired value, which an ordinary drain would send (B4b2 review I1).
      */
     @Test
     fun startResumeAndMidnightAwayFromHomeSendNothing() = rig.run {
@@ -181,28 +182,39 @@ class PublishScenarioTest {
         ha.helpers[STATUS] = statusHelper("UP")
         val binding = enable(PublishKind.EQUIPMENT_STATUS)
         record(OperationalCondition.OPERATIONAL)
-        graph.publishProjector.reconcileDesired(graph.today)
-        graph.publishRunner.publishNow(heater)
-        assertEquals("UP", delivery(binding).lastVerifiedValue)
-        ha.helpers[STATUS] = statusHelper("DOWN") // Home Assistant reset
-        ha.log.clear()
-        graph.currentNetwork = NetworkReading(CurrentNetwork.Wifi("ExampleCafeWifi"), null)
-
+        // At home, the start pass completes a read: the resume window opens (process time stays 0).
         graph.publishTriggers.startPass()
-        graph.publishTriggers.resumePass()
+        assertEquals("UP", delivery(binding).lastVerifiedValue)
+
+        // Away, with no observer: DOWN recorded and projected, a drain owed.
+        graph.currentNetwork = NetworkReading(CurrentNetwork.Wifi("ExampleCafeWifi"), null)
+        record(OperationalCondition.DOWN)
+        graph.publishProjector.reconcileDesired(graph.today)
+        assertEquals("DOWN", delivery(binding).desiredValue)
+        ha.log.clear()
+
+        graph.publishTriggers.resumePass() // inside the window: an ordinary drain
         graph.publishTriggers.midnightPass()
+        graph.publishTriggers.startPass()
         assertTrue("nothing requested away from home", ha.log.isEmpty())
         assertTrue(RecordingPublishWork.Call.EnqueueOnce !in graph.publishWork.calls)
 
         connect(background = BackgroundChecks.ON)
         graph.backgroundAllowed = true // PERIODIC
-        graph.publishTriggers.startPass()
-        assertTrue("still nothing in process", ha.log.isEmpty())
-        assertTrue("the one-time work takes it", RecordingPublishWork.Call.EnqueueOnce in graph.publishWork.calls)
+        for ((name, pass) in listOf<Pair<String, suspend () -> Unit>>(
+            "midnight" to { graph.publishTriggers.midnightPass() },
+            "resume" to { graph.publishTriggers.resumePass() },
+            "start" to { graph.publishTriggers.startPass() },
+        )) {
+            graph.publishWork.calls.clear()
+            pass()
+            assertTrue("$name: still nothing in process", ha.log.isEmpty())
+            assertTrue("$name: the one-time work takes it", RecordingPublishWork.Call.EnqueueOnce in graph.publishWork.calls)
+        }
 
         graph.currentNetwork = NetworkReading(CurrentNetwork.Wifi(HOME_WIFI), null)
         graph.publishTriggers.startPass()
-        assertEquals("UP", ha.state(STATUS))
+        assertEquals("DOWN", ha.state(STATUS))
     }
 
     // Row 105 — story 4: a year-round indoor pool

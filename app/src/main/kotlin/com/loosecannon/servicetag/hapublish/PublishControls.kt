@@ -21,6 +21,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
@@ -50,9 +51,9 @@ data class PublishRequest(val requestId: String, val acceptedAt: Long, val bindi
  * Change target activate on this installation ([installationId], C27) and pass the API's `expectedPlanId` through
  * (C25a); the phone passes none.
  *
- * [requestPublishNow] (the API's Publish now) stamps the covered bindings in one write and launches
- * [PublishRunner.publishNow] on [scope], **never awaited** (I35): the stamp moves no revision, desired value or error,
- * and nothing observes it (I28).
+ * [requestPublishNow] (the API's Publish now) stamps the covered bindings in one write and launches a projection
+ * ([reconciler], I18: so a time-only move is never sent stale) and then [PublishRunner.publishNow] on [scope], **never
+ * awaited** (I35): the stamp moves no revision, desired value or error, and nothing observes it (I28).
  */
 class PublishControls(
     private val enablePublishing: EnablePublishing,
@@ -70,6 +71,8 @@ class PublishControls(
     private val transfers: TransferRecordRepository,
     private val installationId: () -> String,
     private val runner: PublishRunner,
+    private val reconciler: DesiredStateReconciler,
+    private val today: Today,
     private val requester: DeliveryRequester,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
@@ -141,9 +144,10 @@ class PublishControls(
 
     /**
      * C35b — Publish now for [assetId]: in one write, the bindings a reconcile pass would read back (enabled, activated
-     * here, a connection and its token, a standing validation, the asset eligible — the date kind's pending projection
-     * included) take one new request id and time; then the runner's reconcile pass for the asset is launched and
-     * returns at once. With no covered binding nothing is stamped or launched.
+     * here, a connection and a token that reads — the runner's own test, so an undecryptable one is never stamped — a
+     * standing validation, the asset eligible, the date kind's pending projection included) take one new request id and
+     * time; then a projection (I18) and the runner's reconcile pass for the asset are launched, and this returns at
+     * once. With no covered binding nothing is stamped or launched.
      */
     suspend fun requestPublishNow(assetId: AssetId): PublishRequest {
         val requestId = ids.newId()
@@ -151,7 +155,7 @@ class PublishControls(
         val here = installationId()
         val covered = uow.write {
             val connection = connections.get()
-            val hasToken = connection != null && secrets.has(connection.id)
+            val hasToken = connection != null && secrets.get(connection.id) != null
             val asset = assets.get(assetId)
             val held = transfers.heldIds()
             bindings.forAsset(assetId).filter { binding ->
@@ -164,6 +168,7 @@ class PublishControls(
         if (covered.isNotEmpty()) {
             scope.launch {
                 try {
+                    reconciler.reconcileDesired(today.localDate())
                     runner.publishNow(assetId)
                 } catch (e: CancellationException) {
                     throw e
