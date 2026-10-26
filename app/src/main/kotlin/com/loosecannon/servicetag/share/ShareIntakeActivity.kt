@@ -18,7 +18,10 @@ import com.loosecannon.servicetag.ui.asset.AssetsViewModel
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferDoor
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportContent
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
@@ -101,7 +104,7 @@ class ShareIntakeActivity : ComponentActivity() {
                         onImport = importModel::import,
                         onCancel = importModel::cancel,
                         onClose = importModel::close,
-                        modifier = Modifier.padding(top = 24.dp),
+                        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 24.dp),
                     )
                 } else {
                     // #93 (C9): the picker is the Assets tab's own list model, switched to offer only the assets maintained

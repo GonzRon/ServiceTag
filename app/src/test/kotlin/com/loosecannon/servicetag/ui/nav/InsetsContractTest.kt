@@ -6,10 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * #121 (1.8.2 plan §7.3, K1–K5, K7): what the source can pin about the window insets. The root applies the system
+ * #121 (1.8.2 plan §7.3, K1–K7): what the source can pin about the window insets. The root applies the system
  * bars once and consumes them (K1); every `Scaffold` screen is classified, and the input screens pass the keyboard
  * insets to their `Scaffold` (K2); nothing else adds a keyboard inset of its own (K3); the bottom sheets keep
- * Material 3's handling (K4); the dialogs keep the platform's (K5); the write-tag screen's column scrolls (K7).
+ * Material 3's handling (K4); the dialogs keep the platform's (K5); the share intake, which has no root `Scaffold`,
+ * applies the safe-drawing insets at exactly three sites (K6); the write-tag screen's column scrolls (K7).
  *
  * Paths are relative to `app/src/main/kotlin/com/loosecannon/servicetag/`. Every pattern is matched on the code
  * alone, with comments and the contents of literals blanked (see [codeOnly]), so a comment or a string can neither
@@ -158,6 +159,37 @@ class InsetsContractTest {
     @Test fun noDialogDrawsUnderTheSystemWindows() {
         val sites = mainLines { Regex("""decorFitsSystemWindows\s*=\s*false""").containsMatchIn(it) }
         assertTrue("no `decorFitsSystemWindows = false` in app/src/main/kotlin: $sites", sites.isEmpty())
+    }
+
+    /**
+     * K6 (§3.4): the share intake has no root `Scaffold`, so each of its surfaces takes the safe-drawing insets itself,
+     * once. `ShareIntakeScreen.kt` has two steps, the picker and the form, each padded by its own
+     * `.windowInsetsPadding(WindowInsets.safeDrawing)` line, and those two lines are its only raw inset sites (K3).
+     */
+    @Test fun eachShareIntakeStepTakesTheSafeDrawingInsetsOnce() {
+        val file = source(SHARE_SCREEN)
+        val steps = file.code.indices.filter { SHARE_STEP_INSETS.containsMatchIn(file.code[it]) }
+        assertEquals(
+            "$SHARE_SCREEN: two `.windowInsetsPadding(WindowInsets.safeDrawing)` lines, the picker and the form (${steps.map { it + 1 }})",
+            2,
+            steps.size,
+        )
+        val sites = file.code.indices.filter { RAW_INSET_PADDING.containsMatchIn(file.code[it]) }
+        assertEquals("$SHARE_SCREEN: the two steps' lines are its only raw inset sites", steps.map { it + 1 }, sites.map { it + 1 })
+    }
+
+    /** K6 (§3.4, F-6): the Transfer Pack host's one-line modifier is `ShareIntakeActivity.kt`'s one raw inset site. */
+    @Test fun theTransferPackHostTakesTheSafeDrawingInsetsOnce() {
+        val file = source(SHARE_ACTIVITY)
+        val lines = file.code.map { it.trimEnd() }
+        val host = lines.indices.filter { PACK_HOST_INSETS.matches(lines[it]) }
+        assertEquals(
+            "$SHARE_ACTIVITY: one `modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 24.dp),` line",
+            1,
+            host.size,
+        )
+        val sites = lines.indices.filter { RAW_INSET_PADDING.containsMatchIn(lines[it]) }
+        assertEquals("$SHARE_ACTIVITY: the pack host's line is its only raw inset site", host.map { it + 1 }, sites.map { it + 1 })
     }
 
     /**
@@ -342,7 +374,15 @@ class InsetsContractTest {
             "ui/supplies/SupplyItemPicker.kt",
         )
 
-        val SHARE_INTAKE = setOf("share/ShareIntakeScreen.kt", "share/ShareIntakeActivity.kt")
+        const val SHARE_SCREEN = "share/ShareIntakeScreen.kt"
+        const val SHARE_ACTIVITY = "share/ShareIntakeActivity.kt"
+        val SHARE_INTAKE = setOf(SHARE_SCREEN, SHARE_ACTIVITY)
+
+        /** K6: a share-intake step's own line in its modifier chain. */
+        val SHARE_STEP_INSETS = Regex("""^\s*\.windowInsetsPadding\(WindowInsets\.safeDrawing\)""")
+
+        /** K6 (F-6): the Transfer Pack host's one-line modifier. */
+        val PACK_HOST_INSETS = Regex("""^\s*modifier = Modifier\.windowInsetsPadding\(WindowInsets\.safeDrawing\)\.padding\(top = 24\.dp\),$""")
 
         private const val PACKAGE = "src/main/kotlin/com/loosecannon/servicetag"
 
