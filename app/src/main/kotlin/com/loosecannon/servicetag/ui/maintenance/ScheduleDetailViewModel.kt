@@ -543,7 +543,7 @@ class ScheduleDetailViewModel(
     private suspend fun restoreRefusal(refused: SeasonStartStrands): String? {
         val name = refused.assetId?.let { assets.get(it) }?.name ?: return null
         val throughAGroup = schedules.get(scheduleId)?.target is ScheduleTarget.GroupTarget
-        return SeasonStartRestoreStrings.of(refused, name, setOf(scheduleId), throughAGroup)
+        return SeasonStartStrings.strand(refused, name, setOf(scheduleId), throughAGroup)
     }
 
     /**

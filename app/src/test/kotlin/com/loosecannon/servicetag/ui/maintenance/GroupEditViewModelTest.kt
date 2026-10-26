@@ -4,6 +4,8 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
@@ -11,10 +13,12 @@ import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.GroupProblem
 import com.loosecannon.servicetag.core.usecase.GroupValidation
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import java.time.LocalDate
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -32,7 +36,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertFailsWith
 
 /**
  * The group form. Every assertion here is about what the form left **alone** as much as what it
@@ -262,5 +265,27 @@ class GroupEditViewModelTest {
         val state = loaded(viewModel("g1"))
         assertEquals(listOf<AssetId>(member.id), state.candidates.map { it.assetId })
         assertTrue(state.candidates.single().selected)
+    }
+
+    /** #114 row 78 (C11): an asset the group's Season Start service may not cover cannot join it — P114-27, nothing written. */
+    @Test fun anAddedMemberTheGroupsRoleCannotCoverSaysP114_27() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler"))
+        graph.groups.upsert(groupOf("pre", name = "Example pre-season", members = listOf(Triple("heater", "2026-01-01", null))))
+        graph.schedules.upsert(scheduleOf("pre-check", groupId = "pre", title = "Example pre-season check"))
+        graph.setScheduleRole.run(ScheduleId("pre-check"), ScheduleRole.SEASON_START, quickElected = true)
+
+        val vm = viewModel("pre")
+        loaded(vm)
+        vm.toggle(AssetId("boiler"))
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+        assertEquals(
+            "Example Boiler cannot join this group: the group's Season Start service would cover it, and it already has " +
+                "one or cannot have one.",
+            refused.seasonStartRefusal,
+        )
+        assertEquals(listOf(AssetId("heater")), openMembers("pre").map { it.assetId })
+        assertNull(GroupEditState().seasonStartRefusal)
     }
 }

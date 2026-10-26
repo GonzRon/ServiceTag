@@ -25,4 +25,22 @@
     <string name="season_start_cutoff">Учитываются обслуживания с датой %s или позже.</string>
     <string name="season_start_completion_marks_asset_ready">После выполнения объект %s будет отмечен как готовый к сезону.</string>
     <string name="season_start_completion_marks_member_ready">После выполнения для объекта этот объект будет отмечен как готовый к сезону.</string>
+    <string name="season_start_service">Обслуживание к началу сезона</string>
+    <string name="season_start_use">Использовать как обслуживание к началу сезона</string>
+    <string name="season_start_stop">Не использовать как обслуживание к началу сезона</string>
+    <string name="season_start_confirm_asset">Использовать «%1$s» как обслуживание к началу сезона для объекта %2$s? После выполнения объект %2$s будет отмечен как готовый к сезону. Учитываются обслуживания с датой %3$s или позже.</string>
+    <string name="season_start_confirm_group">Использовать «%1$s» как обслуживание к началу сезона для каждого объекта в группе %2$s? После выполнения для объекта он будет отмечен как готовый к сезону. Учитываются обслуживания с датой %3$s или позже.</string>
+    <string name="season_start_quick_note">Этот график выполняется одним нажатием, без сведений об обслуживании. Выполнение одним нажатием всё равно отметит объект как готовый.</string>
+    <string name="season_start_counts_from">Обслуживания учитываются с</string>
+    <string name="season_start_refused_schedule_archived">Этот график в архиве. Сначала верните его из архива.</string>
+    <string name="season_start_refused_no_members">В этой группе нет объектов, которые можно отметить как готовые.</string>
+    <string name="season_start_refused_date_in_future">Дата, с которой учитываются обслуживания, не может быть позже сегодняшней.</string>
+    <string name="season_start_refused_bad_date">Введите дату, с которой учитываются обслуживания, как календарную дату.</string>
+    <string name="season_start_strand_needs_seasons">У объекта %1$s есть обслуживание к началу сезона, поэтому ему нужны сезоны. Сначала перестаньте использовать «%2$s» как его обслуживание к началу сезона.</string>
+    <string name="season_start_strand_would_be_leaf_child">После этого изменения %1$s станет дочерним объектом без собственных дочерних объектов, хотя у него есть обслуживание к началу сезона. Сначала перестаньте использовать «%2$s» как его обслуживание к началу сезона.</string>
+    <string name="season_start_strand_retarget">Этот график — обслуживание к началу сезона, поэтому его объект или группу нельзя изменить. Сначала перестаньте использовать его как обслуживание к началу сезона.</string>
+    <string name="season_start_strand_member">%s не может войти в эту группу: обслуживание к началу сезона этой группы охватило бы его, а у него уже есть такое обслуживание или его не может быть.</string>
+    <string name="season_start_strand_quick_needs_election">Этот график — обслуживание к началу сезона. Подтвердите, что выполнение одним нажатием должно учитываться, прежде чем переводить его на одно нажатие.</string>
+    <string name="season_start_role_line">Обслуживание к началу сезона · обслуживания учитываются с %s</string>
+    <string name="season_start_count_one_tap">Учитывать выполнение одним нажатием</string>
 </resources>

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedDate
@@ -141,6 +142,12 @@ val LOG_METER_READING: String get() = localized(R.string.maintenance_log_meter_r
  */
 val DueItem.isRepairableNoData: Boolean
     get() = status == DueStatus.NO_DATA && !requiredSetEmpty
+
+/** #114 (C33): P114-1 on the row of a Season Start service, keyed on the role alone; null on every other row. */
+internal fun seasonStartLine(item: DueItem): String? = when (item.role) {
+    ScheduleRole.NONE -> null
+    ScheduleRole.SEASON_START -> SeasonStartStrings.label()
+}
 
 /**
  * F3's line, from the two fields the projection already carries: **"Due at \<n\> \<unit\>, now
@@ -287,6 +294,7 @@ fun DueItemRow(
                 }
             }
             QuietLine(subtitleOf(item))
+            seasonStartLine(item)?.let { QuietLine(it) }
             whyLine(item, ::displayDate)?.let { QuietLine(it) }
             item.health?.let { HealthPassenger(it) }
             meterLine(item)?.let { QuietLine(it) }

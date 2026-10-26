@@ -25,4 +25,22 @@
     <string name="season_start_cutoff">Contam as manutenções com data em %s ou depois.</string>
     <string name="season_start_completion_marks_asset_ready">Concluir isto marca %s como pronto para a temporada.</string>
     <string name="season_start_completion_marks_member_ready">Concluir isto para um equipamento marca esse equipamento como pronto para a temporada.</string>
+    <string name="season_start_service">Manutenção de início de temporada</string>
+    <string name="season_start_use">Usar como manutenção de início de temporada</string>
+    <string name="season_start_stop">Deixar de usar como manutenção de início de temporada</string>
+    <string name="season_start_confirm_asset">Usar “%1$s” como manutenção de início de temporada de %2$s? Concluí-la marca %2$s como pronto para a temporada. Contam as manutenções com data em %3$s ou depois.</string>
+    <string name="season_start_confirm_group">Usar “%1$s” como manutenção de início de temporada de todos os equipamentos de %2$s? Concluí-la para um equipamento marca esse equipamento como pronto para a temporada. Contam as manutenções com data em %3$s ou depois.</string>
+    <string name="season_start_quick_note">Este plano é concluído com um toque e sem detalhes da manutenção. Uma conclusão com um toque ainda marcará o equipamento como pronto.</string>
+    <string name="season_start_counts_from">As manutenções contam a partir de</string>
+    <string name="season_start_refused_schedule_archived">Este plano está arquivado. Desarquive-o primeiro.</string>
+    <string name="season_start_refused_no_members">Este grupo não tem equipamentos para marcar como prontos.</string>
+    <string name="season_start_refused_date_in_future">A data a partir da qual as manutenções contam não pode ser depois de hoje.</string>
+    <string name="season_start_refused_bad_date">Insira a data a partir da qual as manutenções contam como uma data do calendário.</string>
+    <string name="season_start_strand_needs_seasons">%1$s tem uma manutenção de início de temporada, então precisa de temporadas. Pare de usar “%2$s” como a manutenção de início de temporada dele primeiro.</string>
+    <string name="season_start_strand_would_be_leaf_child">Esta alteração deixaria %1$s como um equipamento incluído sem equipamentos incluídos próprios enquanto tem uma manutenção de início de temporada. Pare de usar “%2$s” como a manutenção de início de temporada dele primeiro.</string>
+    <string name="season_start_strand_retarget">Este plano é uma manutenção de início de temporada, então o equipamento ou o grupo dele não pode mudar. Pare de usá-lo como manutenção de início de temporada primeiro.</string>
+    <string name="season_start_strand_member">%s não pode entrar neste grupo: a manutenção de início de temporada do grupo o cobriria, e ele já tem uma ou não pode ter uma.</string>
+    <string name="season_start_strand_quick_needs_election">Este plano é uma manutenção de início de temporada. Confirme que as conclusões com um toque devem contar antes de mudá-lo para um toque.</string>
+    <string name="season_start_role_line">Manutenção de início de temporada · as manutenções contam a partir de %s</string>
+    <string name="season_start_count_one_tap">Contar conclusões com um toque</string>
 </resources>

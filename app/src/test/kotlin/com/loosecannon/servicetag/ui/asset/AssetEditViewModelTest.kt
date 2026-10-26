@@ -1,7 +1,10 @@
 package com.loosecannon.servicetag.ui.asset
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -159,5 +162,50 @@ class AssetEditViewModelTest {
         assertNull("only archived ones: not asked", old.prompt.value)
         assertEquals(listOf(AssetId("old")), closed)
         assertTrue(graph.schedules.forAsset(AssetId("old")).all { it.status == ScheduleStatus.ARCHIVED })
+    }
+
+    /** #114 row 78 (C11): an asset a Season Start service covers, about to be all year, is told P114-24 under its season. */
+    @Test fun aChangeToAllYearOfACoveredAssetSaysP114_24() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("garage", name = "Example Garage"))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+
+        val editor = editModel("heater")
+        editor.onSeasonMode(SeasonMode.YEAR_ROUND)
+        editor.saveAndSettle()
+        assertEquals(
+            "Example Heater has a Season Start service, so it needs seasons. Stop using \"Example annual service\" as " +
+                "its Season Start service first.",
+            editor.state.value.seasonRefusal,
+        )
+        assertEquals(SeasonMode.MANUAL, graph.assets.get(AssetId("heater"))!!.seasonMode)
+    }
+
+    /** #114 row 78 (C11): a parent change leaving a covered asset a child with no children says P114-25, as the cycle is said. */
+    @Test fun aParentChangeLeavingACoveredAssetALeafChildSaysP114_25() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("garage", name = "Example Garage"))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+
+        val editor = editModel("heater")
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { editor.messages.collect { said += it } }
+        editor.onParent("garage")
+        editor.saveAndSettle()
+        assertEquals(
+            listOf(
+                "This change would leave Example Heater a child asset with no child assets while it has a Season Start " +
+                    "service. Stop using \"Example annual service\" as its Season Start service first.",
+            ),
+            said,
+        )
+        assertNull(editor.state.value.seasonRefusal)
+        assertNull(graph.assets.get(AssetId("heater"))!!.parentAssetId)
     }
 }

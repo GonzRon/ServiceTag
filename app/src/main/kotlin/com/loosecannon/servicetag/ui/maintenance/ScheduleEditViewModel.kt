@@ -36,6 +36,8 @@ import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localizedDecimal
 import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
@@ -285,6 +287,13 @@ data class ScheduleEditState(
     val noBoundary: Boolean = false,
     /** The link-guard dialog, when a save was refused for a health subject it would strand. */
     val linkGuard: LinkGuardPrompt? = null,
+    /**
+     * #114 (C33, O-2, F-22): a Season Start service's FORM → QUICK edit asks the owner's election first — P114-5 with
+     * the confirm P114-42 — and the save is repeated with it only when the owner confirms.
+     */
+    val quickElection: Boolean = false,
+    /** #114 (C11): why a save would strand the Season Start role (P114-26, or P114-43 after the election is declined). */
+    val seasonStartRefusal: String? = null,
     /** The day S84 measures the season from: its current span, or the next one. */
     val todayOn: LocalDate = LocalDate.of(1970, 1, 1),
     val completionMode: CompletionMode = CompletionMode.QUICK,
@@ -718,6 +727,33 @@ class ScheduleEditViewModel(
     }
 
     /**
+     * #114 (O-2, F-22): P114-42, "Count one-tap completions" — the owner's explicit election. The refused command is
+     * repeated with `seasonStartQuickElected`, and every later save from this editor carries it.
+     */
+    fun electQuick() {
+        val refused = pendingElection
+        if (_state.value.saving || !_state.value.quickElection || refused == null) return
+        quickElected = true
+        submit(refused, unlinkHealthSubject = false)
+    }
+
+    /** #114: the election declined — nothing is written, the form stays as typed, and P114-43 says why. */
+    fun cancelElection() {
+        val refused = electionRefusal
+        if (!_state.value.quickElection || refused == null) return
+        pendingElection = null
+        electionRefusal = null
+        _state.update { it.copy(quickElection = false, seasonStartRefusal = SeasonStartStrings.strand(refused, null)) }
+    }
+
+    /** The command the election was asked about, held for [electQuick] to repeat, and its refusal. */
+    private var pendingElection: ScheduleCommand? = null
+    private var electionRefusal: SeasonStartStrands? = null
+
+    /** #114: the owner confirmed P114-42 in this editor. Never set but by [electQuick]: the election is never defaulted. */
+    private var quickElected = false
+
+    /**
      * S141 "Archive both": **the same command** that was refused, with the unlink flag and nothing
      * else changed (spec §6.1, D-30) — not a rebuild from the form.
      */
@@ -738,17 +774,22 @@ class ScheduleEditViewModel(
     private var pendingCommand: ScheduleCommand? = null
 
     private fun submit(cmd: ScheduleCommand, unlinkHealthSubject: Boolean) {
-        _state.update { it.copy(saving = true, problems = emptyList(), linkGuard = null) }
+        _state.update {
+            it.copy(saving = true, problems = emptyList(), linkGuard = null, quickElection = false, seasonStartRefusal = null)
+        }
         viewModelScope.launch {
             // Asked before the write, because after it the store is never empty again.
             val firstEver = scheduleId == null && schedules.all().isEmpty()
-            val outcome = runCatching { saveSchedule.run(scheduleId, cmd, unlinkHealthSubject) }
+            val outcome = runCatching {
+                saveSchedule.run(scheduleId, cmd, unlinkHealthSubject, seasonStartQuickElected = quickElected)
+            }
             val failure = outcome.exceptionOrNull()
             if (failure != null) {
                 refused(failure, cmd)
                 return@launch
             }
             pendingCommand = null
+            pendingElection = null
             val saved = outcome.getOrThrow()
             if (firstEver && !notifications.granted()) {
                 // The rationale first, then the system dialog: spec §5.1 asks for the permission
@@ -781,6 +822,15 @@ class ScheduleEditViewModel(
             is HealthSubjectIsPrimary -> {
                 pendingCommand = null
                 _state.update { it.copy(saving = false, linkGuard = LinkGuardPrompt.Primary) }
+            }
+            is SeasonStartStrands -> if (failure.strandCause == SeasonStartStrandCause.QUICK_NEEDS_ELECTION) {
+                // O-2 (F-22): the owner is asked first — P114-5, then P114-42; P114-43 only if they decline.
+                pendingElection = cmd
+                electionRefusal = failure
+                _state.update { it.copy(saving = false, quickElection = true) }
+            } else {
+                val name = failure.assetId?.let { assets.get(it) }?.name
+                _state.update { it.copy(saving = false, seasonStartRefusal = SeasonStartStrings.strand(failure, name)) }
             }
             is PreServiceNeedsDates -> {
                 val fresh = assets.get(failure.assetId)?.seasonInputs(emptyList())

@@ -210,7 +210,7 @@ class GroupDetailViewModel(
     private suspend fun restoreRefusal(refused: SeasonStartStrands): String? {
         val name = refused.assetId?.let { assets.get(it) }?.name ?: return null
         val restored = schedules.forGroup(id).mapTo(mutableSetOf()) { it.id }
-        return SeasonStartRestoreStrings.of(refused, name, restored, throughAGroup = true)
+        return SeasonStartStrings.strand(refused, name, restored, throughAGroup = true)
     }
 
     /**

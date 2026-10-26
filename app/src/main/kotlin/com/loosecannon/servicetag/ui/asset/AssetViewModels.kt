@@ -113,6 +113,8 @@ import com.loosecannon.servicetag.core.usecase.SeasonAlreadyEnded
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
@@ -156,6 +158,7 @@ import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.ENTER_THE_NUMBER_OF_DAYS
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.maintenance.SeasonStartStrings
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.service.ServiceCaseRow
 import com.loosecannon.servicetag.ui.service.openServiceCasesLine
@@ -2504,6 +2507,20 @@ class AssetEditViewModel(
                 }
                 is SeasonSyncOwnsSeason -> {
                     _state.update { it.copy(saving = false, seasonRefusal = SEASON_SYNC_FOLLOWS_HA) }
+                    return
+                }
+                is SeasonStartStrands -> {
+                    // #114 (C11): a change into all year sits under the season field (P114-24); a parent change that
+                    // would leave a covered asset a leaf child is about the pair, said as the cycle is (P114-25).
+                    val name = failure.assetId?.let { assets.get(it) }?.name
+                    val line = SeasonStartStrings.strand(failure, name)
+                        ?: localized(R.string.asset_model_could_not_save)
+                    if (failure.strandCause == SeasonStartStrandCause.NEEDS_SEASONS) {
+                        _state.update { it.copy(saving = false, seasonRefusal = line) }
+                    } else {
+                        _state.update { it.copy(saving = false) }
+                        _messages.tryEmit(line)
+                    }
                     return
                 }
                 is WarrantyReminderValidation -> {

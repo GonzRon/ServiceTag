@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -104,6 +105,14 @@ fun ScheduleDetailScreen(
     val model: ScheduleDetailViewModel =
         viewModel(key = scheduleId) { ScheduleDetailViewModel(graph, scheduleId) }
     val state by model.state.collectAsStateWithLifecycle()
+    // #114 (C33, K11): the Season Start role's own action and confirm, never the editor's save.
+    val roleModel: ScheduleRoleViewModel =
+        viewModel(key = "season-start:$scheduleId") { ScheduleRoleViewModel(graph, scheduleId) }
+    val role by roleModel.state.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(roleModel) {
+        roleModel.refresh()
+        onPauseOrDispose { }
+    }
 
     // Coming back from the editor or the profile form is the moment to re-derive: the rule may have
     // changed, and the due date this screen shows is derived from it.
@@ -215,6 +224,15 @@ fun ScheduleDetailScreen(
         state.linkGuard?.let { prompt ->
             LinkGuardDialog(prompt = prompt, onArchiveBoth = model::archiveBoth, onCancel = model::cancelLinkGuard)
         }
+        role.confirm?.let { confirm ->
+            SeasonStartConfirmDialog(
+                confirm = confirm,
+                busy = role.busy,
+                onSinceOn = roleModel::onSinceOn,
+                onConfirm = roleModel::confirm,
+                onDismiss = roleModel::dismiss,
+            )
+        }
 
         // The affordance, wherever this schedule is completed from. It is the flow's own dialog, so
         // this screen and the scan sheet ask the same question in the same words.
@@ -239,6 +257,14 @@ fun ScheduleDetailScreen(
             state.postponedDueOn?.let { LabelValue(label = POSTPONE, value = localizedDate(it)) }
             state.description.takeIf { it.isNotBlank() }?.let { QuietLine(it) }
             state.progress?.let { QuietLine(it) }
+            // P114-41; on a live role the line opens the confirm again to move its day (P114-5 asked again).
+            role.roleLine?.let { line ->
+                if (state.editable && role.canMove) {
+                    QuietLine(line, Modifier.clickable(enabled = !role.busy, onClick = roleModel::ask))
+                } else {
+                    QuietLine(line)
+                }
+            }
 
             Spacer(Modifier.height(12.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -302,6 +328,21 @@ fun ScheduleDetailScreen(
                         enabled = !state.busy,
                         shape = ControlShape,
                     ) { Text(CLOSE_THIS_ROUND) }
+                }
+                // #114 (C33): the role's own two actions (P114-2, P114-3); a held owner's schedule offers neither.
+                if (state.editable && role.canUse) {
+                    OutlinedButton(
+                        onClick = roleModel::ask,
+                        enabled = !role.busy,
+                        shape = ControlShape,
+                    ) { Text(stringResource(R.string.season_start_use)) }
+                }
+                if (state.editable && role.canStop) {
+                    OutlinedButton(
+                        onClick = roleModel::stop,
+                        enabled = !role.busy,
+                        shape = ControlShape,
+                    ) { Text(stringResource(R.string.season_start_stop)) }
                 }
             }
 
@@ -406,6 +447,43 @@ internal fun PostponeDialog(initial: String, onDismiss: () -> Unit, onConfirm: (
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(dueOn) }) { Text(stringResource(R.string.maintenance_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.maintenance_cancel)) } },
+    )
+}
+
+/**
+ * #114 (C33) — the Season Start role's confirm: P114-4 or P114-4g, the note P114-5 on a one-tap schedule (O-2), and the
+ * date field P114-6 with the refusal's sentence under it. A dialog with typed input keeps the platform's keyboard
+ * handling (#121, InsetsContractTest's group D, K5).
+ */
+@Composable
+private fun SeasonStartConfirmDialog(
+    confirm: SeasonStartConfirm,
+    busy: Boolean,
+    onSinceOn: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                Text(confirm.question)
+                confirm.quickNote?.let { QuietLine(it) }
+                DateField(
+                    value = confirm.sinceOn,
+                    onValueChange = onSinceOn,
+                    label = stringResource(R.string.season_start_counts_from),
+                    problem = confirm.problem,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = !busy) { Text(stringResource(R.string.season_start_use)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.maintenance_cancel)) } },
     )

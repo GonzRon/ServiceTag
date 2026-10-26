@@ -56,6 +56,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
 import com.loosecannon.servicetag.ui.asset.DateField
+import com.loosecannon.servicetag.ui.asset.RefusalLine
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -280,6 +281,20 @@ fun ScheduleEditScreen(
         state.linkGuard?.let { prompt ->
             LinkGuardDialog(prompt = prompt, onArchiveBoth = model::archiveBoth, onCancel = model::cancelLinkGuard)
         }
+        if (state.quickElection) {
+            // #114 (O-2, F-22): a Season Start service changed to one tap counts one-tap completions only by the
+            // owner's explicit election — P114-5, confirmed with P114-42; declining says P114-43.
+            AlertDialog(
+                onDismissRequest = model::cancelElection,
+                text = { Text(stringResource(R.string.season_start_quick_note)) },
+                confirmButton = {
+                    TextButton(onClick = model::electQuick) { Text(stringResource(R.string.season_start_count_one_tap)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = model::cancelElection) { Text(stringResource(R.string.maintenance_cancel)) }
+                },
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -289,6 +304,8 @@ fun ScheduleEditScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Spacer(Modifier.height(4.dp))
+            // #114 (C11): why this save would strand the Season Start role (P114-26, P114-43).
+            state.seasonStartRefusal?.let { RefusalLine(it) }
 
             // The target, stated rather than picked: it is chosen once, by the screen that opened
             // this editor, and an edit keeps the stored one. Drawing it read-only is what makes

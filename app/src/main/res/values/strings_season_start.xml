@@ -76,4 +76,43 @@
     <string name="season_start_completion_marks_asset_ready">Completing this marks %s ready for the season.</string>
     <!-- P114-15: completing a group's Season Start service for one of its assets. -->
     <string name="season_start_completion_marks_member_ready">Completing this for an asset marks that asset ready for the season.</string>
+
+    <!-- ============================== the role on the phone (C33; A5b): the action, the confirm, the refusals -->
+
+    <!-- P114-1: the role's label on the schedule row. -->
+    <string name="season_start_service">Season Start service</string>
+    <!-- P114-2: the schedule detail's action that gives the schedule the role. -->
+    <string name="season_start_use">Use as Season Start service</string>
+    <!-- P114-3: the schedule detail's action that clears the role. -->
+    <string name="season_start_stop">Stop using as Season Start service</string>
+    <!-- P114-4: the confirm, asset target. %1$s: the schedule's title. %2$s: the asset's name (twice). %3$s: the date services count from, as a date. -->
+    <string name="season_start_confirm_asset">Use \"%1$s\" as %2$s\'s Season Start service? Completing it marks %2$s ready for the season. Services dated on or after %3$s count.</string>
+    <!-- P114-4g: the confirm, group target. %1$s: the schedule's title. %2$s: the group's name. %3$s: the date services count from, as a date. -->
+    <string name="season_start_confirm_group">Use \"%1$s\" as the Season Start service for every asset in %2$s? Completing it for an asset marks that asset ready for the season. Services dated on or after %3$s count.</string>
+    <!-- P114-5: the confirm's note on a one-tap schedule (O-2); also the body of the editor's one-tap election and the refusal QUICK_NOT_ELECTED. -->
+    <string name="season_start_quick_note">This schedule is completed with one tap and no service details. A one-tap completion will still mark the asset ready.</string>
+    <!-- P114-6: the confirm's date field label. -->
+    <string name="season_start_counts_from">Services count from</string>
+    <!-- P114-19: refused because the schedule is archived (SCHEDULE_ARCHIVED). -->
+    <string name="season_start_refused_schedule_archived">This schedule is archived. Restore it first.</string>
+    <!-- P114-22: refused because the group is archived or has no assets (GROUP_HAS_NO_MEMBERS, GROUP_ARCHIVED). -->
+    <string name="season_start_refused_no_members">This group has no assets to mark ready.</string>
+    <!-- P114-23: refused because the date is after today (DATE_IN_FUTURE). -->
+    <string name="season_start_refused_date_in_future">The date services count from cannot be after today.</string>
+    <!-- P114-28: the date field does not hold a calendar date (BadDate). -->
+    <string name="season_start_refused_bad_date">Enter the date services count from as a calendar date.</string>
+    <!-- P114-24: the asset editor, a change to all year (NEEDS_SEASONS). %1$s: the asset's name. %2$s: the title of its Season Start service. -->
+    <string name="season_start_strand_needs_seasons">%1$s has a Season Start service, so it needs seasons. Stop using \"%2$s\" as its Season Start service first.</string>
+    <!-- P114-25: the asset editor, a parent change (WOULD_BE_LEAF_CHILD). %1$s: the asset's name. %2$s: the title of its Season Start service. -->
+    <string name="season_start_strand_would_be_leaf_child">This change would leave %1$s a child asset with no child assets while it has a Season Start service. Stop using \"%2$s\" as its Season Start service first.</string>
+    <!-- P114-26: the schedule editor, a target change of a Season Start service (ROLE_SCHEDULE_RETARGET). -->
+    <string name="season_start_strand_retarget">This schedule is a Season Start service, so its asset or group cannot change. Stop using it as the Season Start service first.</string>
+    <!-- P114-27: the group editor, an added asset (MEMBER_NOT_ELIGIBLE, MEMBER_ALREADY_COVERED). %s: the asset's name. -->
+    <string name="season_start_strand_member">%s cannot join this group: the group\'s Season Start service would cover it, and it already has one or cannot have one.</string>
+    <!-- P114-43: the schedule editor, a change to one tap the owner did not confirm (QUICK_NEEDS_ELECTION). -->
+    <string name="season_start_strand_quick_needs_election">This schedule is a Season Start service. Confirm that one-tap completions should count before changing it to one tap.</string>
+    <!-- P114-41: the schedule detail's role line. %s: the date services count from, as a date. -->
+    <string name="season_start_role_line">Season Start service · services count from %s</string>
+    <!-- P114-42: the confirm button of the editor's one-tap election; its body is P114-5. -->
+    <string name="season_start_count_one_tap">Count one-tap completions</string>
 </resources>

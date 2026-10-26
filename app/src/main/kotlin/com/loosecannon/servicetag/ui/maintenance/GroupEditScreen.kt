@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.asset.RefusalLine
 import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
@@ -94,6 +95,10 @@ fun GroupEditScreen(
                 .padding(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // #114 (C11): P114-27, an added asset the group's Season Start service may not cover.
+            state.seasonStartRefusal?.let { line ->
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) { RefusalLine(line) }
+            }
             OutlinedTextField(
                 value = state.name,
                 onValueChange = model::onName,

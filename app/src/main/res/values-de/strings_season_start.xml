@@ -25,4 +25,22 @@
     <string name="season_start_cutoff">Wartungen mit Datum am %s oder später zählen.</string>
     <string name="season_start_completion_marks_asset_ready">Wenn du das abschließt, wird %s als bereit für die Saison markiert.</string>
     <string name="season_start_completion_marks_member_ready">Wenn du das für ein Gerät abschließt, wird dieses Gerät als bereit für die Saison markiert.</string>
+    <string name="season_start_service">Saisonstart-Wartung</string>
+    <string name="season_start_use">Als Saisonstart-Wartung verwenden</string>
+    <string name="season_start_stop">Nicht mehr als Saisonstart-Wartung verwenden</string>
+    <string name="season_start_confirm_asset">„%1$s“ als Saisonstart-Wartung für %2$s verwenden? Wenn du sie abschließt, wird %2$s als bereit für die Saison markiert. Wartungen mit Datum am %3$s oder später zählen.</string>
+    <string name="season_start_confirm_group">„%1$s“ als Saisonstart-Wartung für jedes Gerät in %2$s verwenden? Wenn du sie für ein Gerät abschließt, wird dieses Gerät als bereit für die Saison markiert. Wartungen mit Datum am %3$s oder später zählen.</string>
+    <string name="season_start_quick_note">Dieser Plan wird mit einem Tippen und ohne Wartungsdetails abgeschlossen. Auch ein Abschluss mit einem Tippen markiert das Gerät als bereit.</string>
+    <string name="season_start_counts_from">Wartungen zählen ab</string>
+    <string name="season_start_refused_schedule_archived">Dieser Plan ist archiviert. Hebe zuerst die Archivierung auf.</string>
+    <string name="season_start_refused_no_members">Diese Gruppe hat keine Geräte, die als bereit markiert werden können.</string>
+    <string name="season_start_refused_date_in_future">Das Datum, ab dem Wartungen zählen, darf nicht nach heute liegen.</string>
+    <string name="season_start_refused_bad_date">Gib das Datum, ab dem Wartungen zählen, als Kalenderdatum ein.</string>
+    <string name="season_start_strand_needs_seasons">%1$s hat eine Saisonstart-Wartung und braucht deshalb Saisons. Verwende „%2$s“ zuerst nicht mehr als Saisonstart-Wartung.</string>
+    <string name="season_start_strand_would_be_leaf_child">Durch diese Änderung wäre %1$s ein Untergerät ohne eigene Untergeräte, obwohl es eine Saisonstart-Wartung hat. Verwende „%2$s“ zuerst nicht mehr als Saisonstart-Wartung.</string>
+    <string name="season_start_strand_retarget">Dieser Plan ist eine Saisonstart-Wartung, deshalb können Gerät oder Gruppe nicht geändert werden. Verwende ihn zuerst nicht mehr als Saisonstart-Wartung.</string>
+    <string name="season_start_strand_member">%s kann dieser Gruppe nicht beitreten: Die Saisonstart-Wartung der Gruppe würde es abdecken, und es hat bereits eine oder kann keine haben.</string>
+    <string name="season_start_strand_quick_needs_election">Dieser Plan ist eine Saisonstart-Wartung. Bestätige, dass Abschlüsse mit einem Tippen zählen sollen, bevor du ihn auf ein Tippen umstellst.</string>
+    <string name="season_start_role_line">Saisonstart-Wartung · Wartungen zählen ab %s</string>
+    <string name="season_start_count_one_tap">Abschlüsse mit einem Tippen zählen</string>
 </resources>

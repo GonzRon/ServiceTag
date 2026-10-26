@@ -25,4 +25,22 @@
     <string name="season_start_cutoff">%s या उसके बाद की तारीख वाले रखरखाव गिने जाते हैं।</string>
     <string name="season_start_completion_marks_asset_ready">इसे पूरा करने पर %s मौसम के लिए तैयार मार्क हो जाएगा।</string>
     <string name="season_start_completion_marks_member_ready">किसी उपकरण के लिए इसे पूरा करने पर वह उपकरण मौसम के लिए तैयार मार्क हो जाएगा।</string>
+    <string name="season_start_service">मौसम-आरंभ रखरखाव</string>
+    <string name="season_start_use">मौसम-आरंभ रखरखाव के रूप में उपयोग करें</string>
+    <string name="season_start_stop">मौसम-आरंभ रखरखाव के रूप में उपयोग बंद करें</string>
+    <string name="season_start_confirm_asset">“%1$s” को %2$s के मौसम-आरंभ रखरखाव के रूप में उपयोग करें? इसे पूरा करने पर %2$s मौसम के लिए तैयार मार्क हो जाएगा। %3$s या उसके बाद की तारीख वाले रखरखाव गिने जाते हैं।</string>
+    <string name="season_start_confirm_group">“%1$s” को %2$s के हर उपकरण के मौसम-आरंभ रखरखाव के रूप में उपयोग करें? किसी उपकरण के लिए इसे पूरा करने पर वह उपकरण मौसम के लिए तैयार मार्क हो जाएगा। %3$s या उसके बाद की तारीख वाले रखरखाव गिने जाते हैं।</string>
+    <string name="season_start_quick_note">यह शेड्यूल एक टैप से, रखरखाव के विवरण के बिना पूरा होता है। एक टैप से पूरा करने पर भी उपकरण तैयार मार्क हो जाएगा।</string>
+    <string name="season_start_counts_from">रखरखाव इस तारीख से गिने जाएँगे</string>
+    <string name="season_start_refused_schedule_archived">यह शेड्यूल संग्रहित है। पहले इसे संग्रह से निकालें।</string>
+    <string name="season_start_refused_no_members">इस समूह में तैयार मार्क करने के लिए कोई उपकरण नहीं है।</string>
+    <string name="season_start_refused_date_in_future">जिस तारीख से रखरखाव गिने जाते हैं, वह आज के बाद की नहीं हो सकती।</string>
+    <string name="season_start_refused_bad_date">जिस तारीख से रखरखाव गिने जाते हैं, उसे कैलेंडर की तारीख के रूप में दर्ज करें।</string>
+    <string name="season_start_strand_needs_seasons">%1$s के लिए मौसम-आरंभ रखरखाव है, इसलिए इसे मौसमों की ज़रूरत है। पहले “%2$s” का इसके मौसम-आरंभ रखरखाव के रूप में उपयोग बंद करें।</string>
+    <string name="season_start_strand_would_be_leaf_child">इस बदलाव से %1$s ऐसा उप-उपकरण बन जाएगा जिसका अपना कोई उप-उपकरण नहीं है, जबकि इसके लिए मौसम-आरंभ रखरखाव है। पहले “%2$s” का इसके मौसम-आरंभ रखरखाव के रूप में उपयोग बंद करें।</string>
+    <string name="season_start_strand_retarget">यह शेड्यूल एक मौसम-आरंभ रखरखाव है, इसलिए इसका उपकरण या समूह नहीं बदल सकता। पहले इसका मौसम-आरंभ रखरखाव के रूप में उपयोग बंद करें।</string>
+    <string name="season_start_strand_member">%s इस समूह में शामिल नहीं हो सकता: समूह का मौसम-आरंभ रखरखाव इस पर लागू होगा, और इसके लिए पहले से एक है या हो नहीं सकता।</string>
+    <string name="season_start_strand_quick_needs_election">यह शेड्यूल एक मौसम-आरंभ रखरखाव है। इसे एक टैप पर बदलने से पहले पुष्टि करें कि एक टैप से पूरा करना गिना जाना चाहिए।</string>
+    <string name="season_start_role_line">मौसम-आरंभ रखरखाव · रखरखाव %s से गिने जाते हैं</string>
+    <string name="season_start_count_one_tap">एक टैप से पूरा करना गिनें</string>
 </resources>

@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -31,6 +32,7 @@ import com.loosecannon.servicetag.core.usecase.ScheduleValidation
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.scheduleOf
@@ -42,8 +44,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -936,5 +938,43 @@ class ScheduleEditViewModelTest {
         assertEquals("Clean the burn pot first", stored.description)
         assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, stored.servicePolicy)
         assertEquals(7, stored.policyOffsetDays)
+    }
+
+    /**
+     * #114 row 78 (C11, O-2, F-22): a Season Start service's FORM → QUICK edit asks the owner's election first (P114-5,
+     * P114-42); declined, P114-43 and nothing written; confirmed, the same edit saves with the role kept.
+     */
+    @Test fun aFormToQuickEditOfARoleScheduleAsksTheElection() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+
+        val vm = viewModel(scheduleId = "annual")
+        vm.state.first { it.loaded }
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        assertTrue("the election is asked", vm.state.first { !it.saving }.quickElection)
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+
+        vm.cancelElection()
+        assertEquals(
+            "This schedule is a Season Start service. Confirm that one-tap completions should count before changing it " +
+                "to one tap.",
+            vm.state.value.seasonStartRefusal,
+        )
+        assertFalse(vm.state.value.quickElection)
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+
+        vm.save()
+        vm.state.first { !it.saving && it.quickElection }
+        val saved = savedId(vm)
+        vm.electQuick()
+        saved.await()
+        val stored = graph.schedules.get(ScheduleId("annual"))!!
+        assertEquals(CompletionMode.QUICK, stored.completionMode)
+        assertEquals(ScheduleRole.SEASON_START, stored.role)
+        assertNull(vm.state.value.seasonStartRefusal)
     }
 }

@@ -25,4 +25,22 @@
     <string name="season_start_cutoff">日期在 %s 或之后的保养计入。</string>
     <string name="season_start_completion_marks_asset_ready">完成此项会将 %s 标记为已为使用季做好准备。</string>
     <string name="season_start_completion_marks_member_ready">为某台设备完成此项会将该设备标记为已为使用季做好准备。</string>
+    <string name="season_start_service">使用季开始保养</string>
+    <string name="season_start_use">用作使用季开始保养</string>
+    <string name="season_start_stop">停止用作使用季开始保养</string>
+    <string name="season_start_confirm_asset">将“%1$s”用作 %2$s 的使用季开始保养？完成后会将 %2$s 标记为已为使用季做好准备。日期在 %3$s 或之后的保养计入。</string>
+    <string name="season_start_confirm_group">将“%1$s”用作 %2$s 中每台设备的使用季开始保养？为某台设备完成后，会将该设备标记为已为使用季做好准备。日期在 %3$s 或之后的保养计入。</string>
+    <string name="season_start_quick_note">此保养计划点按一次即可完成，不记录保养详情。点按一次完成仍会将设备标记为已做好准备。</string>
+    <string name="season_start_counts_from">保养计入起始日期</string>
+    <string name="season_start_refused_schedule_archived">此保养计划已归档。请先取消归档。</string>
+    <string name="season_start_refused_no_members">此保养组没有可标记为已做好准备的设备。</string>
+    <string name="season_start_refused_date_in_future">保养计入起始日期不能晚于今天。</string>
+    <string name="season_start_refused_bad_date">请以日历日期输入保养计入起始日期。</string>
+    <string name="season_start_strand_needs_seasons">%1$s 有使用季开始保养，因此需要使用季。请先停止将“%2$s”用作它的使用季开始保养。</string>
+    <string name="season_start_strand_would_be_leaf_child">此更改会使 %1$s 在有使用季开始保养的情况下成为没有自身子设备的子设备。请先停止将“%2$s”用作它的使用季开始保养。</string>
+    <string name="season_start_strand_retarget">此保养计划是使用季开始保养，因此不能更改其设备或保养组。请先停止将它用作使用季开始保养。</string>
+    <string name="season_start_strand_member">%s 不能加入此保养组：该组的使用季开始保养会覆盖它，而它已有一个或不能有。</string>
+    <string name="season_start_strand_quick_needs_election">此保养计划是使用季开始保养。在将其改为点按一次之前，请确认点按一次完成应计入。</string>
+    <string name="season_start_role_line">使用季开始保养 · 保养从 %s 起计入</string>
+    <string name="season_start_count_one_tap">计入点按一次完成</string>
 </resources>

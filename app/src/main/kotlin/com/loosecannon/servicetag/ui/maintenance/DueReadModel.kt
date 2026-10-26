@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -130,6 +131,8 @@ data class DueItem(
     val health: SubjectBandFact?,
     val assetCondition: OperationalCondition?,
     val rank: Int,
+    /** #114 (C33): the schedule's Season Start role, so its row carries the label P114-1. */
+    val role: ScheduleRole = ScheduleRole.NONE,
 ) {
     /**
      * Whether this row contributes to a due total. `DUE` and `OVERDUE` do; `INACTIVE_SEASON`,
@@ -300,6 +303,7 @@ class DueReadModel(
             health = band,
             assetCondition = condition,
             rank = 0,
+            role = schedule.role,
         )
     }
 

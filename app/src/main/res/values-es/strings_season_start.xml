@@ -25,4 +25,22 @@
     <string name="season_start_cutoff">Cuentan los mantenimientos con fecha del %s o posterior.</string>
     <string name="season_start_completion_marks_asset_ready">Completarlo marca %s como listo para la temporada.</string>
     <string name="season_start_completion_marks_member_ready">Completarlo para un equipo marca ese equipo como listo para la temporada.</string>
+    <string name="season_start_service">Mantenimiento de inicio de temporada</string>
+    <string name="season_start_use">Usar como mantenimiento de inicio de temporada</string>
+    <string name="season_start_stop">Dejar de usar como mantenimiento de inicio de temporada</string>
+    <string name="season_start_confirm_asset">¿Usar “%1$s” como mantenimiento de inicio de temporada de %2$s? Completarlo marca %2$s como listo para la temporada. Cuentan los mantenimientos con fecha del %3$s o posterior.</string>
+    <string name="season_start_confirm_group">¿Usar “%1$s” como mantenimiento de inicio de temporada de todos los equipos de %2$s? Completarlo para un equipo marca ese equipo como listo para la temporada. Cuentan los mantenimientos con fecha del %3$s o posterior.</string>
+    <string name="season_start_quick_note">Este plan se completa con un toque y sin detalles del mantenimiento. Aun así, completarlo con un toque marcará el equipo como listo.</string>
+    <string name="season_start_counts_from">Los mantenimientos cuentan desde</string>
+    <string name="season_start_refused_schedule_archived">Este plan está archivado. Desarchívalo primero.</string>
+    <string name="season_start_refused_no_members">Este grupo no tiene equipos que marcar como listos.</string>
+    <string name="season_start_refused_date_in_future">La fecha desde la que cuentan los mantenimientos no puede ser posterior a hoy.</string>
+    <string name="season_start_refused_bad_date">Introduce la fecha desde la que cuentan los mantenimientos como una fecha del calendario.</string>
+    <string name="season_start_strand_needs_seasons">%1$s tiene un mantenimiento de inicio de temporada, así que necesita temporadas. Deja de usar “%2$s” como su mantenimiento de inicio de temporada primero.</string>
+    <string name="season_start_strand_would_be_leaf_child">Este cambio dejaría %1$s como equipo incluido sin equipos incluidos propios mientras tiene un mantenimiento de inicio de temporada. Deja de usar “%2$s” como su mantenimiento de inicio de temporada primero.</string>
+    <string name="season_start_strand_retarget">Este plan es un mantenimiento de inicio de temporada, así que su equipo o grupo no puede cambiar. Deja de usarlo como mantenimiento de inicio de temporada primero.</string>
+    <string name="season_start_strand_member">%s no puede unirse a este grupo: el mantenimiento de inicio de temporada del grupo lo cubriría, y ya tiene uno o no puede tenerlo.</string>
+    <string name="season_start_strand_quick_needs_election">Este plan es un mantenimiento de inicio de temporada. Confirma que las finalizaciones con un toque deben contar antes de cambiarlo a un toque.</string>
+    <string name="season_start_role_line">Mantenimiento de inicio de temporada · los mantenimientos cuentan desde el %s</string>
+    <string name="season_start_count_one_tap">Contar las finalizaciones con un toque</string>
 </resources>
