@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.hapublish.DecommissionRepository
+import com.loosecannon.servicetag.core.hapublish.DismissDecommission
 import com.loosecannon.servicetag.core.hapublish.DeliverySteps
 import com.loosecannon.servicetag.core.hapublish.FIELD_BOUNDARY_ENTITY_ID
 import com.loosecannon.servicetag.core.hapublish.FIELD_ENTITY_ID
@@ -12,6 +13,7 @@ import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.hapublish.PublishDelivery
 import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
 import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.hapublish.PublishNotSetUp
 import com.loosecannon.servicetag.core.hapublish.PublishRefusal
 import com.loosecannon.servicetag.core.hapublish.PublishRefused
 import com.loosecannon.servicetag.core.hapublish.STATUS_DEGRADED
@@ -40,6 +42,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -60,6 +63,14 @@ import kotlinx.serialization.json.putJsonObject
  * facade, so every commit asks for delivery (I21); it reads Home Assistant no second time, and the command's own
  * transaction answers `STALE_PLAN` when the connection, its generation, the binding or a helper's shape moved since
  * (I34). No body takes a value, a date to publish or READY (I33).
+ *
+ * **B5w2: Disable, Check helper, Publish now and the acknowledgement.** [act] also takes `DISABLE` — committed locally,
+ * with no read of Home Assistant (C25a, correction 2) — and `CHECK_HELPER`, the runner's validation of the **stored**
+ * destination and then Revalidate, which never activates (A08). [publishNow] stamps the covered bindings through
+ * [PublishControls.requestPublishNow] and answers **202** at once: the pass runs after the answer and is never awaited
+ * here (I35), so the one-request-at-a-time API is never held for a delivery. [acknowledge] deletes an UNDELIVERABLE
+ * tombstone through [DismissDecommission] only on the caller's own attestation (O-21(b)); nothing here infers, defaults
+ * or fills `acknowledgedClearedInHa`.
  */
 internal class HaPublishingHandlers(
     private val assets: AssetRepository,
@@ -220,31 +231,125 @@ internal class HaPublishingHandlers(
     }
 
     /**
-     * C35b — `POST /v1/assets/{id}/ha-publishing`, B5w1's two actions. `ENABLE` and `CHANGE_TARGET` need the caller's
-     * `planId` and `confirmDestination`: either missing → 422 `HA_PUBLISH_CONFIRMATION_REQUIRED`; a plan [plans] does
-     * not hold for this asset, kind and action (unknown, expired, committed, or the screen reopened) → 409
-     * `STALE_PLAN`; a `confirmDestination` other than the plan's `entityId` → the 422; each before anything is written.
-     * Then [PublishControls.enable] or [PublishControls.changeTarget] commits the plan's own validation with
-     * `expectedPlanId`, activating this installation (O-21(c)), and asks for delivery; no second read of Home
-     * Assistant. Success is 200 `{binding}`, the binding as the read route answers it.
+     * C35b — `POST /v1/assets/{id}/ha-publishing`, the controls. An asset that is not there is 404 `no_such_asset`
+     * first. `ENABLE` and `CHANGE_TARGET` commit a plan ([commit]); `DISABLE` and `CHECK_HELPER` carry no confirmation,
+     * so either key present is 422 `HA_PUBLISH_CONFIRMATION_REQUIRED` at that key, nothing written. Success is 200
+     * `{binding}`, the binding as the read route answers it — `null` for a Disable of a kind the asset never published.
      */
     suspend fun act(assetId: String, request: ApiRequest): ApiResponse {
         val body = request.decode(HaPublishingActionRequest.serializer())
         val kind = enumOr400<PublishKind>(body.kind, "kind")
-        val action = enumOr400<PublishAction>(body.action, "action")
+        val control = enumOr400<HaPublishingControl>(body.action, "action")
         val id = AssetId(assetId)
         uow.read { assets.get(id) ?: throw NoSuchAsset(id) }
-        val planId = body.planId ?: throw PublishConfirmationRequired(FIELD_PLAN_ID)
-        val confirmed = body.confirmDestination ?: throw PublishConfirmationRequired(FIELD_CONFIRM_DESTINATION)
+        val binding = when (control) {
+            HaPublishingControl.ENABLE -> commit(id, kind, PublishAction.ENABLE, body)
+            HaPublishingControl.CHANGE_TARGET -> commit(id, kind, PublishAction.CHANGE_TARGET, body)
+            HaPublishingControl.DISABLE -> {
+                refuseConfirmation(control, body)
+                controls.disable(id, kind)
+            }
+            HaPublishingControl.CHECK_HELPER -> {
+                refuseConfirmation(control, body)
+                checkHelper(id, kind)
+            }
+        }
+        return ok(HaPublishingBindingResponse.serializer(), HaPublishingBindingResponse(binding?.let { bindingDtoOf(it) }))
+    }
+
+    /**
+     * B5w1's two actions. `ENABLE` and `CHANGE_TARGET` need the caller's `planId` and `confirmDestination`: either
+     * missing → 422 `HA_PUBLISH_CONFIRMATION_REQUIRED`; a plan [plans] does not hold for this asset, kind and action
+     * (unknown, expired, committed, or the screen reopened) → 409 `STALE_PLAN`; a `confirmDestination` other than the
+     * plan's `entityId` → the 422; each before anything is written. Then [PublishControls.enable] or
+     * [PublishControls.changeTarget] commits the plan's own validation with `expectedPlanId`, activating this
+     * installation (O-21(c)), and asks for delivery; no second read of Home Assistant.
+     */
+    private suspend fun commit(
+        id: AssetId,
+        kind: PublishKind,
+        action: PublishAction,
+        body: HaPublishingActionRequest,
+    ): PublishBinding {
+        val planId = body.planId ?: throw PublishConfirmationRequired(ConfirmationKey.PLAN_ID)
+        val confirmed = body.confirmDestination ?: throw PublishConfirmationRequired(ConfirmationKey.CONFIRM_DESTINATION)
         val plan = plans.find(planId, id, kind, action) ?: throw PublishRefused(PublishRefusal.STALE_PLAN, FIELD_PLAN_ID)
-        if (confirmed != plan.entityId) throw PublishConfirmationRequired(FIELD_CONFIRM_DESTINATION)
+        if (confirmed != plan.entityId) throw PublishConfirmationRequired(ConfirmationKey.CONFIRM_DESTINATION)
         val (target, boundary) = plan.validated
         val committed = when (action) {
             PublishAction.ENABLE -> controls.enable(id, kind, plan.entityId, target, boundary, planId)
             PublishAction.CHANGE_TARGET -> controls.changeTarget(id, kind, plan.entityId, target, boundary, planId)
         }
         plans.remove(planId)
-        return ok(HaPublishingBindingResponse.serializer(), HaPublishingBindingResponse(bindingDtoOf(committed)))
+        return committed
+    }
+
+    /** DISABLE and CHECK_HELPER check no confirmation, so they take none (C35b): either key is the 422 at that key. */
+    private fun refuseConfirmation(control: HaPublishingControl, body: HaPublishingActionRequest) {
+        if (body.planId != null) throw PublishConfirmationRequired(ConfirmationKey.PLAN_ID, takenBy = control)
+        if (body.confirmDestination != null) throw PublishConfirmationRequired(ConfirmationKey.CONFIRM_DESTINATION, takenBy = control)
+    }
+
+    /**
+     * Check helper (C25, C25a correction 2): the runner's validation of the **stored** `entityId` and
+     * `boundaryEntityId`, then [PublishControls.revalidate], which records a helper that fails its validator and never
+     * activates (A08). No binding of [kind] → 409 `HA_PUBLISH_REFUSED` `BAD_ENTITY_ID` at `kind` ([PublishNotSetUp]),
+     * before any read; no connection → `NO_CONNECTION`; a read that answered nothing → 409 `HA_HELPER_READ_FAILED`.
+     */
+    private suspend fun checkHelper(id: AssetId, kind: PublishKind): PublishBinding {
+        val stored = uow.read { bindings.forAsset(id).firstOrNull { it.kind == kind } } ?: throw PublishNotSetUp(id, kind)
+        return when (val validation = validate(id, kind, stored.entityId, stored.boundaryEntityId)) {
+            Validation.NoConnection -> throw PublishRefused(PublishRefusal.NO_CONNECTION, FIELD_ENTITY_ID)
+            is Validation.ReadFailed -> throw HelperReadFailed(validation.kind, validation.detail)
+            is Validation.Validated -> controls.revalidate(id, kind, validation.target, validation.boundary).binding
+        }
+    }
+
+    /**
+     * C35b — `POST /v1/assets/{id}/ha-publishing/publish-now`, body `{}`: [PublishControls.requestPublishNow] stamps
+     * one request id and time on each covered binding — enabled and past C17's gate — and launches the projection and
+     * the runner's pass on the app's scope; this answers **202** `{requestId, acceptedAt, bindings: [{kind, state}]}`
+     * at once and never awaits the pass (I35). No covered binding is a 202 with `bindings: []`, nothing stamped. The
+     * progress is the read's: each binding's `request` (C35). An asset that is not there is 404 `no_such_asset`.
+     */
+    suspend fun publishNow(assetId: String, request: ApiRequest): ApiResponse {
+        request.decode(HaPublishNowRequest.serializer())
+        val id = AssetId(assetId)
+        uow.read { assets.get(id) ?: throw NoSuchAsset(id) }
+        val accepted = controls.requestPublishNow(id)
+        val states = accepted.bindings.map { it.kind to bindingDtoOf(it).state }
+        val answer = buildJsonObject {
+            put("requestId", accepted.requestId)
+            put("acceptedAt", accepted.acceptedAt)
+            putJsonArray("bindings") {
+                states.forEach { (kind, state) ->
+                    addJsonObject {
+                        put("kind", kind.name)
+                        put("state", state)
+                    }
+                }
+            }
+        }
+        return ApiResponse.json(202, "Accepted", ApiJson.encodeToString(JsonObject.serializer(), answer))
+    }
+
+    /**
+     * C35b, O-21(b) — `POST /v1/ha-publishing/decommissions/{id}/acknowledge`: the owner's word that an UNDELIVERABLE
+     * tombstone's helper was cleared in Home Assistant by hand, the P114-38 line's own acknowledgement. Only on the
+     * caller's attestation: `decommissionId` equal to the path's and `acknowledgedClearedInHa` the JSON `true`, both
+     * sent by the caller — a missing key, any other value, or another id is 422 `HA_PUBLISH_CONFIRMATION_REQUIRED` at
+     * that key, nothing deleted. Then [PublishControls.dismissDecommission] ([DismissDecommission]): an unknown id is
+     * 404 `NO_SUCH_DECOMMISSION`, a PENDING one, still being delivered, 409 `DECOMMISSION_STILL_PENDING`, kept. 204.
+     */
+    suspend fun acknowledge(decommissionId: String, request: ApiRequest): ApiResponse {
+        val body = request.decode(HaDecommissionAcknowledgement.serializer())
+        val named = body.decommissionId ?: throw PublishConfirmationRequired(ConfirmationKey.DECOMMISSION_ID)
+        if (body.acknowledgedClearedInHa != JsonPrimitive(true)) {
+            throw PublishConfirmationRequired(ConfirmationKey.ACKNOWLEDGED_CLEARED_IN_HA)
+        }
+        if (named != decommissionId) throw PublishConfirmationRequired(ConfirmationKey.DECOMMISSION_ID)
+        controls.dismissDecommission(decommissionId)
+        return ApiResponse.empty(204, "No Content")
     }
 
     /** [binding] as the read route answers it, its state derived now from one snapshot. */
@@ -263,7 +368,6 @@ internal class HaPublishingHandlers(
     }
 
     private companion object {
-        const val FIELD_CONFIRM_DESTINATION = "confirmDestination"
 
         /** A binding's delivery before any is stored: nothing desired, nothing sent or read. */
         fun emptyDelivery(binding: PublishBinding) = PublishDelivery(binding.id, null, 0, binding.createdAt)
@@ -278,13 +382,32 @@ internal class HaPublishingHandlers(
 }
 
 /**
- * #113/#114 (C35b) — 422 `HA_PUBLISH_CONFIRMATION_REQUIRED`: an action's confirmation at [field] is missing, or
- * `confirmDestination` is not the plan's own `entityId`. Nothing was written. The caller supplies both; nothing here
- * fills either.
+ * #113/#114 (C35b) — the controls `POST /v1/assets/{id}/ha-publishing` takes, by its `action`: the plan's two
+ * (`PublishAction`, which the plan route takes) and the two that need no plan. An API word only: the phone's buttons
+ * call [PublishControls] directly.
  */
-internal class PublishConfirmationRequired(val field: String) :
-    IllegalArgumentException("publishing confirmation required: $field")
+internal enum class HaPublishingControl { ENABLE, CHANGE_TARGET, DISABLE, CHECK_HELPER }
 
-/** A control's answer (C35b): the binding as `GET /v1/assets/{id}/ha-publishing` answers it. */
+/**
+ * #113/#114 (C35b) — 422 `HA_PUBLISH_CONFIRMATION_REQUIRED` at [field]: an Enable's or Change target's confirmation is
+ * missing, or `confirmDestination` is not the plan's own `entityId`; a Disable or Check helper ([takenBy]) carried a
+ * confirmation it does not check; or the acknowledgement's `decommissionId` or `acknowledgedClearedInHa` is missing or
+ * not the caller's attestation. Nothing was written. The caller supplies each; nothing here fills any.
+ */
+internal class PublishConfirmationRequired(val key: ConfirmationKey, val takenBy: HaPublishingControl? = null) :
+    IllegalArgumentException("publishing confirmation required: ${key.field}") {
+    /** The body key the refusal is about, as the wire spells it. */
+    val field: String get() = key.field
+}
+
+/** #113/#114 (C35b) — the body keys a caller confirms or attests with, each by its wire name. */
+internal enum class ConfirmationKey(val field: String) {
+    PLAN_ID(FIELD_PLAN_ID),
+    CONFIRM_DESTINATION("confirmDestination"),
+    DECOMMISSION_ID("decommissionId"),
+    ACKNOWLEDGED_CLEARED_IN_HA("acknowledgedClearedInHa"),
+}
+
+/** A control's answer (C35b): the binding as `GET /v1/assets/{id}/ha-publishing` answers it, or null (Disable, none). */
 @Serializable
-internal data class HaPublishingBindingResponse(val binding: HaPublishBindingDto)
+internal data class HaPublishingBindingResponse(val binding: HaPublishBindingDto?)

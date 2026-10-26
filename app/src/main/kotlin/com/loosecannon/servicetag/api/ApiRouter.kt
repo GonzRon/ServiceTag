@@ -213,6 +213,12 @@ internal class ApiRouter(
      * `PublishControls` with the caller's `planId` and confirmed destination. Another verb on either is a 404, as on
      * every asset sub-resource. Neither takes a value, a date to publish or READY, nor reaches the token, the address,
      * the connection's save or Forget.
+     *
+     * #113/#114 (C35b, B5w2) widened the controls to Disable and Check helper and added two rows: the thirty-second
+     * `/v1/assets/{id}/…` sub-resource, `POST …/ha-publishing/publish-now`, which answers 202 before any Home Assistant
+     * call (another verb on it a 404, as on every asset sub-resource), and `POST
+     * /v1/ha-publishing/decommissions/{id}/acknowledge`, the owner's attestation that an undeliverable obligation was
+     * cleared in Home Assistant, a 405 for any other verb. Neither takes a value, a date to publish or READY.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -304,6 +310,15 @@ internal class ApiRouter(
                     (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).act(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
+
+            // #113/#114 (C35b) — the thirty-second: Publish now, accepted at once (202) and never awaited; an asset
+            // sub-resource, so another verb is a 404.
+            rest.size == 4 && rest[0] == "assets" && rest[2] == "ha-publishing" && rest[3] == "publish-now" ->
+                if (method == "POST") {
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).publishNow(rest[1], request)
+                } else {
+                    throw ApiFailure.notFound(request.path)
+                }
 
             rest == listOf("groups") -> when (method) {
                 "GET" -> handlers.maintenance.listGroups()
@@ -527,6 +542,15 @@ internal class ApiRouter(
             rest == listOf("ha-publishing") ->
                 if (method == "GET") {
                     (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).list()
+                } else {
+                    notAllowed(request)
+                }
+
+            // #113/#114 (C35b, O-21(b)) — the acknowledgement of an undeliverable obligation, on the caller's own
+            // attestation: `POST` alone, a 405 for any other verb.
+            rest.size == 4 && rest[0] == "ha-publishing" && rest[1] == "decommissions" && rest[3] == "acknowledge" ->
+                if (method == "POST") {
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).acknowledge(rest[2], request)
                 } else {
                     notAllowed(request)
                 }

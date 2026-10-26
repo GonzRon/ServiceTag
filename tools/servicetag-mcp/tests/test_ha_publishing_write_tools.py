@@ -457,3 +457,176 @@ def test_writes_nothing_matches_the_plan_shape_and_the_two_shipped_literals() ->
 def test_the_two_shapes_are_vendored() -> None:
     assert command_shapes.HA_PUBLISHING_PLAN_KEYS == ("kind", "action", "entityId", "boundaryEntityId")
     assert command_shapes.HA_PUBLISHING_ACTION_KEYS == ("kind", "action", "planId", "confirmDestination")
+
+
+# --- B5w2: Disable, Check helper, Publish now and the acknowledgement (C35b, O-21(b); row 121) -------------------------
+
+B5W2_TOOLS = ("disable_ha_publishing", "check_ha_publishing_helper", "publish_ha_now", "acknowledge_ha_decommission")
+"""B5w2's four tools, in C29a's order, after B5w1's two."""
+
+STORED_CONTROLS = (("disable_ha_publishing", "DISABLE"), ("check_ha_publishing_helper", "CHECK_HELPER"))
+PUBLISH_NOW_PATH = "/v1/assets/a1/ha-publishing/publish-now"
+ACK_PATH = "/v1/ha-publishing/decommissions/t9/acknowledge"
+
+
+def accepted() -> dict:
+    return {"requestId": "r1", "acceptedAt": 1000, "bindings": [{"kind": "SEASON_SERVICE_DATE", "state": "PENDING"}]}
+
+
+def test_b5w2s_four_tools_follow_b5w1s_in_order() -> None:
+    names = server_module.TOOL_NAMES
+    at = names.index("change_ha_publishing_target")
+    assert names[at + 1:at + 5] == B5W2_TOOLS
+    assert names[-4:] == B5W2_TOOLS
+    assert len(names) == 101
+    for name in B5W2_TOOLS:
+        registered = server_module.mcp._tool_manager.get_tool(name)
+        assert registered is not None and registered.parameters.get("additionalProperties") is False, name
+    assert list(inspect.signature(tool("disable_ha_publishing")).parameters) == ["asset_id", "kind"]
+    assert list(inspect.signature(tool("check_ha_publishing_helper")).parameters) == ["asset_id", "kind"]
+    assert list(inspect.signature(tool("publish_ha_now")).parameters) == ["asset_id"]
+    acknowledge = inspect.signature(tool("acknowledge_ha_decommission")).parameters
+    assert list(acknowledge) == ["decommission_id", "acknowledged_cleared_in_ha"]
+    assert all(p.default is inspect.Parameter.empty for p in acknowledge.values()), "neither is defaulted"
+    schema = server_module.mcp._tool_manager.get_tool("acknowledge_ha_decommission").parameters
+    assert schema["required"] == ["decommission_id", "acknowledged_cleared_in_ha"]
+    assert schema["properties"]["acknowledged_cleared_in_ha"]["type"] == "boolean"
+
+
+@pytest.mark.parametrize(("name", "action"), STORED_CONTROLS)
+def test_a_stored_control_sends_exactly_kind_and_action(phone22, name, action) -> None:
+    phone22.reply("POST", ACTION_PATH, 200, {"binding": {"kind": "EQUIPMENT_STATUS", "entityId": STATUS_HELPER}})
+    answer = tool(name)(asset_id="a1", kind="EQUIPMENT_STATUS")
+    assert answer == {"binding": {"kind": "EQUIPMENT_STATUS", "entityId": STATUS_HELPER}}
+    assert paths(phone22) == [("GET", "/v1/status"), ("POST", ACTION_PATH)]
+    assert body_of(phone22.last()) == {"kind": "EQUIPMENT_STATUS", "action": action}
+    assert set(body_of(phone22.last())) <= set(command_shapes.HA_PUBLISHING_ACTION_KEYS)
+
+
+def test_disable_of_nothing_answers_the_null_binding(phone22) -> None:
+    phone22.reply("POST", ACTION_PATH, 200, {"binding": None})
+    assert tool("disable_ha_publishing")(asset_id="a1", kind="SEASON_SERVICE_DATE") == {"binding": None}
+
+
+def test_the_writes_are_never_retried_and_only_check_helper_takes_the_long_read_budget(phone22, monkeypatch) -> None:
+    calls = spy_requests(monkeypatch)
+    phone22.reply("POST", PUBLISH_NOW_PATH, 202, accepted())
+    phone22.reply("POST", ACK_PATH, 204, b"")
+    tool("disable_ha_publishing")(asset_id="a1", kind="SEASON_SERVICE_DATE")
+    tool("check_ha_publishing_helper")(asset_id="a1", kind="SEASON_SERVICE_DATE")
+    tool("publish_ha_now")(asset_id="a1")
+    tool("acknowledge_ha_decommission")(decommission_id="t9", acknowledged_cleared_in_ha=True)
+    writes = [(path, kwargs) for method, path, kwargs in calls if method == "POST"]
+    assert [path for path, _ in writes] == [ACTION_PATH, ACTION_PATH, PUBLISH_NOW_PATH, ACK_PATH]
+    for path, kwargs in writes:
+        assert kwargs.get("retry_on_connect") is False, path
+    assert [kwargs.get("timeout") for _, kwargs in writes] == [None, httpx.Timeout(30.0, read=120.0), None, None]
+
+
+def test_publish_ha_now_sends_an_empty_object_and_returns_the_202_body(phone22) -> None:
+    phone22.reply("POST", PUBLISH_NOW_PATH, 202, accepted())
+    assert tool("publish_ha_now")(asset_id="a1") == accepted()
+    assert paths(phone22) == [("GET", "/v1/status"), ("POST", PUBLISH_NOW_PATH)]
+    assert body_of(phone22.last()) == {}
+
+
+def test_the_acknowledgement_sends_exactly_the_callers_attestation(phone22) -> None:
+    phone22.reply("POST", ACK_PATH, 204, b"")
+    assert tool("acknowledge_ha_decommission")(decommission_id="t9", acknowledged_cleared_in_ha=True) == {}
+    assert paths(phone22) == [("GET", "/v1/status"), ("POST", ACK_PATH)]
+    assert body_of(phone22.last()) == {"decommissionId": "t9", "acknowledgedClearedInHa": True}
+    assert list(body_of(phone22.last())) == list(command_shapes.HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS)
+
+
+def test_the_acknowledgement_sends_nothing_unless_its_argument_is_true(paired) -> None:
+    for value in (False, None, "true", 1, "yes"):
+        with pytest.raises(ToolError, match="nothing was sent"):
+            tool("acknowledge_ha_decommission")(decommission_id="t9", acknowledged_cleared_in_ha=value)
+    # Through the server, as a client calls it: a string or a number is not the boolean `true`, and a missing
+    # argument is refused before the tool runs — nothing infers or defaults it.
+    for arguments in (
+        {"decommission_id": "t9"},
+        {"decommission_id": "t9", "acknowledged_cleared_in_ha": "true"},
+        {"decommission_id": "t9", "acknowledged_cleared_in_ha": 1},
+        {"decommission_id": "t9", "acknowledged_cleared_in_ha": False},
+    ):
+        with pytest.raises(Exception):
+            asyncio.run(server_module.mcp.call_tool("acknowledge_ha_decommission", arguments))
+    assert paired.requests == []
+
+
+def test_a_refusal_reaches_the_caller_by_its_code_and_is_not_re_sent(phone22) -> None:
+    for path, status, code, call in (
+        (ACTION_PATH, 409, "HA_HELPER_READ_FAILED",
+         lambda: tool("check_ha_publishing_helper")(asset_id="a1", kind="EQUIPMENT_STATUS")),
+        (ACTION_PATH, 409, "HA_PUBLISH_REFUSED", lambda: tool("disable_ha_publishing")(asset_id="a1", kind="X")),
+        (PUBLISH_NOW_PATH, 404, "no_such_asset", lambda: tool("publish_ha_now")(asset_id="a1")),
+        (ACK_PATH, 404, "NO_SUCH_DECOMMISSION",
+         lambda: tool("acknowledge_ha_decommission")(decommission_id="t9", acknowledged_cleared_in_ha=True)),
+        (ACK_PATH, 409, "DECOMMISSION_STILL_PENDING",
+         lambda: tool("acknowledge_ha_decommission")(decommission_id="t9", acknowledged_cleared_in_ha=True)),
+    ):
+        phone22.reply("POST", path, status, {"error": {"code": code, "message": "m", "problems": [], "field": None}})
+        before = len([r for r in phone22.requests if r.method == "POST"])
+        with pytest.raises(ToolError, match=code):
+            call()
+        assert len([r for r in phone22.requests if r.method == "POST"]) == before + 1, code
+
+
+@pytest.mark.parametrize("name", B5W2_TOOLS)
+def test_a_schema_21_phone_is_refused_with_nothing_posted(paired, name) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_21)
+    arguments = {
+        "disable_ha_publishing": {"asset_id": "a1", "kind": "EQUIPMENT_STATUS"},
+        "check_ha_publishing_helper": {"asset_id": "a1", "kind": "EQUIPMENT_STATUS"},
+        "publish_ha_now": {"asset_id": "a1"},
+        "acknowledge_ha_decommission": {"decommission_id": "t9", "acknowledged_cleared_in_ha": True},
+    }[name]
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as refused:
+        tool(name)(**arguments)
+    assert f"{name} needs schema 22" in str(refused.value)
+    assert set(paths(paired)) <= {("GET", "/v1/status")}, "the status read at most, and no POST"
+
+
+@pytest.mark.parametrize("name", B5W2_TOOLS)
+def test_no_argument_takes_a_value_and_an_empty_id_is_refused(paired, name) -> None:
+    arguments = {
+        "disable_ha_publishing": {"asset_id": "a1", "kind": "EQUIPMENT_STATUS"},
+        "check_ha_publishing_helper": {"asset_id": "a1", "kind": "EQUIPMENT_STATUS"},
+        "publish_ha_now": {"asset_id": "a1"},
+        "acknowledge_ha_decommission": {"decommission_id": "t9", "acknowledged_cleared_in_ha": True},
+    }[name]
+    empty = {key: ("" if key.endswith("_id") else value) for key, value in arguments.items()}
+    with pytest.raises(ToolError, match="must not be empty"):
+        tool(name)(**empty)
+    for extra in ({"value": "UP"}, {"date": "2026-02-10"}, {"ready_for_season": True}, {"plan_id": PLAN_ID}):
+        with pytest.raises(ToolError, match="does not accept"):
+            asyncio.run(server_module.mcp.call_tool(name, {**arguments, **extra}))
+    assert paired.requests == []
+
+
+def test_the_docstrings_name_their_routes_codes_and_the_poll() -> None:
+    expectations = {
+        "disable_ha_publishing": ("`POST /v1/assets/{id}/ha-publishing`", 'action: "DISABLE"', "1970-01-01",
+                                  "`HA_PUBLISH_CONFIRMATION_REQUIRED`", "`no_such_asset`", "reads nothing"),
+        "check_ha_publishing_helper": ('action: "CHECK_HELPER"', "**stored**", "`HA_HELPER_READ_FAILED`", "`BAD_ENTITY_ID`",
+                                       "`field` `kind`", "never switches a publication on", "the phone may set"),
+        "publish_ha_now": ("`POST /v1/assets/{id}/ha-publishing/publish-now`", "**202**", "`get_ha_publishing`",
+                           "`ACCEPTED`", "`PUBLISHED`", "`VERIFIED`", "`FAILED`", "ten minutes", "`requestId`"),
+        "acknowledge_ha_decommission": ("`POST /v1/ha-publishing/decommissions/{id}/acknowledge`", "`UNDELIVERABLE`",
+                                        "`NO_SUCH_DECOMMISSION`", "`DECOMMISSION_STILL_PENDING`", "never default it",
+                                        "never set it on a retry", "Never infer it from an error",
+                                        "an orphaned date helper may still permit a start", "never fills it"),
+    }
+    for name, words in expectations.items():
+        doc = flat(tool(name).__doc__)
+        for word in words + ("`APP_SCHEMA_TOO_OLD`",):
+            assert word in doc, (name, word)
+        lowered = doc.lower()
+        assert not any(word in lowered for word in NEVER_SAID), (name, doc)
+
+
+def test_the_acknowledgement_shape_is_vendored() -> None:
+    assert command_shapes.HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS == ("decommissionId", "acknowledgedClearedInHa")
+    assert not server_module._writes_nothing("/v1/assets/a1/ha-publishing/publish-now")
+    assert not server_module._writes_nothing(ACK_PATH)

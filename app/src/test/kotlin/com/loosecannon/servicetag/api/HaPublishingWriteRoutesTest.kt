@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
 import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
 import com.loosecannon.servicetag.core.hapublish.PublishErrorKind
 import com.loosecannon.servicetag.core.hapublish.PublishKind
@@ -20,6 +21,7 @@ import com.loosecannon.servicetag.hapublish.PublishRig.Companion.dateHelper
 import com.loosecannon.servicetag.hapublish.PublishRig.Companion.statusHelper
 import com.loosecannon.servicetag.hapublish.ScenarioRig
 import com.loosecannon.servicetag.testing.assetRow
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -33,6 +35,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * #113/#114 (C35b, C25a, I33, I34, O-21; row 117) — B5w1's controls over `/v1` through the production router over
@@ -448,6 +452,393 @@ class HaPublishingWriteRoutesTest {
         val badKind = api.call("POST", "/v1/assets/${heater.value}/ha-publishing-plan", planBody(PublishKind.EQUIPMENT_STATUS, "ENABLE", STATUS).replace("EQUIPMENT_STATUS", "CONDITION"))
         assertEquals(400, badKind.status)
         assertTrue(graph.publishBindings.all().isEmpty())
+    }
+
+    // --- B5w2: Disable and Check helper (C35b, C25a correction 2; row 118) ---------------------------------------------
+
+    /** One control on the heater's [kind], with any further keys as [extra] (each led by its comma). */
+    private fun V1Client.control(kind: PublishKind, action: String, extra: String = ""): ApiResponse =
+        call("POST", "/v1/assets/${rig.heater.value}/ha-publishing", """{"kind":"${kind.name}","action":"$action"$extra}""")
+
+    private fun ApiResponse.binding(): JsonObject? {
+        assertEquals(bodyText(), 200, status)
+        val tree = Json.parseToJsonElement(bodyText()).jsonObject
+        assertEquals(setOf("binding"), tree.keys)
+        return (tree.getValue("binding") as? JsonObject)?.also { assertEquals(BINDING_KEYS, it.keys) }
+    }
+
+    /** The helpers Home Assistant was asked for after the request's own commit asked for delivery, and before. */
+    private fun ScenarioRig.readsBeforeDelivery(): MutableList<String> {
+        val before = mutableListOf<String>()
+        val asked = graph.deliveryRequests.get()
+        graph.haPublish.onRead = { entityId ->
+            if (graph.deliveryRequests.get() == asked) before += entityId
+            graph.haPublish.answer(entityId)
+        }
+        return before
+    }
+
+    @Test
+    fun disableWhileHaIsUnreachableSucceeds() = rig.run {
+        val api = ready()
+        api.enable(PublishKind.SEASON_SERVICE_DATE, DATE)
+        graph.awaitDispatched()
+        graph.haPublish.helpers[DATE] = dateHelper(DATE, "2025-11-15")
+        val unreachable = RemoteRead.Failed(PublishErrorKind.UNREACHABLE, null)
+        val asked = graph.deliveryRequests.get()
+        val readsDuringTheCall = mutableListOf<String>()
+        graph.haPublish.onRead = { entityId ->
+            if (graph.deliveryRequests.get() == asked) readsDuringTheCall += entityId
+            unreachable
+        }
+        graph.haPublish.log.clear()
+
+        val binding = api.control(PublishKind.SEASON_SERVICE_DATE, "DISABLE").binding()!!
+        assertEquals("NOT_ENABLED", binding.str("state"))
+        assertEquals("false", binding.str("enabled"))
+        assertEquals("Disable reads nothing (C25a): no validate", emptyList<String>(), readsDuringTheCall)
+        assertEquals(asked + 1, graph.deliveryRequests.get())
+        graph.awaitDispatched()
+        val owed = graph.publishDecommissions.all().single()
+        assertEquals(DATE, owed.entityId)
+        assertEquals("Home Assistant unreachable: still owed", DecommissionState.PENDING, owed.state)
+        assertTrue(graph.haPublish.posts.isEmpty())
+
+        // Home Assistant reachable again: the next delivery writes 1970-01-01, reads it back, and lets the helper go.
+        graph.haPublish.onRead = { graph.haPublish.answer(it) }
+        graph.deliveryRequester.requestDelivery()
+        graph.awaitDispatched()
+        assertEquals(INVALID_SERVICE_DATE, graph.haPublish.state(DATE))
+        assertEquals("POST $DATE=$INVALID_SERVICE_DATE", graph.haPublish.log.single { it.startsWith("POST") })
+        assertTrue("the tombstone is deleted once read back", graph.publishDecommissions.all().isEmpty())
+    }
+
+    @Test
+    fun disablingADisabledBindingIsANoOp() = rig.run {
+        val api = ready()
+        api.enable(PublishKind.EQUIPMENT_STATUS, STATUS)
+        graph.awaitDispatched()
+        val disabled = api.control(PublishKind.EQUIPMENT_STATUS, "DISABLE").binding()!!
+        assertEquals("2", disabled.str("revision"))
+        graph.awaitDispatched()
+        val before = tables()
+
+        val again = api.control(PublishKind.EQUIPMENT_STATUS, "DISABLE").binding()!!
+        assertEquals("the binding as stored: no revision, no tombstone (R-1)", disabled, again)
+        graph.awaitDispatched()
+        assertEquals(before, tables())
+
+        // An absent binding is the same no-op (B3 review M2): 200 with a null binding, nothing written.
+        assertEquals(null, api.control(PublishKind.SEASON_SERVICE_DATE, "DISABLE").binding())
+        graph.awaitDispatched()
+        assertEquals(before, tables())
+    }
+
+    @Test
+    fun checkHelperReadsTheStoredDestination() = rig.run {
+        val api = ready()
+        manualFollowingHa()
+        api.enable(PublishKind.SEASON_SERVICE_DATE, DATE, boundary = ENDED)
+        graph.awaitDispatched()
+        val stored = graph.publishBindings.forAsset(heater).single()
+        val reads = readsBeforeDelivery()
+
+        val checked = api.control(PublishKind.SEASON_SERVICE_DATE, "CHECK_HELPER").binding()!!
+        assertEquals("the stored target, then the stored season-ended helper", listOf(DATE, ENDED), reads)
+        assertEquals(DATE, checked.str("entityId"))
+        assertEquals(ENDED, checked.str("boundaryEntityId"))
+        assertEquals((stored.revision + 1).toString(), checked.str("revision"))
+        assertEquals("true", checked.str("validated"))
+        assertEquals(graph.installationIdentity.id(), graph.publishBindings.forAsset(heater).single().activatedInstallationId)
+        graph.awaitDispatched()
+    }
+
+    @Test
+    fun checkHelperNeverActivatesACopiedRow() = rig.run {
+        val api = ready()
+        graph.enablePublishing.run(
+            heater, PublishKind.EQUIPMENT_STATUS, STATUS, fresh(STATUS, PublishKind.EQUIPMENT_STATUS), null,
+            "example-other-installation",
+        )
+        val checked = api.control(PublishKind.EQUIPMENT_STATUS, "CHECK_HELPER").binding()!!
+        assertEquals("COPIED_INSTALLATION", checked.str("state"))
+        assertEquals("example-other-installation", graph.publishBindings.forAsset(heater).single().activatedInstallationId)
+        graph.awaitDispatched()
+        assertTrue("a copied row sends nothing", graph.haPublish.posts.isEmpty())
+    }
+
+    @Test
+    fun disableAndCheckHelperTakeNoConfirmation() = rig.run {
+        val api = ready()
+        api.enable(PublishKind.EQUIPMENT_STATUS, STATUS)
+        graph.awaitDispatched()
+        val before = tables()
+        val asked = graph.deliveryRequests.get()
+        for (action in listOf("DISABLE", "CHECK_HELPER")) {
+            api.control(PublishKind.EQUIPMENT_STATUS, action, ""","planId":"${"a".repeat(64)}"""")
+                .assertRefused(422, "HA_PUBLISH_CONFIRMATION_REQUIRED", "planId", "PublishConfirmationRequired(field=planId)")
+            api.control(PublishKind.EQUIPMENT_STATUS, action, ""","confirmDestination":"$STATUS"""")
+                .assertRefused(
+                    422, "HA_PUBLISH_CONFIRMATION_REQUIRED", "confirmDestination",
+                    "PublishConfirmationRequired(field=confirmDestination)",
+                )
+        }
+        assertEquals(before, tables())
+        assertEquals(asked, graph.deliveryRequests.get())
+    }
+
+    @Test
+    fun checkHelperRefusesNoBindingAndAFailedRead() = rig.run {
+        val api = ready()
+        // C35b, A4w review N4: no binding of the kind is BAD_ENTITY_ID at `kind`, in a sentence about the kind.
+        val none = api.control(PublishKind.SEASON_SERVICE_DATE, "CHECK_HELPER")
+        none.assertRefused(409, "HA_PUBLISH_REFUSED", "kind", "PublishRefused(reason=BAD_ENTITY_ID)")
+        assertTrue(none.bodyText(), none.errorDetail().message.contains("no SEASON_SERVICE_DATE publishing"))
+        assertTrue(none.bodyText(), !none.errorDetail().message.contains("entity id"))
+
+        api.enable(PublishKind.EQUIPMENT_STATUS, STATUS)
+        graph.awaitDispatched()
+        val before = tables()
+        graph.haPublish.onRead = { RemoteRead.Failed(PublishErrorKind.UNREACHABLE, null) }
+        api.control(PublishKind.EQUIPMENT_STATUS, "CHECK_HELPER")
+            .assertRefused(409, "HA_HELPER_READ_FAILED", null, "HelperReadFailed(errorKind=UNREACHABLE)")
+        assertEquals("a failed read writes nothing", before, tables())
+    }
+
+    // --- B5w2: Publish now, 202 (C35b, I35; row 119) -------------------------------------------------------------------
+
+    /** The heater ready since 2025-11-15 (published), and Home Assistant's helper reset to the invalid date since. */
+    private suspend fun ScenarioRig.publishedThenReset(api: V1Client) {
+        role("2025-09-01")
+        complete("2025-11-15")
+        api.enable(PublishKind.SEASON_SERVICE_DATE, DATE)
+        graph.awaitDispatched()
+        assertEquals("2025-11-15", graph.haPublish.state(DATE))
+        graph.haPublish.helpers[DATE] = dateHelper(DATE, INVALID_SERVICE_DATE)
+        graph.now += 1_000
+    }
+
+    private fun V1Client.publishNow(assetId: AssetId = rig.heater): ApiResponse =
+        call("POST", "/v1/assets/${assetId.value}/ha-publishing/publish-now", "{}")
+
+    private fun ApiResponse.accepted(): JsonObject {
+        assertEquals(bodyText(), 202, status)
+        return Json.parseToJsonElement(bodyText()).jsonObject.also {
+            assertEquals(listOf("requestId", "acceptedAt", "bindings"), it.keys.toList())
+        }
+    }
+
+    /** The heater's date binding's `request`, as the read route answers it. */
+    private fun V1Client.request(): JsonObject? {
+        val read = Json.parseToJsonElement(call("GET", "/v1/assets/${rig.heater.value}/ha-publishing").bodyText()).jsonObject
+        val date = read.getValue("bindings").jsonArray.map { it.jsonObject }.single { it.str("kind") == "SEASON_SERVICE_DATE" }
+        return date.getValue("request") as? JsonObject
+    }
+
+    @Test
+    fun publishNowAnswers202BeforeAnyHaCall() = rig.run {
+        val api = ready()
+        publishedThenReset(api)
+        val held = CompletableDeferred<Unit>()
+        graph.haPublish.onRead = { held.await(); graph.haPublish.answer(it) }
+        val posted = graph.haPublish.posts.size
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val accepted = pool.submit<ApiResponse> { api.publishNow() }.get(10, TimeUnit.SECONDS).accepted()
+            val status = pool.submit<ApiResponse> { api.call("GET", "/v1/status") }.get(10, TimeUnit.SECONDS)
+            assertEquals("the API is free while Home Assistant is held", 200, status.status)
+            assertEquals(graph.now, accepted.getValue("acceptedAt").jsonPrimitive.long)
+            val covered = accepted.getValue("bindings").jsonArray.map { it.jsonObject }
+            assertEquals(listOf("SEASON_SERVICE_DATE"), covered.map { it.str("kind") })
+            assertEquals(setOf("kind", "state"), covered.single().keys)
+            assertEquals("nothing was posted before the answer", posted, graph.haPublish.posts.size)
+            val request = api.request()!!
+            assertEquals(accepted.str("requestId"), request.str("id"))
+            assertEquals("ACCEPTED", request.str("progress"))
+        } finally {
+            held.complete(Unit)
+            pool.shutdown()
+        }
+        graph.awaitDispatched()
+        assertEquals("PUBLISHED", api.request()!!.str("progress"))
+        assertEquals("2025-11-15", graph.haPublish.state(DATE))
+    }
+
+    @Test
+    fun theReadShowsAcceptedThenPublishedVerifiedOrFailed() = rig.run {
+        val api = ready()
+        publishedThenReset(api)
+
+        api.publishNow().accepted()
+        graph.awaitDispatched()
+        assertEquals("our POST, read back", "PUBLISHED", api.request()!!.str("progress"))
+
+        graph.now += 1_000
+        val posted = graph.haPublish.posts.size
+        api.publishNow().accepted()
+        graph.awaitDispatched()
+        assertEquals("Home Assistant already held it", "VERIFIED", api.request()!!.str("progress"))
+        assertEquals("read back, no write", posted, graph.haPublish.posts.size)
+
+        graph.now += 1_000
+        graph.haPublish.onRead = { RemoteRead.Failed(PublishErrorKind.UNREACHABLE, null) }
+        api.publishNow().accepted()
+        graph.awaitDispatched()
+        assertEquals("an error after the request", "FAILED", api.request()!!.str("progress"))
+    }
+
+    @Test
+    fun aGateSkippedBindingIsNotCovered() = rig.run {
+        val api = ready()
+        // The status kind with no condition recorded waits for its source; the date kind was activated on another phone.
+        api.enable(PublishKind.EQUIPMENT_STATUS, STATUS)
+        graph.enablePublishing.run(
+            heater, PublishKind.SEASON_SERVICE_DATE, DATE, fresh(DATE, PublishKind.SEASON_SERVICE_DATE), null,
+            "example-other-installation",
+        )
+        graph.awaitDispatched()
+        val before = tables()
+        val accepted = api.publishNow().accepted()
+        assertEquals(0, accepted.getValue("bindings").jsonArray.size)
+        graph.awaitDispatched()
+        assertEquals("nothing stamped", before, tables())
+    }
+
+    /** B5w1 ruling (1): a quiet INVALIDATED_INELIGIBLE date binding is neither read nor sent, so it is not covered. */
+    @Test
+    fun aQuietIneligibleBindingIsNotCovered() = rig.run {
+        val api = ready()
+        api.enable(PublishKind.SEASON_SERVICE_DATE, DATE)
+        graph.awaitDispatched()
+        graph.assets.upsert(
+            assetRow(heater.value, "Example Heater", status = AssetStatus.ARCHIVED, seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        graph.publishProjector.reconcileDesired(graph.today)
+        graph.publishRunner.drain()
+        val state = Json.parseToJsonElement(api.call("GET", "/v1/assets/${heater.value}/ha-publishing").bodyText())
+            .jsonObject.getValue("bindings").jsonArray.single().jsonObject.str("state")
+        assertEquals("INVALIDATED_INELIGIBLE", state)
+        val before = tables()
+        graph.haPublish.log.clear()
+
+        assertEquals(0, api.publishNow().accepted().getValue("bindings").jsonArray.size)
+        graph.awaitDispatched()
+        assertEquals(before, tables())
+        assertTrue("neither read nor sent", graph.haPublish.log.isEmpty())
+    }
+
+    @Test
+    fun aSecondRequestIsSafe() = rig.run {
+        val api = ready()
+        publishedThenReset(api)
+        val posted = graph.haPublish.posts.size
+        val held = CompletableDeferred<Unit>()
+        graph.haPublish.onRead = { held.await(); graph.haPublish.answer(it) }
+        // Each call on its own thread, bounded: a handler that waited on Home Assistant would fail here, not hang.
+        val pool = Executors.newSingleThreadExecutor()
+        val (first, second) = try {
+            val first = pool.submit<ApiResponse> { api.publishNow() }.get(10, TimeUnit.SECONDS).accepted().str("requestId")
+            graph.now += 1_000
+            first to pool.submit<ApiResponse> { api.publishNow() }.get(10, TimeUnit.SECONDS).accepted().str("requestId")
+        } finally {
+            held.complete(Unit)
+            pool.shutdown()
+        }
+        graph.awaitDispatched()
+        assertNotEquals(first, second)
+        assertEquals("the later request replaces the stamp", second, api.request()!!.str("id"))
+        assertEquals("one POST: the second pass reads it back", 1, graph.haPublish.posts.size - posted)
+        assertEquals("PUBLISHED", api.request()!!.str("progress"))
+    }
+
+    @Test
+    fun theRequestSurvivesAGraphRebuild() = rig.run {
+        val api = ready()
+        publishedThenReset(api)
+        val accepted = api.publishNow().accepted()
+        graph.awaitDispatched()
+        rebuild()
+        val request = V1Client(graph).request()!!
+        assertEquals(accepted.str("requestId"), request.str("id"))
+        assertEquals(accepted.getValue("acceptedAt").jsonPrimitive.long, request.getValue("at").jsonPrimitive.long)
+        assertEquals("PUBLISHED", request.str("progress"))
+    }
+
+    @Test
+    fun publishNowTakesNoValueAndNamesAnAsset() = rig.run {
+        val api = ready()
+        assertEquals(404, api.publishNow(AssetId("example-no-such-asset")).status)
+        val value = api.call("POST", "/v1/assets/${heater.value}/ha-publishing/publish-now", """{"value":"2026-02-10"}""")
+        assertEquals(value.bodyText(), 400, value.status)
+        assertEquals("another verb on an asset sub-resource is a 404", 404, api.call("GET", "/v1/assets/${heater.value}/ha-publishing/publish-now").status)
+        assertEquals(0, graph.deliveryRequests.get())
+    }
+
+    // --- B5w2: the acknowledgement (C35b, O-21(b); row 120) ------------------------------------------------------------
+
+    private suspend fun ScenarioRig.tombstone(id: String, state: DecommissionState): DecommissionTombstone =
+        DecommissionTombstone(
+            id, graph.haConnections.get()!!.id, "input_datetime.example_gone_service_done_$id", heater,
+            graph.installationIdentity.id(), state, graph.now, PublishErrorKind.HTTP_ERROR, graph.now, 1,
+        ).also { graph.publishDecommissions.upsertMerging(it) }
+
+    private fun V1Client.acknowledge(pathId: String, body: String): ApiResponse =
+        call("POST", "/v1/ha-publishing/decommissions/$pathId/acknowledge", body)
+
+    @Test
+    fun theAcknowledgementNeedsTheCallersAttestation() = rig.run {
+        val api = ready()
+        val owed = tombstone("example-t1", DecommissionState.UNDELIVERABLE)
+        for ((body, field) in listOf(
+            """{"decommissionId":"example-t1"}""" to "acknowledgedClearedInHa",
+            """{"acknowledgedClearedInHa":true}""" to "decommissionId",
+            """{"decommissionId":"example-t1","acknowledgedClearedInHa":false}""" to "acknowledgedClearedInHa",
+            """{"decommissionId":"example-t1","acknowledgedClearedInHa":"true"}""" to "acknowledgedClearedInHa",
+            """{"decommissionId":"example-t1","acknowledgedClearedInHa":1}""" to "acknowledgedClearedInHa",
+            """{"decommissionId":"example-t1","acknowledgedClearedInHa":null}""" to "acknowledgedClearedInHa",
+            """{"decommissionId":"example-t2","acknowledgedClearedInHa":true}""" to "decommissionId",
+        )) {
+            api.acknowledge("example-t1", body).assertRefused(
+                422, "HA_PUBLISH_CONFIRMATION_REQUIRED", field, "PublishConfirmationRequired(field=$field)",
+            )
+        }
+        assertEquals("nothing deleted", listOf(owed), graph.publishDecommissions.all())
+        assertEquals(0, graph.deliveryRequests.get())
+    }
+
+    @Test
+    fun anUnknownIdIs404() = rig.run {
+        val api = ready()
+        api.acknowledge("example-none", """{"decommissionId":"example-none","acknowledgedClearedInHa":true}""")
+            .assertRefused(404, "NO_SUCH_DECOMMISSION", null)
+    }
+
+    @Test
+    fun aPendingTombstoneIs409AndKept() = rig.run {
+        val api = ready()
+        val owed = tombstone("example-t1", DecommissionState.PENDING)
+        api.acknowledge("example-t1", """{"decommissionId":"example-t1","acknowledgedClearedInHa":true}""")
+            .assertRefused(409, "DECOMMISSION_STILL_PENDING", null)
+        assertEquals(listOf(owed), graph.publishDecommissions.all())
+    }
+
+    @Test
+    fun anUndeliverableOneIsDeletedWith204() = rig.run {
+        val api = ready()
+        tombstone("example-t1", DecommissionState.UNDELIVERABLE)
+        val kept = tombstone("example-t2", DecommissionState.UNDELIVERABLE)
+        val response = api.acknowledge("example-t1", """{"decommissionId":"example-t1","acknowledgedClearedInHa":true}""")
+        assertEquals(response.bodyText(), 204, response.status)
+        assertEquals(listOf(kept), graph.publishDecommissions.all())
+        val listed = Json.parseToJsonElement(api.call("GET", "/v1/ha-publishing").bodyText()).jsonObject
+            .getValue("decommissions").jsonArray.map { it.jsonObject.str("id") }
+        assertEquals(listOf("example-t2"), listed)
+        assertEquals(1, graph.deliveryRequests.get())
+        graph.awaitDispatched()
+        for (verb in listOf("GET", "PATCH", "DELETE")) {
+            val body = if (verb == "PATCH") "{}" else ""
+            assertEquals(verb, 405, api.call(verb, "/v1/ha-publishing/decommissions/example-t2/acknowledge", body).status)
+        }
     }
 
     private fun JsonObject.str(key: String): String = getValue(key).jsonPrimitive.content

@@ -46,7 +46,8 @@ SUPPLY_TOOLS = (
 """C26's eight, named exactly as it names them (R15-5: the removal tool stays). The registered total was **84**
 after #15, **89** after #47's five installed-component tools, **90** after #16's season sync read, **91** after
 #114's season readiness read, **93** after #114's role write and helper discovery, **95** after #113/#114's
-publishing reads, and is **97** since its Enable and Change target, which `test_argument_guard.py` pins."""
+publishing reads, **97** after its Enable and Change target, and is **101** since its Disable, Check helper,
+Publish now and acknowledgement, which `test_argument_guard.py` pins."""
 
 C2_CODES = (
     "SUPPLY_ITEM_NAME_REQUIRED",
@@ -127,7 +128,7 @@ def test_the_eight_supply_tools_are_registered_and_guarded() -> None:
         assert tool is not None, name
         assert tool.parameters.get("additionalProperties") is False, name
     # #47's five installed-component tools and #16's season sync read follow them, last.
-    assert server_module.TOOL_NAMES[-len(SUPPLY_TOOLS) - 13:-13] == SUPPLY_TOOLS
+    assert server_module.TOOL_NAMES[-len(SUPPLY_TOOLS) - 17:-17] == SUPPLY_TOOLS
 
 
 def test_nothing_deletes_a_supply_item_and_the_overlay_has_no_clear_fields() -> None:

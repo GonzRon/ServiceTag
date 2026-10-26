@@ -122,6 +122,11 @@ EXPECTED_TOOLS = (
     # B5w1 (C35b): Enable and Change target, each a plan and then the confirmed action.
     "enable_ha_publishing",
     "change_ha_publishing_target",
+    # B5w2 (C35b): Disable, Check helper, Publish now and the tombstone acknowledgement.
+    "disable_ha_publishing",
+    "check_ha_publishing_helper",
+    "publish_ha_now",
+    "acknowledge_ha_decommission",
 )
 
 
@@ -135,21 +140,21 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_ninety_five() -> None:
+def test_tool_names_are_one_hundred_and_one() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
     repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
     tools to sixty-three, #72's five loan tools to sixty-eight, #86's succession read to sixty-nine,
     #92's five attachment tools to seventy-four and its two replace tools to seventy-six, #15's eight supply
     tools to eighty-four, #47's five installed-component tools to eighty-nine, #16's season sync read to ninety, and
     #114's season readiness read to ninety-one, #114's role write and helper discovery to ninety-three, and #113/#114's
-    publishing read to ninety-four, its collection read to ninety-five, and its Enable and Change target take it
-    to ninety-seven;
+    publishing read to ninety-four, its collection read to ninety-five, its Enable and Change target to
+    ninety-seven, and its Disable, Check helper, Publish now and acknowledgement take it to one hundred and one;
     `TOOL_NAMES`, the registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 97
-    assert len(server_module.TOOL_NAMES) == 97
+    assert len(EXPECTED_TOOLS) == 101
+    assert len(server_module.TOOL_NAMES) == 101
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 97
+    assert len(registered) == 101
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -1018,11 +1023,11 @@ def test_import_merge_docs_say_formats_1_to_21_twenty_three_tables_and_the_four_
 
 
 def test_the_readme_names_every_tool_the_supply_gate_and_the_installed_component_gate() -> None:
-    """#15's C28, #47's C24, #16's C25 and #114's C29: the README's tool list counts ninety-seven and names each tool,
+    """#15's C28, #47's C24, #16's C25 and #114's C29: the README's tool list counts one hundred and one and names each tool,
     the schema-18 gate and the line key, the schema-19 gate, and the schema-21 and schema-22 gates."""
     readme = " ".join(README.read_text(encoding="utf-8").split())
     tools = readme.split("## The tools", 1)[1]
-    assert tools.lstrip().startswith("Ninety-seven:"), tools[:40]
+    assert tools.lstrip().startswith("One hundred and one:"), tools[:40]
     for name in EXPECTED_TOOLS:
         assert f"`{name}`" in readme, name
     assert "The supply tools need schema 18." in readme

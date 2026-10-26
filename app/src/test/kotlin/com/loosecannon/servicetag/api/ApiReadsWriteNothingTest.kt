@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
+import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
@@ -17,9 +18,13 @@ import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
+import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -387,6 +392,62 @@ class ApiReadsWriteNothingTest {
                        "servicePolicy":"IN_SERVICE_AT_START"}""",
                 )
             },
+        )
+
+        // B5w2 (C35b; row 120): the publishing controls write only the publishing tables, each awaited to its end
+        // (the delivery it asked for included), and the acknowledgement only its tombstone.
+        val status = "input_select.example_heater_equipment_status"
+        val date = "input_datetime.example_heater_service_done"
+        runBlocking {
+            graph.saveHaConnection.run(
+                "http://192.168.0.10:8123", Secret("fictional-token-1"), null, NetworkEligibility.HOME_NETWORK_ONLY,
+                "ExampleHomeWifi", null,
+            )
+        }
+        graph.haPublish.helpers[status] = RemoteEntity(status, "unknown", listOf("UP", "DEGRADED", "DOWN"), null, null)
+        graph.haPublish.helpers[date] = RemoteEntity(date, "2025-11-15", null, true, false)
+        for ((kind, entity) in listOf("EQUIPMENT_STATUS" to status, "SEASON_SERVICE_DATE" to date)) {
+            val plan = api.call(
+                "POST", "/v1/assets/$heater/ha-publishing-plan", """{"kind":"$kind","action":"ENABLE","entityId":"$entity"}""",
+            )
+            val planId = Json.parseToJsonElement(plan.bodyText()).jsonObject.getValue("planId").jsonPrimitive.content
+            val enabled = api.call(
+                "POST", "/v1/assets/$heater/ha-publishing",
+                """{"kind":"$kind","action":"ENABLE","planId":"$planId","confirmDestination":"$entity"}""",
+            )
+            assertEquals(enabled.bodyText(), 200, enabled.status)
+        }
+        runBlocking { graph.awaitDispatched() }
+        fun awaited(call: () -> ApiResponse): () -> ApiResponse = { call().also { runBlocking { graph.awaitDispatched() } } }
+        assertEquals(
+            setOf("ha_publish_binding"),
+            tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing", """{"kind":"EQUIPMENT_STATUS","action":"CHECK_HELPER"}""") }),
+        )
+        // A condition to publish, projected as the phone's observer would (it is not started here).
+        api.call("POST", "/v1/assets/$heater/conditions", """{"condition":"DOWN","tzId":"UTC"}""")
+        runBlocking { graph.publishProjector.reconcileDesired(graph.today) }
+        assertEquals(
+            setOf("ha_publish_delivery"),
+            tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing/publish-now", "{}") }),
+        )
+        // Away from home, so the date helper's obligation stays to be acknowledged: Disable reads nothing either way.
+        graph.currentNetwork = NetworkReading(CurrentNetwork.Wifi("ExampleOtherWifi"), null)
+        assertEquals(
+            setOf("ha_publish_binding", "ha_publish_decommission"),
+            tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing", """{"kind":"SEASON_SERVICE_DATE","action":"DISABLE"}""") }),
+        )
+        val owed = runBlocking { graph.publishDecommissions.all() }.single()
+        runBlocking { graph.publishDecommissions.upsertMerging(owed.copy(state = DecommissionState.UNDELIVERABLE)) }
+        assertEquals(
+            setOf("ha_publish_decommission"),
+            tablesWrittenBy(
+                awaited {
+                    api.call(
+                        "POST", "/v1/ha-publishing/decommissions/${owed.id}/acknowledge",
+                        """{"decommissionId":"${owed.id}","acknowledgedClearedInHa":true}""",
+                    )
+                },
+            ),
         )
     }
 }

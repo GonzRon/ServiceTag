@@ -53,6 +53,9 @@ HA_PUBLISHING_PLAN_KEYS: tuple[str, ...] = ("kind", "action", "entityId", "bound
 HA_PUBLISHING_ACTION_KEYS: tuple[str, ...] = ("kind", "action", "planId", "confirmDestination")
 """#113/#114 (C35b): a publishing control, `POST /v1/assets/{id}/ha-publishing`."""
 
+HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS: tuple[str, ...] = ("decommissionId", "acknowledgedClearedInHa")
+"""#114 (C35b, O-21(b)): the tombstone acknowledgement, `POST /v1/ha-publishing/decommissions/{id}/acknowledge`."""
+
 SCHEDULE_ROW_TO_COMMAND: Mapping[str, str] = MappingProxyType(
     {"assetId": "targetAssetId", "groupId": "targetGroupId"}
 )
@@ -108,7 +111,7 @@ season pair, which the replacement fills or ignores — each is a 400 there."""
 
 
 def vendored() -> dict[str, dict[str, Any]]:
-    """The thirteen entries in the golden file's own shape, for the equality test."""
+    """The fourteen entries in the golden file's own shape, for the equality test."""
     return {
         "asset": {"keys": list(ASSET_KEYS)},
         "schedule": {
@@ -128,4 +131,5 @@ def vendored() -> dict[str, dict[str, Any]]:
         "scheduleRole": {"keys": list(SCHEDULE_ROLE_KEYS)},
         "haPublishingPlan": {"keys": list(HA_PUBLISHING_PLAN_KEYS)},
         "haPublishingAction": {"keys": list(HA_PUBLISHING_ACTION_KEYS)},
+        "haPublishingAcknowledgement": {"keys": list(HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS)},
     }

@@ -64,5 +64,8 @@
   },
   "haPublishingAction": {
     "keys": ["kind", "action", "planId", "confirmDestination"]
+  },
+  "haPublishingAcknowledgement": {
+    "keys": ["decommissionId", "acknowledgedClearedInHa"]
   }
 }

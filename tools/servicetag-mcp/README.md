@@ -73,8 +73,9 @@ the one body key it is about, then the `problems` in parentheses.
 - **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
   tools — refuses an app whose `schemaVersion` is below 22 the same way, from the same read, naming the feature
   "season readiness and Home Assistant publishing". So do `set_schedule_role`, `list_ha_entities`,
-  `get_ha_publishing`, `list_ha_publishing`, `enable_ha_publishing` and `change_ha_publishing_target`, the block's
-  next six.
+  `get_ha_publishing`, `list_ha_publishing`, `enable_ha_publishing`, `change_ha_publishing_target`,
+  `disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now` and `acknowledge_ha_decommission`, the
+  block's next ten.
 
 ## Using it
 
@@ -117,7 +118,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Ninety-seven: `pair` plus one per API operation.
+One hundred and one: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -388,8 +389,18 @@ the phone reads the named helpers from Home Assistant (a two-minute read budget)
 `{kind, action, planId, confirmDestination}` to `POST /v1/assets/{id}/ha-publishing` and returns `{binding}`; with
 only one of the two, or another destination, nothing is sent, and neither tool ever fills the confirmation itself.
 A plan that no longer holds is `STALE_PLAN` (409), a missing confirmation `HA_PUBLISH_CONFIRMATION_REQUIRED` (422),
-and the rest `HA_PUBLISH_REFUSED` (409, by reason); the commit is never re-sent on a dropped connection. No tool takes
-a value, a date to publish or a ready flag.
+and the rest `HA_PUBLISH_REFUSED` (409, by reason); the commit is never re-sent on a dropped connection.
+`disable_ha_publishing` and `check_ha_publishing_helper` act on the stored publication and send exactly `{kind,
+action}`: Disable reads nothing from Home Assistant and owes a date helper `1970-01-01`; Check helper reads the stored
+helpers afresh (a two-minute read budget) and never switches a publication on. `publish_ha_now` sends `{}` to `POST
+/v1/assets/{id}/ha-publishing/publish-now` and returns the phone's **202** — `{requestId, acceptedAt, bindings}` — before
+any Home Assistant call; poll `get_ha_publishing` until each covered binding's `request.progress` is `PUBLISHED`,
+`VERIFIED` or `FAILED`, at most ten minutes. `acknowledge_ha_decommission` records the owner's word that an
+`UNDELIVERABLE` helper was cleared in Home Assistant by hand, `POST /v1/ha-publishing/decommissions/{id}/acknowledge`
+with exactly `{decommissionId, acknowledgedClearedInHa: true}`: it sends nothing unless its
+`acknowledged_cleared_in_ha` argument is the caller's own `true`, and no tool infers, defaults or retries that
+attestation — an orphaned date helper may still permit a start in Home Assistant. None of the four is re-sent on a
+dropped connection. No tool takes a value, a date to publish or a ready flag.
 `docs/api/v1.md`'s **Home Assistant publishing (#113, #114)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments

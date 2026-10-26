@@ -24,13 +24,13 @@ import re
 import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Annotated, Any, NamedTuple
 from urllib.parse import quote, urlsplit
 
 import httpx
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import ValidationError
+from pydantic import Strict, ValidationError
 
 from . import command_shapes
 from .client import MAX_ATTACHMENT_BYTES, ApiError, Device, MAX_IMPORT_BYTES, NotAnswering, NotPaired
@@ -193,6 +193,11 @@ TOOL_NAMES: tuple[str, ...] = (
     # B5w1 (C35b): Enable and Change target, each a plan and then the confirmed action, taking the total to 97.
     "enable_ha_publishing",
     "change_ha_publishing_target",
+    # B5w2 (C35b): Disable, Check helper, Publish now and the tombstone acknowledgement, taking the total to 101.
+    "disable_ha_publishing",
+    "check_ha_publishing_helper",
+    "publish_ha_now",
+    "acknowledge_ha_decommission",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -203,8 +208,8 @@ plausible ceiling to hit on a very full archive, so the two import calls get a l
 than everything else (finding 12)."""
 
 _HA_READ_TIMEOUT = httpx.Timeout(30.0, read=120.0)
-"""#113/#114 (C35b): a call the phone answers only after reading Home Assistant itself — helper discovery and the
-publishing plan — gets `_IMPORT_TIMEOUT`'s shape: one or two Home Assistant reads at #16's 30 s each, inside the
+"""#113/#114 (C35b): a call the phone answers only after reading Home Assistant itself — helper discovery, the
+publishing plan and Check helper — gets `_IMPORT_TIMEOUT`'s shape: one or two Home Assistant reads at #16's 30 s each, inside the
 request. Every other "#113/#114" call keeps the default, since no Home Assistant call happens inside it."""
 
 
@@ -4771,6 +4776,120 @@ change_ha_publishing_target.__doc__ = (
     + _HA_PUBLISHING_CONTROL_DOC
 )
 change_ha_publishing_target = mcp.tool()(change_ha_publishing_target)  # registered once its description is whole
+
+
+def _ha_publishing_stored_control(tool: str, action: str, asset_id: str, kind: str, **kwargs: Any) -> dict[str, Any]:
+    """B5w2 (C35b): a control on the stored binding, `{kind, action}` and nothing else — no plan and no confirmation,
+    which the phone refuses on these two actions — never re-sent on a dropped connection."""
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/ha-publishing"
+    _require_ha_publishing_schema(tool)
+    return _call(
+        "POST", path, json_body={"kind": kind, "action": action}, content_type="application/json",
+        retry_on_connect=False, **kwargs,
+    )
+
+
+@mcp.tool()
+def disable_ha_publishing(asset_id: str, kind: str) -> dict[str, Any]:
+    """Switch off one of an asset's Home Assistant publications: `POST /v1/assets/{id}/ha-publishing` with exactly
+    `{kind, action: "DISABLE"}` → `{binding}`, as `get_ha_publishing` answers it. `kind` is `EQUIPMENT_STATUS` or
+    `SEASON_SERVICE_DATE`. It needs no plan and no confirmation, and reads nothing from Home Assistant: it is committed
+    on the phone even while Home Assistant cannot be reached.
+
+    Disabling a date publication owes its helper `1970-01-01`: the obligation appears in `get_ha_publishing`'s
+    `pendingDecommissions` (and `list_ha_publishing`'s `decommissions`) until the phone has written and read it back,
+    and it may still allow starts in Home Assistant until then. A status publication leaves the helper's value as it
+    is. Disabling a publication already off, or one the asset never had, changes nothing: the binding as stored, or
+    `{"binding": null}`.
+
+    Refusals, each writing nothing: an unknown asset is `no_such_asset` (404); a plan id or a destination
+    confirmation is `HA_PUBLISH_CONFIRMATION_REQUIRED` (422) — this tool sends neither. It is never re-sent on a
+    dropped connection: read `get_ha_publishing` before running it again. Needs a phone at schema 22 or later: an older
+    one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    return _ha_publishing_stored_control("disable_ha_publishing", "DISABLE", asset_id, kind)
+
+
+@mcp.tool()
+def check_ha_publishing_helper(asset_id: str, kind: str) -> dict[str, Any]:
+    """Check the helper one of an asset's Home Assistant publications already names: `POST
+    /v1/assets/{id}/ha-publishing` with exactly `{kind, action: "CHECK_HELPER"}` → `{binding}`, as `get_ha_publishing`
+    answers it. The phone reads the **stored** helper, and the stored season-ended helper when the date publication
+    names one, fresh from Home Assistant — so the call can take up to two minutes — and records what it found: a
+    helper that still fits leaves the publication `validated`; one that no longer does keeps the reason in `lastError`.
+    It takes no helper, no plan and no confirmation, and it never switches a publication on or makes one copied from
+    another phone publish from this one; while publishing is enabled, the phone may set the helper within seconds,
+    while the Developer API screen is open.
+
+    Refusals, each writing nothing: an unknown asset is `no_such_asset` (404); no publication of that `kind` on the
+    asset is `HA_PUBLISH_REFUSED` (409, `PublishRefused(reason=BAD_ENTITY_ID)`, `field` `kind`) — `BAD_ENTITY_ID`
+    names the kind here, not a helper id; no saved connection
+    is `HA_PUBLISH_REFUSED` (`NO_CONNECTION`); a read that answered nothing is `HA_HELPER_READ_FAILED` (409,
+    `HelperReadFailed(errorKind=…)`); a connection saved between the read and the record is `HA_PUBLISH_REFUSED`
+    (`STALE_READ`): check again. It is never re-sent on a dropped connection. Needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    return _ha_publishing_stored_control(
+        "check_ha_publishing_helper", "CHECK_HELPER", asset_id, kind, timeout=_HA_READ_TIMEOUT,
+    )
+
+
+@mcp.tool()
+def publish_ha_now(asset_id: str) -> dict[str, Any]:
+    """Ask the phone to publish an asset's Home Assistant values now: `POST
+    /v1/assets/{id}/ha-publishing/publish-now` with `{}` → **202** `{requestId, acceptedAt, bindings: [{kind,
+    state}]}`, the accepted request, returned as the phone sends it. It takes no value: what is published stays derived
+    from the phone's own records. The phone answers before it calls Home Assistant and then, in the background, reads
+    each covered publication back and writes it where Home Assistant differs. `bindings` lists the publications the
+    request covers — enabled on this phone, with a token and a standing helper check, a value to publish, and the
+    asset maintained here; an empty list means nothing was covered and nothing will be sent.
+
+    **Poll `get_ha_publishing`** for the result: each covered binding's `request` carries this `requestId` and its
+    `progress` — `ACCEPTED` while nothing has happened yet, then `PUBLISHED` (the phone's write, read back), `VERIFIED`
+    (Home Assistant already held it) or `FAILED` (see `lastError`). Poll until each is `PUBLISHED`, `VERIFIED` or
+    `FAILED`, at most ten minutes: a request still `ACCEPTED` after that was overtaken (the app stopped, or the phone
+    left its network), and the next start or resume of the app reads back anyway. Asking again is harmless — a new
+    `requestId` replaces the old one, and the phone runs one pass at a time — but this tool never asks again by
+    itself, and never on a dropped connection.
+
+    An unknown asset is `no_such_asset` (404). Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/ha-publishing/publish-now"
+    _require_ha_publishing_schema("publish_ha_now")
+    return _call("POST", path, json_body={}, content_type="application/json", retry_on_connect=False)
+
+
+@mcp.tool()
+def acknowledge_ha_decommission(
+    decommission_id: str, acknowledged_cleared_in_ha: Annotated[bool, Strict()],
+) -> dict[str, Any]:
+    """Record the owner's word that a helper the phone could not reset was cleared in Home Assistant by hand: `POST
+    /v1/ha-publishing/decommissions/{id}/acknowledge` with exactly `{decommissionId, acknowledgedClearedInHa: true}`;
+    the phone deletes that obligation and answers 204 (`{}` here). `decommission_id` is the obligation's `id` from
+    `get_ha_publishing`'s `pendingDecommissions` or `list_ha_publishing`'s `decommissions`.
+
+    **`acknowledged_cleared_in_ha` must be the caller's own `true`, given only once the owner has said the helper was
+    cleared in Home Assistant.** Anything else is refused here and nothing is sent. Never infer it from an error, a
+    state or a read, never default it, and never set it on a retry: an orphaned date helper may still permit a start
+    in Home Assistant, so only the owner's word acknowledges one. This tool never fills it.
+
+    Only an `UNDELIVERABLE` obligation is acknowledged. Refusals, each deleting nothing: an id the phone does not
+    hold is `NO_SUCH_DECOMMISSION` (404); a `PENDING` one, which the phone is still delivering, is
+    `DECOMMISSION_STILL_PENDING` (409); a body without the attestation is `HA_PUBLISH_CONFIRMATION_REQUIRED` (422). It
+    is never re-sent on a dropped connection: read `list_ha_publishing` before running it again. Needs a phone at
+    schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    if acknowledged_cleared_in_ha is not True:
+        raise ToolError(
+            "acknowledged_cleared_in_ha must be true, the owner's own word that the helper was cleared in Home "
+            "Assistant; nothing was sent"
+        )
+    path = f"/v1/ha-publishing/decommissions/{_path_id(decommission_id, field='decommission_id')}/acknowledge"
+    _require_ha_publishing_schema("acknowledge_ha_decommission")
+    values = {"decommissionId": decommission_id, "acknowledgedClearedInHa": acknowledged_cleared_in_ha}
+    body = {key: values[key] for key in command_shapes.HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS}
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

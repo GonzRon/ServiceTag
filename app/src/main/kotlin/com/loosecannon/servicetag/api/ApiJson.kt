@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.fetch.FetchProblem
+import com.loosecannon.servicetag.core.hapublish.DecommissionStillPending
+import com.loosecannon.servicetag.core.hapublish.NoSuchDecommission
 import com.loosecannon.servicetag.core.hapublish.PublishNotSetUp
 import com.loosecannon.servicetag.core.hapublish.PublishRefusal
 import com.loosecannon.servicetag.core.hapublish.PublishRefused
@@ -568,15 +570,23 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     is PublishRefused -> publishRefusedResponse(e)
     // #113/#114 (C35b; B3 review M2): a control on a kind the asset does not publish — no binding to change. The
     // `BAD_ENTITY_ID` reason of the controls' family, about the body's `kind`; nothing was written.
+    // Change target and Check helper both reach it, so its sentence names the kind, never an entity id (A4w review N4).
     is PublishNotSetUp -> errorResponse(
-        409, "Conflict", "HA_PUBLISH_REFUSED", "this asset has no ${e.kind.name} publishing to change; enable it first",
+        409, "Conflict", "HA_PUBLISH_REFUSED",
+        "this asset has no ${e.kind.name} publishing to change or check; enable it first",
         listOf("PublishRefused(reason=${PublishRefusal.BAD_ENTITY_ID.name})"), "kind",
     )
-    // #113/#114 (C35b): an Enable or Change target without the caller's own plan id and destination confirmation.
+    // #113/#114 (C35b): a control or the acknowledgement without the caller's own confirmation, or with one the action
+    // does not check.
     is PublishConfirmationRequired -> errorResponse(
-        422, "Unprocessable Content", "HA_PUBLISH_CONFIRMATION_REQUIRED",
-        "${e.field} is required: send the planId the plan answered and confirmDestination equal to its entityId",
+        422, "Unprocessable Content", "HA_PUBLISH_CONFIRMATION_REQUIRED", publishConfirmationMessage(e),
         listOf("PublishConfirmationRequired(field=${e.field})"), e.field,
+    )
+    // #114 (C25a, C35b): the acknowledgement named no obligation, or one the phone is still delivering (kept).
+    is NoSuchDecommission -> errorResponse(404, "Not Found", "NO_SUCH_DECOMMISSION", "no such decommission")
+    is DecommissionStillPending -> errorResponse(
+        409, "Conflict", "DECOMMISSION_STILL_PENDING",
+        "the phone is still delivering 1970-01-01 to that helper; only an undeliverable one is acknowledged",
     )
     // #113/#114 (C29b): a read of Home Assistant answered nothing to use; its kind under the outbound name.
     is HelperReadFailed -> errorResponse(
@@ -709,6 +719,19 @@ private fun seasonStartRefusalMessage(reason: SeasonStartRefusal): String = when
         "the asset has no Season Start service to count from; give one of its schedules the role first"
     SeasonStartRefusal.CountsFromItself ->
         "a Season Start service cannot count from itself; change when the schedule starts counting first"
+}
+
+/**
+ * #113/#114 (C35b): the sentence for [PublishConfirmationRequired] — what the caller must send, or that the action
+ * takes no confirmation at all. The caller's own values only: nothing is filled for it.
+ */
+private fun publishConfirmationMessage(e: PublishConfirmationRequired): String = when (e.key) {
+    ConfirmationKey.PLAN_ID, ConfirmationKey.CONFIRM_DESTINATION ->
+        e.takenBy?.let { "${it.name} takes no ${e.field}: it checks no confirmation" }
+            ?: "${e.field} is required: send the planId the plan answered and confirmDestination equal to its entityId"
+    ConfirmationKey.DECOMMISSION_ID -> "decommissionId is required and must be the path's id"
+    ConfirmationKey.ACKNOWLEDGED_CLEARED_IN_HA ->
+        "acknowledgedClearedInHa must be true, sent by the caller once the helper was cleared in Home Assistant"
 }
 
 /**

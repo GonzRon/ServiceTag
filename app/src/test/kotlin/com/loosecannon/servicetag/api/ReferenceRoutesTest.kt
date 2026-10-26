@@ -763,18 +763,18 @@ class ReferenceRoutesTest {
         )
 
         assertFalse(
-            "there are thirty-one asset sub-resources now",
+            "there are thirty-two asset sub-resources now",
             listOf(
                 "nine", "sixteen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-five", "twenty-six",
-                "twenty-seven", "twenty-eight", "twenty-nine", "thirty",
+                "twenty-seven", "twenty-eight", "twenty-nine", "thirty", "thirty-one",
             ).any {
                 // A whole number word: "nine …" is also the tail of "twenty-nine …".
                 Regex("""(?<![\w-])${Regex.escape(it)} `/v1/assets/\{id\}/…` sub-resources""").containsMatchIn(text)
             },
         )
         assertTrue(
-            "the 405 row must name thirty-one asset sub-resources",
-            "thirty-one `/v1/assets/{id}/…` sub-resources" in text,
+            "the 405 row must name thirty-two asset sub-resources",
+            "thirty-two `/v1/assets/{id}/…` sub-resources" in text,
         )
 
         // The one code the mapper can spell and no route can return. The 1.2 subsection documents
