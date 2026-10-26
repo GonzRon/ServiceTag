@@ -68,6 +68,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.journal.Reading
@@ -75,7 +76,6 @@ import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.journal.classify
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
-import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -272,8 +272,8 @@ fun AssetDetailScreen(
         readinessModel.onResumed()
         onPauseOrDispose {}
     }
-    // #113/#114 (C36): the two publishing blocks, each its own model, read again on every resume; the date kind's block
-    // draws once its words are there (B6b).
+    // #113/#114 (C36): the two publishing blocks, each its own model, redrawn as their records change and read again on
+    // every resume.
     val statusPublishModel: PublishBlockViewModel = viewModel(key = "publish:$assetId:${PublishKind.EQUIPMENT_STATUS}") {
         PublishBlockViewModel(graph, AssetId(assetId), PublishKind.EQUIPMENT_STATUS)
     }
@@ -428,7 +428,19 @@ fun AssetDetailScreen(
             )
         }
         publishSheet?.let { kind ->
-            LinkPublishSheet(graph = graph, assetId = assetId, kind = kind, opening = publishSheetOpening) {
+            // B6a review M2: a stopped or copied setup reopens on its stored helper.
+            val stored = when (kind) {
+                PublishKind.EQUIPMENT_STATUS -> statusPublish
+                PublishKind.SEASON_SERVICE_DATE -> datePublish
+            }
+            LinkPublishSheet(
+                graph = graph,
+                assetId = assetId,
+                kind = kind,
+                opening = publishSheetOpening,
+                storedHelper = stored.storedHelper,
+                storedBoundary = stored.storedBoundary,
+            ) {
                 publishSheet = null
             }
         }

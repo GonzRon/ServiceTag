@@ -245,7 +245,7 @@ internal fun EntityBrowser(
         if (browse.loading) QuietLine(SEASON_SYNC_READING_ENTITIES)
         browse.failure.forEach { RefusalLine(it.text) }
         if (browse.truncatedList) QuietLine(seasonSyncOnlyFirstShown(MAX_LISTED_ENTITIES))
-        if (browse.failure.isEmpty() && browse.scopeEmpty) QuietLine(SEASON_SYNC_NO_HELPERS)
+        if (browse.failure.isEmpty() && browse.scopeEmpty) browserNoHelpers(scope)?.let { QuietLine(it) }
         if (browse.noMatch) QuietLine(SEASON_SYNC_NO_MATCH)
         // Bounded, because a lazy list cannot measure inside a scrolling column without a height of its own.
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
@@ -267,6 +267,16 @@ internal fun EntityBrowser(
 private fun browserTitle(scope: EntityScope): String = when (scope) {
     EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_CHOOSE_ENTITY
     EntityScope.INPUT_SELECTS, EntityScope.INPUT_DATETIMES -> HA_PUBLISH_CHOOSE_HELPER
+}
+
+/**
+ * B6a review I1 — what an empty scope says: P105-8 only for #16's on/off helpers, whose sentence it is. No ratified
+ * sentence fits the publishing scopes (a candidate for the owner's string batch), so their scope line (P113-4 / P114-31)
+ * over an empty list says it.
+ */
+internal fun browserNoHelpers(scope: EntityScope): String? = when (scope) {
+    EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_NO_HELPERS
+    EntityScope.INPUT_SELECTS, EntityScope.INPUT_DATETIMES -> null
 }
 
 /** The scope line (P105-6, P113-4, P114-31): the date kind's is B6b's, read through its words. */

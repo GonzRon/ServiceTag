@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.data.room.entities.HaPublishBindingEntity
 import com.loosecannon.servicetag.data.room.entities.HaPublishDecommissionEntity
 import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /**
@@ -56,6 +57,9 @@ class RoomPublishBindingRepository(private val dao: HaPublishBindingDao) : Publi
 class RoomPublishDeliveryRepository(private val dao: HaPublishDeliveryDao) : PublishDeliveryRepository {
 
     override suspend fun get(bindingId: String): PublishDelivery? = dao.get(bindingId)?.toDomain()
+
+    override fun observe(bindingId: String): Flow<PublishDelivery?> =
+        dao.observe(bindingId).map { it?.toDomain() }.distinctUntilChanged()
 
     override suspend fun upsert(delivery: PublishDelivery) = dao.upsert(delivery.toEntity())
 

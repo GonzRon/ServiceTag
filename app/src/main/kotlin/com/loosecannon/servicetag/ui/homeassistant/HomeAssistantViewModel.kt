@@ -146,11 +146,16 @@ internal data class HomeAssistantState(
     val stored: HaConnection? = null,
     /** #113/#114 (C36): the publishing facts the screen draws. */
     val publishing: HaScreenPublishing = HaScreenPublishing(),
-    /** P113-41, above P16-9 while the Disconnect confirmation is open and a date helper may still hold a date. */
-    val forgetWarning: String? = null,
 ) {
     /** P113-40 while any asset has a publish binding: this phone writes to Home Assistant with this token. */
     val writeDisclosure: String? get() = HA_PUBLISH_WRITE_DISCLOSURE.takeIf { publishing.anyBinding }
+
+    /**
+     * P113-41, above P16-9 while the Disconnect confirmation is open and a date helper may still hold a date: derived
+     * from the publishing facts as they are read (B6a review N1), so a change while the confirm is open shows at once.
+     */
+    val forgetWarning: String? get() =
+        publishing.dateHelpersOwed.takeIf { disconnectAsk != null && it > 0 }?.let(::haPublishForgetDateHelpers)
 
     /**
      * The form still describes [stored] — its canonical address, its network choice and, under "Only on this home
@@ -451,10 +456,7 @@ internal class HomeAssistantViewModel(
     }
 
     /** Disconnect asks P16-9 first, under P113-41 while a date helper may still hold a Season Start date (O-11). */
-    fun askDisconnect() = mutableState.update { state ->
-        val owed = state.publishing.dateHelpersOwed
-        state.copy(disconnectAsk = HA_DISCONNECT_BODY, forgetWarning = haPublishForgetDateHelpers(owed).takeIf { owed > 0 })
-    }
+    fun askDisconnect() = mutableState.update { it.copy(disconnectAsk = HA_DISCONNECT_BODY) }
 
     /**
      * P114-38 on an orphan obligation: the owner's own word that the helper is cleared in Home Assistant, through the
@@ -481,14 +483,14 @@ internal class HomeAssistantViewModel(
         }
     }
 
-    fun dismissDisconnect() = mutableState.update { it.copy(disconnectAsk = null, forgetWarning = null) }
+    fun dismissDisconnect() = mutableState.update { it.copy(disconnectAsk = null) }
 
     /**
      * Confirmed: [PublishControls.forgetConnection] drains each date helper's `1970-01-01` once, then #16's Forget
      * deletes the connection, its bindings and the token, then delivery is asked for; the screen reloads.
      */
     fun confirmDisconnect() {
-        mutableState.update { it.copy(disconnectAsk = null, forgetWarning = null, busy = true) }
+        mutableState.update { it.copy(disconnectAsk = null, busy = true) }
         viewModelScope.launch {
             try {
                 controls.forgetConnection()

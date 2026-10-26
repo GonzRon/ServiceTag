@@ -85,20 +85,39 @@ internal class LinkPublishViewModel(
     private val controls: PublishControls,
     private val validate: suspend (AssetId, PublishKind, String, String?) -> Validation,
     /**
+     * B6a review M2 — the stored helper (and season-ended helper) when the switch turns a stopped or copied setup back
+     * on: the sheet opens on them, typed, so the owner checks exactly the helper P113-21 names.
+     */
+    initial: String? = null,
+    initialBoundary: String? = null,
+    /**
      * #105's one foreground list read over the stored connection and its token (`AppGraph.listHaEntities`): null with
      * no connection, else the client's outcome. Called only by Choose helper and Refresh.
      */
     private val listEntities: suspend () -> HaListOutcome?,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, assetId: AssetId, kind: PublishKind) : this(
+    constructor(
+        graph: AppGraph,
+        assetId: AssetId,
+        kind: PublishKind,
+        initial: String? = null,
+        initialBoundary: String? = null,
+    ) : this(
         assetId, kind, graph.assets, graph.seasonSyncBindings, graph.publishControls, graph.publishRunner::validate,
-        graph.listHaEntities,
+        initial, initialBoundary, graph.listHaEntities,
     )
 
     private val words: PublishKindWords? = publishWordsOf(kind)
     private val scope = entityScopeOf(kind)
-    private val _state = MutableStateFlow(LinkPublishState(kind))
+    private val _state = MutableStateFlow(
+        LinkPublishState(
+            kind,
+            entityId = initial.orEmpty(),
+            manualEntry = initial != null,
+            boundaryEntityId = initialBoundary.orEmpty(),
+        ),
+    )
     val state: StateFlow<LinkPublishState> = _state.asStateFlow()
 
     /** The fresh read the confirm stands on, for exactly [LinkPublishState.target]; dropped with any change. */

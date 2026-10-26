@@ -120,6 +120,7 @@ class InMemoryPublishDeliveryRepository(
     private val bindings: InMemoryPublishBindingRepository,
 ) : PublishDeliveryRepository, Rollbackable {
     val rows = LinkedHashMap<String, PublishDelivery>()
+    private val version = MutableStateFlow(0)
 
     /** How many [record] calls answered false. */
     var droppedRecords = 0
@@ -131,14 +132,18 @@ class InMemoryPublishDeliveryRepository(
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
 
     override suspend fun get(bindingId: String): PublishDelivery? = rows[bindingId]
 
+    /** Display only (I28): moved by this double's own writes. */
+    override fun observe(bindingId: String): Flow<PublishDelivery?> = version.map { rows[bindingId] }
+
     override suspend fun upsert(delivery: PublishDelivery) {
         if (delivery.bindingId !in bindings.rows) throw RiggedFailure("ha_publish_delivery: no binding ${delivery.bindingId}")
         rows[delivery.bindingId] = delivery
+        version.value += 1
     }
 
     override suspend fun writeDesired(
@@ -158,6 +163,7 @@ class InMemoryPublishDeliveryRepository(
             desiredAt = desiredAt,
             attemptsAtRevision = 0,
         ).withoutError()
+        version.value += 1
         return true
     }
 
@@ -181,16 +187,19 @@ class InMemoryPublishDeliveryRepository(
             errorBindingRevision = delivery.errorKind?.let { bindingRevision },
             errorDesiredRevision = delivery.errorKind?.let { delivery.desiredRevision },
         )
+        version.value += 1
         return true
     }
 
     override suspend fun stampRequest(bindingIds: List<String>, requestId: String, at: Long) {
         bindingIds.forEach { id -> rows[id]?.let { rows[id] = it.copy(lastRequestId = requestId, lastRequestAt = at) } }
+        version.value += 1
     }
 
     /** A04's clearing for a moved generation, which the binding double's update calls. */
     fun clearError(bindingId: String) {
         rows[bindingId]?.let { rows[bindingId] = it.withoutError() }
+        version.value += 1
     }
 
     private fun PublishDelivery.withoutError() = copy(

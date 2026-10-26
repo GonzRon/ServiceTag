@@ -842,6 +842,44 @@ class HomeAssistantViewModelTest {
         )
     }
 
+    @Test fun aDateHelperAlreadyReadBackAt1970IsNotCounted() = runTest {
+        val binding = enableDate(connected())
+        // B3's ruling (6): the helper already holds 1970-01-01, read back at the current pair with nothing outstanding.
+        graph.uow.write {
+            val held = graph.publishDeliveries.get(binding.id)!!
+            graph.publishDeliveries.upsert(
+                held.copy(
+                    desiredValue = "1970-01-01", lastVerifiedValue = "1970-01-01", lastVerifiedAt = graph.now,
+                    verifiedBindingRevision = binding.revision, verifiedDesiredRevision = held.desiredRevision,
+                    needsDelivery = false, reconcilePending = false, outcomeUnknownSince = null,
+                ),
+            )
+        }
+        val screen = open()
+        screen.model.askDisconnect()
+        assertEquals(DISCONNECT_BODY, screen.state.disconnectAsk)
+        assertNull("a helper already read back at 1970-01-01 holds no date", screen.state.forgetWarning)
+    }
+
+    @Test fun theForgetWarningFollowsTheCountWhileTheConfirmIsOpen() = runTest {
+        val connection = connected()
+        enableStatus(connection)
+        val screen = open()
+        screen.model.askDisconnect()
+        assertNull(screen.state.forgetWarning)
+
+        // B6a review N1: a date binding enabled while the confirm is open is warned about at once.
+        enableDate(connection)
+        advanceUntilIdle()
+        assertEquals(
+            "1 date helper in Home Assistant still holds a Season Start date. Disconnecting first sets it to " +
+                "1970-01-01 if it can; if it cannot, it keeps its date until you clear it in Home Assistant.",
+            screen.state.forgetWarning,
+        )
+        screen.model.dismissDisconnect()
+        assertNull(screen.state.forgetWarning)
+    }
+
     @Test fun anAddressChangeRefusalHasItsSentence() = runTest {
         enableDate(connected())
         val screen = open()

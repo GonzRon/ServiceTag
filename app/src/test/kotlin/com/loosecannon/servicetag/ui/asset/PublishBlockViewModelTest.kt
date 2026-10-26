@@ -25,7 +25,6 @@ import java.time.ZoneOffset
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -319,7 +318,7 @@ class PublishBlockViewModelTest {
             heater, kind, graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.haConnections,
             graph.secretStore, graph.assets, graph.transferRecords, graph.installationIdentity::id, graph.uow,
             graph.publishControls, graph.publishRunner::validate,
-            DateMeaning.of(graph.openingServiceReader, graph.events, graph.todayPort) { ZoneOffset.UTC }, emptyFlow(),
+            DateMeaning.of(graph.openingServiceReader, graph.events, graph.todayPort) { ZoneOffset.UTC },
         ) { ZoneOffset.UTC }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.state.collect {} }
         advanceUntilIdle()
@@ -358,6 +357,45 @@ class PublishBlockViewModelTest {
         block.model.onResumed()
         advanceUntilIdle()
         assertTrue(block.state.publishedLine.orEmpty(), block.state.publishedLine.orEmpty().startsWith("Published DEGRADED · "))
+    }
+
+    @Test fun aPassRedrawsTheBlockWithoutAResume() = runTest(scheduler) {
+        enabled()
+        graph.recordCondition.run(heater, ConditionCommand(OperationalCondition.DEGRADED, tzId = "UTC"))
+        graph.publishProjector.reconcileDesired(graph.today)
+        val block = open()
+
+        block.model.publishNow()
+        advanceUntilIdle()
+        graph.awaitDispatched()
+        advanceUntilIdle()
+
+        // B6a review I2: the pass's record redraws the block through the delivery's display flow, with no resume and
+        // no poll.
+        assertEquals("DEGRADED", graph.haPublish.state(STATUS))
+        assertTrue(block.state.publishedLine.orEmpty(), block.state.publishedLine.orEmpty().startsWith("Published DEGRADED · "))
+    }
+
+    @Test fun aCopiedOrStoppedSetupOffersItsStoredHelperToTheSheet() {
+        // B6a review M2: P113-21 asks the owner to check the helper, the stored one, so the sheet opens on it.
+        assertEquals(STATUS, block(PublishState.COPIED_INSTALLATION).storedHelper)
+        val stopped = publishBlockOf(
+            PublishKind.EQUIPMENT_STATUS, StatusWords,
+            writable.copy(binding = binding.copy(enabled = false), delivery = pending, state = PublishState.NOT_ENABLED),
+        ) { "at $it" }
+        assertEquals(STATUS, stopped.storedHelper)
+        val dated = publishBlockOf(
+            PublishKind.SEASON_SERVICE_DATE, DateWords,
+            writable.copy(
+                binding = binding.copy(kind = PublishKind.SEASON_SERVICE_DATE, entityId = DATE, boundaryEntityId = SEASON_ENDED),
+                delivery = pending,
+                state = PublishState.COPIED_INSTALLATION,
+            ),
+        ) { "at $it" }
+        assertEquals(DATE, dated.storedHelper)
+        assertEquals(SEASON_ENDED, dated.storedBoundary)
+        // No binding: nothing to seed.
+        assertNull(publishBlockOf(PublishKind.EQUIPMENT_STATUS, StatusWords, writable) { "at $it" }.storedHelper)
     }
 
     @Test fun stopAsksP113_14ThenDisablesThroughTheControls() = runTest(scheduler) {
@@ -588,6 +626,7 @@ class PublishBlockViewModelTest {
     private companion object {
         const val STATUS = "input_select.example_heater_equipment_status"
         const val DATE = "input_datetime.example_heater_service_done"
+        const val SEASON_ENDED = "input_datetime.example_heater_season_ended"
         const val NOT_YET_CLEARED = "Not yet cleared in Home Assistant: $DATE may still allow starts. ServiceTag keeps " +
             "trying; if this phone cannot reach Home Assistant, set it to 1970-01-01 there."
         const val CANNOT_REACH =

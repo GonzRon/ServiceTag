@@ -49,6 +49,13 @@ interface PublishBindingRepository {
 interface PublishDeliveryRepository {
     suspend fun get(bindingId: String): PublishDelivery?
 
+    /**
+     * [bindingId]'s record as it changes, null while there is none: **display only** (B6a review I2), so a pass's
+     * result reaches the publishing block without a poll. Never an input of `PublishInputs`, the projector or the
+     * dispatch (I28): no delivery write may trigger a projection or a drain.
+     */
+    fun observe(bindingId: String): Flow<PublishDelivery?>
+
     /** Writes [delivery] whole, every column; only a command's write, which read the row in the same transaction. */
     suspend fun upsert(delivery: PublishDelivery)
 

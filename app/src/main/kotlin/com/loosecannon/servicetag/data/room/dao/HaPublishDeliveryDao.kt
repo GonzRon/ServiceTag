@@ -6,6 +6,7 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Update
 import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
+import kotlinx.coroutines.flow.Flow
 
 /**
  * #113/#114 (C5): the device-local delivery records, one per binding. **No flow is offered** — the projector never
@@ -36,6 +37,10 @@ interface HaPublishDeliveryDao {
 
     @Query("SELECT * FROM ha_publish_delivery WHERE binding_id = :bindingId")
     suspend fun get(bindingId: String): HaPublishDeliveryEntity?
+
+    /** Display only (B6a review I2, I28): the publishing block's view of one record. */
+    @Query("SELECT * FROM ha_publish_delivery WHERE binding_id = :bindingId")
+    fun observe(bindingId: String): Flow<HaPublishDeliveryEntity?>
 
     @Query("SELECT * FROM ha_publish_delivery ORDER BY binding_id")
     suspend fun all(): List<HaPublishDeliveryEntity>

@@ -42,7 +42,8 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
  * shows; its answer, or the confirm naming the exact destination and the mapping (P113-5) with Publish (P113-6). A
  * refusal keeps the sheet open with its sentence; nothing is written before Publish. **Insets (G28):** an input sheet
  * of group E — fully expanded, its content scrolling so Publish scrolls above the keyboard, Material's own keyboard
- * handling and no form insets. [opening] keys a fresh model for each opening, kept across a rotation.
+ * handling and no form insets. [opening] keys a fresh model for each opening, kept across a rotation; [storedHelper] and
+ * [storedBoundary] seed it when a stopped or copied setup is turned back on (B6a review M2).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,11 +52,13 @@ internal fun LinkPublishSheet(
     assetId: String,
     kind: PublishKind,
     opening: Int,
+    storedHelper: String? = null,
+    storedBoundary: String? = null,
     onDone: () -> Unit,
 ) {
     val words = publishWordsOf(kind) ?: return
     val model: LinkPublishViewModel = viewModel(key = "publish-sheet:$assetId:${kind.name}:$opening") {
-        LinkPublishViewModel(graph, AssetId(assetId), kind)
+        LinkPublishViewModel(graph, AssetId(assetId), kind, storedHelper, storedBoundary)
     }
     val state by model.state.collectAsStateWithLifecycle()
     val done by rememberUpdatedState(onDone)

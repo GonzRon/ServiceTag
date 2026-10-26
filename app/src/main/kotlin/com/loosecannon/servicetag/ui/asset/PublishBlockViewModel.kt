@@ -48,15 +48,16 @@ import java.time.Instant
 import java.time.ZoneId
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -100,6 +101,12 @@ internal data class PublishBlockState(
     val invalidationLine: String? = null,
     /** #114 (C34) — this asset's obligations to helpers it let go of (P114-36, P114-37 with P114-38). */
     val tombstones: List<PublishTombstoneLine> = emptyList(),
+    /**
+     * B6a review M2 — the stored helper (and the date kind's season-ended helper), which the sheet opens on when the
+     * switch turns a stopped or copied setup back on: P113-21 asks the owner to check *that* helper.
+     */
+    val storedHelper: String? = null,
+    val storedBoundary: String? = null,
 )
 
 /**
@@ -148,6 +155,8 @@ internal fun publishBlockOf(
             title = words.title,
             offersSetUp = canSetUp,
             tombstones = tombstones,
+            storedHelper = binding?.entityId,
+            storedBoundary = binding?.boundaryEntityId,
         )
     }
     val entityId = binding.entityId
@@ -242,6 +251,8 @@ internal fun publishBlockOf(
         offersStop = facts.writable,
         invalidationLine = invalidationLineOf(kind, state, binding, delivery),
         tombstones = tombstones,
+        storedHelper = binding.entityId,
+        storedBoundary = binding.boundaryEntityId,
     )
 }
 
@@ -287,9 +298,10 @@ private fun optionOf(condition: OperationalCondition): String = when (condition)
 /**
  * #113/#114 (C36, C32) — one publishing block's model. It reads the binding, its delivery, the stored connection,
  * whether the token is on this phone, the asset and the open transfers in one snapshot and derives the state with
- * C17's own rules; it is read again on every change to the bindings, the connection, the assets and the transfers, on
- * resume, after each control, and every two seconds while drawn ([ticks]), because a delivery record has no flow by
- * design (I28) and a pass runs after the control returns. Every control goes through [PublishControls], which asks for
+ * C17's own rules; it is read again on every change to the bindings, the obligations, the connection, the assets, the
+ * transfers and this binding's delivery record (its display-only flow, B6a review I2: I28 bounds what may trigger a
+ * projection or a drain, not what a screen observes, so a pass that runs after the control returns redraws the block),
+ * on resume and after each control — never on a timer, and the Keystore is asked only when one of those moves. Every control goes through [PublishControls], which asks for
  * delivery after its commit (A03): Publish now, Check helper (a fresh read of the stored helper, then Revalidate, which
  * never activates), Stop publishing after its confirm and, for the date kind, the owner's P114-38 on an obligation. A
  * refusal comes back as a code and is drawn as its sentence. The date kind also reads its asset's obligations (C34) and
@@ -313,7 +325,6 @@ internal class PublishBlockViewModel(
     private val validate: suspend (AssetId, PublishKind, String, String?) -> Validation,
     /** The date kind's meaning row, read through the one readiness reader (C36; B5's single source). */
     private val meaning: DateMeaning,
-    private val ticks: Flow<Unit>,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) : ViewModel() {
 
@@ -322,7 +333,6 @@ internal class PublishBlockViewModel(
         graph.secretStore, graph.assets, graph.transferRecords, graph.installationIdentity::id, graph.uow,
         graph.publishControls, graph.publishRunner::validate,
         DateMeaning.of(graph.openingServiceReader, graph.events, graph.today) { ZoneId.systemDefault() },
-        everyTwoSeconds(),
     )
 
     private data class Pending(val busy: Boolean = false, val notices: List<String> = emptyList(), val stopAsk: String? = null)
@@ -334,7 +344,7 @@ internal class PublishBlockViewModel(
     private val reads: Flow<PublishBlockFacts> = combine(
         listOf<Flow<Any?>>(
             bindings.observeAll(), decommissions.observeAll(), connections.observe(), assets.observeAll(),
-            transfers.observeHeldIds(), ticks.onStart { emit(Unit) }, refreshes,
+            transfers.observeHeldIds(), deliveryOfThisBinding(), refreshes,
         ),
     ) { }.mapLatest { read() }
 
@@ -345,6 +355,12 @@ internal class PublishBlockViewModel(
             stopAsk = pending.stopAsk,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), PublishBlockState())
+
+    /** This kind's binding's delivery record as it changes (display only, I28); null while there is no binding. */
+    private fun deliveryOfThisBinding(): Flow<PublishDelivery?> = bindings.observeAll()
+        .map { all -> all.firstOrNull { it.assetId == assetId && it.kind == kind }?.id }
+        .distinctUntilChanged()
+        .flatMapLatest { id -> id?.let(deliveries::observe) ?: flowOf(null) }
 
     /** Reads the stores again: the screen calls it on every resume. */
     fun onResumed() = refreshes.update { it + 1 }
@@ -495,15 +511,6 @@ internal class PublishBlockViewModel(
 
     companion object {
         private const val STOP_TIMEOUT_MILLIS = 5_000L
-        private const val TICK_MILLIS = 2_000L
-
-        /** The production re-read while the block is drawn. */
-        fun everyTwoSeconds(): Flow<Unit> = flow {
-            while (true) {
-                delay(TICK_MILLIS)
-                emit(Unit)
-            }
-        }
     }
 }
 

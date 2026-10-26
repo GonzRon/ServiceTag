@@ -189,6 +189,32 @@ class LinkPublishViewModelTest {
         assertTrue(graph.publishBindings.forAsset(heater).isEmpty())
     }
 
+    @Test fun anEmptyDropdownScopeNeverSaysOnOffHelpers() {
+        // B6a review I1: P105-8 sends the owner to make an on/off helper, which only #16's own browser lists. The
+        // publishing scopes have no ratified sentence, so their scope line over an empty list says it.
+        assertEquals(
+            "No Home Assistant on/off helpers found. Create one in Home Assistant, or enter an entity ID manually.",
+            browserNoHelpers(EntityScope.INPUT_BOOLEANS),
+        )
+        assertNull(browserNoHelpers(EntityScope.INPUT_SELECTS))
+        assertNull(browserNoHelpers(EntityScope.INPUT_DATETIMES))
+    }
+
+    @Test fun aCopiedSetupOpensOnItsStoredHelper() = runTest(scheduler) {
+        connected()
+        // B6a review M2: the block hands the sheet the stored helper (and the date kind's season-ended helper).
+        val sheet = LinkPublishViewModel(
+            heater, PublishKind.SEASON_SERVICE_DATE, graph.assets, graph.seasonSyncBindings, graph.publishControls,
+            graph.publishRunner::validate, DATE, SEASON_ENDED,
+        ) { listed }
+        advanceUntilIdle()
+        assertEquals(DATE, sheet.state.value.target)
+        assertTrue("typed, so the owner sees and can change it", sheet.state.value.manualEntry)
+        assertEquals(SEASON_ENDED, sheet.state.value.boundaryEntityId)
+        // Opened from the switch with nothing stored: empty, as before.
+        assertEquals("", open().state.value.target)
+    }
+
     // --- #114 (B6b): the date kind's sheet and its season-ended helper (C9a, D; P114-47/48) ----------------------------
 
     @Test fun theDateSheetAsksForTheSeasonEndedHelperOnlyWhenHomeAssistantDrivesTheSeason() = runTest(scheduler) {
