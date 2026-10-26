@@ -926,7 +926,7 @@ class ReplaceAssetTest {
         anchorOn = "2025-04-01", completionMode = mode,
     ).copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01")
 
-    /** Both schedules ticked, and the season unless [carrySeason] is false. */
+    /** Both schedules ticked, and the season unless [carrySeason] is false; replaced 2026-09-15, five days before today. */
     private fun bothTicked(r: ReplaceHarness = h, carrySeason: Boolean = true, parent: String? = null, groupIds: Set<String> = emptySet()) =
         r.draft(
             carrySeason = carrySeason, parent = parent, scheduleIds = setOf("s-open", "s-after"), scheduleStartOn = "2026-09-15",
@@ -947,7 +947,11 @@ class ReplaceAssetTest {
         val (check, opening) = h.copiesFor(successor)
 
         assertEquals(ScheduleRole.SEASON_START, opening.role, "ruling 1: the copy carries the role")
-        assertEquals(REPLACE_TODAY, opening.roleSinceOn, "counting from the replacement day, never the predecessor's boundary")
+        assertEquals(
+            "2026-09-15",
+            opening.roleSinceOn,
+            "counting from the replacement date (back-dated before today), never today nor the predecessor's boundary",
+        )
         assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, check.servicePolicy, "the dependent is copied, covered")
         assertEquals(ScheduleRole.NONE, check.role)
         assertEquals(openingService(), h.raw.schedules.rows.getValue("s-open"), "the predecessor's role is untouched")
@@ -965,7 +969,7 @@ class ReplaceAssetTest {
 
         assertEquals(CompletionMode.QUICK, opening.completionMode)
         assertEquals(
-            ScheduleRole.SEASON_START to REPLACE_TODAY,
+            ScheduleRole.SEASON_START to "2026-09-15",
             opening.role to opening.roleSinceOn,
             "the source's election is the owner's own, carried and never asked again",
         )

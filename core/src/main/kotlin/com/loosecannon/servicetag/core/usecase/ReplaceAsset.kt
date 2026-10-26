@@ -181,8 +181,8 @@ class ReplaceStale(val assetId: AssetId) :
  * - **The date (R86-3, R86-13 amended, R86-13a).** The succession, the retirement and a MANUAL successor's one
  *   activation all carry the replacement date; one later than today is refused.
  * - **The Season Start role (#124, ruling 1 on N2b).** The copy of a schedule holding the role keeps it, counting from
- *   today, when C10's rule lets the new asset hold it ([keepsRole]); no service is copied, so the new asset starts not
- *   ready. Otherwise the copy has no role, and a ticked schedule counting from the opening service is refused by its
+ *   the replacement date (so a back-dated replacement counts the services done since then), when C10's rule lets the
+ *   new asset hold it ([keepsRole]); no service is copied, so the new asset starts not ready. Otherwise the copy has no role, and a ticked schedule counting from the opening service is refused by its
  *   create (`SeasonStartRefused`), never left waiting on a role that is not there.
  */
 class ReplaceAsset(
@@ -369,7 +369,7 @@ class ReplaceAsset(
         plan.sources.schedules.sortedBy { it.role != ScheduleRole.SEASON_START }.forEach { source ->
             val copy = saveSchedule.createInTransaction(copyOf(source, successor.id, draft.scheduleStartOn, clone))
             if (keepsRole(source, successor.id)) {
-                schedules.upsert(copy.copy(role = ScheduleRole.SEASON_START, roleSinceOn = today.localDate().toString(), updatedAt = now))
+                schedules.upsert(copy.copy(role = ScheduleRole.SEASON_START, roleSinceOn = plan.replacedOn, updatedAt = now))
             }
         }
         // (7) C14: each moved tag retargeted in place; no tag is written to.
