@@ -62,6 +62,7 @@ import com.loosecannon.servicetag.ui.asset.SERIAL_NUMBER_FIELD
 import com.loosecannon.servicetag.ui.asset.TAGS_SECTION
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.maintenance.GROUPS_SECTION
 import com.loosecannon.servicetag.ui.maintenance.SCHEDULES_SECTION
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -97,6 +98,7 @@ fun ReplaceAssetScreen(graph: AppGraph, assetId: String, onBack: () -> Unit, onD
     BackHandler(enabled = !state.saving, onBack = back)
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = { Text(ReplaceStrings.REPLACE_ASSET) },

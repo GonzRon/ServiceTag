@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
@@ -38,6 +40,7 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.nfc.ReaderMode
 import com.loosecannon.servicetag.ui.nfc.TagSinkEffect
@@ -80,6 +83,7 @@ fun WriteTagScreen(
     var warnAboutLock by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.tag_write_title)) },
@@ -92,7 +96,7 @@ fun WriteTagScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TargetLine(targetName)

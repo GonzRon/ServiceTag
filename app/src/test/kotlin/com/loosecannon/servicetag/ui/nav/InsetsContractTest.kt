@@ -6,10 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * #121 (1.8.2 plan §7.3, K1–K5): what the source can pin about the window insets. The root applies the system bars
- * once and consumes them (K1); every `Scaffold` screen is classified, and the input screens pass the keyboard
+ * #121 (1.8.2 plan §7.3, K1–K5, K7): what the source can pin about the window insets. The root applies the system
+ * bars once and consumes them (K1); every `Scaffold` screen is classified, and the input screens pass the keyboard
  * insets to their `Scaffold` (K2); nothing else adds a keyboard inset of its own (K3); the bottom sheets keep
- * Material 3's handling (K4); the dialogs keep the platform's (K5).
+ * Material 3's handling (K4); the dialogs keep the platform's (K5); the write-tag screen's column scrolls (K7).
  *
  * Paths are relative to `app/src/main/kotlin/com/loosecannon/servicetag/`. Every pattern is matched on the code
  * alone, with comments and the contents of literals blanked (see [codeOnly]), so a comment or a string can neither
@@ -59,14 +59,12 @@ class InsetsContractTest {
     }
 
     /**
-     * K2, application: a screen that takes typed input passes `contentWindowInsets = formContentInsets` to its
-     * `Scaffold`, directly among the call's own arguments, before the `) { … ->` content lambda. [FORM_SCREENS] is
-     * filled by T4 and T5; the group B shape (every `Scaffold` call closing on its content lambda) is checked on all
-     * fifteen now, so the rule can be read on each of them.
+     * K2, application: every screen that takes typed input ([FORM_SCREENS], group B) passes
+     * `contentWindowInsets = formContentInsets` to its `Scaffold`, directly among the call's own arguments, before the
+     * `) { … ->` content lambda.
      */
     @Test fun everyFormScreenPassesTheKeyboardInsetsToItsScaffold() {
-        assertTrue("every form screen is a group B screen: ${FORM_SCREENS - GROUP_B}", GROUP_B.containsAll(FORM_SCREENS))
-        for (path in GROUP_B) {
+        for (path in FORM_SCREENS) {
             val file = source(path)
             val calls = file.calls(SCAFFOLD)
             assertTrue("$path has an anchored `Scaffold(`", calls.isNotEmpty())
@@ -75,7 +73,6 @@ class InsetsContractTest {
                     "$path:${call.closeLine + 1}: the Scaffold's arguments close on its `) { … ->` content lambda",
                     CONTENT_LAMBDA.containsMatchIn(file.code[call.closeLine].substring(call.closeColumn)),
                 )
-                if (path !in FORM_SCREENS) continue
                 val passed = (call.openLine + 1 until call.closeLine)
                     .filter { FORM_INSETS_ARGUMENT.matches(file.code[it].trimEnd()) && call.depthAtLineStart(it) == 1 }
                 assertEquals(
@@ -162,6 +159,28 @@ class InsetsContractTest {
         assertTrue("no `decorFitsSystemWindows = false` in app/src/main/kotlin: $sites", sites.isEmpty())
     }
 
+    /**
+     * K7 (D7): `WriteTagScreen`'s content column, the first `Column(` in its `Scaffold`'s content lambda, scrolls inside
+     * the `Scaffold`'s padding, so its placement field can be brought above the keyboard and its lock switch reached in
+     * landscape.
+     */
+    @Test fun theWriteTagColumnScrollsInsideTheScaffoldPadding() {
+        val file = source(WRITE_TAG)
+        val scaffold = file.calls(SCAFFOLD).single()
+        val column = file.calls(COLUMN).firstOrNull { it.openLine > scaffold.closeLine }
+            ?: error("$WRITE_TAG: no anchored `Column(` after the Scaffold's content lambda opens")
+        val at = "$WRITE_TAG:${column.openLine + 1}"
+        val modifier = file.arguments(column).singleOrNull { it.startsWith("modifier =") }
+            ?: error("$at: the content column passes no `modifier =`")
+        val chain = modifier.replace(Regex("""\s+"""), "")
+        val padded = chain.indexOf(".padding(padding)")
+        assertTrue("$at: the content column pads with the Scaffold's padding: $chain", padded >= 0)
+        assertTrue(
+            "$at: the content column's `.verticalScroll(` follows `.padding(padding)`: $chain",
+            chain.indexOf(".verticalScroll(", padded) >= 0,
+        )
+    }
+
     private class Source(val path: String, val text: String) {
         val lines: List<String> = text.lines()
         val code: List<String> = codeOnly(lines)
@@ -181,6 +200,26 @@ class InsetsContractTest {
                 val to = if (index == call.closeLine) call.closeColumn else code[index].length
                 append(code[index], from, to).append('\n')
             }
+        }
+
+        /** The call's own arguments, split at its top-level commas and trimmed; a trailing comma leaves none empty. */
+        fun arguments(call: Call): List<String> {
+            val text = argumentText(call)
+            val arguments = mutableListOf<String>()
+            var depth = 0
+            var from = 0
+            for ((at, char) in text.withIndex()) {
+                when (char) {
+                    '(', '{', '[' -> depth++
+                    ')', '}', ']' -> depth--
+                    ',' -> if (depth == 0) {
+                        arguments += text.substring(from, at).trim()
+                        from = at + 1
+                    }
+                }
+            }
+            arguments += text.substring(from).trim()
+            return arguments.filter { it.isNotEmpty() }
         }
 
         private fun call(openLine: Int, openColumn: Int): Call {
@@ -214,8 +253,10 @@ class InsetsContractTest {
     private companion object {
         const val ROOT = "ui/nav/ServiceTagRoot.kt"
         const val FORM_INSETS_FILE = "ui/components/FormInsets.kt"
+        const val WRITE_TAG = "ui/scan/WriteTagScreen.kt"
 
         val SCAFFOLD = Regex("""^\s*Scaffold\(""")
+        val COLUMN = Regex("""^\s*Column\(""")
         val SHEET = Regex("""^\s*(\S.*->\s*)?ModalBottomSheet\(""")
         val ROOT_MODIFIER = Regex("""^\s*modifier = Modifier\.padding\(padding\)\.consumeWindowInsets\(padding\),$""")
         val CONTENT_LAMBDA = Regex("""^\)\s*\{\s*\w+\s*->""")
@@ -274,17 +315,10 @@ class InsetsContractTest {
         val GROUP_C_WITHOUT_SCAFFOLD = setOf("ui/scan/TagResultSheet.kt")
 
         /**
-         * The group B screens that pass `contentWindowInsets = formContentInsets`: B1–B6 (T4); T5 adds B7–B15 and
-         * closes it on group B.
+         * K2's closure: the screens that pass `contentWindowInsets = formContentInsets` are group B, all fifteen (B1–B6
+         * since T4, B7–B15 since T5), and no other file names it.
          */
-        val FORM_SCREENS = setOf(
-            "ui/journal/EventEntryScreen.kt",
-            "ui/asset/AssetEditScreen.kt",
-            "ui/setup/DefinitionEditScreen.kt",
-            "ui/setup/ProfileEditScreen.kt",
-            "ui/supplies/SupplyEditScreen.kt",
-            "ui/health/HealthSubjectEditScreen.kt",
-        )
+        val FORM_SCREENS = GROUP_B
 
         /** Group E (§4.5): the files whose bottom sheets take typed input. */
         val GROUP_E = setOf(

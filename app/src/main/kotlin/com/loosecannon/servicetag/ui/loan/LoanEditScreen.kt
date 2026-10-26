@@ -44,6 +44,7 @@ import com.loosecannon.servicetag.ui.asset.FieldLabel
 import com.loosecannon.servicetag.ui.asset.FormField
 import com.loosecannon.servicetag.ui.asset.RefusalLine
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.maintenance.NONE
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
 import com.loosecannon.servicetag.ui.theme.BadgeShape
@@ -92,6 +93,7 @@ fun LoanEditScreen(
     }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(

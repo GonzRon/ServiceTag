@@ -52,6 +52,7 @@ import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
 import com.loosecannon.servicetag.ui.maintenance.partOfLine
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -102,6 +103,7 @@ fun TransferFlowScreen(graph: AppGraph, preselect: String?, onBack: () -> Unit, 
     BackHandler(enabled = made.phase != PackPhase.MARKING, onBack = back)
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = { Text(TransferStrings.TRANSFER_ASSETS) },

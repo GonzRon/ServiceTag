@@ -62,6 +62,7 @@ import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.condition.ConditionBadge
 import com.loosecannon.servicetag.ui.health.HealthBadge
 import com.loosecannon.servicetag.ui.health.needsAttention
@@ -107,6 +108,7 @@ fun AssetsScreen(
     }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.assets_title)) },
