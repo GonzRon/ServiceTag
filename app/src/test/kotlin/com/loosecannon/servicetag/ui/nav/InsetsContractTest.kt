@@ -115,7 +115,8 @@ class InsetsContractTest {
 
     /**
      * K3 (F-16): `windowInsetsPadding(` and the built-in inset paddings (`safeDrawingPadding()` and
-     * `safeContentPadding()`, which add the keyboard, and the bar and cutout paddings) only in the share intake, whose
+     * `safeContentPadding()`, which add the keyboard, and the bar and cutout paddings), and the raw bar and safe-area
+     * insets (`WindowInsets.navigationBars`, `WindowInsets.safeDrawing` and the like), only in the share intake, whose
      * exact sites K6 counts.
      */
     @Test fun rawInsetPaddingOnlyInTheShareIntake() {
@@ -264,8 +265,10 @@ class InsetsContractTest {
         val FORM_INSETS_NAME = Regex("""\bformContentInsets\b""")
         val FORM_INSETS_DEFINITION = Regex("""^\s*(internal |public |private )?val formContentInsets\b""")
         val IME_PADDING = listOf(Regex("""\.imePadding\(\)"""), Regex("""^\s*imePadding\(\)"""))
-        val RAW_INSET_PADDING =
-            Regex("""windowInsetsPadding\(|\b(safeDrawing|safeContent|systemBars|navigationBars|statusBars|displayCutout)Padding\(""")
+        val RAW_INSET_PADDING = Regex(
+            """windowInsetsPadding\(|\b(safeDrawing|safeContent|systemBars|navigationBars|statusBars|displayCutout)Padding\(""" +
+                """|WindowInsets\.(safeDrawing|safeContent|systemBars|navigationBars|statusBars|displayCutout)\b""",
+        )
 
         /** Group B (§4.2): the `Scaffold` screens that take typed input in their own content. */
         val GROUP_B = setOf(

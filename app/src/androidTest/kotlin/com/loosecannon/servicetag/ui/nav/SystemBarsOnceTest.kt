@@ -83,6 +83,7 @@ class SystemBarsOnceTest {
      */
     @Test fun aPushedFormEndsOverTheNavigationBarOnce() {
         openTheBenchForm()
+        rule.waitUntil("the keyboard down", IME_TIMEOUT_MS) { windowInsets(WindowInsetsCompat.Type.ime()).bottom == 0 }
         val column = theOverflowingScrollNode()
         val navigation = windowInsets(WindowInsetsCompat.Type.navigationBars()).bottom
 
