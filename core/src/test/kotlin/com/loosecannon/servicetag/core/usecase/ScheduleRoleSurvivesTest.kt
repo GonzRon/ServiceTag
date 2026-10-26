@@ -23,8 +23,9 @@ import kotlinx.coroutines.test.runTest
 
 /**
  * #114 (A2; C7, C10, C12, B; rows 21, 21a) — what a role and an event's `imported` marker survive: a full-replace
- * schedule save keeps the role, a Replace asset copy never inherits one, the role moves no computed due, an edit
- * never clears the marker, and clearing and setting the role again never re-admits an imported service.
+ * schedule save keeps the role, a Replace asset copy on a new asset that cannot hold one never inherits it (#124's
+ * ruling 1 on N2b: one that can keeps it from the replacement day, `ReplaceAssetTest`), the role moves no computed due,
+ * an edit never clears the marker, and clearing and setting the role again never re-admits an imported service.
  */
 class ScheduleRoleSurvivesTest {
     private val h = SeasonStartHarness()
@@ -78,7 +79,7 @@ class ScheduleRoleSurvivesTest {
         )
     }
 
-    @Test fun aReplaceAssetCopyHasNoRole() = runTest {
+    @Test fun aReplaceAssetCopyOnANewAssetInUseAllYearHasNoRole() = runTest {
         val r = ReplaceHarness()
         r.put(r.assetRow(PRED, "Example Water Heater"))
         r.put(
@@ -89,7 +90,7 @@ class ScheduleRoleSurvivesTest {
         val result = r.replaceWith(r.draft(scheduleIds = setOf("s-flush"), scheduleStartOn = "2026-09-15"))
         val copy = r.copiesFor(result.successor.id).single()
 
-        assertEquals(ScheduleRole.NONE, copy.role, "#114 point 6: a successor never inherits the role")
+        assertEquals(ScheduleRole.NONE, copy.role, "the season unticked: the new asset is in use all year and holds no role")
         assertNull(copy.roleSinceOn, "nor its boundary")
     }
 

@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -170,14 +171,19 @@ class ReplaceStale(val assetId: AssetId) :
  * - [run] refuses a draft other than the one reviewed ([ReplaceStale]) before anything is opened. Then it opens the
  *   one write and re-reads the offer and the plan through the same bodies: a held old asset is
  *   [AssetTransferredOut]; one with a successor, a problem, or any difference from the reviewed sources is
- *   [ReplaceStale]. Then, in order: the retirement (R86-3), the new asset, set-up, schedules, groups, tags, and the
- *   row.
+ *   [ReplaceStale]. Then, in order: the retirement (R86-3), the new asset, set-up, groups, schedules, tags, and the
+ *   row. The groups go before the schedules, so a ticked role group's coverage is in place when a copy counting from
+ *   the opening service is judged (#124).
  * - It never nests another use case: it calls their in-transaction bodies (C15), since the transaction is not
  *   re-entrant.
  * - **The old asset is history (R86-C1).** Its one change is the retirement; its schedules, windows, activations,
  *   events, closures, documents, references, conditions, cases, loans and children are never written.
  * - **The date (R86-3, R86-13 amended, R86-13a).** The succession, the retirement and a MANUAL successor's one
  *   activation all carry the replacement date; one later than today is refused.
+ * - **The Season Start role (#124, ruling 1 on N2b).** The copy of a schedule holding the role keeps it, counting from
+ *   today, when C10's rule lets the new asset hold it ([keepsRole]); no service is copied, so the new asset starts not
+ *   ready. Otherwise the copy has no role, and a ticked schedule counting from the opening service is refused by its
+ *   create (`SeasonStartRefused`), never left waiting on a role that is not there.
  */
 class ReplaceAsset(
     private val assets: AssetRepository,
@@ -357,12 +363,15 @@ class ReplaceAsset(
             successor = successor.copy(templateKey = predecessor.templateKey, updatedAt = now)
             assets.upsert(successor)
         }
-        // (5) C11: each ticked schedule, in id order, as a create.
-        plan.sources.schedules.forEach { source ->
-            saveSchedule.createInTransaction(copyOf(source, successor.id, draft.scheduleStartOn, clone))
-        }
-        // (6) C13: each ticked group keeps every open window by id and gains one for the new asset.
+        // (5) C13: each ticked group keeps every open window by id and gains one for the new asset.
         plan.sources.groups.forEach { group -> saveGroup.saveInTransaction(group.id, joining(group, successor.id)) }
+        // (6) C11: each ticked schedule as a create, the one holding the Season Start role first, then in id order.
+        plan.sources.schedules.sortedBy { it.role != ScheduleRole.SEASON_START }.forEach { source ->
+            val copy = saveSchedule.createInTransaction(copyOf(source, successor.id, draft.scheduleStartOn, clone))
+            if (keepsRole(source, successor.id)) {
+                schedules.upsert(copy.copy(role = ScheduleRole.SEASON_START, roleSinceOn = today.localDate().toString(), updatedAt = now))
+            }
+        }
         // (7) C14: each moved tag retargeted in place; no tag is written to.
         plan.sources.tags.forEach { tag ->
             bindTag.bindInTransaction(tag.payloadFormat, tag.payloadKey, TagTarget.AssetTarget(successor.id), label = null)
@@ -381,6 +390,21 @@ class ReplaceAsset(
         }
         successions.append(row)
         return ReplaceResult(successor, row)
+    }
+
+    /**
+     * #124 (ruling 1 on N2b) — whether the copy of [source] keeps the Season Start role on [successor]: [source] holds
+     * it, and C10's rule lets [successor] hold it — maintained here, not `YEAR_ROUND`, not a child with no child row of
+     * its own, and covered by no other live role (C9's coverage, so a ticked group's role, joined at step 5, wins and no
+     * second role is made). The QUICK election (C10a) is not asked again: [source]'s role is the owner's own election
+     * for that schedule, carried, never a default.
+     */
+    private suspend fun keepsRole(source: MaintenanceSchedule, successor: AssetId): Boolean {
+        if (source.role != ScheduleRole.SEASON_START) return false
+        val all = assets.all()
+        val asset = all.firstOrNull { it.id == successor } ?: return false
+        return seasonStartAssetRefusal(asset, all, transfers.heldIds()) == null &&
+            seasonStartRolesCovering(successor, schedules.all(), groups.all()).isEmpty()
     }
 
     private fun settingsFor(draft: ReplaceDraft, predecessor: Asset): AssetSettingsCommand {

@@ -31,6 +31,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonAction
@@ -48,6 +49,9 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.season.NotReadyReason
+import com.loosecannon.servicetag.core.season.Readiness
+import com.loosecannon.servicetag.core.season.seasonReadiness
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
@@ -82,6 +86,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -889,6 +894,137 @@ class ReplaceAssetTest {
         assertEquals(listOf(ReplaceProblem.NotOffered("TEST-link")), h.replace.plan(h.draft(movedTagIds = setOf("TEST-link"))).problems)
         h.replaceWith(h.draft(movedTagIds = setOf("TEST-side")))
         assertEquals(tombstone, h.raw.tags.rows.getValue("TEST-link"))
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // #124 (N2b's fix round, ruling 1) — a copied role schedule keeps the Season Start role
+    // ---------------------------------------------------------------------------------------------------------
+
+    /**
+     * A predecessor in season April to October whose "Opening service" holds the role since April and whose "Burner
+     * check" counts from it. The check's id sorts first, so a copy made in id order alone would judge it uncovered.
+     * The predecessor's own opening service is on record: evidence a copy never takes.
+     */
+    private fun seasonalEstate(r: ReplaceHarness = h, mode: CompletionMode = CompletionMode.FORM, ownRole: Boolean = true) {
+        r.put(
+            r.assetRow(PRED, "Example Water Heater")
+                .copy(seasonMode = SeasonMode.CALENDAR, seasonStartMmdd = "04-01", seasonEndMmdd = "10-31"),
+        )
+        r.put(openingService(mode).let { if (ownRole) it else it.copy(role = ScheduleRole.NONE, roleSinceOn = null) })
+        r.put(
+            scheduleOf(
+                "s-after", assetId = PRED, title = "Burner check", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR,
+                anchorOn = "2025-04-01", servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 14,
+                completionMode = CompletionMode.FORM,
+            ),
+        )
+        r.raw.events.rows["e-open"] = completionOf("e-open", occurredOn = "2026-09-18", occurrenceOn = null, assetId = PRED, scheduleId = "s-open")
+    }
+
+    private fun openingService(mode: CompletionMode = CompletionMode.FORM) = scheduleOf(
+        "s-open", assetId = PRED, title = "Opening service", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR,
+        anchorOn = "2025-04-01", completionMode = mode,
+    ).copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01")
+
+    /** Both schedules ticked, and the season unless [carrySeason] is false. */
+    private fun bothTicked(r: ReplaceHarness = h, carrySeason: Boolean = true, parent: String? = null, groupIds: Set<String> = emptySet()) =
+        r.draft(
+            carrySeason = carrySeason, parent = parent, scheduleIds = setOf("s-open", "s-after"), scheduleStartOn = "2026-09-15",
+            groupIds = groupIds,
+        )
+
+    /** C9's answer for [assetId] on the harness's today, over every stored row. */
+    private fun readinessOf(r: ReplaceHarness, assetId: AssetId): Readiness = seasonReadiness(
+        r.raw.assets.rows.getValue(assetId.value), r.raw.assets.rows.values, r.raw.schedules.rows.values,
+        r.raw.groups.rows.values, r.raw.events.rows.values, r.raw.activations.rows.values.toList(),
+        LocalDate.parse(REPLACE_TODAY), ZoneOffset.UTC,
+    )
+
+    @Test fun aCopiedRoleScheduleKeepsTheRoleFromTheReplacementDayAndItsDependentIsCovered() = runTest {
+        seasonalEstate()
+
+        val successor = h.replaceWith(bothTicked()).successor.id
+        val (check, opening) = h.copiesFor(successor)
+
+        assertEquals(ScheduleRole.SEASON_START, opening.role, "ruling 1: the copy carries the role")
+        assertEquals(REPLACE_TODAY, opening.roleSinceOn, "counting from the replacement day, never the predecessor's boundary")
+        assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, check.servicePolicy, "the dependent is copied, covered")
+        assertEquals(ScheduleRole.NONE, check.role)
+        assertEquals(openingService(), h.raw.schedules.rows.getValue("s-open"), "the predecessor's role is untouched")
+        assertTrue(h.raw.events.rows.values.none { it.scheduleId == opening.id }, "no evidence is copied")
+        val readiness = readinessOf(h, successor)
+        assertIs<Readiness.NotReady>(readiness, "the new asset starts not ready")
+        assertEquals(NotReadyReason.NOT_DONE_SINCE_COMMISSIONING to opening.id, readiness.reason to readiness.scheduleId)
+    }
+
+    @Test fun aQuickRoleScheduleKeepsTheOwnersElection() = runTest {
+        seasonalEstate(mode = CompletionMode.QUICK)
+
+        val successor = h.replaceWith(bothTicked()).successor.id
+        val opening = h.copiesFor(successor).single { it.title == "Opening service" }
+
+        assertEquals(CompletionMode.QUICK, opening.completionMode)
+        assertEquals(
+            ScheduleRole.SEASON_START to REPLACE_TODAY,
+            opening.role to opening.roleSinceOn,
+            "the source's election is the owner's own, carried and never asked again",
+        )
+    }
+
+    @Test fun aNewAssetThatCannotHoldTheRoleIsRefusedAsBeforeAndNeverGivenOne() = runTest {
+        seasonalEstate()
+        h.put(h.assetRow(HOUSE, "Example Plant Room"))
+        val before = h.snapshot()
+
+        val yearRound = assertFailsWith<SeasonStartRefused>("the season unticked: in use all year") {
+            h.replaceWith(bothTicked(carrySeason = false))
+        }
+        assertIs<SeasonStartRefusal.YearRound>(yearRound.reason)
+        val leafChild = assertFailsWith<SeasonStartRefused>("a child with no child of its own holds no role") {
+            h.replaceWith(bothTicked(parent = HOUSE))
+        }
+        assertIs<SeasonStartRefusal.NoSeasonStartService>(leafChild.reason)
+        assertEquals(before, h.snapshot(), "each refusal writes nothing")
+
+        // With nothing counting from it, the copy is made without the role it could not hold.
+        val successor = h.replaceWith(h.draft(carrySeason = true, parent = HOUSE, scheduleIds = setOf("s-open"), scheduleStartOn = "2026-09-15"))
+            .successor.id
+        assertEquals(ScheduleRole.NONE to null, h.copiesFor(successor).single().let { it.role to it.roleSinceOn })
+    }
+
+    @Test fun aTickedRoleGroupCoversTheNewAssetAndNoSecondRoleIsMade() = runTest {
+        fun withRoleGroup(r: ReplaceHarness) {
+            r.put(groupOf("g-north", members = listOf(Triple(PRED, "2026-01-01", null))))
+            r.put(
+                scheduleOf(
+                    "s-walk", assetId = null, groupId = "g-north", title = "Opening walk-round", timeInterval = 1,
+                    timeUnit = RecurrenceUnit.YEAR, anchorOn = "2025-04-01",
+                ).copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01"),
+            )
+        }
+
+        // The group's role alone covers the predecessor: the joined group covers the copied dependent.
+        val x = ReplaceHarness()
+        seasonalEstate(x, ownRole = false)
+        withRoleGroup(x)
+        val bySuccessor = x.replaceWith(bothTicked(x, groupIds = setOf("g-north"))).successor.id
+        assertEquals(listOf(ScheduleRole.NONE, ScheduleRole.NONE), x.copiesFor(bySuccessor).map { it.role })
+        val byGroup = readinessOf(x, bySuccessor)
+        assertIs<Readiness.NotReady>(byGroup)
+        assertEquals(ScheduleId("s-walk"), byGroup.scheduleId, "covered by the group's role")
+
+        // A predecessor with its own role too (TWO_ROLES, a merged row): the group's coverage wins, no second role.
+        seasonalEstate()
+        withRoleGroup(h)
+        val successor = h.replaceWith(bothTicked(groupIds = setOf("g-north"))).successor.id
+        assertEquals(listOf(ScheduleRole.NONE, ScheduleRole.NONE), h.copiesFor(successor).map { it.role }, "the asset role is not copied")
+        val readiness = readinessOf(h, successor)
+        assertIs<Readiness.NotReady>(readiness)
+        assertEquals(
+            NotReadyReason.NOT_DONE_SINCE_COMMISSIONING to ScheduleId("s-walk"),
+            readiness.reason to readiness.scheduleId,
+            "one role, never TWO_ROLES",
+        )
     }
 }
 
