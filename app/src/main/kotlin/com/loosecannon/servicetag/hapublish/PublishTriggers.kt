@@ -8,6 +8,8 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -45,10 +47,17 @@ class PublishTriggers(
     /** When the last start or resume read-back completed, in [elapsed]'s time; null before the first. */
     @Volatile private var lastReadBackAt: Long? = null
 
-    /** The start pass, then, for the life of [scope], the observer and the midnight tick. */
+    /**
+     * Holds the window decision with the read-back it guards: a resume during the start's read-back waits for it and
+     * then finds the window open, so a cold start reads each helper once (F-3); a read that did not complete opens
+     * none (N-1).
+     */
+    private val readBacks = Mutex()
+
+    /** The start pass, then, for the life of [scope], the observer and the midnight tick: all children of this Job. */
     fun start(): Job = scope.launch {
         launch { guarded { startPass() } }
-        observe()
+        launch { observeWork() }
         launch { tick.run { guarded { midnightPass() } } }
     }
 
@@ -59,16 +68,18 @@ class PublishTriggers(
 
     internal suspend fun startPass() {
         reconciler.reconcileDesired(today.localDate())
-        readBack()
+        readBacks.withLock { readBack() }
     }
 
     internal suspend fun resumePass() {
         reconciler.reconcileDesired(today.localDate())
-        val last = lastReadBackAt
-        if (last != null && elapsed() - last < RESUME_WINDOW_MILLIS) {
-            dispatch.drainNow(DeliveryTrigger.CHANGE)
-        } else {
-            readBack()
+        readBacks.withLock {
+            val last = lastReadBackAt
+            if (last != null && elapsed() - last < RESUME_WINDOW_MILLIS) {
+                dispatch.drainNow(DeliveryTrigger.CHANGE)
+            } else {
+                readBack()
+            }
         }
     }
 
@@ -77,13 +88,27 @@ class PublishTriggers(
         dispatch.drainNow(DeliveryTrigger.SCHEDULED)
     }
 
+    /** The observer alone, on [scope] (a test's entry; [start] runs it as its own child). */
+    internal fun observe(): Job = scope.launch { observeWork() }
+
+    /**
+     * The observer's collect. A failure of an observed flow itself (a Room query that throws upstream) ends the
+     * observer with GH3 rather than reaching the scope, which carries no handler; start, resume, midnight and every
+     * control commit still deliver.
+     */
     @OptIn(FlowPreview::class)
-    internal fun observe(): Job = scope.launch {
-        inputs.workArrived().debounce(debounceMillis).collect {
-            guarded {
-                reconciler.reconcileDesired(today.localDate())
-                if (workPending()) requester.requestDelivery()
+    private suspend fun observeWork() {
+        try {
+            inputs.workArrived().debounce(debounceMillis).collect {
+                guarded {
+                    reconciler.reconcileDesired(today.localDate())
+                    if (workPending()) requester.requestDelivery()
+                }
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            Log.w(TAG, "the ha publish reconcile failed; the next trigger repeats it") // l10n-ok
         }
     }
 

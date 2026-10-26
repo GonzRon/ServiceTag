@@ -29,6 +29,16 @@ import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.data.room.fileBackedDb
+import com.loosecannon.servicetag.core.usecase.TransferImportPreview
+import com.loosecannon.servicetag.core.usecase.TransferImportResult
+import com.loosecannon.servicetag.ui.transfer.`import`.AppPack
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackAppFixtures
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.flow
+import java.time.ZoneOffset
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
@@ -71,9 +81,13 @@ class PublishProjectorTest {
 
     @Before fun setUp() = on("2026-02-10")
 
+    /** Row 57a's file-backed database lives here; deleted with its `-wal` and `-shm` after each test. */
+    private val tempDir: File = kotlin.io.path.createTempDirectory("projector").toFile()
+
     @After fun close() {
         graph.close()
         extra.forEach { it.close() }
+        tempDir.deleteRecursively()
     }
 
     private fun run(block: suspend CoroutineScope.() -> Unit) = runBlocking<Unit> { withTimeout(40_000) { block() } }
@@ -107,19 +121,19 @@ class PublishProjectorTest {
         "ExampleHomeWifi", null,
     )
 
-    private suspend fun fresh(entityId: String, kind: PublishKind): ValidationResult {
+    private suspend fun fresh(entityId: String, kind: PublishKind, asset: AssetId = heater): ValidationResult {
         val connection = graph.haConnections.get()!!
-        val revision = graph.publishBindings.forAsset(heater).firstOrNull { it.kind == kind }?.revision ?: 0
+        val revision = graph.publishBindings.forAsset(asset).firstOrNull { it.kind == kind }?.revision ?: 0
         return ValidationResult(entityId, ha.helpers.getValue(entityId), connection.id, connection.configGeneration, revision, graph.now)
     }
 
     /** Enabled through B3's command; its desired value is the projector's to compute. */
-    private suspend fun enable(kind: PublishKind): PublishBinding {
+    private suspend fun enable(kind: PublishKind, asset: AssetId = heater): PublishBinding {
         val entityId = when (kind) {
             PublishKind.EQUIPMENT_STATUS -> STATUS.also { ha.helpers.putIfAbsent(it, statusHelper("UP")) }
             PublishKind.SEASON_SERVICE_DATE -> DATE.also { ha.helpers.putIfAbsent(it, dateHelper(INVALID_SERVICE_DATE)) }
         }
-        return graph.enablePublishing.run(heater, kind, entityId, fresh(entityId, kind), null, graph.installationIdentity.id())
+        return graph.enablePublishing.run(asset, kind, entityId, fresh(entityId, kind, asset), null, graph.installationIdentity.id())
     }
 
     private suspend fun record(condition: OperationalCondition): AssetCondition {
@@ -181,6 +195,12 @@ class PublishProjectorTest {
         reconcile()
         assertEquals(start.desiredRevision + 1, delivery(status).desiredRevision)
 
+        // One attempt at this revision, refused before transmission, so the reset below has a count to reset.
+        ha.onCall = { CallOutcome.Refused(PublishErrorKind.UNREACHABLE, null) }
+        graph.publishRunner.drain()
+        assertEquals(1, delivery(status).attemptsAtRevision)
+        ha.onCall = { ha.act(it) }
+
         record(OperationalCondition.OPERATIONAL)
         reconcile()
         reconcile()
@@ -236,7 +256,7 @@ class PublishProjectorTest {
 
     @Test fun aProjectionsReadAndWriteAreOneTransaction() = run {
         graph.close()
-        graph = FakeGraph(db = fileBackedDb(File.createTempFile("projector", ".db").also { it.delete() }))
+        graph = FakeGraph(db = fileBackedDb(File(tempDir, "servicetag.db")))
         on("2026-02-10")
         calendarHeater()
         role()
@@ -415,6 +435,49 @@ class PublishProjectorTest {
         }
     }
 
+    /**
+     * Row 62's eighth writer (B4b1 review I1), and R-N5's return path through the observer: the asset leaves by a
+     * Transfer Pack (nothing desired, the helper kept), Home Assistant's helper changes while it is away, and the
+     * return's import brings its DOWN back to the helper.
+     */
+    @Test fun aTransferPackReturnReachesTheProjection() = run {
+        val returning = AssetId(TransferPackAppFixtures.HEATER)
+        TransferPackAppFixtures.seedHeater(graph)
+        connect()
+        ha.helpers[STATUS] = statusHelper("UP")
+        val status = enable(PublishKind.EQUIPMENT_STATUS, returning)
+        graph.now += 1_000
+        graph.recordCondition.run(returning, ConditionCommand(OperationalCondition.DOWN, tzId = "UTC"))
+        val observer = graph.publishTriggers.observe()
+        try {
+            eventually("DOWN published") { ha.state(STATUS) == "DOWN" }
+
+            val out = TransferPackAppFixtures.seal(graph, TransferPackAppFixtures.HEATER)
+            graph.markTransferredOut.run(out.created)
+            eventually("nothing desired while it is away") { delivery(status).desiredValue == null }
+            assertEquals("the remote value is kept", "DOWN", ha.state(STATUS))
+            ha.helpers[STATUS] = statusHelper("UP") // changed in Home Assistant meanwhile
+
+            val recipient = FakeGraph().also { extra += it }
+            recipient.today = graph.today
+            recipient.now = graph.now
+            assertTrue(recipient.importAll(out) is TransferImportResult.Imported)
+            repeat(20) { recipient.ids.newId() }
+            val back = TransferPackAppFixtures.seal(recipient, TransferPackAppFixtures.HEATER)
+
+            assertTrue(graph.importAll(back) is TransferImportResult.Imported)
+            eventually("a Transfer Pack import reaches the helper as DOWN") { ha.state(STATUS) == "DOWN" }
+            assertEquals(emptySet<AssetId>(), graph.transferRecords.heldIds())
+        } finally {
+            observer.cancel()
+        }
+    }
+
+    private suspend fun FakeGraph.importAll(pack: AppPack): TransferImportResult {
+        val ready = importTransferPack.preview { pack.bytes.inputStream() } as TransferImportPreview.Ready
+        return importTransferPack.import(ready) { pack.bytes.inputStream() }
+    }
+
     // --- row 65: only committed state is projected -----------------------------------------------
 
     @Test fun aRolledBackWriteChangesNothing() = run {
@@ -431,7 +494,10 @@ class PublishProjectorTest {
 
             // The combined write, its condition insert failing after the Incident is in the transaction.
             val refusing = object : ConditionRepository by graph.conditions {
-                override suspend fun insert(row: AssetCondition) = throw IllegalStateException("the disk is full")
+                override suspend fun insert(row: AssetCondition) {
+                    graph.conditions.insert(row) // the DOWN row is inside the transaction…
+                    throw IllegalStateException("the disk is full") // …and rolled back with it
+                }
             }
             val record = RecordCondition(graph.assets, graph.events, refusing, graph.uow, graph.ids, graph.clock, graph.todayPort)
             val combined = RecordConditionWithIncident(
@@ -510,6 +576,100 @@ class PublishProjectorTest {
         on("2026-02-10")
         graph.publishTriggers.startPass()
         assertEquals("the start repairs it", "UP", graph.haPublish.state(STATUS))
+    }
+
+    /** B4b1 review M2: a resume during the start's read-back waits for it, so a cold start reads each helper once. */
+    @Test fun aResumeDuringTheStartsReadBackDoesNotReadAgain() = run {
+        yearRoundHeater()
+        connect()
+        enable(PublishKind.EQUIPMENT_STATUS)
+        record(OperationalCondition.OPERATIONAL)
+        reconcile()
+        val reading = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        ha.onRead = { reading.complete(Unit); release.await(); ha.answer(it) }
+
+        coroutineScope {
+            val start = async(Dispatchers.Default) { graph.publishTriggers.startPass() }
+            reading.await()
+            val resume = async(Dispatchers.Default) { graph.publishTriggers.resumePass() }
+            delay(200)
+            release.complete(Unit)
+            start.await()
+            resume.await()
+        }
+        assertEquals("one read-back per cold start", 1, ha.log.count { it == "GET $STATUS" })
+    }
+
+    /** B4b1 review M4 (N-1): a start pass that read nothing opens no window, so the next resume reads back. */
+    @Test fun aStartThatReadNothingStartsNoWindow() = run {
+        yearRoundHeater()
+        connect()
+        graph.publishTriggers.startPass() // no binding yet: nothing read
+        enable(PublishKind.EQUIPMENT_STATUS)
+        record(OperationalCondition.OPERATIONAL)
+        reconcile()
+        graph.publishRunner.drain()
+        assertEquals("UP", ha.state(STATUS))
+
+        ha.helpers[STATUS] = statusHelper("DOWN")
+        graph.elapsedMillis = 10 * MINUTE
+        graph.publishTriggers.resumePass()
+        assertEquals("no window: resume reads back and repairs", "UP", ha.state(STATUS))
+    }
+
+    /** B4b1 review M1: an observed flow that fails ends the observer quietly, never on the scope's handler. */
+    @Test fun aFailingInputEndsTheObserverQuietly() = run {
+        val escaped = java.util.Collections.synchronizedList(mutableListOf<Throwable>())
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> escaped += e })
+        val inputs = PublishInputs(
+            graph.conditions, graph.assets, graph.schedules, graph.groups, graph.transferRecords, graph.events,
+            graph.seasonActivations, flow { throw IllegalStateException("example: the database is closed") },
+            graph.seasonSyncBindings, graph.haConnections, graph.db.haPublishDecommissionDao().observeObligations(),
+        )
+        val triggers = PublishTriggers(
+            graph.desiredStateReconciler, graph.publishProjector::deliveryWorkPending, graph.publishDispatch, inputs,
+            graph.deliveryRequester, graph.todayPort, scope, { 0L }, MidnightTick(graph.clock, { ZoneOffset.UTC }),
+        )
+        triggers.observe().join()
+        assertEquals(emptyList<Throwable>(), escaped)
+        scope.cancel()
+    }
+
+    /**
+     * B4b1 review M3 (A03): the delivery signal is computed apart from the projection's answer — an unrelated change
+     * asks for nothing; a generation move alone (Check helper) and a new obligation alone (Disable) each ask once.
+     */
+    @Test fun theDeliverySignalIsComputedApartFromTheProjection() = run {
+        yearRoundHeater()
+        connect()
+        enable(PublishKind.EQUIPMENT_STATUS)
+        enable(PublishKind.SEASON_SERVICE_DATE)
+        record(OperationalCondition.OPERATIONAL)
+        val answers = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+        graph.desiredStateReconciler.answer = { graph.publishProjector.reconcileDesired(it).also { a -> answers += a } }
+        val observer = graph.publishTriggers.observe()
+        try {
+            eventually("everything delivered") { answers.isNotEmpty() && !graph.publishProjector.deliveryWorkPending() }
+            tenWindows()
+            val n = graph.deliveryRequests.get()
+
+            val projections = answers.size
+            graph.assets.upsert(assetRow("example-boiler", "Example Boiler"))
+            eventually("one more projection") { answers.size > projections }
+            tenWindows()
+            assertEquals("nothing pending: nothing asked", n, graph.deliveryRequests.get())
+
+            graph.revalidatePublishing.run(heater, PublishKind.EQUIPMENT_STATUS, fresh(STATUS, PublishKind.EQUIPMENT_STATUS), null)
+            eventually("a generation move alone asks once") { graph.deliveryRequests.get() == n + 1 }
+            assertFalse(answers.last())
+
+            graph.disablePublishing.run(heater, PublishKind.SEASON_SERVICE_DATE)
+            eventually("a new obligation alone asks once") { graph.deliveryRequests.get() == n + 2 }
+            assertFalse(answers.last())
+        } finally {
+            observer.cancel()
+        }
     }
 
     // --- row 68: the midnight tick alone carries a time-only change (K14) -----------------------
