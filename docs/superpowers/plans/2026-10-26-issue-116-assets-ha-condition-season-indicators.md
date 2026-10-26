@@ -14,7 +14,7 @@
 > **Branch:** `issue-113-114-ha-publishing` (one 1.9.0 integration branch), worktree `../noteNFC-wt-113`.
 > **Base:** master after the merge of `issue-121-keyboard-insets` (read on `16768cde` + `42647492`), then the #113/#114
 > master plan's waves (`docs/superpowers/plans/2026-10-22-issues-113-114-home-assistant-publishing.md`, rev 6; "the
-> master plan" below, its constraints G1–G30). **Two briefs:** U1 (wave 8, lane 2) and U2 (wave 12, lane 1), the
+> master plan" below, rev 6.1, its constraints G1–G31). **Two briefs:** U1 (wave 8, lane 2) and U2 (wave 14, lane 1), the
 > master plan's empty slots, so the train keeps two lanes.
 > **Paths:** as the master plan's: `C/`, `CT/` core main/test, `A/`, `T/`, `AT/` app main/test/androidTest under
 > `com/loosecannon/servicetag/`. Every `file:line` was read on `42647492`.
@@ -208,10 +208,11 @@ silently resetting another control (u5); H7 a new surface outside #121's insets 
 | brief | wave · lane (the master plan's §4) | touches | never touches |
 |---|---|---|---|
 | **U1** the row facts and the filter state (JVM) | 8 · L2 (beside B5; after B3, the master plan's wave 4; base: lane 2's tip after A4w) | `A/ui/asset/AssetRowFacts.kt` (new: `RowFacts`, `rowFactsOf`); `A/ui/asset/AssetViewModels.kt` (`AssetRow`'s three fields, `AssetFilters.condition`, the three trailing sources, the join and the Condition predicate); `T/ui/asset/AssetRowFactsTest.kt` (new), `T/ui/asset/AssetViewModelsTest.kt` (+5) — rows u1–u5, u7, u8; ~55 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/api`, `AssetsScreen.kt`, `res/`, `share/`, every `AT/` file, the insets files, `EmptyReason` |
-| **U2** the drawing, the control, the empty state and the UI proof | 12 · L1 (after B7; base: the integrated tip after wave 11, U1 in it) | `A/ui/asset/AssetsScreen.kt` (`AssetListRow`'s badge and marks, `AssetsFilterRow`'s Condition control, the empty state's arm); `A/ui/asset/AssetViewModels.kt` (`EmptyReason.CONDITION_HIDDEN` and its decision, only); `A/ui/components/ServiceTagIcons.kt` (two vectors); `app/src/main/res/drawable/{ic_in_season,ic_ha_link}.xml` (new); `app/src/main/res/values*/strings_asset_detail.xml` (×10: P116-1…4, ratified first); `AT/ui/asset/AssetsRowFactsTest.kt` (new), `AT/ui/asset/AssetsIndicatorsTest.kt` (the one named case), `T/ui/asset/AssetViewModelsTest.kt` (+2) — rows u6, u9, u10, u11; ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/api`, `share/`, `InsetsContractTest.kt`, `AssetsFiltersTest.kt`, `AssetsSearchTest.kt`, every other `AT/` file, the condition package |
+| **U2** the drawing, the control, the empty state and the UI proof | 14 · L1 (rev 6.1 of the master plan; after B7; base: the integrated tip after wave 13, U1 in it) | `A/ui/asset/AssetsScreen.kt` (`AssetListRow`'s badge and marks, `AssetsFilterRow`'s Condition control, the empty state's arm); `A/ui/asset/AssetViewModels.kt` (`EmptyReason.CONDITION_HIDDEN` and its decision, only); `A/ui/components/ServiceTagIcons.kt` (two vectors); `app/src/main/res/drawable/{ic_in_season,ic_ha_link}.xml` (new); `app/src/main/res/values*/strings_asset_detail.xml` (×10: P116-1…4, ratified first); `AT/ui/asset/AssetsRowFactsTest.kt` (new), `AT/ui/asset/AssetsIndicatorsTest.kt` (the one named case), `T/ui/asset/AssetViewModelsTest.kt` (+2) — rows u6, u9, u10, u11; ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/api`, `share/`, `InsetsContractTest.kt`, `AssetsFiltersTest.kt`, `AssetsSearchTest.kt`, every other `AT/` file, the condition package |
 
 **Why concurrent is safe:** U1 beside B5 (wave 8) — B5 owns the graph's last edit and `A/api`, `A/hapublish`, `M/`;
-U1 neither. U2 beside B5w2 (wave 12) — B5w2 is `A/api`, `M/`, `docs/api`; U2 neither. `AssetViewModels.kt` is also
+U1 neither. U2 runs alone in wave 14. #124's N3 (wave 12) edits `ScheduleEditScreen` and the due rows, never the
+Assets list. `AssetViewModels.kt` is also
 A5b's (wave 6, the editor's strand causes): sequential, by wave.
 
 **Between-brief gap:** U1 → U2, the facts and the Condition predicate exist and nothing draws them; the filter is set

@@ -1,4 +1,17 @@
-# #113 + #114 — Home Assistant publishing: equipment status and the Season Start service: master plan (rev 6, 2026-10-26)
+# #113 + #114 — Home Assistant publishing: equipment status and the Season Start service: master plan (rev 6.1, 2026-10-26)
+
+> **Rev 6.1 (2026-10-26)** folds **#124**, "a schedule can start counting from the season's opening service" (owner
+> ruling 2026-10-26: 1.9.0), under the controller's decisions of that day, and records the rulings on rev 6 (the
+> write-day rule, A0 alone in wave 0 and `LinkPublishSheet` in group E are accepted). #124 consumes #114's readiness
+> directly: a new `ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE`, the third "Start counting from" answer; the pure
+> engine reads the qualifying opening-service day through a new `PolicyInputs.openingServiceOn`, fed by one reader
+> that is C9 itself, so O-2, O-20 and O-16 reach it unchanged; in season and not ready it waits with no date
+> (`AWAITING_OPENING_SERVICE`), once ready it counts from max(that day, the cycle's start) plus "Days after"; out of
+> season it is IN_SERVICE as shipped. Refusals and a strand cause in the `SEASON_START_REFUSED` /
+> `SEASON_START_STRANDED` families; format 21 and the merge carry it; full API/MCP parity (C40–C44, G31, rows
+> 134–153, limits 20–21). **Four briefs** — N1 (wave 0), N2a (wave 9, the graph's last edit), N2b (wave 10), N3
+> (wave 12) — and D1 moves to wave 13: **twenty-seven dispatches here and #116's two, in fifteen waves (0–14)**. Nine
+> strings pending (P124-1…9). The vehicle carries seven issues.
 
 > **Rev 6 (2026-10-26)** follows the owner gate's close ("APPROVED WITH THE O-16 AMENDMENT AND RELEASE-BASE
 > RECONCILIATION", `owner-rulings-2026-10-26.md`) and the controller's rulings of that day, nothing else. **Base:** the
@@ -236,12 +249,15 @@ Re-derived on `16768cde` + `42647492`; everything not listed was re-read and sta
 | r13 | the #16 binding and cadence flows C31 observes | assumed | absent at the base (`SeasonSyncRepository` has `observeFor(assetId)` only, `HaConnectionRepository` no flow, `C/seasonsync/SeasonSyncPorts.kt:11-37`): **B3 adds** `SeasonSyncRepository.observeAll()` and `HaConnectionRepository.observe()` (C24), which #116 also reads |
 | r14 | B6b's boundary-helper field | in "the date sheet", while B6b's fence excluded `LinkPublishSheet.kt` | the field is drawn in `LinkPublishSheet.kt` by B6b (that field only); the fence says so |
 | r15 | O-16 | readiness only, `FUTURE_DATED` counting from its day | commands refuse (C39, A0); readiness keeps `FUTURE_DATED` and adds `RECORDED_IN_ADVANCE` (C9) |
-| r16 | vehicle | "1.10.0 if free", pending | **1.9.0 / 23** with #116, #119, #121, #123 (G14) |
+| r16 | vehicle | "1.10.0 if free", pending | **1.9.0 / 23** with #116, #119, #121, #123, and #124 (rev 6.1) (G14) |
 | r17 | dispatches / waves | 22 / 12 | 23 / 13 (A0, wave 0), #116's U1 and U2 in wave 8 lane 2 and wave 12 lane 1 |
 | r18 | strings | 89 + 1 plural, PENDING | 89 + 1 plural **RATIFIED**; **P114-54** pending; the O-16 refusal reuses #82's S25 |
 | r19 | older release that refuses format 21 | 1.8.0 | 1.8.1 (and 1.8.0 while a phone still runs it) |
 | r20 | JVM growth | core +~170, app +~215, MCP +~45 | core +~185, app +~230, MCP +~48 (A0 and rows 4a, 132–133) |
 | r21 | the fix branch during rev 6 | — | advanced to `7f296b0d` (T6: the share intake's insets; `InsetsContractTest` +46 lines, its lists now at `:306-379`): no count, contract or file this plan cites moved but those line numbers; the one mechanical re-read after the fix PR merges confirms the rest |
+| r22 | #124 (rev 6.1) | — | in 1.9.0; briefs N1, N2a, N2b, N3; 27 dispatches + #116's 2 in 15 waves (0–14); N2a is the graph's last edit (G20); D1 moves to wave 13 and B5r…B5w2 to waves 9–11 |
+| r23 | `ServicePolicy`, `PolicyReason`, `PolicyInputs` (`C/model/ServicePolicy.kt:7`, `:13-21`; `C/schedule/ServicePolicyEngine.kt:15-21`) | 4 values, 7 reasons, 5 inputs | + `IN_SERVICE_AFTER_OPENING_SERVICE`; + `AWAITING_OPENING_SERVICE`, `OPENING_SERVICE`; + `openingServiceOn` (C40) |
+| r24 | group schedules and season policies | inv. 106 (`ScheduleCommands.kt:330-344`): a group target takes `CONTINUOUS` only, and a group schedule's recompute reads no season (`RecomputeSchedules.kt`) | unchanged: #124's C1 is the **role** on a group schedule, each member's own asset schedules counting from that member's own completion (C41) |
 
 ## Global constraints
 
@@ -305,7 +321,8 @@ Each line is a sentence a reviewer can test against the diff.
     `versionCode`: master carries schema 22 under 1.8.1's name, emulator only, until the release. **The vehicle is
     ServiceTag 1.9.0, versionCode 23** (owner ruling 2026-10-26, #104), one MINOR (`docs/versioning.md:24`: a
     forward-only format step and new capabilities) carrying **#113, #114, #116, #119, #121 and #123**; its release task
-    (§7) sets the numbers and writes the notes for all six. Tagging is not authorized by this plan.
+    (§7) sets the numbers and writes the notes for all six — **seven with #124** (owner ruling 2026-10-26, rev 6.1).
+    Tagging is not authorized by this plan.
 15. **HTTP stays outside domain transactions.** No use case awaits the network inside `uow.write`; the projector reads
     its sources and writes the desired state in one `uow.write` with no HTTP (A02, C31); the sender reads one `uow.read`
     snapshot, records a write-ahead attempt before any POST (A05) and a reconcile write-ahead before a reconcile's
@@ -331,8 +348,9 @@ Each line is a sentence a reviewer can test against the diff.
     `ExampleHomeWifi`; the owner's asset, schedule and group names, entity ids, fixture helper ids, address, Wi-Fi, host
     name, token, HA automation names and production-phone state never enter the repository (§8 names two HA-side places
     the owner's ruling allows, and only in this plan; the private ledger holds the rest).
-20. **AppGraph and FakeGraph** are edited only by A0 (rev 6), S1, A2, A3, B3, B4a, B4b1, B4b2 and B5, never by two
-    concurrent briefs; A0 is the first, alone in wave 0, and B5 is the last of all (§4). #116's briefs edit neither.
+20. **AppGraph and FakeGraph** are edited only by A0 (rev 6), S1, A2, A3, B3, B4a, B4b1, B4b2, B5 and N2a (rev
+    6.1), never by two concurrent briefs; A0 is the first (wave 0) and N2a the last (wave 9) (§4). #116's briefs and
+    N1, N2b, N3 edit neither.
 21. **Standing rules.** Commits: one casual lowercase subject line, no body, no trailer, no tool name; implementers
     never write ledgers; JVM first; every counted RED a real mutation (`--no-build-cache --rerun-tasks`), quoted,
     reverted; no rerun-until-green; time boxes 1 h target, 2 h hard, fix rounds 45 min.
@@ -378,6 +396,13 @@ commissioning; G23–G27 verbatim):**
 30. **The 1.9.0 fixes are a base, not a lane.** #119's `CompletionCommand.viaForm` meter rule, #123's after-write
     reminder sweep and #121's insets are consumed as shipped; only A0 edits `CompleteSchedule` (its date guard), and a
     refused completion runs no after-write sweep.
+31. **#124 counts from the opening service through C9 alone (rev 6.1).** The engine stays pure: the only new input
+    is `PolicyInputs.openingServiceOn`, the `Ready.serviceOn` of #114's own rule for the schedule's asset, read by one
+    reader (C41) that assembles exactly C9's inputs, the asset's `HaBoundary` included; no other code decides whether
+    an opening service qualifies, so O-2, O-20 and O-16 reach it unchanged. The answer is offered for an asset target
+    on a `CALENDAR` or `MANUAL` asset only, never `YEAR_ROUND` and never a group target (inv. 106 stands); every way to
+    leave a dependent schedule without a live role is refused or stranded, never a silent fallback; no date means no
+    reminder and no health penalty.
 
 ## 1. Scope
 
@@ -415,6 +440,9 @@ O-7, O-21). Nothing more.*
 | AC114-6 | every way ServiceTag stops writing publishes `1970-01-01` first; an undeliverable invalidation is shown | C34 · rows 70–74 |
 | AC114-7 | docs: role, boundary, rule, invalid date, HA pair and gate with the freeze override, the interim, no instant revocation, same day | C38, §8 · D1 |
 | AC-P | (the owner's instruction, 2026-10-23) every new fact and control of #113 and #114 is reachable over `/v1` and MCP, but the phone-only list of G17 | C10a, C25a, C29b, C35b · rows 112–122 |
+| AC124-1 | (#124) a third "Start counting from" answer: the opening service; not ready → no date and a waiting reason; done early → from the season's start; done late → from its own day; plus "Days after"; out of season as today; MANUAL and CALENDAR; each group member from its own opening service | C40, C41 · rows 134–138, 141–144 |
+| AC124-2 | refusals: no Season Start schedule; the Season Start schedule itself; removing the role or archiving the role schedule while a schedule depends on it is a strand | C42 · rows 146, 147 |
+| AC124-3 | backups, merges and the Transfer Pack carry the value; API and MCP parity; the editor offers it; due-work rows show the waiting reason | C42–C44 · rows 140, 148, 150–153 |
 | AC-O16 | (owner ruling 2026-10-26, O-16 amended) a future-dated scheduled completion is refused by `CompleteSchedule`, `CompleteGroupMembers` and the relevant event edits, one refusal test per entry point; readiness keeps its defensive date check; legacy and imported rows are handled without corrupting history | C9, C39 · rows 4, 4a, 123–131 |
 
 **Out of scope** (the fence, G17, and): #116's Assets-tab indicators (its own plan, the same release); maintenance-health publication (#113's separate
@@ -485,6 +513,13 @@ cross-check is the place its source joins. **#116:** its own plan reads this pla
     it names. The owner re-attests it by editing it on or after that day, or deletes it; nothing is changed for them.
     The phone's today decides the refusal, so an API caller in a zone already on tomorrow is refused until the phone's
     midnight (limit 6's kind).
+20. **An HA boundary moving without a database write reaches a dependent schedule late (#124).** The card, the API
+    and HA see a fresh `season_ended` read at once; a schedule counting from the opening service sees it at its next
+    recompute — any write to the asset, the daily rebuild or `readState`'s new-day rebuild — because the runner's
+    boundary cache write triggers no recompute (C41).
+21. **A group schedule never counts from the opening service (#124, inv. 106).** A group target takes `CONTINUOUS`
+    only, as shipped; #124's C1 is the role: when an asset's Season Start service is a group schedule, each member's own
+    asset schedules count from that member's own completion of it.
 
 ## 1a. Stories
 
@@ -665,6 +700,99 @@ Out of scope: the hot tub's and the pool's Home Assistant rules (§8 describes o
     (b) The entry form (`A/ui/journal/EventEntryViewModel.kt`): a form completion (`:597`) or an edit of a completion
     refused `CompletionDateInFuture` draws S25 as its first problem (`DATE_NOT_LATER_THAN_TODAY`, `:690`'s
     precedent), writes nothing and runs no reconcile. No layout or inset change (G28). **No new string.**
+
+### N1, N2a, N2b, N3 — #124, counting from the opening service (C40–C44; rev 6.1)
+
+- **C40, the value and the engine (N1; core, pure).**
+  - `ServicePolicy` (`C/model/ServicePolicy.kt:7`) gains **`IN_SERVICE_AFTER_OPENING_SERVICE`**, stored as its name in
+    the shipped TEXT column (no DDL); `PolicyReason` (`:13-21`) gains **`AWAITING_OPENING_SERVICE`** (not moving, like
+    `AWAITING_START`) and **`OPENING_SERVICE`** (moving: the date moved to count from a late opening service);
+    `PolicyInputs` (`C/schedule/ServicePolicyEngine.kt:15-21`) gains a trailing **`openingServiceOn: LocalDate? = null`**
+    (shipped constructions compile; only the feed fills it, C41).
+  - The engine (`ServicePolicyEngine.evaluate`, `:50-72`): the new value is in-service — `DORMANT` out of season and
+    break-aware like the other two — and its date is:
+
+```kotlin
+// fragment: the new arm of `actionable`, beside `inService` (s = season.cycleStartAt(at))
+s == null && season?.mode == MANUAL           -> null to AWAITING_START            // as shipped
+season == null || season.mode == YEAR_ROUND   -> date to POLICY_INAPPLICABLE      // only a merge reaches it
+season.phaseAt(at) == OUT_OF_SEASON           -> exactly IN_SERVICE_AT_START with the same offset
+inputs.openingServiceOn == null               -> null to AWAITING_OPENING_SERVICE // and phase DORMANT
+else -> { val from = maxOf(inputs.openingServiceOn, s!!)
+          val opens = from.plusDays(offset)          // offset 0..365, as AT_START
+          val moved = if (date < opens) opens else date  // never drags a later date back (inv. 97)
+          break rule as shipped (AFTER_BREAK), else
+          moved to when { moved == date -> NONE; from == s -> SEASON_START; else -> OPENING_SERVICE } }
+```
+
+    **Waiting is held:** while `AWAITING_OPENING_SERVICE` the phase is `DORMANT` and the actionable date null, so the
+    status is the shipped `INACTIVE_SEASON` (not counted, no reminder, `ScheduleStatus.kt:131`) and the health clock,
+    which evaluates the engine (`HealthClock.kt:20-60`), counts no overdue day; `isInService` (`:95-96`) gains the
+    value. Out of season the input is never read.
+  - Validation (`ScheduleCommands.kt:333-376`): the offset is 0–365 and defaults to 0 (AT_START's range); a meter-only
+    schedule's non-zero offset is `SeasonPolicyNeedsATimeRule`; a group target is the shipped
+    `SeasonFollowsAssetOnGroupTarget` (inv. 106). `LegacySeasonMapping.toLegacy` reports no legacy spelling (all three
+    null, `PRE_SERVICE`'s precedent, `ServicePolicy.kt:71-77`), and the API's legacy write of such a row is the shipped
+    `LEGACY_WRITE_CANNOT_REPRESENT` (`A/api/ScheduleForms.kt:90`); `ScheduleForms.kt:153` defaults its offset to 0.
+  - N1's app arms keep behaviour: `WhyLines.kt:70-82` draws nothing for the two reasons yet (N3 gives the lines);
+    `ScheduleEditViewModel`'s policy mapping (`:201-212`, `:334-345`) round-trips a stored value unchanged through an
+    edit (no silent rewrite), with no option drawn until N3.
+- **C41, the feed (N2a; core, the graph's last edit).**
+  - `fun interface OpeningServiceReader { suspend fun openingServiceOn(assetId: AssetId): LocalDate?; companion NONE }`
+    (`C/season/OpeningService.kt`, new) and its one implementation **`SeasonReadinessReader`**
+    (`C/season/SeasonReadinessReader.kt`, new): inside the caller's transaction it reads the asset, the asset tree,
+    schedules, groups, the asset's events and activations, `today` and the zone, and the asset's `HaBoundary` through
+    B1's `haBoundaryOf` over B3's binding and delivery repositories, the #16 binding and the connection's cadence and
+    the shipped clock — **exactly** the inputs B4b1's projector passes C9 — and answers `(seasonReadiness(…) as?
+    Ready)?.serviceOn`. Nothing else in it filters an event.
+  - `RecomputeSchedules` (`C/usecase/RecomputeSchedules.kt:49-63`) gains a trailing `openingService:
+    OpeningServiceReader = OpeningServiceReader.NONE` (F-6; production passes the reader, R6) and, for an
+    asset-targeted schedule with the new value only, passes the reader's day into
+    `ScheduleRecompute.policyInputsOf(schedule, state, zone, openingServiceOn)` (`ScheduleRecompute.kt:153-159`, a new
+    defaulted parameter); `quietUntil` (`:180-191`) and the health read model's links
+    (`A/ui/health/AssetHealthReadModel.kt:334`) pass the same day. For a group member (C1), the member's own asset
+    schedules read the member's own readiness, whose coverage includes the group role (C9).
+  - **Recompute triggers it adds:** `CompleteGroupMembers` (`:112`) also recomputes each completed member's asset
+    (`forAsset`) when the schedule is a role schedule; `SetScheduleRole` recomputes each covered asset after its write
+    (row 21's pin holds: the role schedule's own state is unchanged). Every other change already recomputes the asset
+    (a completion, an edit or delete of one, an activation, a mode or window change, an import's `all()`); an HA
+    boundary cache write does not (limit 20).
+  - `AppGraph`/`FakeGraph` wire the reader into `RecomputeSchedules` and pass every collaborator N2b's hooks need
+    (the brief lists them from the constructors of `SaveSchedule`, `SetScheduleRole`, `ArchiveSchedule`, `SaveGroup`
+    and the season-mode writers).
+- **C42, the guards, the format and the merge (N2b; core, the app's exhaustive arms).**
+  - **Refused**, `SeasonStartRefused(reason)` → the shipped 409 `SEASON_START_REFUSED` (A2/A4w's arm), nothing
+    written; `SeasonStartRefusal` gains **`NO_SEASON_START_SERVICE(assetId)`** — `SaveSchedule` (create and update)
+    choosing the value on an asset no live role covers (C9's coverage, the group role included) — and
+    **`COUNTS_FROM_ITSELF`** — the value on the role schedule itself, or `SetScheduleRole(SEASON_START)` on a schedule
+    with the value; a `YEAR_ROUND` asset reuses **`YEAR_ROUND(assetId)`** (P114-17).
+  - **Stranded**, `SeasonStartStrands(assetId, cause, schedules)` → the shipped 409 `SEASON_START_STRANDED` naming the
+    dependents; `SeasonStartStrandCause` gains **`HAS_DEPENDENT_SCHEDULES`**: `SetScheduleRole(NONE)` on a role schedule,
+    `ArchiveSchedule` of a role schedule, a season-mode change to `YEAR_ROUND` (`SetSeasonMode`, `UpdateAsset`,
+    `SaveAssetSettings`, after C11's `NEEDS_SEASONS`) and `SaveGroup` removing a member of a role group, each while a
+    live (ACTIVE or PAUSED) dependent schedule of an affected asset would be left with no live role. Through
+    `seasonStartStrandedBy` (C11), after the strands rule and C11's own causes.
+  - **Format and merge:** format 21 carries the value (A3's step); a format ≤ 20 archive carrying it is refused as
+    hand-built (A3's `FIRST_SCHEDULE_ROLE_FORMAT` gate). The merge compares it as content (C19) and, under the plan's
+    one-coverage conflict rule (O-9), an INSERT of a dependent schedule whose asset no live role covers after the
+    plan's accepted rows → **`CONFLICT`, new `MergeReason.SEASON_START_SERVICE_MISSING`** (`A/api/ApiDtos.kt:145`
+    names it; v1.md's merge table is N3's); the Transfer Pack is the same planner under its context (C20).
+  - Every exhaustive `when` the new members reach gets its arm and sentence here (F-4's rule): the role action's and
+    the editors' refusal and strand arms (A5b's files) — P124-5…8.
+- **C43, the phone (N3).** The schedule editor (`A/ui/maintenance/ScheduleEditScreen.kt`, group B, keeps
+  `formContentInsets`; `ScheduleEditViewModel`'s `StartCountingFrom` gains `OPENING_SERVICE`): under "When the season
+  starts", "Start counting from" (S73) offers **P124-1** beside S74 and S75 only for an asset target whose asset is
+  `CALENDAR` or `MANUAL`, with its offset field labelled **P124-2** (S72 "Days after it starts" names the season's start,
+  the wrong anchor here). Due work and the schedule rows: a waiting row's status word is **P124-9** and its why-line
+  **P124-3** — checked before `WhyLines.kt`'s DORMANT season lines — with no `dormantUntil` and in the `CURRENT` section,
+  never `OUT_OF_SEASON` (`DueReadModel.kt:289`, `:373-377`: the asset is in season); a moved row's why-line is
+  **P124-4**. No new surface (G28): the editor is an existing group-B screen.
+- **C44, the wire (N3).** Over `/v1` the value is a `servicePolicy` name on the shipped schedule create and update
+  bodies and every schedule read (its legacy triple null), `policyReason` carries the two new names, and the refusals
+  and the strand travel in the shipped codes with the new `reason` and `cause` names (no new code). v1.md: the policy
+  table, the legacy table, the reason list (`:327-329`), the "#113/#114 codes" table's reasons and cause, the merge
+  table's reason. MCP: `create_schedule` and `update_schedule` docstrings (`server.py:1705`) name the value and its
+  offset, the reasons and the refusals; no tool, argument or client-side list is added (the server validates).
 
 ### A1 — the role and the readiness rule (C7–C9; core JVM)
 
@@ -1328,9 +1456,9 @@ sealed interface CallOutcome {
     `M/tests/test_tools.py:980-998` (the range at `:985`, `:997`) move with them (row 111).
   - **The count pins (D1), owned by the brief that adds each tool; the ladder by wave (rev 5)** — A4
     `get_season_readiness` (wave 4: 90 → 91); A4w `set_schedule_role`, `list_ha_entities` (wave 7: → 93); B5
-    `get_ha_publishing` (wave 8: → 94); B5r `list_ha_publishing` (wave 10: → 95); B5w1 `enable_ha_publishing`,
-    `change_ha_publishing_target` (wave 11: → 97); B5w2 `disable_ha_publishing`, `check_ha_publishing_helper`,
-    `publish_ha_now`, `acknowledge_ha_decommission` (wave 12: → **101**) — each site read on `62e39670`, moved in that brief
+    `get_ha_publishing` (wave 8: → 94); B5r `list_ha_publishing` (wave 9 since rev 6.1: → 95); B5w1 `enable_ha_publishing`,
+    `change_ha_publishing_target` (wave 10: → 97); B5w2 `disable_ha_publishing`, `check_ha_publishing_helper`,
+    `publish_ha_now`, `acknowledge_ha_decommission` (wave 11: → **101**); N3 adds no tool — each site read on `62e39670`, moved in that brief
     and inside its §4 row: `server.py:78-183` (`TOOL_NAMES`, the "#113/#114" block appended after `:182` with its
     comment; the guard's `expected_count` at `:4430` follows it); `M/tests/test_tools.py:23` (`EXPECTED_TOOLS`),
     `:127-138` (`test_tool_names_are_ninety`, its docstring, three `== 90`), `:1007`, `:1011` (`"Ninety:"`);
@@ -1882,12 +2010,18 @@ recorded pair, and every row below that moves `rev` or `dRev` clears it in the s
 | I35 | Publish now over the API answers before any Home Assistant call and never holds the API connection; its progress is read from the delivery's pairs and its request stamp (C35b) | 119, 122 |
 | I36 | no command writes a schedule's completion dated after the phone's today — `CompleteSchedule`, `CompleteGroupMembers`, an `UpdateEvent` whose result names a schedule — over the phone, `/v1` and MCP; no import, merge, restore or reader rewrites a stored date (O-16, C39) | 123–131 |
 | I37 | an event dated after today, or written before the day it names, never qualifies, whatever the clock later reads; `createdAt` never takes part (O-16, C9) | 4, 4a |
+| I39 | a schedule counting from the opening service has a date only while its asset is in season and C9 answers Ready, or out of season exactly as `IN_SERVICE_AT_START`; its day is C9's `serviceOn`, read by one reader (#124) | 134–136, 141–143 |
+| I40 | no command leaves a live dependent schedule with no live role covering its asset; a merge or pack doing so is a conflict (#124) | 146–148 |
 | I38 | every input surface the range adds is classified in `InsetsContractTest` and obeys its kind's rule; no surface outside `FormInsets.kt` reads `WindowInsets.ime` (G28) | 133 |
 
 ### Interfaces between briefs (consumes → produces)
 
 | brief | consumes | produces (the boundary later briefs code against) |
 |---|---|---|
+| N1 | the shipped engine | the value, the two reasons, `openingServiceOn`; the engine arm; behaviour-neutral app arms |
+| N2a | N1; A1's rule; B1's `haBoundaryOf`; B3's ports and flows; A2's `SetScheduleRole` | `OpeningServiceReader`, `SeasonReadinessReader`; `RecomputeSchedules`' feed and triggers; the graph's last wiring |
+| N2b | N2a; A2's hooks and helper; A3's format and planner | `NO_SEASON_START_SERVICE`, `COUNTS_FROM_ITSELF`, `HAS_DEPENDENT_SCHEDULES`; `SEASON_START_SERVICE_MISSING`; their phone arms |
+| N3 | N1, N2b; A4w's arms; B5w2's v1.md | the editor's answer and field; the waiting row; v1.md and MCP docstrings |
 | A0 | the fix branch's `CompleteSchedule` (#119 `viaForm`), `CompletionFlow` (#123 `afterWrite`), the shipped `Today` | `CompletionDateInFuture`, `refuseFutureCompletion`; `today` on three commands; 422 `COMPLETION_DATE_IN_FUTURE`; the dialog's and the entry form's S25 refusal |
 | S1 | — | the v22 entities and DAOs (C4, C5), including `observeControls()` and `observeObligations()` and the `imported`, `config_generation`, `reconcile_pending` and (rev 5) `last_request_id` / `last_request_at` columns; `MIGRATION_21_22`; `22.json` |
 | A1 | `SeasonContext`, `AssetTree`, the model | `ScheduleRole`, the two role fields, `AssetEvent.imported`; `lastSeasonEndOnOrBefore`; `HaBoundary`, `BoundarySource`, `ReadinessBoundary`; `seasonReadiness(…, today, zone, haBoundary) : Readiness` with the `!imported` and write-day rules (rev 6: `RECORDED_IN_ADVANCE`) |
@@ -1904,7 +2038,7 @@ recorded pair, and every row below that moves `rev` or `dRev` clears it in the s
 | A5b | A2, A5a | the role action and dialogs, the refusal and strand sentences, the editor's QUICK election; rev 5: `quickElected = true` from the confirm and the `QUICK_NOT_ELECTED` arm |
 | A4w | A2's `setScheduleRole` with `quickElected`; A4's block and Errors table; B3's `PublishRefused` and `STALE_PLAN`; B1's `publishKindOf`; #105's `listHaEntities` and `pickerRows` | `POST /v1/schedules/{id}/role`; the PATCH flag; `GET /v1/ha-connection/entities/{scope}`; `EntityScope`'s two scopes and `HaEntityCandidate.attributes`; the `HA_PUBLISH_REFUSED` / `STALE_PLAN`, `HA_HELPER_READ_FAILED` and `SEASON_START_DATE_INVALID` arms; `set_schedule_role`, `list_ha_entities`; `command-shapes.json`'s `scheduleRole` and flag |
 | B5 | B4a, B4b1, B4b2, B3; B1's `haBoundaryOf` | the readiness route's `HaBoundary` argument (C29); the decommission paths; `GET …/ha-publishing` with rev 4.1's keys (G-R1); `get_ha_publishing`; the Forget orchestration; rev 5: the binding's `request` key and `RequestProgress` |
-| B5r | B5's route, DTO file and tool block; D1's v1.md | `GET /v1/ha-publishing`; `list_ha_publishing`; the G-R6 sentences; the write-nothing snapshot over the HA tables (D2) |
+| B5r | B5's route, DTO file and tool block | `GET /v1/ha-publishing`; `list_ha_publishing`; the G-R6 sentences; the write-nothing snapshot over the HA tables (D2) |
 | B5w1 | B5r's block; B4a's `validate`; B4b2's `PublishControls`; B3's `planIdOf` and `expectedPlanId`; A4w's arms | `POST …/ha-publishing-plan` and its store; the action route's ENABLE and CHANGE_TARGET; `HA_PUBLISH_CONFIRMATION_REQUIRED`; `enable_ha_publishing`, `change_ha_publishing_target`; `_POSTS_THAT_WRITE_NOTHING` as shapes |
 | B5w2 | B5w1's route and request file; B4b2's `requestPublishNow`; B5's `request` key; B3's `DismissDecommission` refusals | DISABLE and CHECK_HELPER; `POST …/ha-publishing/publish-now` (202); the acknowledgement route; `NO_SUCH_DECOMMISSION`, `DECOMMISSION_STILL_PENDING`; `disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now`, `acknowledge_ha_decommission` |
 | B6a | B3's commands, B4a's runner, B5's read model and `drainBeforeForget`, A5a's strings, A4w's two scopes | the status block, the blocks' frame, the setup sheet, the scopes, the HA screen lines, two glossary terms; the `STALE_PLAN` arm (P113-44) |
@@ -1918,6 +2052,31 @@ Rows: id · layer (**JVM** core or app; **Compose**; **contract** = API route or
 **real-HA** = §7's controller proof, never a gate) · class · cases · the behaviour proven · **the mechanism by which it
 fails without the change** (the counted RED is that mutation, `--no-build-cache --rerun-tasks`, quoted, reverted). Case
 names are the implementer's; what each proves is not. "pin" = a shipped assertion re-run unchanged, no RED.
+
+### N1, N2a, N2b, N3 — #124 (rows 134–153; rev 6.1)
+
+| # | layer | class · cases | proves | fails without |
+|---|---|---|---|---|
+| 134 | JVM | `CT/schedule/OpeningServicePolicyTest` (new, N1) · in season with `openingServiceOn` null → no date, `DORMANT`, `AWAITING_OPENING_SERVICE`, on a `CALENDAR` and a `MANUAL` asset | C40, AC124-1 "not ready means no date" | the null taken as the cycle's start (a date at the season's start) |
+| 135 | JVM | same · a service done before the cycle's start → `s` + offset (`SEASON_START` when moved); one done after → its day + offset (`OPENING_SERVICE`); offsets 0 and 14; a later raw date never dragged back | C40 "early from the season's start, late from its own day" | the anchor taken as `openingServiceOn` alone (an early service dates work before the season starts) |
+| 136 | JVM | same · out of season: equal, case for case, to `IN_SERVICE_AT_START` with the same offset — `CALENDAR` re-entering at the next start, `MANUAL` `AWAITING_START` — whatever `openingServiceOn` holds | C40 "out of season as today" | the out-of-season branch reading the input |
+| 137 | JVM | same · a moved date inside the break → the first allowed day (`AFTER_BREAK`); quiet as the other in-service policies; `YEAR_ROUND` or no season → `POLICY_INAPPLICABLE` | C40 | the break rule skipped on the new arm |
+| 138 | JVM | `CT/health/HealthClockTest` (+2, N1) · no overdue day while waiting; once ready, overdue from the engine's date only | C40 "the health clock follows the engine" | `isInService` without the value (the waiting schedule accrues overdue days) |
+| 139 | JVM | `CT/usecase/ScheduleCommandRulesTest` (+3, N1) · offset 0–365 and default 0; a meter-only non-zero offset is `SeasonPolicyNeedsATimeRule`; a group target is `SeasonFollowsAssetOnGroupTarget`; the legacy triple is all null | C40, inv. 106 | the group-target check exempting the value |
+| 140 | JVM | `T/ui/maintenance/ScheduleEditViewModelTest` (+1, N1) and `T/api/ScheduleFormsTest` (+2) · a stored value round-trips through an edit unchanged; the API defaults its offset to 0 and refuses a legacy write of it | C40's app arms | the editor's mapping falling back to `IN_SERVICE_AT_START` (a silent rewrite) |
+| 141 | JVM | `CT/season/SeasonReadinessReaderTest` (new, N2a) · the reader answers C9's `serviceOn` or null over the same inputs, each varied: an asset role, a group role per member (C1), a QUICK role without the election refused upstream (O-2), an imported service (O-20), a future-dated and an advance-written one (O-16) | C41, AC124-1 | the reader filtering events itself (an imported service counts) |
+| 142 | JVM | `T/hapublish/OpeningServiceAgreementTest` (new, N2a, Room `FakeGraph`) · over a matrix of assets — `CALENDAR`, `MANUAL` without HA, `MANUAL` with a `Fresh` and an `Unverified` HA boundary — the reader, B4b1's projection and A4's `seasonServiceDoneOn` agree | C41 "exactly C9's inputs" | the reader passing `HaBoundary.NotUsed` (the HA-driven asset diverges) |
+| 143 | JVM | `CT/usecase/OpeningServiceRecomputeTest` (new, N2a) · a dependent's stored state carries the reader's day; a schedule without the value never calls the reader (counting reader); two members of one role group each count from their own completion | C41, C1 | the group member's dependent reading another member's completion |
+| 144 | JVM | same · in the same write: an asset-role completion, a group-role completion (each completed member's asset), `SetScheduleRole` set and date move, an END and a START, a deleted completion — each moves the dependent's stored state | C41 triggers | `CompleteGroupMembers` recomputing only the group schedule |
+| 145 | JVM | `RecomputeSchedules`' shipped constructions compile with `OpeningServiceReader.NONE` (pin; R6's grep guards production) | F-6 | none: pin |
+| 146 | JVM | `CT/usecase/OpeningServiceGuardsTest` (new, N2b) · `SaveSchedule` refuses the value with `NO_SEASON_START_SERVICE`, `COUNTS_FROM_ITSELF` and `YEAR_ROUND`; `SetScheduleRole(SEASON_START)` on a dependent → `COUNTS_FROM_ITSELF`; an asset covered by a group role is accepted; nothing written on any refusal | C42, AC124-2 | the coverage check reading asset targets only (the group-role asset refused) |
+| 147 | JVM | same · `SetScheduleRole(NONE)`, `ArchiveSchedule` of the role schedule, a mode change to `YEAR_ROUND` (three writers) and `SaveGroup` removing a member, each with a live dependent → `SEASON_START_STRANDED` `HAS_DEPENDENT_SCHEDULES` naming the dependents, nothing written; with only an archived dependent, or none, each proceeds | C42 "no silent fallback" | `ArchiveSchedule` unhooked (the dependent waits forever) |
+| 148 | JVM | `CT/merge/OpeningServiceMergeTest` (new, N2b) · format 21 round-trips the value; a format-20 archive carrying it is refused; a merge or pack inserting a dependent with no live role on its asset → `CONFLICT` `SEASON_START_SERVICE_MISSING`; with the role among the same accepted rows → inserted | C42 | the claim not seeded from the accepted rows (the role-and-dependent archive conflicts) |
+| 149 | JVM | `T/ui/maintenance/ScheduleRoleViewModelTest`, `ScheduleEditViewModelTest`, `T/ui/asset/AssetEditViewModelTest`, `GroupEditViewModelTest` (+1 each, N2b) · each new refusal and the new cause draw P124-5…8 (exhaustive) | C42's arms | an `else` arm |
+| 150 | JVM | `ScheduleEditViewModelTest` (+3, N3) · the answer offered only for an asset target on a `CALENDAR` or `MANUAL` asset, with P124-2; never on `YEAR_ROUND` or a group target; saving sends the value and its offset | C43 | the answer offered on a `YEAR_ROUND` asset |
+| 151 | JVM | `T/ui/maintenance/WhyLinesTest`, `DueReadModelTest` (+2 each, N3) · a waiting row: P124-9, P124-3, `CURRENT`, no `dormantUntil`, uncounted, no reminder; a moved row: P124-4 | C43, AC124-3 "due-work rows show the waiting reason" | the DORMANT season line drawn first ("Out of season until…" on an in-season asset) |
+| 152 | contract | `T/api/OpeningServicePolicyRoutesTest` (new, N3) · `POST` and `PATCH /v1/schedules` accept the value and offset; reads carry it, the null legacy triple and `policyReason` `AWAITING_OPENING_SERVICE` / `OPENING_SERVICE`; the refusals as `SEASON_START_REFUSED` `reason`s and the strand as `SEASON_START_STRANDED` `cause`, nothing written | C44 | the value missing from the forms' decoder (a 400) |
+| 153 | contract | `M/tests/test_opening_service_policy.py` (new, N3) · `create_schedule` and `update_schedule` pass the value and offset unchanged; the docstrings name it, its reasons and refusals; no client-side list | C44 | stale docstrings |
 
 ### A0 — future-dated completions refused (rows 123–131; `CT/usecase/CompletionDateTest`, `T/api/CompletionDateRoutesTest`, `M/tests/test_completion_dates.py`, new; rev 6)
 
@@ -2178,12 +2337,15 @@ cleared, no recompute, no closure (a counting double or a before/after table sna
 | K22 | a delivery holding the one-request-at-a-time API (rev 5) | 119, 122 |
 | K23 | an advance record becoming a service when midnight arrives; a legacy or merged future-dated row rewritten (rev 6, O-16) | 4a, 123–126 |
 | K24 | a new input surface outside #121's insets contract (rev 6) | 133; the 1.9.0 keyboard sweep (§7) |
+| K25 | a schedule coming due on equipment whose opening service is not done, or counting from evidence #114 would refuse (rev 6.1, #124) | 134–136, 141–144 |
+| K26 | a dependent schedule silently left without its role (rev 6.1) | 146–148 |
 
 ## 4. Files, fences, order and the gate budget
 
 | brief | wave · lane | touches | never touches |
 |---|---|---|---|
 | **A0** future-dated completions refused (rev 6) | 0 · L1 | `C/usecase/CompletionDates.kt` (new); `C/usecase/{CompleteSchedule,CompleteGroupMembers,UpdateEvent}.kt` (the trailing `today` and the guard, only); `A/di/AppGraph.kt` (`:983`, `:1011`, `:1030`), `T/testing/FakeGraph.kt` (`:507`, `:634`, `:652`) — those arguments only; the fourteen other positional constructions (the appended `today`); `A/api/ApiJson.kt` (one `is` arm); `docs/api/v1.md` (the completion and event PATCH rows, the Errors row); `M/src/servicetag_mcp/server.py` (two docstring sentences); `A/ui/maintenance/CompletionFlow.kt` (the dialog's date guard and the outcome's sentence); `A/ui/journal/EventEntryViewModel.kt` (the catch); `CT/usecase/CompletionDateTest.kt`, `T/api/CompletionDateRoutesTest.kt`, `M/tests/test_completion_dates.py` (new); `T/ui/maintenance/CompletionFlowTest.kt`, `T/ui/journal/EventEntryViewModelTest.kt` (+2 each) — rows 123–131; ~60 min | `C/season`, `C/hapublish`, `C/backup`, `C/merge`, `C/transfer`, `LogEvent.kt`, `buildEvent`, every other `A/api` file, `res/`, `A/hapublish`, the insets files, `S/`, `B/` |
+| **N1** #124's value and engine (rev 6.1) | 0 · L2 | `C/model/ServicePolicy.kt` (the value, two reasons, the legacy arm); `C/schedule/ServicePolicyEngine.kt` (`openingServiceOn`, the arm); `C/health/HealthClock.kt` (`isInService`); `C/usecase/ScheduleCommands.kt` (the offset rule only); `A/ui/maintenance/{WhyLines,ScheduleEditViewModel}.kt` and `A/api/ScheduleForms.kt` (behaviour-neutral arms, the default offset, the legacy write); `CT/schedule/OpeningServicePolicyTest.kt` (new), `CT/health/HealthClockTest.kt`, `CT/usecase/ScheduleCommandRulesTest.kt`, `T/ui/maintenance/ScheduleEditViewModelTest.kt`, `T/api/ScheduleFormsTest.kt` (+) — rows 134–140; ~50 min | `A/di`, `FakeGraph`, `C/usecase` but the offset rule, `C/season`, `C/backup`, `C/merge`, `res/`, every `A0` file, `S/`, `B/` |
 | **S1** schema 22 | 1 · L1 | `A/data/room/entities/MaintenanceEntities.kt` (two columns, the entity `:95-155`), `JournalEntities.kt` (`imported`, `:198-215`), `HaConnectionEntity.kt` (`config_generation`); `A/data/room/entities/{HaPublishBindingEntity,HaPublishDeliveryEntity,HaPublishDecommissionEntity}.kt`, `A/data/room/dao/{HaPublishBindingDao,HaPublishDeliveryDao,HaPublishDecommissionDao}.kt` (new); `A/data/room/{Migrations,AppDatabase}.kt` (`MIGRATION_21_22`, version 22); `A/di/AppGraph.kt` (`SCHEMA_VERSION`, the migration list **only**); `T/testing/FakeGraph.kt`, `MigrationTestSupport` (twins); `app/schemas/…/22.json` (generated); `T/data/room/{Migration21To22Test,HaPublishDaoTest}.kt` (new); `T/backup/SeasonSyncNeverTravelsTest.kt` (+4); `T/VersionAgreementTest.kt` (schema only: `:87`, `:158`) — rows 12, 22–24 (the error pair, `needs_delivery`, `reconcile_pending`, `boundary_*`, `imported`, `config_generation` and (rev 5) `last_request_id` / `last_request_at` columns and the `observeControls` / `observeObligations` queries included) | `C/**`, `A/api`, `A/ui`, `A/seasonsync`, `21.json`, `docs`, `tools` |
 | **A1** rule | 1 · L2 | `C/model/Maintenance.kt` (`ScheduleRole`, two fields); `C/model/Journal.kt` (`AssetEvent.imported`, appended and defaulted); `C/schedule/SeasonContext.kt` (`lastSeasonEndOnOrBefore`, `YearlyWindow` made class-visible); `C/season/SeasonReadiness.kt` (new); `CT/season/{SeasonReadinessTest,SeasonStoriesTest}.kt`, `CT/schedule/SeasonContextLastEndTest.kt` (new) — rows 1–11, 3a–3c, 4a, 102–104, 106; rev 6: the `zone` parameter, the write day and `RECORDED_IN_ADVANCE`, +10 min | `A/**`, `C/usecase`, `C/backup`, `C/merge`, `C/transfer`, every other `C/schedule` line, `docs`, `tools` |
 | **A2** role command | 2 · L2 | `C/usecase/SetScheduleRole.kt` (new); `C/usecase/{SeasonCommands,SetSeasonMode,UpdateAsset,SaveAssetSettings,SaveSchedule,SaveGroup}.kt` (the exceptions, the helper, one call each, `candidate`'s two fields, the QUICK-election parameter); `C/usecase/EventCommands.kt` (`buildEvent`'s one `imported` line, B); `A/data/room/MaintenanceMappers.kt` (role mapping) and `A/data/room/JournalMappers.kt` (`imported`, B); `A/api/ApiJson.kt` (the two `is` arms only); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (`setScheduleRole`, constructor arguments); `CT/usecase/{SetScheduleRoleTest,SeasonStartStrandsTest,ScheduleRoleSurvivesTest}.kt` (new) — rows 13–21, 21a; rev 5 (C10a): `quickElected` and `QUICK_NOT_ELECTED` in `SetScheduleRole.kt`, row 112, +10 min | `C/backup`, `C/merge`, `C/transfer`, `C/schedule`, `C/hapublish`, `A/ui`, `A/hapublish`, every other `A/api` file, `docs`, `tools` |
@@ -2199,13 +2361,16 @@ cleared, no recompute, no closure (a counting double or a before/after table sna
 | **B4b2** worker + wiring | 7 · L1 | `A/hapublish/{PublishWorker,PublishWork,HaPublishDispatch,PublishDispatch,PublishControls}.kt` (new; `requestDelivery()` and the facade, A03); `A/ServiceTagApp.kt` (the dispatch beside `:55`); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (work seam, dispatch, facade); `T/hapublish/{PublishWorkerBodyTest,PublishScenarioTest,ControlDispatchTest,BoundaryScenarioTest,ReconcilePendingTest}.kt` (new) — rows 57d, 58, 59, 67, 70a, 98–100, 99a, 99b, 100a, 105; rev 5: `PublishControls.requestPublishNow` and the `expectedPlanId` pass-through (C32, C35b) — row 122, +10 min | `A/ui/**`, `A/api`, `C/**`, the manifest |
 | **A4w** role write + helper discovery (rev 5) | 7 · L2 | `A/api/{ApiRouter,MaintenanceHandlers,MaintenanceDtos,HaEntityHandlers,ApiJson,ApiHandlers}.kt` (the role route and `ScheduleRoleRequest`, the PATCH flag, discovery in its own handler class — new — as a trailing defaulted handler group, and the `SEASON_START_DATE_INVALID`, `HA_PUBLISH_REFUSED` / `STALE_PLAN` and `HA_HELPER_READ_FAILED` arms); `C/seasonsync/EntityPicker.kt` (two scopes) and `C/seasonsync/HaEntityList.kt` (`HaEntityCandidate`'s defaulted `attributes`, filled for the two domains only); `docs/api/command-shapes.json` (`:8`, `scheduleRole`) with `T/api/CommandShapesGoldenTest.kt` (`:44-58`, `:118-120`), `M/src/servicetag_mcp/command_shapes.py` (`:44`, `:108`), `M/tests/test_command_shapes.py` (`:65-76`); `docs/api/v1.md` (C29b's part); `M/src/servicetag_mcp/server.py` (`set_schedule_role`, `list_ha_entities`, `update_schedule`'s flag), `M/README.md`; `T/api/{ScheduleRoleRoutesTest,HaEntityRoutesTest}.kt` (new), `T/api/{MaintenanceFixtures,ApiReadsWriteNothingTest}.kt`; `CT/hapublish/HelperAttributesTest.kt` (new); `M/tests/test_ha_publishing_write_tools.py` (new, its half) and D1's count-pin sites (C29a; 91 → 93) — rows 113, 114, 115, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/usecase`, `C/hapublish`, `A/hapublish`, `A/ui`, `res/`, every shipped `CT/seasonsync` and `T/seasonsync` test file, `S/`, `B/` |
 | **B5** decommission + read | 8 · L1 | `C/hapublish/Decommission.kt` (new); `A/hapublish/{PublishRunner,PublishProjector}.kt` (drain, `drainBeforeForget`, orphan retirement); `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt`, `A/api/SeasonHealthHandlers.kt` (the readiness handler's `HaBoundary` argument only, C29); `docs/api/v1.md` (the route, rev 4.1's keys); `M/src/servicetag_mcp/server.py`, `M/README.md`, `M/tests/test_ha_publishing_tools.py` (the publishing half) and D1's count-pin sites (C29a; 93 → 94); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the Forget orchestration, the tombstone read model) — **the last edit of either**; `CT/hapublish/DecommissionTest.kt`, `T/hapublish/DecommissionScenarioTest.kt`, `T/api/HaPublishingRoutesTest.kt` (new) — rows 70–74, 82, 84 (half), 107 (its cases, rev 5's `request` key and `RequestProgress` included), 111 (its pins); rev 4.1 adds ~10 min, rev 5 ~5 | `A/ui/**`, `C/usecase`, `C/backup`, `C/merge`, `S/`, `B/` |
-| **B6a** status block, sheet, HA screen | 9 · L1 | `A/ui/asset/{PublishBlock,PublishBlockViewModel,LinkPublishSheet,LinkPublishViewModel,PublishStrings}.kt` (new; the block's frame for **both** kinds, the sheet with its scope parameter); `A/ui/asset/AssetDetailScreen.kt` (the two blocks' slots); `A/ui/asset/LinkSeasonSyncSheet.kt` (the browser's scope parameter only); `A/ui/homeassistant/{HomeAssistantScreen,HomeAssistantViewModel,HomeAssistantStrings}.kt` (P113-40, the P113-41 plural, orphan tombstones); `docs/localization-glossary.md` (**helper**, **publish**); `app/src/main/res/values*/strings_ha_publishing.xml` and `values*/plurals.xml` (ten files each); every control call through B4b2's `PublishControls`, and `HomeAssistantViewModel`'s save followed by `requestDelivery()` (A03); rev 5: the `PublishRefusal.STALE_PLAN` arm with P113-44, and A4w's two scopes consumed; rev 6: `T/ui/nav/InsetsContractTest.kt` (`GROUP_E` and K4's counts, only; G28) — rows 88 (status half), 89, 90, 133 | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `ReadinessStrings.kt`, the three B3 arms |
-| **D1** documents | 9 · L2 | C38's list, including the **one KDoc-only edit** in `A/fetch/UrlConnectionTransport.kt:20-22` (A11) | any other `.kt`, any `.py`, any `.xml` but the manifest comment at `:12`; any code line of `UrlConnectionTransport.kt`; `docs/versioning.md`, `docs/releases` |
-| **B6b** date block and tombstones | 10 · L1 | `A/ui/asset/{PublishDateBlock,PublishDateStrings}.kt` (new), `PublishBlockViewModel.kt` (the date states and the P114-36/37 rule), the date sheet's boundary-helper field, offered only for a `MANUAL` asset with an enabled #16 binding (P114-47/48, D); `app/src/main/res/values*/strings_ha_publishing_date.xml` (new, ten files: P114-30…39, P114-47, P114-48); rev 5: `NoSuchDecommission` / `DecommissionStillPending` from P114-38's tap re-read the block, no sentence (C25a); rev 6 (§0 r14): `LinkPublishSheet.kt` (the boundary-helper field only, inside the sheet's own scrolling content) — row 88 (date half) | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `AssetDetailScreen.kt`, every other line of `LinkPublishSheet.kt`, `InsetsContractTest.kt` |
-| **B5r** publishing collection + MCP parity (rev 4.1) | 10 · L2 | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt` (the collection's route, handler and DTOs); `docs/api/v1.md` (C35a's rows, the 405 path list, the no-endpoint publishing half); `M/src/servicetag_mcp/server.py` (`list_ha_publishing`; the eleven G-R6 sentences, nothing else in those tools), `M/README.md`; `T/api/{HaPublishingRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_tools.py` (the collection, the sentences) and D1's count-pin sites (C29a; 94 → 95) — rows 107 (its cases), 108, 111 (its half); ~40 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/`; any tool's request or arguments |
-| **B7** drawn + platform | 11 · L1 | `AT/hapublish/{HaPublishScreensTest,HaPublishPlatformProofTest}.kt` (new) — rows 91, 92 | every main file; every shipped `AT/` file |
-| **B5w1** plan + Enable / Change target (rev 5) | 11 · L2 | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingPlans,HaPublishingRequests,ApiJson}.kt` (the plan route and its store — new — the action route's ENABLE and CHANGE_TARGET, the request classes in their own file — new — and the `HA_PUBLISH_CONFIRMATION_REQUIRED` arm); `docs/api/command-shapes.json` (`haPublishingPlan`, `haPublishingAction`) with `CommandShapesGoldenTest.kt`; `docs/api/v1.md` (C35b's plan, action and `STALE_PLAN` parts; the sub-resource count 30 → 31); `M/src/servicetag_mcp/server.py` (`enable_ha_publishing`, `change_ha_publishing_target`, `_POSTS_THAT_WRITE_NOTHING` as shapes with `_writes_nothing`, the long read budget), `M/README.md`; `T/api/{HaPublishingWriteRoutesTest (new),ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_write_tools.py` (its half) and D1's count-pin sites (C29a; 95 → 97) — rows 117, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/` |
-| **B5w2** Disable, Check helper, Publish now, acknowledgement (rev 5) | 12 · L2 | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingRequests,ApiJson}.kt` (DISABLE and CHECK_HELPER on the action route, the publish-now route and its 202 body, the acknowledgement route, the `NO_SUCH_DECOMMISSION` and `DECOMMISSION_STILL_PENDING` arms); `docs/api/command-shapes.json` (`haPublishingAcknowledgement`) with `CommandShapesGoldenTest.kt`; `docs/api/v1.md` (C35b's rest, the 202 status row, the 405 row's acknowledgement shape, the sub-resource count 31 → 32); `M/src/servicetag_mcp/server.py` (`disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now`, `acknowledge_ha_decommission`), `M/README.md`; `T/api/{HaPublishingWriteRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_write_tools.py` (its half) and D1's count-pin sites (C29a; 97 → 101, the README's "One hundred and one:") — rows 118, 119, 120, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/` |
+| **B6a** status block, sheet, HA screen | 11 · L1 (rev 6.1) | `A/ui/asset/{PublishBlock,PublishBlockViewModel,LinkPublishSheet,LinkPublishViewModel,PublishStrings}.kt` (new; the block's frame for **both** kinds, the sheet with its scope parameter); `A/ui/asset/AssetDetailScreen.kt` (the two blocks' slots); `A/ui/asset/LinkSeasonSyncSheet.kt` (the browser's scope parameter only); `A/ui/homeassistant/{HomeAssistantScreen,HomeAssistantViewModel,HomeAssistantStrings}.kt` (P113-40, the P113-41 plural, orphan tombstones); `docs/localization-glossary.md` (**helper**, **publish**); `app/src/main/res/values*/strings_ha_publishing.xml` and `values*/plurals.xml` (ten files each); every control call through B4b2's `PublishControls`, and `HomeAssistantViewModel`'s save followed by `requestDelivery()` (A03); rev 5: the `PublishRefusal.STALE_PLAN` arm with P113-44, and A4w's two scopes consumed; rev 6: `T/ui/nav/InsetsContractTest.kt` (`GROUP_E` and K4's counts, only; G28) — rows 88 (status half), 89, 90, 133 | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `ReadinessStrings.kt`, the three B3 arms |
+| **D1** documents | 13 · L2 (rev 6.1) | C38's list, including the **one KDoc-only edit** in `A/fetch/UrlConnectionTransport.kt:20-22` (A11) | any other `.kt`, any `.py`, any `.xml` but the manifest comment at `:12`; any code line of `UrlConnectionTransport.kt`; `docs/versioning.md`, `docs/releases` |
+| **B6b** date block and tombstones | 12 · L1 (rev 6.1) | `A/ui/asset/{PublishDateBlock,PublishDateStrings}.kt` (new), `PublishBlockViewModel.kt` (the date states and the P114-36/37 rule), the date sheet's boundary-helper field, offered only for a `MANUAL` asset with an enabled #16 binding (P114-47/48, D); `app/src/main/res/values*/strings_ha_publishing_date.xml` (new, ten files: P114-30…39, P114-47, P114-48); rev 5: `NoSuchDecommission` / `DecommissionStillPending` from P114-38's tap re-read the block, no sentence (C25a); rev 6 (§0 r14): `LinkPublishSheet.kt` (the boundary-helper field only, inside the sheet's own scrolling content) — row 88 (date half) | `A/di`, `FakeGraph`, `A/hapublish`, `A/api`, `C/**`, `AssetDetailScreen.kt`, every other line of `LinkPublishSheet.kt`, `InsetsContractTest.kt` |
+| **B5r** publishing collection + MCP parity (rev 4.1) | 9 · L2 (rev 6.1) | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingDtos}.kt` (the collection's route, handler and DTOs); `docs/api/v1.md` (C35a's rows, the 405 path list, the no-endpoint publishing half); `M/src/servicetag_mcp/server.py` (`list_ha_publishing`; the eleven G-R6 sentences, nothing else in those tools), `M/README.md`; `T/api/{HaPublishingRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_tools.py` (the collection, the sentences) and D1's count-pin sites (C29a; 94 → 95) — rows 107 (its cases), 108, 111 (its half); ~40 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/`; any tool's request or arguments |
+| **N2a** #124's feed (rev 6.1) | 9 · L1 | `C/season/{OpeningService,SeasonReadinessReader}.kt` (new); `C/usecase/RecomputeSchedules.kt` (the trailing reader, its use), `C/schedule/ScheduleRecompute.kt` (`policyInputsOf`'s defaulted day), `C/usecase/{CompleteGroupMembers,SetScheduleRole}.kt` (the two recompute triggers only); `A/ui/health/AssetHealthReadModel.kt` (`:334`, the day passed); `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (the reader and N2b's collaborators) — **the graph's last edit**; `CT/season/SeasonReadinessReaderTest.kt`, `CT/usecase/OpeningServiceRecomputeTest.kt`, `T/hapublish/OpeningServiceAgreementTest.kt` (new) — rows 141–145; ~55 min | `A/api`, `A/hapublish`, `A/ui` but `:334`, `C/hapublish`, `res/`, `S/`, `B/` |
+| **N2b** #124's guards (rev 6.1) | 10 · L1 | `C/usecase/{SeasonCommands,SetScheduleRole,SaveSchedule,ArchiveSchedule,SaveGroup,SetSeasonMode,UpdateAsset,SaveAssetSettings}.kt` (the refusals and the strand, through C11's helper); `C/backup/BackupCodec.kt` (the ≤ 20 refusal), `C/merge/{MergePlanner,MergePlan}.kt` (the reason and its claim), `A/api/ApiDtos.kt` (the reason's name); A5b's exhaustive arms (`ScheduleDetailViewModel`, `ScheduleEditViewModel`, `GroupEditViewModel`, `AssetViewModels`, `ReadinessStrings.kt`) and `strings_season_start.xml` ×10 (P124-5…8, ratified first); `CT/usecase/OpeningServiceGuardsTest.kt`, `CT/merge/OpeningServiceMergeTest.kt` (new), the four view-model tests (+) — rows 146–149; ~60 min | `A/di`, `FakeGraph`, `A/hapublish`, every other `A/api` file, `docs`, `tools`, `S/`, `B/` |
+| **N3** #124's phone and wire (rev 6.1) | 12 · L2 | `A/ui/maintenance/{ScheduleEditScreen,ScheduleEditViewModel,WhyLines,DueReadModel}.kt` and the status word's function (the answer, its field, the waiting row); `strings_maintenance.xml` ×10 (P124-1…4, P124-9, ratified first); `docs/api/v1.md` (C44's rows, the merge reason); `M/src/servicetag_mcp/server.py` (two docstrings), `M/README.md`; `T/api/OpeningServicePolicyRoutesTest.kt`, `M/tests/test_opening_service_policy.py` (new), the view-model tests (+) — rows 150–153; ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, the insets files, every other `A/api` file, `S/`, `B/` |
+| **B7** drawn + platform | 13 · L1 (rev 6.1) | `AT/hapublish/{HaPublishScreensTest,HaPublishPlatformProofTest}.kt` (new) — rows 91, 92 | every main file; every shipped `AT/` file |
+| **B5w1** plan + Enable / Change target (rev 5) | 10 · L2 (rev 6.1) | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingPlans,HaPublishingRequests,ApiJson}.kt` (the plan route and its store — new — the action route's ENABLE and CHANGE_TARGET, the request classes in their own file — new — and the `HA_PUBLISH_CONFIRMATION_REQUIRED` arm); `docs/api/command-shapes.json` (`haPublishingPlan`, `haPublishingAction`) with `CommandShapesGoldenTest.kt`; `docs/api/v1.md` (C35b's plan, action and `STALE_PLAN` parts; the sub-resource count 30 → 31); `M/src/servicetag_mcp/server.py` (`enable_ha_publishing`, `change_ha_publishing_target`, `_POSTS_THAT_WRITE_NOTHING` as shapes with `_writes_nothing`, the long read budget), `M/README.md`; `T/api/{HaPublishingWriteRoutesTest (new),ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_write_tools.py` (its half) and D1's count-pin sites (C29a; 95 → 97) — rows 117, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/` |
+| **B5w2** Disable, Check helper, Publish now, acknowledgement (rev 5) | 11 · L2 (rev 6.1) | `A/api/{ApiRouter,HaPublishingHandlers,HaPublishingRequests,ApiJson}.kt` (DISABLE and CHECK_HELPER on the action route, the publish-now route and its 202 body, the acknowledgement route, the `NO_SUCH_DECOMMISSION` and `DECOMMISSION_STILL_PENDING` arms); `docs/api/command-shapes.json` (`haPublishingAcknowledgement`) with `CommandShapesGoldenTest.kt`; `docs/api/v1.md` (C35b's rest, the 202 status row, the 405 row's acknowledgement shape, the sub-resource count 31 → 32); `M/src/servicetag_mcp/server.py` (`disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now`, `acknowledge_ha_decommission`), `M/README.md`; `T/api/{HaPublishingWriteRoutesTest,ApiReadsWriteNothingTest}.kt`; `M/tests/test_ha_publishing_write_tools.py` (its half) and D1's count-pin sites (C29a; 97 → 101, the README's "One hundred and one:") — rows 118, 119, 120, 121 (its half); ~60 min | `A/di`, `FakeGraph`, `C/**`, `A/hapublish`, `A/ui`, `res/`, `S/`, `B/` |
 
 **Waves and lanes (two lanes at most, owner ruling 2026-09-17; no shared emulator, no gate on the device inside a
 brief).** Rev 2 splits B4b, B6 and A5 (F-17) and runs B6 after B5 (F-5): **eighteen dispatches in eleven waves.** Rev 4.1
@@ -2213,11 +2378,15 @@ adds B5r beside B6b (the surface audit's Part R): **nineteen dispatches in eleve
 lane 2), B5w1 (wave 11, lane 2) and B5w2 (a new wave 12, lane 2): **twenty-two dispatches in twelve waves.** Rev 6
 adds **A0** alone in a new **wave 0** (lane 1; the graph's first edit, and the fix branch's `CompleteSchedule` its
 base): **twenty-three dispatches in thirteen waves**; #116's **U1** (wave 8, lane 2) and **U2** (wave 12, lane 1) fill
-two empty slots and edit neither graph (its own plan).
+two empty slots and edit neither graph (its own plan). **Rev 6.1** adds #124's N1 (wave 0, lane 2), N2a (wave 9, the
+graph's last edit), N2b (wave 10) and N3 (wave 12); B5r, B5w1 and B5w2 move to waves 9–11, B6a, B6b and B7 to
+waves 11–13, D1 to wave 13 (after every route it documents) and U2 to wave 14: **twenty-seven dispatches, and
+#116's two, in fifteen waves (0–14)**. `docs/api/v1.md` and `server.py` stay on one lane at a time (lane 2 from wave
+9).
 
 | wave | lane 1 | lane 2 | why concurrent is safe |
 |---|---|---|---|
-| 0 | A0 | — | A0 edits the graph (three constructor arguments); nothing runs beside it |
+| 0 | A0 | N1 (#124) | A0 edits the graph; N1 is the engine, the model and three app files A0 never touches |
 | 1 | S1 | A1 | S1 is `A/data/room` + one `AppGraph` constant; A1 is `C/model` + `C/schedule` + `C/season` |
 | 2 | B1 | A2 | B1 is new `C/hapublish` files only; A2 owns the wave's `AppGraph` edit |
 | 3 | B2 | A3 | B2 edits no graph; A3 does (one argument) |
@@ -2225,23 +2394,32 @@ two empty slots and edit neither graph (its own plan).
 | 5 | B4a | A5a | lane 1 owns the graph; A5a is UI (season card, completion sheet) |
 | 6 | B4b1 | A5b | lane 1 owns the graph; A5b is UI (schedule, editors) — no file shared with A5a's but `ReadinessStrings.kt`, sequential by wave |
 | 7 | B4b2 | A4w | lane 1 owns the graph; A4w is `A/api`, `M/`, `docs/api` and two `C/seasonsync` main files no lane-1 brief touches, and edits neither graph |
-| 8 | B5 | U1 (#116) | the graph, last edit; U1 is `A/ui/asset/AssetViewModels.kt` and its JVM tests, no graph (its plan) |
-| 9 | B6a | D1 | UI versus docs |
-| 10 | B6b | B5r | UI over B6a's frame; B5r is `A/api`, `M/` and `docs/api/v1.md`, no file shared with B6b, and D1's v1.md edit landed in wave 9 |
-| 11 | B7 | B5w1 | B7 is `AT/` only; B5w1 is `A/api`, `M/` and `docs/api`, no file B7 touches |
-| 12 | U2 (#116) | B5w2 | U2 is `AssetsScreen.kt`, `res/`, an `AT/` class (its plan); B5w2 after B5w1: the same handler, request and tool files |
+| 8 | B5 | U1 (#116) | B5 edits the graph; U1 is `A/ui/asset/AssetViewModels.kt` and its JVM tests, no graph (its plan) |
+| 9 | N2a (#124) | B5r | N2a is core and the graph's **last** edit; B5r is `A/api`, `M/`, `docs/api/v1.md` |
+| 10 | N2b (#124) | B5w1 | N2b is core, `ApiDtos.kt` and A5b's UI arms; B5w1 is other `A/api` files, `M/`, `docs/api` |
+| 11 | B6a | B5w2 | UI versus `A/api`, `M/`, `docs/api` |
+| 12 | B6b | N3 (#124) | UI over B6a's frame; N3 is the schedule editor, due rows, v1.md and `M/`, after B5w2 on lane 2 |
+| 13 | B7 | D1 | `AT/` only versus docs; D1 after every route it documents |
+| 14 | U2 (#116) | — | U2 is `AssetsScreen.kt`, `res/`, an `AT/` class (its plan) |
+
+**Rev 6.1's order (#124):** N1 (nothing; the strings batch ruled) → N2a (N1, A1, A2, A3, B1, B3 — all landed by wave 4) →
+N2b (N2a, A2's hooks, A3's planner) → N3 (N2b, B5w2's v1.md) → D1. The order below is rev 6's, with the waves of the
+table above.
 
 **Dispatch order and dependencies:** A0 (the merged fix branch) → S1 ∥ A1 → B1 ∥ A2 (A1's model, S1's columns) → B2 (B1's kinds and mapper) ∥ A3
 (A1's model) → B3 (S1's DAOs, B1's model and validators; ratified P113-42/43) ∥ A4 (A1's rule, A2's mapper) → B4a
 (B2's client, B3's repositories) ∥ A5a (A1) → B4b1 (B4a) ∥ A5b (A2, A5a's strings file) → B4b2 (B4b1) ∥ A4w (A2's `quickElected`, A4's block, B3's `PublishRefused`,
 B1's `publishKindOf`) → B5 (B4b2;
 B3's `DismissDecommission`) → B6a (B3's commands, B4a's runner, **B5's** `pendingDecommissions` read model and
-`drainBeforeForget`, A5a's strings) ∥ D1 → B6b (B6a's frame and sheet, B5) ∥ B5r (B5's route, DTO file and tool block; D1's v1.md) → B7 (everything drawn) ∥ B5w1 (B5r's block, B4a's `validate`, B4b2's `PublishControls`, B3's
-`planIdOf`, A4w's arms) → B5w2 (B5w1; B4b2's `requestPublishNow`; B5's `request` key). Each brief is
+`drainBeforeForget`, A5a's strings) → B6b (B6a's frame and sheet, B5) → B7 (everything drawn); B5r (B5's route, DTO file and tool block) → B5w1 (B5r's block, B4a's `validate`, B4b2's `PublishControls`, B3's
+`planIdOf`, A4w's arms) → B5w2 (B5w1; B4b2's `requestPublishNow`; B5's `request` key) → N3 → D1 (everything). Each brief is
 ≤ 1 h by estimate. **AppGraph/FakeGraph edits:** A0 (the three commands' `today`), S1, A2, A3 (`ImportTransferPack`'s `today`), B3, B4a, B4b1, B4b2, B5 — never two in one
-wave, A0 first, B5 last (G20). #116's U1 needs B1 and B3 (its plan's dependencies); U2 needs U1 and its ratified strings.
+wave, A0 first, N2a last (G20, rev 6.1). #116's U1 needs B1 and B3 (its plan's dependencies); U2 needs U1 and its ratified strings.
 
-**Between-brief gaps** (each unreachable: no screen enables a binding before B6a): rev 6: A0 → A1, the refusal is live
+**Between-brief gaps** (each unreachable: no screen enables a binding before B6a): rev 6.1: N1 → N2a, the value is
+accepted by name over `/v1` with no refusal and no feed, so such a schedule waits (emulator-only master, nothing on
+the phone offers it); N2a → N2b, it counts correctly but the guards are absent; N2b → N3, the phone cannot choose it
+and a waiting row reads the season's line. Rev 6: A0 → A1, the refusal is live
 on every entry point while no readiness exists to read it; A1 → A5a, `RECORDED_IN_ADVANCE` has no sentence on the
 phone (nothing draws readiness yet); S1 → B3, the tables exist with no
 writer and `config_generation` stays 0 until B3 maps it; A2 → A5b, the role is settable only from tests; B2 → B4a, the client is unwired; B3 → B4b1, an enabled binding
@@ -2260,7 +2438,8 @@ phone's.
 `SeasonSyncGuard`, `RecordSeasonSyncResult`; `RecordCondition`, `RecordConditionWithIncident`, the two offers,
 `LogEvent` and `buildEvent` (but A2's one `imported` line), `CompleteSchedule`, `CompleteGroupMembers` and
 `UpdateEvent` but A0's `today` and date guard (#119's meter rule, `alsoRequired` and #123's sweep wiring untouched),
-`FormInsets.kt` and `InsetsContractTest` but B6a's group-E entry,
+`FormInsets.kt` and `InsetsContractTest` but B6a's group-E entry, `ServicePolicyEngine`'s shipped arms and
+`ScheduleRecompute`'s derivation but #124's input (rev 6.1),
 `DeleteEvent`, `DeleteAsset`, `ImportBackupReplace`, `ApplyBackupMergePlan` and `BuildBackupMergePlan` but A3's context
 and return-carry lines (A01, A), `ReplaceAsset`; `CreateTransferPack`, `MarkTransferredOut` and `C/transfer/**`; `21.json`; `ServiceTagRoot.kt`; the manifest but `:12`; `S/`;
 the gitlink.
@@ -2270,7 +2449,9 @@ tests / ~16 min under software rendering (1.8.1's gate: 80 / 445, about 16 min).
 cases, ~1 min) and `HaPublishPlatformProofTest` (~6 cases, ~0.5 min) → **83 classes / ~471 tests / ~17.5 min**; with
 #116's `AssetsRowFactsTest` (~12 cases) **84 / ~483**; `SeasonSyncPlatformProofTest`, `SeasonSyncScreensTest` and
 `SystemBarsOnceTest` unchanged. **JVM:** core +~185, app +~230, MCP +~48 (rev 4.1: rows 107–111; rev 5: rows 112–122;
-rev 6: rows 4a, 123–133). Revs 5 and 6 add no connected class here: the API controls and A0's refusal draw nothing new.
+rev 6: rows 4a, 123–133; rev 6.1, #124: core +~45, app +~25, MCP +~3, rows 134–153). Revs 5, 6 and 6.1 add no
+connected class here: the API controls, A0's refusal and #124's answer draw nothing new on a new surface (the editor's
+answer is observed by R-K).
 
 ## 5. Strings
 
@@ -2410,6 +2591,23 @@ ratified:**
 
 With it the count becomes **90 strings and one plural**.
 
+**Pending (rev 6.1, #124) — in the same owner batch; N1, N2b and N3 draw them only once ratified.** Homes:
+`strings_maintenance.xml` beside S65–S78 (P124-1…4, P124-9) and `strings_season_start.xml` (P124-5…8).
+
+| id | proposed wording | where · state |
+|---|---|---|
+| P124-1 | "The Season Start service" | S73's third answer, beside S74 and S75 (C43) |
+| P124-2 | "Days after the Season Start service" | the answer's offset field (S72 "Days after it starts" names the season's start, the wrong anchor) |
+| P124-3 | "Waiting for this season's Season Start service" | why-line, `AWAITING_OPENING_SERVICE` |
+| P124-4 | "Moved from %1$s to count from the Season Start service" | why-line, `OPENING_SERVICE` (S88's shape) |
+| P124-5 | "%s has no Season Start service to count from. Use one of its schedules as its Season Start service first." | `NO_SEASON_START_SERVICE` |
+| P124-6 | "This schedule is the Season Start service, so it cannot count from itself." | `COUNTS_FROM_ITSELF`, the editor |
+| P124-7 | "This schedule counts from the Season Start service, so it cannot be one. Change when it starts counting first." | `COUNTS_FROM_ITSELF`, the role action |
+| P124-8 | "\"%1$s\" counts from %2$s's Season Start service. Change when it starts counting first." | strand `HAS_DEPENDENT_SCHEDULES` (the first dependent by title; the API body names all) |
+| P124-9 | "Waiting" | the waiting row's status word (drawn upper-cased, as the shipped words) |
+
+With these the 1.9.0 batch for the owner is **fourteen**: P114-54, P116-1…4 and P124-1…9.
+
 **Rule (F-16):** every `PublishState`, `PublishErrorKind`, `PublishRefusal`, `NotReadyReason` (`RECORDED_IN_ADVANCE`: P114-54, pending), `BoundarySource`,
 `SeasonStartRefusal` and `SeasonStartStrandCause` member named in §2 has an id above (or a named reused #16 sentence); an enabled date
 binding whose desired value is `1970-01-01` and whose verified pair is not current draws P114-36 (P114-37 when its
@@ -2468,7 +2666,8 @@ C35b; A4w, B5w1, B5w2 — twenty-two dispatches in twelve waves, §4; rows 112�
 | **O-19 (A07; rev 4: D)** | **RATIFIED rev 4, 2026-10-26** | **The readiness boundary, per asset.** *Plan position (controller rulings for revs 3 and 4):* C9a — a `CALENDAR` asset's window is its boundary and HA's date never overrides it; a `MANUAL` asset with an enabled #16 binding and a boundary helper named on its date binding uses HA's `season_ended`, **fresh** while read at the binding's current revision within max(7 days, the cadence) and not before its newest activation, otherwise **unverified** — the later of the cached date and the phone's END, "unverified since" on the card (P114-45) and the API (`boundaryUnverifiedSince`), publication proceeding with HA's own comparison as the backstop; every other `MANUAL` asset uses the phone's END. *Alt.:* no boundary read; document the limitation (a late observation moves the phone's boundary later, a missed cycle leaves none) and give the owner a reconciliation workflow — backdate the END on the phone to HA's `season_ended` by hand; the phone's readiness may then disagree with HA's release until the owner does. | C9, C9a, C25, C29, C30, rows 3a, 3c, 98–101b |
 | **O-20 (B)** | **RATIFIED 2026-10-26** (no installation identifier in backup manifests) | **Which imports mark an event `imported`.** *Plan position:* only a Transfer Pack import (another owner's, or a borrower's, record); a backup Replace or Merge of the owner's own archives marks nothing and writes each event's marker verbatim — the same owner's history counts as recorded. *Alt.:* also mark every event a merge inserts from another installation; archives carry no installation id today (§10), so this needs a format-21 manifest key naming the exporting installation and a rule for archives older than it. | C9, C20, row 49b |
 | **O-21** | **RATIFIED 2026-10-26** (ruled 2026-10-23); `acknowledgedClearedInHa: true` is supplied by the caller alone, never inferred or set by an agent or adapter (C35b) | **The publishing controls — enable, change target, disable, check helper, Publish now — over `/v1` and MCP** (C25a, C35b), narrowing #16's R16-9 for #113/#114 only. **(a)** Parameters confirm, accepted: `seasonStartQuickElected` for P114-5 / P114-42; the plan's `planId` echoed with `confirmDestination` for P113-5 / P114-33; nothing extra for Disable (P113-14 / P114-35). **(b)** **Tombstone acknowledgement is in scope (O-21(b)):** `POST /v1/ha-publishing/decommissions/{id}/acknowledge` and MCP `acknowledge_ha_decommission` acknowledge an UNDELIVERABLE tombstone as cleared in Home Assistant by hand only when the body carries the tombstone id (`decommissionId`, equal to the path's) and `acknowledgedClearedInHa: true`, both set by the caller — the tool never invents either — and the sentence the phone shows (P114-38) is unchanged. **(c)** An explicit, destination-confirmed API Enable (or Change target) counts as activation on the serving phone (I26); Check helper never activates a copied installation (A08). **(d)** The token, the address, the Wi-Fi capture, the location asks, Forget and saving the connection stay phone-only; readiness and published values stay derived from canonical records — no "set READY", no route takes a value (G17, I33). | C25a, C27, C35b, rows 116–122 |
-| **Vehicle** | **RULED 2026-10-26: 1.9.0** | ServiceTag **1.9.0, versionCode 23**, one MINOR assigned by #104: #113, #114, #116, #119, #121 and #123 (1.8.2 cancelled, its fixes folded in). The release task (§7) sets the numbers and writes the notes for all six; **no tag is authorized by this plan** (G14). | G14, §7 |
+| **Vehicle** | **RULED 2026-10-26: 1.9.0** | ServiceTag **1.9.0, versionCode 23**, one MINOR assigned by #104: #113, #114, #116, #119, #121 and #123 (1.8.2 cancelled, its fixes folded in), and #124 (rev 6.1). The release task (§7) sets the numbers and writes the notes for all six; **no tag is authorized by this plan** (G14). | G14, §7 |
+| **#124 (rev 6.1)** | **RULED 2026-10-26: in 1.9.0** (the controller's decisions binding the shape) | A new `ServicePolicy` under "When the season starts" — the third "Start counting from" answer, `IN_SERVICE_AFTER_OPENING_SERVICE`; a pure engine reading `openingServiceOn` from C9's own answer; waiting has no date and its own reason; out of season as `IN_SERVICE_AT_START`; seasonal assets only; refusals and a strand cause in the shipped families; the format and merge carry it; full API/MCP parity; the editor and the due rows. **Plan positions inside those decisions:** the waiting row is held (`DORMANT`, `INACTIVE_SEASON`, its own word and line, the `CURRENT` section); a group target stays `CONTINUOUS` (inv. 106) and C1 is the role on a group schedule; `SaveGroup` removing a member and the mode change join the strand. | C40–C44, rows 134–153 |
 | R-N1 | RATIFIED 2026-10-26 | The card's readiness line is drawn only when a role covers the asset or a date binding exists (`NO_ROLE` is otherwise silent). *Alt.:* on every seasonal top-level or parent asset. | C33, row 75 |
 | R-N2 | RATIFIED 2026-10-26 | `ha_publish_binding.asset_id` is a soft link (no FK), so asset delete and replace restore leave the obligation for the projector — no shipped use case is touched. *Alt.:* hook `DeleteAsset` and `ImportBackupReplace`. | C4, C34, row 71 |
 | R-N3 | RATIFIED 2026-10-26 | 403 on a write is its own kind and sentence (`WRITE_FORBIDDEN`, P113-18); 404 on a service call is `HTTP_ERROR`; a missing entity is found by the readback. *Alt.:* the audit's 401/403 → `AUTH_REFUSED`, 404 → `ENTITY_NOT_FOUND`. | C23, row 53 |
@@ -2510,7 +2709,8 @@ the two asset roles and step 4 completes the two FORM schedules.
     on the fix branch) runs once on the integrated 1.9.0 tip on `emulator-5554`, portrait and landscape, with its pass
     criteria and evidence format, plus **E9** `LinkPublishSheet` (both kinds; the boundary field on an HA-driven
     `MANUAL` asset), **D12** the role confirm's date field (A5b) and the Assets screen re-observed with #116's
-    Condition control (kind L). A portrait failure stops the release; a landscape confirm under the keyboard is
+    Condition control (kind L), and the schedule editor's "Days after the Season Start service" field (#124, group B).
+    A portrait failure stops the release; a landscape confirm under the keyboard is
     recorded (Q1 as ruled there). Observation only: no brief runs it.  - **R5** structural: both `ManifestContractTest` classes green with **no new permission or component**;
     `VersionAgreementTest`.
   - **R6 anchored greps (`git grep -nE`), expected counts at the tip, each hit read.** `<base>` is master at the merge
@@ -2522,6 +2722,12 @@ the two asset roles and step 4 completes the two FORM schedules.
       core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/CompleteSchedule.kt` → the `today` parameter and the
       guard only (#119's `viaForm` and `alsoRequired` lines unmoved); `'RECORDED_IN_ADVANCE'` in `C/season` → the enum
       member and its one arm;
+    - **#124 (rev 6.1):** `'IN_SERVICE_AFTER_OPENING_SERVICE'` in `C/model/ServicePolicy.kt` → 1 and in every
+      exhaustive `when` over `ServicePolicy` an arm, no `else`; `'OpeningServiceReader\.NONE'` in `app/src/main` → 0;
+      `'openingServiceOn ='` in `C/` → the reader's use in `RecomputeSchedules` and `policyInputsOf` only (no other code
+      decides the day); `'detailsPending|imported|occurredOn'` in `C/season/SeasonReadinessReader.kt` → 0 (C9 decides);
+      `git diff <base> -- tools/servicetag-schedules` → empty (the loader treats it as a policy the legacy triple cannot
+      describe, as `PRE_SERVICE`);
     - **insets (rev 6, G28):** `'formContentInsets'` in `app/src/main` → the same files as at `<base>` (group B and
       `FormInsets.kt`), each read; `'imePadding\(|WindowInsets\.ime'` in the files the range adds → 0;
       `'skipPartiallyExpanded = true'` in `A/ui/asset/LinkPublishSheet.kt` → 1;
@@ -2646,7 +2852,7 @@ the third, date-only season-ended helper and its explicit initialization, 2026-1
   auditable.
 - **The release task (1.9.0 / 23; the controller's, after #116's briefs, the whole-branch review and the gate above;
   not a brief).** `versionName` 1.9.0 and `versionCode` 23; `docs/releases/1.9.0.md` and the `docs/versioning.md` row
-  naming all six issues — #113, #114, #116 and the fixes #119, #121, #123 — with schema **22** and format **21**;
+  naming all seven issues — #113, #114, #116, #124 and the fixes #119, #121, #123 — with schema **22** and format **21**;
   `VersionAgreementTest`'s 1.9.0 / 23 row case beside 1.8.1's; R7's upgrade proof; the release proofs of
   `docs/release-proofs.md`. **Tagging is not authorized by this plan**; the operator's manual release gate decides.
 - **The commissioning sequence (owner-gated, after a release carries this; never by an agent without the owner's go;
@@ -2775,8 +2981,10 @@ and `oil_zone_owner`. ServiceTag ships none of this; D1's guide carries a generi
 - **#100:** future inbound source; C26 is where it joins. **#116:** the Assets-tab indicators, its own plan
   (`docs/superpowers/plans/2026-10-26-issue-116-assets-ha-condition-season-indicators.md`), the same release; it reads
   B1's `equipmentStatusOf`, B3's `PublishBindingRepository.observeAll()` and `SeasonSyncRepository.observeAll()`, and
-  its briefs U1 and U2 sit in this plan's wave 8 lane 2 and wave 12 lane 1. **#104:** the roadmap of record; 1.9.0
+  its briefs U1 and U2 sit in this plan's wave 8 lane 2 and (rev 6.1) wave 14 lane 1. **#104:** the roadmap of record; 1.9.0
   assigned (2026-10-26). **#62:** rows 91–92 are tiers 2–3; no UI driving. **#90:** reporting only.
+- **#124 (rev 6.1):** counting from the opening service, the same release; it consumes C9 through one reader (C41)
+  and the shipped engine, and its briefs N1, N2a, N2b and N3 are this plan's.
 - **#119, #121, #123 (the 1.9.0 fixes, on master first from `issue-121-keyboard-insets`):** consumed as the base
   (G30): #119's `CompletionCommand.viaForm` and `CompleteSchedule`'s meter demand (A0 adds only the date guard; a form
   completion is never `detailsPending`, C9); #123's after-write reminder sweep on the detail, group-detail and picker
