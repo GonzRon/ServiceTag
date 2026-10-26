@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: French translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s est un équipement rattaché sans équipement rattaché qui lui soit propre : il ne peut donc pas avoir d\'entretien de début de saison.</string>
+    <string name="season_start_refused_year_round">%s est utilisé toute l\'année : il n\'a donc pas de saison à démarrer. Donnez-lui d\'abord une saison à dates fixes ou manuelle.</string>
+    <string name="season_start_refused_not_maintained_here">%s est archivé, retiré du service ou transféré : il ne peut donc pas avoir d\'entretien de début de saison.</string>
+    <string name="season_start_refused_already_covered">%1$s a déjà un entretien de début de saison : « %2$s ». Cessez d\'abord de l\'utiliser.</string>
+    <string name="season_start_refused_group_member">Chaque équipement de ce groupe doit pouvoir avoir un entretien de début de saison. %s</string>
+</resources>

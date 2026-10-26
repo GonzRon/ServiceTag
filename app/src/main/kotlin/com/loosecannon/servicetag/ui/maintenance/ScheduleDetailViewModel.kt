@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
@@ -531,7 +532,18 @@ class ScheduleDetailViewModel(
             null
         } catch (refused: ScheduleDrivesHealthSubject) {
             LinkGuardPrompt.Asks(refused.name)
+        } catch (refused: SeasonStartStrands) {
+            // #114 (C11 erratum): a restore that would strand a Season Start role is refused and said, not folded.
+            restoreRefusal(refused)?.let { _messages.trySend(it) }
+            null
         }
+    }
+
+    /** The sentence for a refused restore of this schedule; a group target's member sentence sits inside P114-21. */
+    private suspend fun restoreRefusal(refused: SeasonStartStrands): String? {
+        val name = refused.assetId?.let { assets.get(it) }?.name ?: return null
+        val throughAGroup = schedules.get(scheduleId)?.target is ScheduleTarget.GroupTarget
+        return SeasonStartRestoreStrings.of(refused, name, setOf(scheduleId), throughAGroup)
     }
 
     /**

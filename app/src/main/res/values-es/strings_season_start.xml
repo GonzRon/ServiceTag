@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Spanish translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s es un equipo incluido sin equipos incluidos propios, así que no puede tener un mantenimiento de inicio de temporada.</string>
+    <string name="season_start_refused_year_round">%s se usa todo el año, así que no tiene una temporada que iniciar. Dale primero una temporada por fechas o manual.</string>
+    <string name="season_start_refused_not_maintained_here">%s está archivado, retirado o transferido, así que no puede tener un mantenimiento de inicio de temporada.</string>
+    <string name="season_start_refused_already_covered">%1$s ya tiene un mantenimiento de inicio de temporada: “%2$s”. Deja de usar ese primero.</string>
+    <string name="season_start_refused_group_member">Todos los equipos de este grupo deben poder tener un mantenimiento de inicio de temporada. %s</string>
+</resources>

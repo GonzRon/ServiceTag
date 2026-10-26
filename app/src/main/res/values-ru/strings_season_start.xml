@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s — дочерний объект без собственных дочерних объектов, поэтому у него не может быть обслуживания к началу сезона.</string>
+    <string name="season_start_refused_year_round">%s используется круглый год, поэтому у него нет сезона, который можно начать. Сначала задайте ему сезон по датам или ручной сезон.</string>
+    <string name="season_start_refused_not_maintained_here">%s в архиве, списан или передан, поэтому у него не может быть обслуживания к началу сезона.</string>
+    <string name="season_start_refused_already_covered">%1$s: обслуживание к началу сезона уже задано — «%2$s». Сначала перестаньте его использовать.</string>
+    <string name="season_start_refused_group_member">Каждый объект в этой группе должен допускать обслуживание к началу сезона. %s</string>
+</resources>

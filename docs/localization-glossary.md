@@ -61,6 +61,7 @@ are capitals in languages that have them and plain in those that do not (zh-Hans
 | entry / event | one thing recorded in the journal | registro | registro | 记录 | entrée | 記録 | запись | Eintrag | voce | प्रविष्टि |
 | operating season | when the Asset is in use | temporada de uso | temporada de uso | 使用季 | saison d'utilisation | 稼働シーズン | сезон эксплуатации | Betriebssaison | stagione di utilizzo | संचालन मौसम |
 | in season / out of season | | en temporada / fuera de temporada | em temporada / fora de temporada | 使用季内 / 使用季外 | en saison / hors saison | シーズン中 / シーズン外 | в сезоне / вне сезона | in der Saison / außerhalb der Saison | in stagione / fuori stagione | मौसम में / मौसम से बाहर |
+| Season Start service | the schedule whose completion marks an Asset ready for the season (#114) | mantenimiento de inicio de temporada | manutenção de início de temporada | 使用季开始保养 | entretien de début de saison | シーズン開始メンテナンス | обслуживание к началу сезона | Saisonstart-Wartung | manutenzione di inizio stagione | मौसम-आरंभ रखरखाव |
 | maintenance break | a span with no routine work | pausa de mantenimiento | pausa de manutenção | 保养暂停期 | pause d'entretien | メンテナンス休止期間 | перерыв в обслуживании | Wartungspause | pausa di manutenzione | रखरखाव विराम |
 | condition | operational, degraded or down | estado | condição | 状况 | état | 状態 | состояние | Zustand | condizione | स्थिति |
 | operational / OPERATIONAL | | operativo | operacional | 正常运行 | opérationnel | 稼働中 | работает | betriebsbereit | operativo | चालू |

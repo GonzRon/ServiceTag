@@ -133,12 +133,15 @@ enum class SeasonStartStrandCause {
 /**
  * #114 (C11) — 409: the change would leave a Season Start role where it may not stand ([strandCause]; the plan's
  * `cause`, which `Throwable` already names). [assetId] is the asset it would strand — null when it is a group
- * schedule's own edit — and [schedules] the role schedules involved, by title then id. Nothing was written.
+ * schedule's own edit — and [schedules] the role schedules involved, by title then id. [refusal] is C10's asset rule's
+ * answer for [SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE], so the phone can say which (P114-16/17/18); null for
+ * every other cause. Nothing was written.
  */
 class SeasonStartStrands(
     val assetId: AssetId?,
     val strandCause: SeasonStartStrandCause,
     val schedules: List<StrandedSchedule>,
+    val refusal: SeasonStartRefusal? = null,
 ) : IllegalStateException("the change would strand a Season Start role: $strandCause")
 
 /** 409: an activation was aimed at an asset whose season is not MANUAL. */
@@ -374,16 +377,17 @@ internal fun seasonStartRestoreStrandOf(
         .sortedWith(compareBy({ it.name }, { it.id.value }))
         .firstNotNullOfOrNull { asset ->
             val covering = seasonStartRolesCovering(asset.id, schedules, groups)
+            val refusal = seasonStartAssetRefusal(asset, assets, held)
             val cause = if (covering.none { it.id in restored }) {
                 return@firstNotNullOfOrNull null
-            } else if (seasonStartAssetRefusal(asset, assets, held) != null) {
+            } else if (refusal != null) {
                 SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE
             } else if (covering.size > 1) {
                 SeasonStartStrandCause.RESTORE_ALREADY_COVERED
             } else {
                 return@firstNotNullOfOrNull null
             }
-            SeasonStartStrands(asset.id, cause, covering.map { StrandedSchedule(it.id, it.title) })
+            SeasonStartStrands(asset.id, cause, covering.map { StrandedSchedule(it.id, it.title) }, refusal)
         }
 }
 

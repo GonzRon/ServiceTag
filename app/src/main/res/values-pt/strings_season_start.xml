@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Portuguese translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s é um equipamento incluído sem equipamentos incluídos próprios, então não pode ter uma manutenção de início de temporada.</string>
+    <string name="season_start_refused_year_round">%s é usado o ano todo, então não tem uma temporada para iniciar. Primeiro, dê a ele uma temporada por datas ou manual.</string>
+    <string name="season_start_refused_not_maintained_here">%s está arquivado, desativado ou transferido, então não pode ter uma manutenção de início de temporada.</string>
+    <string name="season_start_refused_already_covered">%1$s já tem uma manutenção de início de temporada: “%2$s”. Pare de usar essa primeiro.</string>
+    <string name="season_start_refused_group_member">Todos os equipamentos deste grupo precisam poder ter uma manutenção de início de temporada. %s</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s एक उप-उपकरण है जिसका अपना कोई उप-उपकरण नहीं है, इसलिए इसके लिए मौसम-आरंभ रखरखाव नहीं हो सकता।</string>
+    <string name="season_start_refused_year_round">%s पूरे साल उपयोग में रहता है, इसलिए इसका शुरू करने के लिए कोई मौसम नहीं है। पहले इसे तारीखों वाला या मैन्युअल मौसम दें।</string>
+    <string name="season_start_refused_not_maintained_here">%s संग्रहित है, सेवा से हटाया गया है या ट्रांसफ़र किया गया है, इसलिए इसके लिए मौसम-आरंभ रखरखाव नहीं हो सकता।</string>
+    <string name="season_start_refused_already_covered">%1$s के लिए पहले से एक मौसम-आरंभ रखरखाव है: “%2$s”। पहले उसका उपयोग बंद करें।</string>
+    <string name="season_start_refused_group_member">इस समूह के हर उपकरण के लिए मौसम-आरंभ रखरखाव संभव होना चाहिए। %s</string>
+</resources>

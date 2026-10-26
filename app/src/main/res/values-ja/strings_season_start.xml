@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s は子機器で、自身の子機器がないため、シーズン開始メンテナンスを設定できません。</string>
+    <string name="season_start_refused_year_round">%s は通年で使用されるため、開始するシーズンがありません。先に日付指定または手動のシーズンを設定してください。</string>
+    <string name="season_start_refused_not_maintained_here">%s はアーカイブ済み、使用終了、または移管済みのため、シーズン開始メンテナンスを設定できません。</string>
+    <string name="season_start_refused_already_covered">%1$s にはすでにシーズン開始メンテナンス「%2$s」があります。先にそちらの使用をやめてください。</string>
+    <string name="season_start_refused_group_member">このグループのすべての機器が、シーズン開始メンテナンスを設定できる必要があります。%s</string>
+</resources>

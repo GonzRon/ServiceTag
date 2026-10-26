@@ -320,6 +320,11 @@ class SeasonStartStrandsTest {
             stranded { h.archiveSchedule.run(ScheduleId("s1"), archived = false) },
             "C9 would read TWO_ROLES",
         )
+        assertEquals(
+            null,
+            assertFailsWith<SeasonStartStrands> { h.archiveSchedule.run(ScheduleId("s1"), archived = false) }.refusal,
+            "only RESTORE_NOT_ELIGIBLE carries the asset rule's answer",
+        )
     }
 
     @Test fun restoringARoleScheduleOverAnIneligibleAssetIsRefused() = runTest {
@@ -331,6 +336,11 @@ class SeasonStartStrandsTest {
         assertEquals(
             strand("heater", SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE, "s1" to "Annual service"),
             stranded { h.archiveSchedule.run(ScheduleId("s1"), archived = false) },
+        )
+        assertEquals(
+            SeasonStartRefusal.YearRound(AssetId("heater")),
+            assertFailsWith<SeasonStartStrands> { h.archiveSchedule.run(ScheduleId("s1"), archived = false) }.refusal,
+            "the phone says which rule refused (P114-17)",
         )
 
         h.asset("boiler")

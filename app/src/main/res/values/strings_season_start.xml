@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  #114: the Season Start service — English source. Comments carry the ratification ids (P114-xx, the plan's §5) and
+  what each string and placeholder is for. Asset names and schedule titles are the owner's own, passed in unchanged.
+-->
+<resources>
+
+    <!-- ===================================================== a refused Season Start role (SeasonStartRefusal) -->
+
+    <!-- P114-16: refused because the asset is a child asset with no child assets (LEAF_CHILD); also a refused restore
+         from the archive. %s: the asset's name. -->
+    <string name="season_start_refused_leaf_child">%s is a child asset with no child assets of its own, so it cannot have a Season Start service.</string>
+    <!-- P114-17: refused because the asset is in use all year (YEAR_ROUND); also a refused restore from the archive.
+         %s: the asset's name. -->
+    <string name="season_start_refused_year_round">%s is in use all year, so it has no season to start. Give it a calendar or manual season first.</string>
+    <!-- P114-18: refused because the asset is archived, retired or transferred out (NOT_MAINTAINED_HERE); also a refused
+         restore from the archive. %s: the asset's name. -->
+    <string name="season_start_refused_not_maintained_here">%s is archived, retired or transferred out, so it cannot have a Season Start service.</string>
+    <!-- P114-20: refused because another live Season Start service already covers the asset (ALREADY_COVERED); also a
+         restore from the archive that would give the asset a second one. %1$s: the asset's name. %2$s: the title of the
+         Season Start service that already covers it. -->
+    <string name="season_start_refused_already_covered">%1$s already has a Season Start service: \"%2$s\". Stop using that one first.</string>
+    <!-- P114-21: a group's refusal, wrapping the member's own sentence. %s: P114-16, P114-17, P114-18 or P114-20 for the
+         first member refused, by name. -->
+    <string name="season_start_refused_group_member">Every asset in this group must be able to have a Season Start service. %s</string>
+</resources>

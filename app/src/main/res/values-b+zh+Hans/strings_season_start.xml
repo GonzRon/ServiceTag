@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s 是子设备，且自身没有子设备，因此不能有使用季开始保养。</string>
+    <string name="season_start_refused_year_round">%s 全年使用，没有可开始的使用季。请先为它设置按日期或手动的使用季。</string>
+    <string name="season_start_refused_not_maintained_here">%s 已归档、已退役或已转出，因此不能有使用季开始保养。</string>
+    <string name="season_start_refused_already_covered">%1$s 已有使用季开始保养：“%2$s”。请先停用它。</string>
+    <string name="season_start_refused_group_member">此组中的每台设备都必须能够有使用季开始保养。%s</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s ist ein Untergerät ohne eigene Untergeräte und kann deshalb keine Saisonstart-Wartung haben.</string>
+    <string name="season_start_refused_year_round">%s ist ganzjährig in Betrieb und hat daher keine Saison, die beginnen könnte. Gib ihm zuerst eine Saison mit festen Daten oder eine manuelle Saison.</string>
+    <string name="season_start_refused_not_maintained_here">%s ist archiviert, ausgemustert oder übergeben und kann deshalb keine Saisonstart-Wartung haben.</string>
+    <string name="season_start_refused_already_covered">%1$s hat bereits eine Saisonstart-Wartung: „%2$s“. Beende zuerst deren Nutzung.</string>
+    <string name="season_start_refused_group_member">Jedes Gerät in dieser Gruppe muss eine Saisonstart-Wartung haben können. %s</string>
+</resources>

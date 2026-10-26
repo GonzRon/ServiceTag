@@ -191,4 +191,38 @@ class SeasonStartStrandRoutesTest {
             listOf(own to "Example annual service", check to "Example pre-season check"),
         )
     }
+
+    // --- POST /v1/schedules/{id}/archive and /v1/groups/{id}/archive: a restore (C11 erratum) ------------------------
+
+    /** A role schedule restored over an asset another live role covers would be a second role (C9's `TWO_ROLES`). */
+    @Test fun aRestoredRoleScheduleThatWouldBeASecondRoleIsStranded() {
+        val heater = calendarAsset("Example Heater")
+        val annual = schedule(""""targetAssetId":"$heater"""")
+        role(annual)
+        api.ok(ScheduleResponse.serializer(), "POST", "/v1/schedules/$annual/archive", """{"archived":true}""")
+        val burner = schedule(""""targetAssetId":"$heater"""", "Example burner check")
+        role(burner)
+        assertStranded(
+            "POST", "/v1/schedules/$annual/archive", """{"archived":false}""",
+            SeasonStartStrandCause.RESTORE_ALREADY_COVERED, heater,
+            listOf(annual to "Example annual service", burner to "Example burner check"),
+        )
+    }
+
+    /** A role group restored over a member that has since gone year-round would cover an asset C10 refuses. */
+    @Test fun aRestoredRoleGroupWithAnIneligibleMemberIsStranded() {
+        val boiler = calendarAsset("Example Boiler")
+        val group = api.ok(
+            GroupResponse.serializer(), "POST", "/v1/groups",
+            """{"name":"Example appliances","members":[{"assetId":"$boiler"}]}""", status = 201,
+        ).group
+        val check = schedule(""""targetGroupId":"${group.id}"""", "Example pre-season check")
+        role(check)
+        api.ok(GroupResponse.serializer(), "POST", "/v1/groups/${group.id}/archive", """{"archived":true}""")
+        api.ok(AssetSeasonResponse.serializer(), "POST", "/v1/assets/$boiler/season-mode", """{"seasonMode":"YEAR_ROUND"}""")
+        assertStranded(
+            "POST", "/v1/groups/${group.id}/archive", """{"archived":false}""",
+            SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE, boiler, listOf(check to "Example pre-season check"),
+        )
+    }
 }

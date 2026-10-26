@@ -10,7 +10,9 @@ import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
@@ -1143,5 +1145,40 @@ class ScheduleDetailViewModelTest {
         assertEquals("arrivalEnded not sent", 0, ended.size)
         assertEquals("the event stands", 1, graph.events.all().size)
         assertFalse("reloaded", vm.state.value.busy)
+    }
+
+    /**
+     * #114 (A2 re-review): a restore the Season Start rule refuses was folded silently by `operateGuarded`; it is said
+     * now, and the schedule stays archived. An asset target's sentence stands alone (P114-17); another role over the asset
+     * is P114-20, naming that role and not the one being restored.
+     */
+    @Test fun aRefusedRestoreSaysWhyAndTheScheduleStaysArchived() = runTest {
+        val pump = graph.createAsset.run(AssetCommand(name = "Example Pump", category = "Heating"))
+        val heater = graph.createAsset.run(
+            AssetCommand(name = "Example Heater", category = "Heating", seasonStartMmdd = "10-01", seasonEndMmdd = "04-30"),
+        )
+        fun role(schedule: MaintenanceSchedule) = schedule.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01")
+        graph.schedules.upsert(role(scheduleOf("s-pump", assetId = pump.id.value, title = "Pump service", status = ScheduleStatus.ARCHIVED)))
+        graph.schedules.upsert(
+            role(scheduleOf("s-heater-old", assetId = heater.id.value, title = "Annual service", status = ScheduleStatus.ARCHIVED)),
+        )
+        graph.schedules.upsert(role(scheduleOf("s-heater", assetId = heater.id.value, title = "Heater service")))
+
+        for ((id, sentence) in listOf(
+            "s-pump" to "Example Pump is in use all year, so it has no season to start. Give it a calendar or manual season first.",
+            "s-heater-old" to "Example Heater already has a Season Start service: \"Heater service\". Stop using that one first.",
+        )) {
+            val vm = viewModel(ScheduleId(id))
+            vm.state.first { it.loaded }
+            val said = mutableListOf<String>()
+            backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.collect { said += it } }
+
+            vm.archive(false)
+            vm.state.first { !it.busy }
+            advanceUntilIdle()
+
+            assertEquals(id, listOf(sentence), said)
+            assertEquals(id, ScheduleStatus.ARCHIVED, graph.schedules.get(ScheduleId(id))!!.status)
+        }
     }
 }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Italian translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s è un\'attrezzatura collegata senza attrezzature collegate proprie, quindi non può avere una manutenzione di inizio stagione.</string>
+    <string name="season_start_refused_year_round">%s è in uso tutto l\'anno, quindi non ha una stagione da avviare. Imposta prima una stagione a date fisse o manuale.</string>
+    <string name="season_start_refused_not_maintained_here">L\'attrezzatura %s è archiviata, dismessa o trasferita, quindi non può avere una manutenzione di inizio stagione.</string>
+    <string name="season_start_refused_already_covered">%1$s ha già una manutenzione di inizio stagione: “%2$s”. Smetti prima di usare quella.</string>
+    <string name="season_start_refused_group_member">Ogni attrezzatura di questo gruppo deve poter avere una manutenzione di inizio stagione. %s</string>
+</resources>
