@@ -1,12 +1,14 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
@@ -236,6 +238,32 @@ class ScheduleSeasonCommandsTest {
         h.group("g-1")
         h.schedule("s-group", groupId = "g-1", source = ScheduleSeasonSource.OWN) // only a hand-built row carries it
         assertNull(h.recompute.seasonFor(h.stored("s-group")), "a group target reads no season (inv. 106)")
+    }
+
+    /**
+     * #125 (H1b; the controller's ruling on H1 concern 5) — a schedule following its own season cannot become a
+     * group's (inv. 106): the save is refused `GROUP_TARGET` and writes nothing, linked or stranded alike. Moving to
+     * another asset keeps the link (U-C3), and an `ASSET` schedule still moves to the group.
+     */
+    @Test fun aScheduleOnItsOwnSeasonRetargetedToAGroupIsRefusedAndWritesNothing() = runTest {
+        linkedHeater()
+        h.group("g-1")
+        fun toGroup(id: String) = SeasonStartHarness().commandOf(h.stored(id)).copy(
+            targetAssetId = null, targetGroupId = GroupId("g-1"), servicePolicy = ServicePolicy.CONTINUOUS, policyOffsetDays = null,
+        )
+        suspend fun refusedToMove(why: String) {
+            val before = snapshot()
+            val refused = assertFailsWith<ScheduleSeasonRefused>(why) { h.saveSchedule.run(ScheduleId("s-own"), toGroup("s-own")) }
+            assertEquals(ScheduleSeasonRefusal.GROUP_TARGET, refused.reason, why)
+            assertEquals(before, snapshot(), "$why: nothing written")
+        }
+
+        refusedToMove("linked")
+        h.bindings.rows.remove("s-own")
+        refusedToMove("stranded")
+
+        h.saveSchedule.run(ScheduleId("s-other"), toGroup("s-other"))
+        assertEquals(ScheduleTarget.GroupTarget(GroupId("g-1")), h.stored("s-other").target, "an ASSET schedule moves")
     }
 
     private fun ScheduleSeasonHarness.group(id: String) {

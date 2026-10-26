@@ -21,6 +21,7 @@ import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.isInService
 import com.loosecannon.servicetag.core.model.maintainedHere
@@ -323,7 +324,11 @@ class AssetHealthReadModel(
         )
     }
 
-    /** Every schedule a scorable subject names, with its policy inputs read for today. */
+    /**
+     * Every schedule a scorable subject names, with its policy inputs read for today, and — for a schedule following
+     * its own Home Assistant season (#125, H1b) — that season, from the one answer its due rules read
+     * ([RecomputeSchedules.seasonFor]); an `ASSET` link reads the asset's season [resultFor] hands the engine.
+     */
     private suspend fun linksOf(scorable: List<HealthSubject>): Map<ScheduleId, LinkedSchedule> =
         scorable.filter { it.archivedAt == null }
             .mapNotNull { it.scheduleId }
@@ -332,7 +337,12 @@ class AssetHealthReadModel(
                 schedules.get(id)?.let { schedule ->
                     val state = recompute.readState(schedule)
                     val opened = recompute.openingServiceOf(schedule)
-                    id to LinkedSchedule(schedule, ScheduleRecompute.policyInputsOf(schedule, state, zone(), opened))
+                    val ownSeason = when (schedule.seasonSource) {
+                        ScheduleSeasonSource.ASSET -> null
+                        ScheduleSeasonSource.OWN -> recompute.seasonFor(schedule)?.let(SeasonContext::of)
+                    }
+                    val inputs = ScheduleRecompute.policyInputsOf(schedule, state, zone(), opened)
+                    id to LinkedSchedule(schedule, inputs, ownSeason)
                 }
             }
             .toMap()

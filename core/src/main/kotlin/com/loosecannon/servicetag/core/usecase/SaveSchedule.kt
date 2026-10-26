@@ -19,6 +19,8 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.BoundaryKind
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefusal
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefused
 
 /**
  * Creates or edits one schedule: **the recurrence edit** of the operations table, and the only
@@ -71,6 +73,10 @@ import com.loosecannon.servicetag.core.schedule.BoundaryKind
  * FORM to QUICK without [run]'s `seasonStartQuickElected`, is 409 [SeasonStartStrands], after the PRE_SERVICE 409.
  * Both read the row as stored **inside** the write, so a role set after [run]'s first read is kept and judged, never
  * wiped.
+ *
+ * **A schedule on its own season** (#125, H1b). A retarget to a group of a schedule following its own Home Assistant
+ * season, linked or stranded, is 409 [ScheduleSeasonRefused] `GROUP_TARGET` (inv. 106), after the role's strand: the
+ * remedy is the unlink. A move to another asset keeps the link.
  *
  * **Counting from the opening service** (#124, C42). Last, a save that chooses `IN_SERVICE_AFTER_OPENING_SERVICE` — a
  * create, an edit into it, or a retarget while it holds it — is 409 [SeasonStartRefused]: `COUNTS_FROM_ITSELF` on a role
@@ -243,6 +249,11 @@ class SaveSchedule(
             throw PreServiceNeedsDates(targetAsset.id)
         }
         if (stored != null) seasonStartStrandOf(stored, saved, seasonStartQuickElected)?.let { throw it }
+        // #125 (H1b): a schedule following its own season cannot become a group's, which reads no season (inv. 106).
+        // The stored source decides, read inside this write as the role is; the remedy is the unlink first.
+        if (saved.seasonSource == ScheduleSeasonSource.OWN && saved.target is ScheduleTarget.GroupTarget) {
+            throw ScheduleSeasonRefused(ScheduleSeasonRefusal.GROUP_TARGET)
+        }
         // #124 (C42): a save choosing to count from the opening service needs a live role to count from, never itself.
         if (choosesOpeningService(stored, saved)) {
             openingServiceRefusalOf(saved, targetAsset, schedules.all(), groups.all())?.let { throw SeasonStartRefused(it) }

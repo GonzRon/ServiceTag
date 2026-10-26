@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.schedule.PolicyInputs
@@ -26,8 +27,16 @@ import java.time.temporal.ChronoUnit
  * lifecycle, time rule and title, and [inputs], the occurrence as the policy sees it
  * (`ScheduleRecompute.policyInputsOf` over the schedule's `readState`). [inputs] is the engine's
  * **only** view of the occurrence — its raw due, its postponement and the day it opened.
+ *
+ * [ownSeason] is #125's (H1b): the season a schedule following its own Home Assistant season reads —
+ * `RecomputeSchedules.seasonFor`'s answer for an `OWN` source, the one answer its due rules read — and null for
+ * every `ASSET` link, which reads its asset's season, the one [AssetHealthEngine.evaluate] is handed.
  */
-data class LinkedSchedule(val schedule: MaintenanceSchedule, val inputs: PolicyInputs)
+data class LinkedSchedule(
+    val schedule: MaintenanceSchedule,
+    val inputs: PolicyInputs,
+    val ownSeason: SeasonContext? = null,
+)
 
 /** Why a subject has no value (spec §6.3, §6.4, §6.8, §7.1). Never stored; never a 100. */
 enum class NotTrackedReason {
@@ -138,9 +147,14 @@ data class AssetHealthResult(
  * no way in at all (O-6, inv. 131). [profileExists] is a function rather than a repository for the
  * same reason: the caller answers it from the asset's profiles.
  *
+ * **Each link is judged against its own season** (#125, H1b). `season` is the asset's, read by every
+ * `ASSET`-source link; a schedule following its own Home Assistant season carries its own on the link
+ * ([LinkedSchedule.ownSeason]) and is judged against that alone.
+ *
  * **Malformed subjects are refused, not answered.** [evaluate] throws `IllegalArgumentException` when
  * any non-archived subject of the asset has [HealthSubjectShape.problems]; no command or restore can
- * store one, and a reader over merged data screens with that function before calling.
+ * store one, and a reader over merged data screens with that function before calling. A live link whose
+ * carried season disagrees with its source is refused the same way.
  */
 object AssetHealthEngine {
 
@@ -210,13 +224,15 @@ object AssetHealthEngine {
     /**
      * MAINTENANCE_OVERDUE (spec §6.2, §7.1): NOT TRACKED first, in the order an invalid link, an
      * archived schedule, a paused one, then a MEDIUM subject whose IN_SERVICE schedule is dormant
-     * today; otherwise `x` is [HealthClock.countedDays].
+     * today; otherwise `x` is [HealthClock.countedDays]. The dormancy, the waiting exemption and the
+     * clock all read the link's own season ([seasonReadAgainst]): the asset's for an `ASSET` source,
+     * its own for an `OWN` one (#125).
      */
     private fun maintenanceOverdue(
         asset: Asset,
         subject: HealthSubject,
         links: Map<ScheduleId, LinkedSchedule>,
-        season: SeasonContext?,
+        assetSeason: SeasonContext?,
         today: LocalDate,
     ): SubjectHealth {
         val link = subject.scheduleId?.let { links[it] }
@@ -227,6 +243,8 @@ object AssetHealthEngine {
             ScheduleStatus.PAUSED -> return notTracked(subject, NotTrackedReason.SCHEDULE_PAUSED, DriverLine.NotTrackedPaused)
             ScheduleStatus.ACTIVE -> Unit
         }
+        // #125 (H1b): from here on the link is judged against the season its own due rules read, never another's.
+        val season = link.seasonReadAgainst(assetSeason)
         val now = ServicePolicyEngine.evaluate(link.inputs, season, at = today)
         // #124 (review I-2): waiting in season for the opening service is DORMANT but not out of season;
         // the subject stays tracked, at no late day, as a PART subject on the same schedule is.
@@ -248,6 +266,22 @@ object AssetHealthEngine {
         }
         return SubjectHealth(subject, scored(subject, x), lines)
     }
+
+    /**
+     * #125 (H1b) — the one season this link is judged against: [assetSeason] for an `ASSET` source, and for an `OWN`
+     * one the season the link carries ([LinkedSchedule.ownSeason], `RecomputeSchedules.seasonFor`'s answer). A link
+     * whose carried season disagrees with its source is a reader's bug, refused as a malformed subject is, so an `OWN`
+     * schedule is never silently judged against its asset's window.
+     */
+    private fun LinkedSchedule.seasonReadAgainst(assetSeason: SeasonContext?): SeasonContext? =
+        when (schedule.seasonSource) {
+            ScheduleSeasonSource.ASSET -> {
+                require(ownSeason == null) { "schedule ${schedule.id.value}: an ASSET link carries an own season" }
+                assetSeason
+            }
+            ScheduleSeasonSource.OWN ->
+                requireNotNull(ownSeason) { "schedule ${schedule.id.value}: an OWN link carries no season" }
+        }
 
     /** Targets this asset, and has a time rule for the clock to count against. */
     private fun LinkedSchedule.isValidFor(asset: Asset): Boolean =

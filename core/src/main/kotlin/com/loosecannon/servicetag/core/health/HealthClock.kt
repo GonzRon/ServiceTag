@@ -38,6 +38,10 @@ import java.time.temporal.ChronoUnit
  *
  * No meter side contributes (Q-2), no snooze is an input (O-6), and nothing here reads a clock.
  *
+ * **The season is the link's own** (#125, H1b): [countedDays] is handed the season the link's due rules
+ * read — its asset's, or for a schedule following its own Home Assistant season its own — so the MEDIUM
+ * restart, the runs and the opening-service rule below all follow that one season.
+ *
  * **#124's opening service** (review I-1): `openingServiceOn` is today's readiness, which answers for
  * the cycle running today and no other. So an `IN_SERVICE_AFTER_OPENING_SERVICE` link is evaluated as
  * `IN_SERVICE_AT_START` with the same offset on every run outside that cycle: a season's end resetting

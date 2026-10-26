@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonInputs
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -31,6 +32,7 @@ import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
 import com.loosecannon.servicetag.core.usecase.PreServiceNeedsDates
+import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
@@ -516,6 +518,12 @@ class ScheduleEditViewModel(
     private val scheduleId: ScheduleId?,
     private val targetAssetId: AssetId?,
     private val targetGroupId: GroupId?,
+    /**
+     * #125 (H1b, M4) — the one answer for a stored schedule's season (`RecomputeSchedules.seasonFor`), asked only for
+     * a schedule following its own Home Assistant season, whose options and boundary are its own season's and never
+     * its asset's. Defaulted so every shipped construction compiles unchanged; the app passes the graph's.
+     */
+    private val recompute: RecomputeSchedules? = null,
 ) : ViewModel() {
 
     constructor(
@@ -532,6 +540,7 @@ class ScheduleEditViewModel(
         // The asset wins and the group is dropped rather than both being carried into a command the
         // engine would refuse: one target is the only representable state (invariant 1).
         targetGroupId?.takeIf { targetAssetId == null }?.let(::GroupId),
+        graph.recomputeSchedules,
     )
 
     private val _state = MutableStateFlow(ScheduleEditState(editing = scheduleId != null))
@@ -548,9 +557,9 @@ class ScheduleEditViewModel(
             val target = existing?.target ?: targetAssetId?.let(ScheduleTarget::AssetTarget)
                 ?: targetGroupId?.let(ScheduleTarget::GroupTarget)
             val assetId = (target as? ScheduleTarget.AssetTarget)?.assetId
-            // The asset's season and break decide which answers S65 offers. Activations are not read:
-            // no option depends on a MANUAL asset's phase, and CALENDAR's warnings read the window.
-            val season = assetId?.let { assets.get(it) }?.seasonInputs(emptyList())
+            // The season the schedule's due rules read decides which answers S65 offers (#125: its own, for one
+            // following its own Home Assistant season).
+            val season = seasonOf(existing, assetId)
             val todayOn = today.localDate()
             _state.update { form ->
                 val filled = (existing?.let { form.filledFrom(it) } ?: form.blank()).copy(
@@ -570,6 +579,25 @@ class ScheduleEditViewModel(
             }
             refreshDuplicateWarning()
         }
+    }
+
+    /**
+     * The season whose options and boundary the form offers: for a stored schedule following its own Home Assistant
+     * season, its own, through the one answer its due rules read (#125, H1b, M4: `RecomputeSchedules.seasonFor` —
+     * MANUAL, no window, the asset's break); otherwise its asset's, as before — a create is always `ASSET`.
+     * Activations are not read for the asset's: no option depends on a MANUAL asset's phase, and CALENDAR's warnings
+     * read the window.
+     */
+    private suspend fun seasonOf(existing: MaintenanceSchedule?, assetId: AssetId?): SeasonInputs? {
+        if (existing != null) {
+            when (existing.seasonSource) {
+                ScheduleSeasonSource.ASSET -> Unit
+                ScheduleSeasonSource.OWN -> return checkNotNull(recompute) {
+                    "schedule ${existing.id.value}: an OWN schedule's editor needs the recompute" // l10n-ok: exception message
+                }.seasonFor(existing)
+            }
+        }
+        return assetId?.let { assets.get(it) }?.seasonInputs(emptyList())
     }
 
     private suspend fun nameOf(target: ScheduleTarget?): String = when (target) {
@@ -877,7 +905,7 @@ class ScheduleEditViewModel(
                 }
             }
             is PreServiceNeedsDates -> {
-                val fresh = assets.get(failure.assetId)?.seasonInputs(emptyList())
+                val fresh = seasonOf(scheduleId?.let { schedules.get(it) }, failure.assetId)
                 _state.update {
                     it.copy(saving = false, season = fresh ?: it.season, noBoundary = true, policyOption = null)
                 }
