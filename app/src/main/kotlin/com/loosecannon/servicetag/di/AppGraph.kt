@@ -985,7 +985,7 @@ class AppGraph(private val context: Context) {
         publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
         transferRecords, conditions, schedules, groups, events, seasonActivations, uow, ids, clock,
     ) { ZoneId.systemDefault() }
-    val haPublishClient: HomeAssistantPublishClient = HomeAssistantPublishClient(
+    private val haPublishClient: HomeAssistantPublishClient = HomeAssistantPublishClient(
         settings = storedPublishConnection(haConnections),
         networkPermissionGranted = networkPermissionGranted,
         currentNetwork = currentNetworkReader,

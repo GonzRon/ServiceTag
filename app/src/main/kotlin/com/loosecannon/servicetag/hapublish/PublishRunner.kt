@@ -8,7 +8,6 @@ import com.loosecannon.servicetag.core.hapublish.DeliverySteps
 import com.loosecannon.servicetag.core.hapublish.DeliveryTrigger
 import com.loosecannon.servicetag.core.hapublish.FIELD_BOUNDARY_ENTITY_ID
 import com.loosecannon.servicetag.core.hapublish.FIELD_ENTITY_ID
-import com.loosecannon.servicetag.core.hapublish.HaServiceAction
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
 import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.hapublish.PublishDelivery
@@ -19,7 +18,6 @@ import com.loosecannon.servicetag.core.hapublish.PublishState
 import com.loosecannon.servicetag.core.hapublish.ReadStep
 import com.loosecannon.servicetag.core.hapublish.RemoteRead
 import com.loosecannon.servicetag.core.hapublish.RetryClass
-import com.loosecannon.servicetag.core.hapublish.STATUS_OPTIONS
 import com.loosecannon.servicetag.core.hapublish.Snap
 import com.loosecannon.servicetag.core.hapublish.ValidationResult
 import com.loosecannon.servicetag.core.hapublish.boundaryCache
@@ -42,7 +40,6 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
-import com.loosecannon.servicetag.core.seasonsync.isValidEntityId
 import com.loosecannon.servicetag.seasonsync.SeasonSyncSchedule
 import com.loosecannon.servicetag.seasonsync.seasonSyncScheduleOf
 import kotlinx.coroutines.sync.Mutex
@@ -307,6 +304,8 @@ class PublishRunner(
         state: PassState,
     ): Step? {
         val boundaryId = checkNotNull(binding.boundaryEntityId)
+        // Asked before the GET: an activation created while the read is in flight is never older than the cache (C9a).
+        val readAt = clock.nowMillis()
         val remote = when (val read = transport.read(connection, boundaryId, token)) {
             is RemoteRead.Failed -> {
                 state.boundaryPending = true
@@ -320,11 +319,12 @@ class PublishRunner(
             return if (record(failed)) Step.Finished(PassResult.Failed(kind, null)) else Step.Dropped
         }
         val endedOn = boundaryDateOf(remote) ?: return null
-        val cached = database { boundaryCache.recordBoundary(binding.id, binding.revision, endedOn.toString(), clock.nowMillis()) }
+        val cached = database { boundaryCache.recordBoundary(binding.id, binding.revision, endedOn.toString(), readAt) }
         if (!cached) {
             state.boundaryPending = true
             return Step.Dropped
         }
+        state.reprojected = true
         reproject()
         return Step.Again
     }
@@ -337,7 +337,7 @@ class PublishRunner(
         connection: HaConnection,
         token: Secret,
     ): Step {
-        if (!sendable(binding, step.action, step.value)) {
+        if (!admissible(step.action, binding.entityId, step.value)) {
             // A desired value outside its action's shape is never sent (B2: the client refuses it as a bug).
             return recorded(
                 DeliverySteps.failed(binding, delivery, PublishErrorKind.MALFORMED, null, clock.nowMillis()),
@@ -446,22 +446,12 @@ class PublishRunner(
         /** C30: a dropped record loops at most twice per call; a third newer desired value waits for the next trigger. */
         const val MAX_DROPS = 2
 
-        val ISO_DAY = Regex("^\\d{4}-\\d{2}-\\d{2}$")
-
         /** C9a: in reconcile mode always, otherwise when the cache is not fresh; never when HA does not decide. */
         fun boundaryDue(boundary: HaBoundary, reconcile: Boolean): Boolean = when (boundary) {
             HaBoundary.NotUsed -> false
             is HaBoundary.Fresh -> reconcile
             is HaBoundary.Unverified -> true
         }
-
-        /** C16's shapes, before the client's own guard: a helper of the action's domain and a value it takes. */
-        fun sendable(binding: PublishBinding, action: HaServiceAction, value: String): Boolean =
-            isValidEntityId(binding.entityId) && domainRefusalOf(binding.kind, binding.entityId) == null &&
-                when (action) {
-                    HaServiceAction.SELECT_OPTION -> value in STATUS_OPTIONS
-                    HaServiceAction.SET_DATE -> ISO_DAY.matches(value)
-                }
     }
 }
 

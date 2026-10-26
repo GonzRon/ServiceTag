@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.hapublish
 
+import com.loosecannon.servicetag.core.hapublish.FIELD_BOUNDARY_ENTITY_ID
 import com.loosecannon.servicetag.core.hapublish.FIELD_ENTITY_ID
 import com.loosecannon.servicetag.core.hapublish.HaServiceAction
 import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
@@ -229,6 +230,10 @@ class PublishRunnerTest {
         ha.onCall = { CallOutcome.Refused(PublishErrorKind.UNREACHABLE, null) }
         assertTrue(graph.publishRunner.drain())
 
+        ha.onRead = { RemoteRead.Failed(PublishErrorKind.NOT_ON_LOCAL_NETWORK, null) }
+        assertFalse("a WAIT error is no transient work, though drain() still selects it", graph.publishRunner.drain())
+        ha.onRead = { ha.answer(it) }
+
         ha.onCall = { CallOutcome.Refused(PublishErrorKind.WRITE_FORBIDDEN, null) }
         assertFalse("a refused write waits for the owner", graph.publishRunner.publishNow(heater).transientWorkRemains)
         assertEquals(PublishErrorKind.WRITE_FORBIDDEN, delivery(binding).errorKind)
@@ -257,7 +262,12 @@ class PublishRunnerTest {
         // A valid read is cached at the binding's revision, with its read time.
         ha.helpers[ENDED] = dateHelper(ENDED, "2026-05-15")
         graph.now = 2_000L
+        ha.onRead = { id ->
+            if (id == ENDED) graph.now = 2_500L // the read takes its time: the cache keeps when it was asked
+            ha.answer(id)
+        }
         graph.publishRunner.publishNow(heater)
+        ha.onRead = { ha.answer(it) }
         assertEquals("2026-05-15", delivery(binding).boundaryValue)
         assertEquals(2_000L, delivery(binding).boundaryReadAt)
         assertEquals(binding.revision, delivery(binding).boundaryBindingRevision)
@@ -265,7 +275,9 @@ class PublishRunnerTest {
         // A failed read records nothing and keeps the old cache.
         ha.onRead = { if (it == ENDED) RemoteRead.Failed(PublishErrorKind.UNREACHABLE, null) else ha.answer(it) }
         graph.now = 3_000L
-        graph.publishRunner.publishNow(heater)
+        val failed = graph.publishRunner.publishNow(heater)
+        assertTrue("the boundary's transient failure is work remaining", failed.transientWorkRemains)
+        assertTrue("the reconcile stays pending", delivery(binding).reconcilePending)
         assertEquals("2026-05-15", delivery(binding).boundaryValue)
         assertEquals(2_000L, delivery(binding).boundaryReadAt)
 
@@ -311,6 +323,69 @@ class PublishRunnerTest {
             ha.log,
         )
         assertEquals(INVALID_SERVICE_DATE, ha.state(DATE))
+    }
+
+    @Test
+    fun aChangeDrainReadsTheBoundaryOnlyWhenTheCacheIsNotFresh() = rig.run {
+        val binding = enableDate(desired = "2026-09-18", remote = "2026-04-01", haDecides = true, ended = "2026-05-10")
+
+        graph.publishRunner.drain()
+        assertFalse("a fresh cache is not read again on a change", "GET $ENDED" in ha.log)
+
+        val stored = graph.publishBindings.get(binding.id)!!
+        check(graph.publishDeliveries.writeDesired(stored.id, stored.revision, delivery(binding).desiredRevision, "2026-09-19", graph.now))
+        graph.now += 8 * 86_400_000L // past the week: the cache is Unverified
+        ha.log.clear()
+        graph.publishRunner.drain()
+        assertEquals("an unverified cache is read first", "GET $ENDED", ha.log.first())
+    }
+
+    @Test
+    fun aBoundaryReadsProjectionIsTheCallsOnlyOne() = rig.run {
+        val binding = enableDate(desired = "2026-09-18", remote = "2026-04-01", haDecides = true, ended = "2026-05-10")
+        // The projection after the boundary read leaves no value to send: the next snapshot asks for a projection.
+        graph.desiredStateReconciler.answer = {
+            val stored = graph.publishBindings.get(binding.id)!!
+            val current = delivery(binding)
+            current.desiredValue != null &&
+                graph.publishDeliveries.writeDesired(stored.id, stored.revision, current.desiredRevision, null, graph.now)
+        }
+
+        val pass = graph.publishRunner.publishNow(heater)
+
+        assertEquals(PassResult.Skipped(PublishState.PENDING), pass.outcomes.single().result)
+        assertEquals("one projection per binding per call", 1, graph.desiredStateReconciler.days.size)
+    }
+
+    @Test
+    fun aDesiredValueOutsideItsShapeIsRecordedMalformedAndNeverSent() = rig.run {
+        val binding = enableStatus(desired = "up", remote = "DOWN")
+
+        graph.publishRunner.drain()
+
+        assertEquals(listOf("GET $STATUS"), ha.log)
+        assertTrue(ha.posts.isEmpty())
+        assertEquals(PublishErrorKind.MALFORMED, delivery(binding).errorKind)
+        assertFalse("no write-ahead was written", delivery(binding).needsDelivery)
+    }
+
+    @Test
+    fun aThirdNewerDesiredValueWaitsForTheNextTrigger() = rig.run {
+        val binding = enableStatus(desired = "UP", remote = "DOWN")
+        val next = ArrayDeque(listOf("DEGRADED", "DOWN", "UP"))
+        ha.onCall = { call ->
+            ha.act(call)
+            next.removeFirstOrNull()?.let { value ->
+                val stored = graph.publishBindings.get(binding.id)!!
+                check(graph.publishDeliveries.writeDesired(stored.id, stored.revision, delivery(binding).desiredRevision, value, graph.now))
+            }
+            CallOutcome.Accepted
+        }
+
+        val pass = graph.publishRunner.publishNow(heater)
+
+        assertEquals(PassResult.Superseded, pass.outcomes.single().result)
+        assertEquals(3, ha.posts.size)
     }
 
     // Row 101a — `validate`: both results from one snapshot.
@@ -376,6 +451,10 @@ class PublishRunnerTest {
         assertEquals(
             Validation.ReadFailed(FIELD_ENTITY_ID, PublishErrorKind.WRONG_DOMAIN, null),
             graph.publishRunner.validate(heater, PublishKind.EQUIPMENT_STATUS, INBOUND, null),
+        )
+        assertEquals(
+            Validation.ReadFailed(FIELD_BOUNDARY_ENTITY_ID, PublishErrorKind.WRONG_DOMAIN, null),
+            graph.publishRunner.validate(heater, PublishKind.SEASON_SERVICE_DATE, DATE, INBOUND),
         )
         assertTrue(ha.log.isEmpty())
     }

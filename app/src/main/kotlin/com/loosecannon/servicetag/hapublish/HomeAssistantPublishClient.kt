@@ -284,17 +284,6 @@ class HomeAssistantPublishClient(
         const val BUFFER_BYTES = 8 * 1024
         const val MAX_CAUSE_DEPTH = 16
 
-        val ISO_DAY = Regex("^\\d{4}-\\d{2}-\\d{2}$")
-
-        /** C16's shapes, again at the wire: a helper of the action's own domain and a value it takes. */
-        fun admissible(action: HaServiceAction, entityId: String, value: String): Boolean {
-            if (!isValidEntityId(entityId) || entityId.substringBefore('.') != action.domain) return false
-            return when (action) {
-                HaServiceAction.SELECT_OPTION -> value in STATUS_OPTIONS
-                HaServiceAction.SET_DATE -> ISO_DAY.matches(value)
-            }
-        }
-
         /** Two keys, in this order, encoded by kotlinx-serialization: never built by concatenation. */
         fun bodyOf(action: HaServiceAction, entityId: String, value: String): ByteArray {
             val call = buildJsonObject {
@@ -349,5 +338,19 @@ class HomeAssistantPublishClient(
                 // Already gone.
             }
         }
+    }
+}
+
+private val ISO_DAY = Regex("^\\d{4}-\\d{2}-\\d{2}$")
+
+/**
+ * C16's shapes at the wire, the one rule: a helper of the action's own domain and a value it takes. The client
+ * refuses a call outside it as a bug; the runner checks it first and records `MALFORMED` without sending (C30).
+ */
+internal fun admissible(action: HaServiceAction, entityId: String, value: String): Boolean {
+    if (!isValidEntityId(entityId) || entityId.substringBefore('.') != action.domain) return false
+    return when (action) {
+        HaServiceAction.SELECT_OPTION -> value in STATUS_OPTIONS
+        HaServiceAction.SET_DATE -> ISO_DAY.matches(value)
     }
 }
