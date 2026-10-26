@@ -4635,7 +4635,8 @@ def list_ha_publishing() -> dict[str, Any]:
     on the phone from its own records when it is read: nothing is read from Home Assistant, nothing is written, and no
     tool takes a value, a date to publish or a ready flag.
 
-    `writesEnabled` is true while any binding is enabled, that is, while the phone may set a helper. `bindings` holds
+    `writesEnabled` is true while any binding is enabled — a copied or not yet validated one included; each binding's
+    `state` says whether this phone sends to it. `bindings` holds
     one entry per binding, ordered by asset and then kind, each exactly what `get_ha_publishing` answers for a binding
     (`kind`, `entityId`, `boundaryEntityId`, `enabled`, `state`, `desiredValue`, `lastPublished`, `lastVerified`,
     `lastError`, `revision`, `validated`, `validatedAt`, `remote`, `needsDelivery`, `reconcilePending`,

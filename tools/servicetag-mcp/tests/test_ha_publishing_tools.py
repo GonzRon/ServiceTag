@@ -483,8 +483,11 @@ def test_the_collection_docstring_names_the_route_its_keys_and_the_orphan() -> N
         "GET /v1/ha-publishing", "read only", "`writesEnabled`", "`bindings`", "`decommissions`", "`assetId`",
         "orphan", "`get_ha_publishing`", "`APP_SCHEMA_TOO_OLD`", "schema 22", "1970-01-01", "`UNDELIVERABLE`",
         "never the address",
+        # B5r review N4: an enabled binding is not a write — a copied or unvalidated one sends nothing.
+        "a copied or not yet validated one included", "each binding's `state` says whether this phone sends to it",
     ):
         assert words in doc, words
+    assert "while the phone may set a helper" not in doc
     for name in PUBLISHING_STATES:
         assert f"`{name}`" in doc, name
     lowered = doc.lower()

@@ -16,8 +16,10 @@ import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
+import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
@@ -27,6 +29,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -153,7 +156,10 @@ class ApiReadsWriteNothingTest {
             status = 201,
         ).loan.id
 
-        // Row 108: rows in the publishing tables, so the three #113/#114 reads have something to leave alone.
+        // Row 108: rows in the publishing tables, so the three #113/#114 reads have something to leave alone — seeded so
+        // that a read-side projection or boundary write would visibly move them (B5r review I1): the generator's
+        // stored `UP` against its recorded `DEGRADED`, and the hot tub's date binding following Home Assistant with no
+        // boundary read cached and no value projected.
         runBlocking {
             graph.haConnections.upsert(
                 HaConnection(
@@ -170,7 +176,25 @@ class ApiReadsWriteNothingTest {
                     boundaryEntityId = null, createdAt = 1L, updatedAt = 1L,
                 ),
             )
-            graph.publishDeliveries.upsert(PublishDelivery("example-binding-1", "DEGRADED", 3, 1L))
+            graph.publishDeliveries.upsert(PublishDelivery("example-binding-1", "UP", 3, 1L))
+            graph.publishBindings.insert(
+                PublishBinding(
+                    id = "example-binding-2", assetId = AssetId(tub), connectionId = "example-connection",
+                    kind = PublishKind.SEASON_SERVICE_DATE, entityId = "input_datetime.example_hot_tub_service_done",
+                    enabled = true, revision = 2, activatedInstallationId = "example-installation", validatedAt = 1L,
+                    validatedRevision = 2, boundaryEntityId = "input_datetime.example_hot_tub_season_ended",
+                    createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            graph.publishDeliveries.upsert(PublishDelivery("example-binding-2", null, 0, 1L))
+            graph.seasonSyncBindings.insert(
+                SeasonSyncBinding(
+                    AssetId(tub), "example-connection", "input_boolean.example_hot_tub_in_season", SyncMode.FOLLOW,
+                    enabled = true, revision = 1, observedState = null, observedChangedAt = null, lastSuccessAt = null,
+                    lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null, appliedAction = null,
+                    appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
             graph.publishDecommissions.upsertMerging(
                 DecommissionTombstone(
                     "example-tombstone-1", "example-connection", "input_datetime.example_gone", null, "example-installation",
@@ -183,6 +207,7 @@ class ApiReadsWriteNothingTest {
         graph.now = dayMillis("2026-02-10")
         val before = snapshot()
         assertTrue("the publishing tables are not empty", before.getValue("ha_publish_binding").isNotEmpty())
+        assertTrue("a season sync binding is seeded", before.getValue("season_sync_binding").isNotEmpty())
         assertTrue("the stored state is stale", runBlocking { graph.scheduleStates.all() }.all { it.computedForOn == "2026-01-20" })
 
         for (path in listOf(
@@ -241,6 +266,13 @@ class ApiReadsWriteNothingTest {
         assertEquals("2026-02-10", detail.computedForOn)
         assertEquals("2026-03-01", detail.state.actionableDueOn)
         assertEquals("DEFERRED", detail.status)
+
+        // The positive control (B5r review I1): the seed is one a projection visibly moves, so a read that projected
+        // would have failed the loop above.
+        runBlocking { graph.publishProjector.reconcileDesired(graph.today) }
+        assertNotEquals(
+            "a projection moves the seeded deliveries", before.getValue("ha_publish_delivery"), snapshot().getValue("ha_publish_delivery"),
+        )
     }
 
     /**

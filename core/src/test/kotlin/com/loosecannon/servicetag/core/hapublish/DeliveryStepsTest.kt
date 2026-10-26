@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.hapublish.DeliveryTrigger.SCHEDULED
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.season.NotReadyReason
 import com.loosecannon.servicetag.core.season.Readiness
@@ -707,5 +708,24 @@ class DeliveryStepsTest {
         assertTrue(DeliverySteps.selects(b, d, RECONCILE))
         assertFalse(DeliverySteps.selects(b.copy(enabled = false), again, RECONCILE))
         assertFalse(DeliverySteps.selects(b.copy(enabled = false), again, CHANGE))
+    }
+
+    // B5 review M2, B5r/B5w1 review N3 — a quiet ineligible date binding is neither read nor sent (C34, P114-39).
+
+    @Test
+    fun aQuietIneligibleDateBindingIsDoneOnEveryTriggerUntilAReadIsOwed() {
+        val b = binding(kind = PublishKind.SEASON_SERVICE_DATE)
+        val archived = heater.copy(status = AssetStatus.ARCHIVED)
+        val quiet = verified(delivery(INVALID_SERVICE_DATE), 1, INVALID_SERVICE_DATE)
+        for (trigger in listOf(CHANGE, SCHEDULED, RECONCILE)) {
+            assertEquals(DeliveryPlan.Done, DeliverySteps.plan(snap(b, quiet, asset = archived), trigger), trigger.name)
+        }
+        assertEquals(PublishState.INVALIDATED_INELIGIBLE, DeliverySteps.stateOf(snap(b, quiet, asset = archived)))
+
+        // A read-back begun and not completed is owed whatever the asset: the reconcile reads.
+        val owed = quiet.copy(reconcilePending = true)
+        for (trigger in listOf(CHANGE, RECONCILE)) {
+            assertIs<DeliveryPlan.ReadFirst>(DeliverySteps.plan(snap(b, owed, asset = archived), trigger), trigger.name)
+        }
     }
 }

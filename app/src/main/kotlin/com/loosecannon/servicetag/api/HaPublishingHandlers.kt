@@ -117,7 +117,9 @@ internal class HaPublishingHandlers(
     /**
      * C35a (G-R2) — `GET /v1/ha-publishing`, one `uow.read`: every binding by asset then kind, led by its `assetId`,
      * and every obligation by request time then id — the only read of an orphan tombstone, whose asset is gone and
-     * which [get] answers 404 for. `writesEnabled` is whether any binding is enabled. Nothing here writes.
+     * which [get] answers 404 for. A binding whose asset row is gone is listed too: its only foreign key is the
+     * connection's, so it outlives its asset until the projector retires it (row 71), and its helper may still hold a
+     * date meanwhile (B5r review M1). `writesEnabled` is whether any binding is enabled. Nothing here writes.
      */
     suspend fun list(): ApiResponse {
         val here = installationId()
@@ -126,8 +128,8 @@ internal class HaPublishingHandlers(
             val hasToken = connection != null && secrets.has(connection.id)
             val held = transfers.heldIds()
             val all = bindings.all().sortedWith(compareBy({ it.assetId.value }, { it.kind }))
-            val rows = all.mapNotNull { binding ->
-                val asset = assets.get(binding.assetId) ?: return@mapNotNull null
+            val rows = all.map { binding ->
+                val asset = assets.get(binding.assetId)
                 val delivery = deliveries.get(binding.id) ?: emptyDelivery(binding)
                 val present = connection != null && connection.id == binding.connectionId
                 val state = DeliverySteps.stateOf(Snap(binding, delivery, present, hasToken, here, asset, held))
@@ -356,7 +358,8 @@ internal class HaPublishingHandlers(
     private suspend fun bindingDtoOf(binding: PublishBinding): HaPublishBindingDto {
         val here = installationId()
         return uow.read {
-            val stored = bindings.forAsset(binding.assetId).first { it.id == binding.id }
+            // B5w1 review N2: a binding gone since the commit (an asset deleted, then retired) answers as committed.
+            val stored = bindings.forAsset(binding.assetId).firstOrNull { it.id == binding.id } ?: binding
             val asset = assets.get(binding.assetId)
             val connection = connections.get()
             val hasToken = connection != null && secrets.has(connection.id)

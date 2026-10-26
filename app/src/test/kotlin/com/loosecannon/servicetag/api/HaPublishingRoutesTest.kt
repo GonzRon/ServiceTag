@@ -281,16 +281,22 @@ class HaPublishingRoutesTest {
         // An obligation whose asset is gone, one naming none, and the heater's own; sorted by time, then id.
         graph.publishDecommissions.upsertMerging(orphan("example-orphan-b", AssetId("example-deleted-asset"), 50L, DecommissionState.UNDELIVERABLE))
         graph.publishDecommissions.upsertMerging(orphan("example-orphan-a", null, 50L))
+        // B5r review M2: a second asset enabled last whose id sorts first, so the order is the sort, not insertion.
+        graph.assets.upsert(assetRow(BOILER.value, "Example Boiler"))
+        graph.haPublish.helpers[BOILER_STATUS] = statusHelper("unknown").copy(entityId = BOILER_STATUS)
+        graph.enablePublishing.run(
+            BOILER, PublishKind.EQUIPMENT_STATUS, BOILER_STATUS, fresh(BOILER_STATUS, PublishKind.EQUIPMENT_STATUS, BOILER),
+            null, graph.installationIdentity.id(),
+        )
 
         val tree = collection()
         assertEquals(setOf("writesEnabled", "bindings", "decommissions"), tree.keys)
         assertEquals("true", tree.str("writesEnabled"))
-        val bindings = tree.getValue("bindings").jsonArray.map { it.jsonObject }
+        val all = tree.getValue("bindings").jsonArray.map { it.jsonObject }
+        assertEquals(listOf(BOILER.value, heater.value, heater.value), all.map { it.str("assetId") })
+        all.forEach { assertEquals(setOf("assetId") + BINDING_KEYS, it.keys) }
+        val bindings = all.filter { it.str("assetId") == heater.value }
         assertEquals(listOf("EQUIPMENT_STATUS", "SEASON_SERVICE_DATE"), bindings.map { it.str("kind") })
-        bindings.forEach {
-            assertEquals(setOf("assetId") + BINDING_KEYS, it.keys)
-            assertEquals(heater.value, it.str("assetId"))
-        }
         // The same binding the per-asset route answers.
         val perAsset = publishing().getValue("bindings").jsonArray.map { it.jsonObject }
         assertEquals(perAsset, bindings.map { JsonObject(it - "assetId") })
@@ -319,6 +325,40 @@ class HaPublishingRoutesTest {
         graph.haPublish.helpers[STATUS] = statusHelper("unknown")
         enable(PublishKind.EQUIPMENT_STATUS)
         assertEquals("true", collection().str("writesEnabled"))
+
+        // B5r review M2: a disabled binding is still listed, and writes nothing.
+        graph.disablePublishing.run(heater, PublishKind.EQUIPMENT_STATUS)
+        val disabled = collection()
+        assertEquals("false", disabled.str("writesEnabled"))
+        assertEquals("false", disabled.getValue("bindings").jsonArray.single().jsonObject.str("enabled"))
+    }
+
+    /**
+     * B5r review M1: a binding's only foreign key is its connection's, so it outlives its asset row until the projector
+     * retires it (row 71). Meanwhile the collection lists it — its helper may still hold a date — under the asset id
+     * it names, and `writesEnabled` agrees.
+     */
+    @Test
+    fun theCollectionListsABindingWhoseAssetIsGone() = rig.run {
+        val connection = connect()
+        val gone = AssetId("example-deleted-asset")
+        graph.publishBindings.insert(
+            PublishBinding(
+                id = "example-binding-gone", assetId = gone, connectionId = connection.id,
+                kind = PublishKind.SEASON_SERVICE_DATE, entityId = "input_datetime.example_gone_service_done", enabled = true,
+                revision = 1, activatedInstallationId = graph.installationIdentity.id(), validatedAt = graph.now,
+                validatedRevision = 1, boundaryEntityId = null, createdAt = graph.now, updatedAt = graph.now,
+            ),
+        )
+        graph.publishDeliveries.upsert(PublishDelivery("example-binding-gone", "2025-11-15", 1, graph.now))
+
+        val tree = collection()
+        assertEquals("true", tree.str("writesEnabled"))
+        val listed = tree.getValue("bindings").jsonArray.single().jsonObject
+        assertEquals(gone.value, listed.str("assetId"))
+        assertEquals("input_datetime.example_gone_service_done", listed.str("entityId"))
+        assertEquals("PENDING", listed.str("state"))
+        assertEquals("the per-asset route cannot reach it", 404, api.call("GET", "/v1/assets/${gone.value}/ha-publishing").status)
     }
 
     @Test
@@ -402,6 +442,7 @@ class HaPublishingRoutesTest {
     private companion object {
         const val OTHER_DATE = "input_datetime.example_heater_service_done_2"
         const val BOILER_DATE = "input_datetime.example_boiler_service_done"
+        const val BOILER_STATUS = "input_select.example_boiler_equipment_status"
         val BOILER = AssetId("example-boiler")
 
         val BINDING_KEYS = setOf(
