@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.ComponentCondition
 import com.loosecannon.servicetag.ui.health.ConditionView
 import com.loosecannon.servicetag.ui.journal.formatNumber
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -178,6 +179,17 @@ fun interface LastCompletionEventId {
  */
 fun interface ReminderReconcile {
     suspend fun run()
+}
+
+/** #123: the sweep after a completion's write. The write has committed; a failed sweep is the backstop's to repeat. */
+suspend fun ReminderReconcile.runAfterWrite(tag: String) {
+    try {
+        run()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failed: Exception) {
+        Log.w(tag, "the reminder sweep after a completion failed", failed)
+    }
 }
 
 /**

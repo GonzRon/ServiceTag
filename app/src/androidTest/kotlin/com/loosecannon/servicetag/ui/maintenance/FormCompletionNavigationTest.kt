@@ -26,6 +26,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -51,6 +52,7 @@ import com.loosecannon.servicetag.ui.nav.ServiceTagRoot
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.Collections
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -73,7 +75,10 @@ import org.junit.runner.RunWith
  * arrival over the same schedule's plain detail leaves two equal detail keys once it is cleared, and the stack still
  * backs out through both to the dashboard (N2c); an arrival over its own open form returns to that form rather than
  * pushing a twin (N2d). N4 also proves #120: the picker waits for its rows before it decides there is nothing to log.
- * A picker with nothing to log draws no dialog and closes itself once (#120's other half).
+ * A picker with nothing to log draws no dialog and closes itself once (#120's other half); a QUICK row completed from
+ * the picker runs the picker's reminder sweep once, after its write (#123, LP1). A FORM schedule that also counts a
+ * meter its profile does not carry asks for the reading on its form, refuses the save without it and stores it once
+ * (#119, N5).
  *
  * The last three cases compose the detail screen alone, because what they count is its callbacks: an arrival's end
  * reaches `onArrivalEnded` exactly once after an answer or a cancel, and never after a hand-over to the form.
@@ -83,8 +88,9 @@ import org.junit.runner.RunWith
  * frame or two of the detail composing.
  *
  * Fixtures are fictional: an asset "Mower", FORM schedules "Blade sharpen" and "Deck clean" anchored two quarters
- * back (so overdue), and one profile with a required reading and a suggested material. Emulator only — the suite
- * wipes app data.
+ * back (so overdue), and one profile with a required reading and a suggested material; N5's Mower has its own
+ * "Blade sharpen", counting the meter "Engine hours" every 25 h, on a profile that does not carry it. Emulator
+ * only — the suite wipes app data.
  */
 @RunWith(AndroidJUnit4::class)
 class FormCompletionNavigationTest {
@@ -288,6 +294,77 @@ class FormCompletionNavigationTest {
         }
         rule.onAllNodes(isDialog()).assertCountEquals(0)
         assertEquals(1, rule.runOnIdle { dismissed.size })
+    }
+
+    /**
+     * #123 LP1 (Q2, F-7): the picker composed with a counting sweep; its QUICK row tapped and the prompt answered — one
+     * event stored for the schedule, and the sweep ran once, with that event already stored.
+     */
+    @Test fun aQuickCompletionFromThePickerSweepsOnce() {
+        val deck = seedQuickSchedule()
+        val graph = app.graph
+        val seen = Collections.synchronizedList(mutableListOf<Int>())
+        val dismissed = Collections.synchronizedList(mutableListOf<Unit>())
+        rule.setContent {
+            ServiceTagTheme {
+                LogMaintenancePicker(
+                    flow = graph.completionFlow,
+                    due = graph.dueReadModel,
+                    onDismiss = { dismissed += Unit },
+                    onLogForm = {},
+                    onOpenSchedule = {},
+                    reconcile = ReminderReconcile { seen += graph.events.all().size },
+                )
+            }
+        }
+        rule.waitUntil(conditionDescription = "the picker lists the QUICK row", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodes(hasText(DECK) and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNode(hasText(DECK) and hasAnyAncestor(isDialog())).performClick()
+        rule.awaitText(WHEN_WAS_THIS_DONE)
+        rule.onNode(hasText(SAVE) and hasAnyAncestor(isDialog())).performClick()
+        rule.waitUntil(conditionDescription = "the completion ends and the picker closes", timeoutMillis = TIMEOUT_MS) {
+            dismissed.isNotEmpty()
+        }
+
+        assertEquals(listOf(deck), linkedSchedules())
+        assertEquals("one sweep, after the write", listOf(1), seen.toList())
+    }
+
+    /**
+     * #119 N5: "Blade sharpen" counts the Mower's engine hours, which its "Blade service" profile does not carry. Its
+     * form draws an "Engine hours" row; **Record entry** with only "Blade edge" typed stays on the form, says
+     * "Engine hours is required" and writes nothing; with "120" typed the save completes the schedule, back on the
+     * detail, with the reading on the linked event.
+     */
+    @Test fun aMeteredFormAsksForTheMeterReadingAndStoresItOnce() {
+        val (blade, hours) = seedMeteredForm()
+        open(Route.ScheduleDetail(blade))
+
+        rule.awaitText(LOG_MAINTENANCE_LABEL)
+        rule.onNodeWithText(LOG_MAINTENANCE_LABEL).performClick()
+        rule.waitUntil(conditionDescription = "the form alone, with the meter's row", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodesWithText(RECORD_ENTRY).fetchSemanticsNodes().size == 1 &&
+                rule.onAllNodesWithTag(HOURS_TAG).fetchSemanticsNodes().size == 1 &&
+                rule.onAllNodesWithContentDescription(BACK).fetchSemanticsNodes().isEmpty()
+        }
+        rule.onNodeWithText(ENGINE_HOURS).assertExists()
+
+        rule.onNodeWithTag(EDGE_TAG).performScrollTo().performTextInput("3")
+        rule.onNodeWithText(RECORD_ENTRY).performScrollTo().performClick()
+        rule.waitUntil(conditionDescription = "the form says the reading is required", timeoutMillis = TIMEOUT_MS) {
+            rule.onAllNodesWithText(HOURS_REQUIRED).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onAllNodesWithText(RECORD_ENTRY).assertCountEquals(1)
+        assertEquals(0, runBlocking { app.graph.events.all().size })
+
+        rule.onNodeWithTag(HOURS_TAG).performScrollTo().performTextInput("120")
+        rule.onNodeWithText(RECORD_ENTRY).performScrollTo().performClick()
+        awaitFormClosed()
+        awaitTheDetailListsTheCompletion()
+        val stored = runBlocking { app.graph.events.all() }.single()
+        assertEquals(blade, stored.scheduleId?.value)
+        assertEquals(listOf(120.0), stored.measurements.filter { it.definitionId == hours }.map { it.valueNum })
     }
 
     /** T1b2 review, O2: a QUICK meter arrival answered — one completion, and its end said to the host once. */
@@ -551,6 +628,68 @@ class FormCompletionNavigationTest {
         id.value
     }
 
+    /**
+     * N5's Mower: "Blade edge" (mm) and the meter "Engine hours" (h); "Blade service" requires the edge and does not
+     * carry the meter; "Blade sharpen" is a FORM schedule on it, counting the meter every 25 h from 100 and quarterly
+     * from two quarters back. Returns the schedule's id and the meter's.
+     */
+    private fun seedMeteredForm(): Pair<String, DefinitionId> = runBlocking {
+        val graph = app.graph
+        val mower = graph.createAsset.run(AssetCommand(name = MOWER, category = "Yard")).id
+        suspend fun reading(key: String, label: String, unit: String, isMeter: Boolean) = graph.saveDefinition.run(
+            null,
+            DefinitionCommand(
+                assetId = mower,
+                key = key,
+                label = label,
+                unit = unit,
+                kind = DefinitionKind.ENTERED,
+                valueType = ValueType.NUMBER,
+                decimals = 0,
+                rangeLow = null,
+                rangeHigh = null,
+                isMeter = isMeter,
+                formula = null,
+                sourceA = null,
+                sourceB = null,
+            ),
+        )
+        val edge = reading("blade_edge", "Blade edge", "mm", isMeter = false)
+        val hours = reading("engine_hours", ENGINE_HOURS, "h", isMeter = true)
+        val profile = graph.saveProfile.run(
+            null,
+            ProfileCommand(
+                assetId = mower,
+                name = "Blade service",
+                eventKind = EventKind.MAINTENANCE,
+                defaultTitle = "",
+                fields = listOf(ProfileFieldInput(edge.id, required = true)),
+                consumables = emptyList(),
+            ),
+        )
+        val id = ScheduleId("t2b-blade-sharpen")
+        graph.schedules.upsert(
+            formSchedule(id, mower, BLADE, profile.id, back = LocalDate.now().minusMonths(6)).copy(
+                meterDefinitionId = hours.id,
+                meterInterval = 25.0,
+                anchorMeter = 100.0,
+            ),
+        )
+        graph.recomputeSchedules.forSchedule(id)
+        id.value to hours.id
+    }
+
+    /** LP1's QUICK "Deck clean" on the Mower, FIXED quarterly from two quarters back, so overdue and in the picker. */
+    private fun seedQuickSchedule(): String = runBlocking {
+        val graph = app.graph
+        val mower = graph.createAsset.run(AssetCommand(name = MOWER, category = "Yard")).id
+        val id = ScheduleId("t1-deck-clean")
+        val back = LocalDate.now().minusMonths(6)
+        graph.schedules.upsert(formSchedule(id, mower, DECK, profileId = null, back = back).copy(completionMode = CompletionMode.QUICK))
+        graph.recomputeSchedules.forSchedule(id)
+        id.value
+    }
+
     private fun formSchedule(id: ScheduleId, assetId: AssetId, title: String, profileId: ProfileId?, back: LocalDate) =
         MaintenanceSchedule(
             id = id,
@@ -598,6 +737,11 @@ class FormCompletionNavigationTest {
         const val DECK = "Deck clean"
         const val READING_TAG = "value-blade_gap"
 
+        /** N5's two rows: the profile's required reading and the schedule's meter. */
+        const val EDGE_TAG = "value-blade_edge"
+        const val HOURS_TAG = "value-engine_hours"
+        const val ENGINE_HOURS = "Engine hours"
+
         // The shipped English words the owner taps and reads; none is new.
         const val RECORD_ENTRY = "Record entry"
         const val CLOSE = "Close"
@@ -611,6 +755,7 @@ class FormCompletionNavigationTest {
         const val LOG_METER_READING = "Log meter reading"
         const val SAVE = "Save"
         const val CANCEL = "Cancel"
+        const val HOURS_REQUIRED = "Engine hours is required"
 
         /** The trail's mark for one `onArrivalEnded` call. */
         const val ENDED = "ended"

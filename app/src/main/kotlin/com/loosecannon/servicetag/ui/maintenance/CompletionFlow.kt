@@ -51,6 +51,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/** The log tag of [CompletionFlow] and [LogMaintenancePicker]: file level, so the composable sees it too. */
+private const val TAG = "CompletionFlow"
+
 /** RATIFIED, verbatim (master plan §17): the completion affordance's own question. */
 val WHEN_WAS_THIS_DONE: String get() = localized(R.string.maintenance_when_was_this_done)
 
@@ -139,9 +142,11 @@ data class CompletionAnswer(
  * an activation (inv. 81, 93). The notification's one-tap completion does not come through this flow
  * at all, so it offers nothing: there is no screen to ask on.
  *
- * A caller that must act on the written completion before anyone answers an offer — the scan sheet's
- * reminder reconcile — passes `afterWrite`, which runs right after the write and before the first
- * offer (the controller's ruling on B12's review, R-2). A caller completing several items at once
+ * A caller that must act on the written completion before anyone answers an offer — the reminder sweep
+ * of the scan sheet, the schedule detail, the group detail and the Log maintenance picker (#123) —
+ * passes `afterWrite`, which runs right after the write and before the first offer (the controller's
+ * ruling on B12's review, R-2), once for every [CompletionOutcome.Completed], an empty one included,
+ * and never for any other outcome. A caller completing several items at once
  * opens one [OfferBatch] with [openSelection] and closes it with [closeSelection], so each asset is
  * asked each offer at most once in the whole selection — form items saved in the journal entry
  * included (M-1, RS-2).
@@ -192,7 +197,8 @@ class CompletionFlow(
                 // A `FORM` schedule collects its details in its profile form. Asking "when was this
                 // done" here and writing a minimal completion would mark the event `details_pending`
                 // from a surface that had the owner's whole attention — the one place the quick path
-                // is not wanted (spec §2.1, D-18b).
+                // is not wanted (spec §2.1, D-18b). The form also collects the schedule's meter reading,
+                // which this prompt would otherwise have asked for (#119).
                 if (schedule.completionMode == CompletionMode.FORM) {
                     CompletionOutcome.NeedsForm(scheduleId, target.assetId, schedule.profileId)
                 } else {
@@ -208,9 +214,10 @@ class CompletionFlow(
         }
     }
 
-    /** "Complete selected": the named members of a group round, in one write. */
-    suspend fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>): CompletionOutcome =
-        completeMembers(scheduleId, assetIds, afterWrite = {})
+    /** "Complete selected": the named members of a group round, in one write. [afterWrite] as for [complete]. */
+    suspend fun completeSelected(
+        scheduleId: ScheduleId, assetIds: List<AssetId>, afterWrite: suspend () -> Unit = {},
+    ): CompletionOutcome = completeMembers(scheduleId, assetIds, afterWrite)
 
     private suspend fun completeMembers(
         scheduleId: ScheduleId,
@@ -223,12 +230,12 @@ class CompletionFlow(
         return attempt(afterWrite) { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
     }
 
-    /** "Complete all": every required member of a group round that is not yet done. */
-    suspend fun completeAll(scheduleId: ScheduleId): CompletionOutcome {
+    /** "Complete all": every required member of a group round that is not yet done. [afterWrite] as for [complete]. */
+    suspend fun completeAll(scheduleId: ScheduleId, afterWrite: suspend () -> Unit = {}): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt(afterWrite = {}) { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
+        return attempt(afterWrite) { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
     }
 
     /**
@@ -356,10 +363,6 @@ class CompletionFlow(
         }
     }
 
-    private companion object {
-        const val TAG = "CompletionFlow"
-    }
-
     private fun CompletionAnswer.command(schedule: MaintenanceSchedule): CompletionCommand {
         // Typed in the owner's decimal separator; it goes on as the use case reads a number (#102).
         val reading = meterValue?.trim()?.takeIf { it.isNotEmpty() }?.let(::neutralNumber)
@@ -462,6 +465,10 @@ fun CompletionFlowHost(flow: CompletionFlow) {
  * that needed one would be drafting it — so the finding is reported and the action stays quiet.
  * That is decided only once the list has loaded: until `due.items()` returns, the picker draws
  * nothing and stays open, so a list still loading is never taken for an empty one (#120).
+ *
+ * #123: a QUICK completion here runs [reconcile] — the graph's reminder sweep, passed by the root — once after
+ * its write, so the reminder for the schedule clears. Defaulted to nothing for a host that composes the picker
+ * alone; the root's argument is pinned by `ReminderSweepWiringTest`.
  */
 @Composable
 fun LogMaintenancePicker(
@@ -471,6 +478,7 @@ fun LogMaintenancePicker(
     /** A `FORM` schedule's completion, handed over whole (#117), so the host's entry route completes it. */
     onLogForm: (CompletionOutcome.NeedsForm) -> Unit,
     onOpenSchedule: (scheduleId: String) -> Unit,
+    reconcile: ReminderReconcile = ReminderReconcile {},
 ) {
     val scope = rememberCoroutineScope()
     // Null until the rows have loaded, so "not loaded yet" is never read as "nothing to log" (#120).
@@ -517,7 +525,7 @@ fun LogMaintenancePicker(
                                 onOpenSchedule(item.scheduleId.value)
                             } else {
                                 scope.launch {
-                                    val outcome = flow.complete(item.scheduleId, asset)
+                                    val outcome = flow.complete(item.scheduleId, asset) { reconcile.runAfterWrite(TAG) }
                                     if (outcome is CompletionOutcome.NeedsForm) onLogForm(outcome)
                                     onDismiss()
                                 }

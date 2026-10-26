@@ -38,6 +38,7 @@ import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.asset.FieldLabel
 import com.loosecannon.servicetag.ui.asset.FormField
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
@@ -69,6 +70,7 @@ fun ServiceCaseEditScreen(
     LaunchedEffect(missing) { if (missing) onBack() }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(

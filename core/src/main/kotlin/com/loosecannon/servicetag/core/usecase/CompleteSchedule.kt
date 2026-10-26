@@ -42,7 +42,9 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   `details_pending`: the notification's one-tap action and a bodyless API call both land here,
  *   and demanding the form's required fields would make the quick path impossible.
  *   A completion collected by the form (`viaForm`) is never minimal: it is held to the profile's
- *   required fields and never owes its details.
+ *   required fields and never owes its details. It also owes the schedule's meter reading, as the
+ *   quick prompt does, whether or not the profile carries that meter (#119); a meter rule whose
+ *   definition has gone, or is archived, demands nothing.
  *
  * A group-targeted schedule is refused, and permanently: this operation takes no member list, so
  * obeying it would mean picking an Asset to write an event against — exactly what invariants 28 and
@@ -103,6 +105,10 @@ class CompleteSchedule(
                 detailsPending = detailsPending,
             )
             val profile = resolveOwnedProfile(eventCmd, definitions, profiles)
+            // #119: the form stands where the quick prompt would have asked for the reading, so it owes it too. Only a
+            // meter that still resolves is owed, as the quick prompt decides; buildEvent excuses an archived one.
+            val owedMeter = schedule.meterDefinitionId
+                ?.takeIf { cmd.viaForm && definitions.get(it) != null }
             val event = buildEvent(
                 cmd = eventCmd,
                 definitions = definitions,
@@ -120,6 +126,7 @@ class CompleteSchedule(
                 } else {
                     EventSource.MANUAL
                 },
+                alsoRequired = setOfNotNull(owedMeter),
             )
             events.upsert(event)
             if (schedule.postponedDueOn != null) {

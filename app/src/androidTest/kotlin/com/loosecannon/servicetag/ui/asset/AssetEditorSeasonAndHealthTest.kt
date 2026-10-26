@@ -47,6 +47,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
+import com.loosecannon.servicetag.ui.settleKeyboard
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -204,6 +205,7 @@ class AssetEditorSeasonAndHealthTest {
         saveAsset().assertIsNotEnabled()
 
         field("$BREAK_STARTS *").performScrollTo().performTextInput(monthDayFieldText("12-01"))
+        rule.settleKeyboard()
         field("$BREAK_ENDS *").performScrollTo().performTextInput(monthDayFieldText("02-28"))
         field(BREAK_STARTS).assertExists()
         saveAsset().assertIsEnabled().performClick()

@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.DefinitionId
+import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
@@ -18,8 +20,11 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.model.ValueType
+import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
+import com.loosecannon.servicetag.core.usecase.DefinitionCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.FieldProblem
 import com.loosecannon.servicetag.core.usecase.GroupCommand
@@ -1075,15 +1080,18 @@ class EventEntryViewModelTest {
     /**
      * A FORM schedule on [assetId], FIXED quarterly from 2025-08-01 and never done: due 2025-08-01, so on the
      * tenth of February 2026 it is two quarters overdue, and one completion on the tenth moves it to 2026-05-01.
+     * With a [meter] its rule also counts that meter, every 25 from 100 (#119).
      */
     private suspend fun formSchedule(
         assetId: AssetId,
         profileId: ProfileId?,
         title: String = "Quarterly water check",
         id: String = "s-water",
+        meter: DefinitionId? = null,
     ): MaintenanceSchedule {
         val schedule = scheduleOf(
             id, assetId = assetId.value, title = title, anchorOn = "2025-08-01", leadDays = 0,
+            meterDefinitionId = meter?.value, meterInterval = meter?.let { 25.0 }, anchorMeter = meter?.let { 100.0 },
             completionMode = CompletionMode.FORM, createdOn = "2025-08-01",
         ).copy(profileId = profileId)
         graph.schedules.upsert(schedule)
@@ -1509,5 +1517,210 @@ class EventEntryViewModelTest {
         assertEquals(TransferImportStrings.ASSET_TRANSFERRED_OUT, refused.firstProblem)
         assertEquals(emptyList<AssetEvent>(), graph.events.all())
         assertEquals(0, reconciles)
+    }
+
+    // --- #119 (M1–M8): a schedule's form collects the meter reading its schedule counts ----------------------
+
+    /** The Mower: a reading "Blade edge", the meter "Engine hours" (h) and a reading "Deck height", in that order. */
+    private class Mower(
+        val id: AssetId,
+        val edge: MeasurementDefinition,
+        val hours: MeasurementDefinition,
+        val deck: MeasurementDefinition,
+    )
+
+    private suspend fun mower(): Mower {
+        val id = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard")).id
+        suspend fun reading(key: String, label: String, unit: String, isMeter: Boolean) = graph.saveDefinition.run(
+            null,
+            DefinitionCommand(
+                assetId = id, key = key, label = label, unit = unit, kind = DefinitionKind.ENTERED,
+                valueType = ValueType.NUMBER, decimals = 0, rangeLow = null, rangeHigh = null, isMeter = isMeter,
+                formula = null, sourceA = null, sourceB = null,
+            ),
+        )
+        return Mower(
+            id,
+            edge = reading("blade_edge", "Blade edge", "mm", isMeter = false),
+            hours = reading("engine_hours", "Engine hours", "h", isMeter = true),
+            deck = reading("deck_height", "Deck height", "mm", isMeter = false),
+        )
+    }
+
+    /** "Blade service": "Blade edge" required, then [more]; it carries the meter only when [more] names it. */
+    private suspend fun bladeService(
+        mower: Mower,
+        more: ProfileFieldInput? = null,
+        name: String = "Blade service",
+    ): EventProfile = graph.saveProfile.run(
+        null,
+        ProfileCommand(
+            mower.id, name, EventKind.MAINTENANCE, "",
+            listOfNotNull(ProfileFieldInput(mower.edge.id, true), more), emptyList(),
+        ),
+    )
+
+    /** "Blade sharpen": a FORM schedule on [profileId] whose rule also counts [meter] (none: time only). */
+    private suspend fun bladeSharpen(mower: Mower, profileId: ProfileId?, meter: DefinitionId? = mower.hours.id) =
+        formSchedule(mower.id, profileId, title = "Blade sharpen", id = "s-blade", meter = meter)
+
+    /** Each row as (definition, required): what the form draws and what it demands. */
+    private fun List<FieldRow>.drawn(): List<Pair<DefinitionId, Boolean>> = map { it.definition.id to it.required }
+
+    /** M1: the profile does not carry the meter, so its row comes after the profile's rows, required and empty. */
+    @Test fun aMeteredScheduleFormAppendsTheMeterRowRequired() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower)
+        val schedule = bladeSharpen(mower, profile.id)
+
+        val fields = formModel(mower.id, profile.id, schedule.id).state.first { it.loaded }.fields
+
+        assertEquals(listOf(mower.edge.id to true, mower.hours.id to true), fields.drawn())
+        assertEquals("", fields.last().text)
+        assertNull(fields.last().problem)
+    }
+
+    /** M2: the profile carries the meter as optional: no second row, and that row is now required. */
+    @Test fun aMeterTheProfileCarriesOptionalIsMadeRequiredNotDrawnTwice() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower, ProfileFieldInput(mower.hours.id, false))
+        val schedule = bladeSharpen(mower, profile.id)
+
+        val fields = formModel(mower.id, profile.id, schedule.id).state.first { it.loaded }.fields
+
+        assertEquals(listOf(mower.edge.id to true, mower.hours.id to true), fields.drawn())
+    }
+
+    /** M3: a profile-less form draws every unarchived definition once, and the meter's row is the required one. */
+    @Test fun aProfileLessMeteredFormRequiresTheMeterRowAmongTheAssetsDefinitions() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val schedule = bladeSharpen(mower, profileId = null)
+
+        val fields = formModel(mower.id, null, schedule.id).state.first { it.loaded }.fields
+
+        assertEquals(
+            listOf(mower.edge.id to false, mower.hours.id to true, mower.deck.id to false),
+            fields.drawn(),
+        )
+    }
+
+    /**
+     * M4: the meter left blank and the required reading typed: the meter's own row is marked, the screen says
+     * "Engine hours is required", and nothing is written — no event, the due and the meter state unchanged.
+     */
+    @Test fun aBlankMeterReadingIsRefusedOnItsRowAndNothingIsWritten() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower)
+        val schedule = bladeSharpen(mower, profile.id)
+        val stateBefore = graph.scheduleStates.get(schedule.id)
+        val vm = formModel(mower.id, profile.id, schedule.id)
+        vm.state.first { it.loaded }
+        vm.onDate("2026-02-10")
+        vm.onValue(mower.edge.id, "3")
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        val problems = refused.fields.associate { it.definition.id to it.problem }
+        assertEquals(mapOf(mower.edge.id to null, mower.hours.id to FieldProblem.Required(mower.hours.id)), problems)
+        assertEquals("Engine hours is required", refused.firstProblem)
+        assertFalse(refused.saving)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+        assertEquals("2025-08-01", dueOf(schedule.id))
+        assertEquals(stateBefore, graph.scheduleStates.get(schedule.id))
+        assertEquals(0, reconciles)
+    }
+
+    /** M5: the meter typed: one linked completion, the reading among its measurements once, the meter's state on. */
+    @Test fun aTypedMeterReadingIsStoredOnceOnTheLinkedCompletion() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower)
+        val schedule = bladeSharpen(mower, profile.id)
+        val vm = formModel(mower.id, profile.id, schedule.id)
+        vm.state.first { it.loaded }
+        vm.onDate("2026-02-10")
+        vm.onValue(mower.edge.id, "3")
+        vm.onValue(mower.hours.id, "120")
+
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val stored = graph.events.all().single()
+        assertEquals(schedule.id, stored.scheduleId)
+        assertEquals(listOf(mower.edge.id, mower.hours.id), stored.measurements.map { it.definitionId })
+        assertEquals(120.0, stored.measurements.single { it.definitionId == mower.hours.id }.valueNum!!, 0.0)
+        assertEquals(120.0, graph.scheduleStates.get(schedule.id)!!.lastCompletedMeter!!, 0.0)
+        assertEquals(1, reconciles)
+    }
+
+    /** M6 (pin): the same asset and profiles opened without a schedule id draw their rows as 1.8.1 did. */
+    @Test fun withoutAScheduleIdTheMeterIsNeitherAddedNorRequired() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val without = bladeService(mower)
+        val carrying = bladeService(mower, ProfileFieldInput(mower.hours.id, false), name = "Blade check")
+        bladeSharpen(mower, without.id)
+
+        val plain = formModel(mower.id, without.id, scheduleId = null).state.first { it.loaded }.fields
+        val optional = formModel(mower.id, carrying.id, scheduleId = null).state.first { it.loaded }.fields
+
+        assertEquals(listOf(mower.edge.id to true), plain.drawn())
+        assertEquals(listOf(mower.edge.id to true, mower.hours.id to false), optional.drawn())
+    }
+
+    /** M7 (pin): a FORM schedule that counts no meter draws its rows as 1.8.1 did, profile-backed or profile-less. */
+    @Test fun aFormScheduleWithoutAMeterDrawsItsRowsUnchanged() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower, ProfileFieldInput(mower.hours.id, false))
+        val backed = bladeSharpen(mower, profile.id, meter = null)
+        val bare = formSchedule(mower.id, null, title = "Deck clean", id = "s-deck")
+
+        val withProfile = formModel(mower.id, profile.id, backed.id).state.first { it.loaded }.fields
+        val profileLess = formModel(mower.id, null, bare.id).state.first { it.loaded }.fields
+
+        assertEquals(listOf(mower.edge.id to true, mower.hours.id to false), withProfile.drawn())
+        assertEquals(
+            listOf(mower.edge.id to false, mower.hours.id to false, mower.deck.id to false),
+            profileLess.drawn(),
+        )
+    }
+
+    /** M8 (pin): editing a metered schedule's linked completion draws its rows as 1.8.1 did: no schedule is read. */
+    @Test fun editingAMeteredCompletionDrawsItsRowsUnchanged() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower)
+        val schedule = bladeSharpen(mower, profile.id)
+        val done = graph.completeSchedule.run(
+            schedule.id,
+            CompletionCommand(
+                occurredOn = "2026-02-10", tzId = "UTC",
+                values = mapOf(mower.edge.id to "3", mower.hours.id to "120"),
+            ),
+        )
+
+        val fields = formModel(mower.id, null, scheduleId = null, eventId = done.id).state.first { it.loaded }.fields
+
+        assertEquals(listOf(mower.edge.id to true, mower.hours.id to false), fields.drawn())
+        assertEquals(listOf("3", "120"), fields.map { it.text })
+    }
+
+    /** M9 (pin): an archived meter is off the form, as every archived definition is, even when its schedule counts it. */
+    @Test fun anArchivedMeterTheProfileLacksDrawsNoRow() = runTest {
+        onTheTenth()
+        val mower = mower()
+        val profile = bladeService(mower)
+        val schedule = bladeSharpen(mower, profile.id)
+        graph.definitions.upsert(mower.hours.copy(archivedAt = 9_000L))
+
+        val fields = formModel(mower.id, profile.id, schedule.id).state.first { it.loaded }.fields
+
+        assertEquals(listOf(mower.edge.id to true), fields.drawn())
     }
 }

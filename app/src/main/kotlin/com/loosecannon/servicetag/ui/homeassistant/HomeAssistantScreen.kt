@@ -47,6 +47,7 @@ import com.loosecannon.servicetag.ui.asset.CANCEL_BUTTON
 import com.loosecannon.servicetag.ui.attachments.SAVE_LABEL
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.formContentInsets
 
 /**
  * #16 (C26) — Settings → Home Assistant: the one connection of this installation. A pushed destination reached only
@@ -85,6 +86,7 @@ internal fun HomeAssistantScreen(graph: AppGraph, onBack: () -> Unit) {
     )
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = { Text(HA_TITLE) },

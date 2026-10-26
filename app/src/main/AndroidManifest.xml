@@ -80,6 +80,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.ServiceTag">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -127,6 +128,7 @@
             android:excludeFromRecents="true"
             android:launchMode="standard"
             android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.ServiceTag">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

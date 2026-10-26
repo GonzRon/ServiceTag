@@ -129,9 +129,11 @@ class JournalDeviceProofTest {
 
             rule.awaitTag("value-ph")
             rule.onNodeWithTag("value-ph").performTextReplacement("7.5")
-            rule.saveEntry()
+            rule.onNodeWithText("Save entry").performScrollTo().performClick()
 
-            // The edit pops back onto the entry it changed, which now reads 7.5.
+            // The edit pops back onto the entry it changed, which now reads 7.5. The form's own field holds 7.5 as
+            // well, so the form is waited off the screen first: the 7.5 found after that is the saved one.
+            rule.awaitGone("Save entry")
             rule.awaitText("7.5")
             rule.onNodeWithContentDescription("Back").performClick()
 
@@ -392,6 +394,11 @@ private fun ComposeTestRule.awaitTag(tag: String) {
     waitUntil(WAIT_MS) { onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
 }
 
+/** Waits until nothing on screen carries [text] any more. */
+private fun ComposeTestRule.awaitGone(text: String) {
+    waitUntil(WAIT_MS) { onAllNodesWithText(text).fetchSemanticsNodes().isEmpty() }
+}
+
 /**
  * Types one reading and asserts what its row says back while it is still being typed — the live
  * range state of G1 §1.3, read off the screen rather than off the ViewModel.
@@ -418,7 +425,7 @@ private fun ComposeTestRule.typeReading(key: String, value: String, says: String
  */
 private fun ComposeTestRule.addMaterial(suggestion: String, quantity: String) {
     entryList().performScrollToNode(hasText("MATERIALS USED"))
-    onNodeWithText(suggestion).performClick()
+    onNodeWithText(suggestion).performScrollTo().performClick()
     textFieldAfter(suggestion).performTextInput(quantity)
 }
 

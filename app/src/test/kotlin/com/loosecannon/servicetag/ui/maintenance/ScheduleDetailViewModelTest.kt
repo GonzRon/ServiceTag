@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -32,6 +33,7 @@ import com.loosecannon.servicetag.reminders.DigestPolicy
 import com.loosecannon.servicetag.reminders.Fixture
 import com.loosecannon.servicetag.reminders.ItemPost
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.scheduleOf
@@ -40,6 +42,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.filterNotNull
@@ -90,7 +93,11 @@ class ScheduleDetailViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(scheduleId: ScheduleId, transfers: TransferRecordRepository? = null) = ScheduleDetailViewModel(
+    private fun viewModel(
+        scheduleId: ScheduleId,
+        transfers: TransferRecordRepository? = null,
+        reconcile: ReminderReconcile = ReminderReconcile {},
+    ) = ScheduleDetailViewModel(
         schedules = graph.schedules,
         assets = graph.assets,
         groups = graph.groups,
@@ -107,6 +114,7 @@ class ScheduleDetailViewModelTest {
         completion = graph.completionFlow,
         scheduleId = scheduleId,
         transfers = transfers,
+        reconcile = reconcile,
     )
 
     private suspend fun anAssetSchedule(
@@ -886,5 +894,252 @@ class ScheduleDetailViewModelTest {
         assertEquals(listOf("This asset was transferred out."), said)
         assertEquals("the held refusal is no ending", 0, ended.size)
         assertTrue("nothing written", graph.events.all().isEmpty())
+    }
+
+    // ---------------------------------------------------------------- #123: one sweep after every completion (§3.7)
+
+    /** #123: a sweep that records, as it runs, the events the store holds and whether an offer is open. */
+    private fun sweep(failure: Throwable? = null) = CountingSweep(failure) {
+        SweepSighting(events = graph.events.all().size, offerOpen = graph.completionFlow.offer.value != null)
+    }
+
+    /**
+     * "Oil change" on a Tractor: QUICK, quarterly from Jan 1 (so OVERDUE today) and every 100 engine hours from 400,
+     * so its arrival asks "When was this done?" with a reading. [down] makes the Tractor DOWN, so the completion asks
+     * "Mark operational?" after it.
+     */
+    private suspend fun aMeterSchedule(down: Boolean = false): ScheduleId {
+        val tractor = graph.createAsset.run(AssetCommand(name = "Tractor", category = "Yard"))
+        val hours = meterDefinitionOf("d-hours", tractor.id.value)
+        graph.definitions.upsert(hours)
+        if (down) {
+            graph.conditions.insert(conditionRow("c-tractor", tractor.id.value, OperationalCondition.DOWN, "2026-04-01"))
+        }
+        return graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = tractor.id,
+                targetGroupId = null,
+                title = "Oil change",
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = "2026-01-01",
+                meterDefinitionId = hours.id,
+                meterInterval = 100.0,
+                anchorMeter = 400.0,
+            ),
+        ).id
+    }
+
+    private fun transferredOut(assetId: AssetId) = TransferRecord(
+        id = "out-${assetId.value}", assetId = assetId, kind = TransferKind.OUT, packId = "0f1e2d3c-4b5a-4968-8776-655443322110",
+        lineage = emptyList(), at = dayMillis("2026-04-01"), packSha256 = "ab".repeat(32), nameSnapshot = "Mower",
+        note = "",
+    )
+
+    /** SD1: **Complete** on a QUICK schedule, answered — one event, and one sweep that already sees it. */
+    @Test fun completeSweepsOnceAfterTheWrite() = runTest {
+        val (_, id) = anAssetSchedule()
+        val sweep = sweep()
+        val vm = viewModel(id, reconcile = sweep)
+        vm.state.first { it.loaded }
+
+        vm.complete()
+        answer("2026-04-15")
+        vm.state.first { !it.busy && it.history.isNotEmpty() }
+
+        assertEquals(1, graph.events.all().size)
+        assertEquals("once, with the event already stored", listOf(SweepSighting(1, false)), sweep.sightings)
+    }
+
+    /** SD2: the reminder's **Done** arrival on a meter schedule, the reading answered — one event, one sweep, one end. */
+    @Test fun theDoneArrivalSweepsOnceAfterTheReading() = runTest {
+        val id = aMeterSchedule()
+        val sweep = sweep()
+        val vm = viewModel(id, reconcile = sweep)
+        vm.state.first { it.loaded }
+        val ended = endings(vm)
+
+        vm.arrive()
+        answer("2026-04-15", meterValue = "512")
+        vm.state.first { !it.busy && it.history.isNotEmpty() }
+        advanceUntilIdle()
+
+        assertEquals(1, graph.events.all().size)
+        assertEquals(listOf(SweepSighting(1, false)), sweep.sightings)
+        assertEquals("arrivalEnded once", 1, ended.size)
+    }
+
+    /**
+     * SD3: **Complete all** — one write, one sweep. (A second **Complete all** is not the empty case: once the round is
+     * complete the engine's current occurrence is the next round, so it writes that one. The empty `Completed` is
+     * reached by naming a member already done, SD4.)
+     */
+    @Test fun completeAllSweepsOnceAfterTheWrite() = runTest {
+        val (_, round, members) = aGroupRound()
+        val sweep = sweep()
+        val vm = viewModel(round, reconcile = sweep)
+        vm.state.first { it.loaded }
+
+        vm.completeAll()
+        answer("2026-04-15")
+        vm.state.first { !it.busy && it.history.size == members.size }
+        advanceUntilIdle()
+
+        assertEquals(members.size, graph.events.all().size)
+        assertEquals(listOf(SweepSighting(members.size, false)), sweep.sightings)
+    }
+
+    /**
+     * SD4: **Complete selected** with one member sweeps once; the same member again — already done, so nothing is
+     * written, an empty `Completed` — sweeps once more (F-4); with none it asks nothing and sweeps nothing.
+     */
+    @Test fun completeSelectedSweepsOnceAnEmptyCompletionSweepsTooAndAnEmptySelectionNone() = runTest {
+        val (_, round, members) = aGroupRound()
+        val sweep = sweep()
+        val vm = viewModel(round, reconcile = sweep)
+        vm.state.first { it.loaded }
+
+        vm.completeSelected(listOf(members.first()))
+        answer("2026-04-15")
+        vm.state.first { !it.busy && it.history.size == 1 }
+        assertEquals(listOf(SweepSighting(1, false)), sweep.sightings)
+
+        vm.completeSelected(listOf(members.first()))
+        answer("2026-04-15")
+        vm.state.first { !it.busy }
+        advanceUntilIdle()
+        assertEquals("nothing more written", 1, graph.events.all().size)
+        assertEquals("the empty one sweeps too", listOf(SweepSighting(1, false), SweepSighting(1, false)), sweep.sightings)
+
+        vm.completeSelected(emptyList())
+        vm.state.first { !it.busy }
+        advanceUntilIdle()
+        assertNull("nothing asked", graph.completionFlow.prompt.value)
+        assertEquals(2, sweep.runs)
+    }
+
+    /** SD5, a pin: a FORM schedule's **Complete** hands over to the form and sweeps nothing; the form sweeps its own write. */
+    @Test fun aFormScheduleHandsOverWithNoSweep() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val schedule = graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = mower.id,
+                targetGroupId = null,
+                title = "Blade sharpen",
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = "2026-01-01",
+                completionMode = CompletionMode.FORM,
+            ),
+        )
+        val sweep = sweep()
+        val vm = viewModel(schedule.id, reconcile = sweep)
+        vm.state.first { it.loaded }
+        val forms = mutableListOf<CompletionOutcome.NeedsForm>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.needsForm.collect { forms += it } }
+
+        vm.complete()
+        vm.state.first { !it.busy }
+        advanceUntilIdle()
+
+        assertEquals(1, forms.size)
+        assertEquals(0, sweep.runs)
+    }
+
+    /**
+     * SD6, a pin: backed out at the prompt, refused (archived after the screen loaded), and the asset transferred
+     * out — refused by the guarded write, and refused before the flow on a model that reads the hold (P77-35 each) —
+     * none of them sweeps.
+     */
+    @Test fun aCancelledRefusedOrHeldCompletionRunsNoSweep() = runTest {
+        val sweep = sweep()
+        val said = mutableListOf<String>()
+
+        val (_, cancelledId) = anAssetSchedule()
+        val cancelled = viewModel(cancelledId, reconcile = sweep)
+        cancelled.state.first { it.loaded }
+        cancelled.complete()
+        graph.completionFlow.prompt.first { it != null }
+        graph.completionFlow.cancel()
+        cancelled.state.first { !it.busy }
+
+        val (_, archivedId) = anAssetSchedule(title = "Deck clean")
+        val archived = viewModel(archivedId, reconcile = sweep)
+        archived.state.first { it.loaded }
+        graph.archiveSchedule.run(archivedId, true)
+        archived.complete()
+        answer("2026-04-15")
+        archived.state.first { !it.busy }
+
+        val (mower, heldId) = anAssetSchedule(title = "Belt check")
+        val raced = viewModel(heldId, reconcile = sweep)
+        raced.state.first { it.loaded }
+        graph.transferRecords.append(transferredOut(mower))
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { raced.messages.collect { said += it } }
+        raced.complete()
+        answer("2026-04-15")
+        raced.state.first { !it.busy }
+
+        val held = viewModel(heldId, transfers = graph.transferRecords, reconcile = sweep)
+        held.state.first { it.loaded }
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { held.messages.collect { said += it } }
+        held.complete()
+        held.state.first { !it.busy }
+        advanceUntilIdle()
+
+        assertEquals(List(2) { "This asset was transferred out." }, said)
+        assertTrue("nothing written", graph.events.all().isEmpty())
+        assertEquals(0, sweep.runs)
+    }
+
+    /**
+     * SD7 (I13): a sweep that throws, on an arrival — attempted once; the event stands, the arrival ends once, and the
+     * screen re-derives (no longer due) with nothing busy.
+     */
+    @Test fun aFailedSweepOnAnArrivalLeavesTheCompletionWrittenAndTheArrivalEnded() = runTest {
+        val id = aMeterSchedule()
+        val sweep = sweep(IllegalStateException("the provider refused"))
+        val vm = viewModel(id, reconcile = sweep)
+        assertTrue("due before", vm.state.first { it.loaded }.status!!.countsAsDue)
+        val ended = endings(vm)
+
+        vm.arrive()
+        answer("2026-04-15", meterValue = "512")
+        vm.state.first { !it.busy && it.history.isNotEmpty() }
+        advanceUntilIdle()
+
+        assertEquals("attempted once", 1, sweep.runs)
+        assertEquals("the event stands", 1, graph.events.all().size)
+        assertEquals("the arrival ended once", 1, ended.size)
+        assertFalse(vm.state.value.busy)
+        assertFalse("re-derived: no longer due", vm.state.value.status!!.countsAsDue)
+    }
+
+    /**
+     * SD8 (F-3): an arrival whose sweep is cancelled under it — with an offer to make — asks no offer and says no end;
+     * the event stands, and `operateGuarded` (which wraps its block in `runCatching`) reloads as it always has.
+     */
+    @Test fun aCancelledSweepOnAnArrivalAsksNoOfferAndEndsNothing() = runTest {
+        val id = aMeterSchedule(down = true)
+        val sweep = sweep(CancellationException("the screen left"))
+        val vm = viewModel(id, reconcile = sweep)
+        vm.state.first { it.loaded }
+        val offered = mutableListOf<Any>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) {
+            graph.completionFlow.offer.filterNotNull().collect { offered += it }
+        }
+        val ended = endings(vm)
+
+        vm.arrive()
+        answer("2026-04-15", meterValue = "512")
+        advanceUntilIdle()
+
+        assertEquals(1, sweep.runs)
+        assertTrue("no offer asked", offered.isEmpty())
+        assertEquals("arrivalEnded not sent", 0, ended.size)
+        assertEquals("the event stands", 1, graph.events.all().size)
+        assertFalse("reloaded", vm.state.value.busy)
     }
 }

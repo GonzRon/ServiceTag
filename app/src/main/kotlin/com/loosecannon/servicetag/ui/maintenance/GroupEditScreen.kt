@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
@@ -64,6 +65,7 @@ fun GroupEditScreen(
     LaunchedEffect(model) { model.saved.collect { onDone(it) } }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = { Text(MAINTENANCE_GROUP) },

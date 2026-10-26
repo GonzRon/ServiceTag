@@ -57,6 +57,7 @@ import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 
@@ -226,6 +227,7 @@ fun ScheduleEditScreen(
     }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 // **The app bar names the target and nothing else.** The create/edit words that

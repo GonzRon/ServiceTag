@@ -62,6 +62,7 @@ import com.loosecannon.servicetag.ui.components.LedgerList
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.supplies.SupplyItemPickerSheet
 import com.loosecannon.servicetag.ui.supplies.SupplyLinkLine
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
@@ -131,6 +132,7 @@ fun ProfileEditScreen(
     }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
