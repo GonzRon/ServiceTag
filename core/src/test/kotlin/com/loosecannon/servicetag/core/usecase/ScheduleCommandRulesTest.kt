@@ -9,7 +9,9 @@ import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.LegacySeasonMapping
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -280,5 +282,80 @@ class ScheduleCommandRulesTest {
             com.loosecannon.servicetag.core.model.EventSource.SCHEDULE_QUICK_COMPLETE,
             written.single().source,
         )
+    }
+
+    // --- #124 (C40, row 139): the opening-service policy's own rules --------------------------
+
+    /**
+     * `IN_SERVICE_AFTER_OPENING_SERVICE` takes AT_START's offset: 0 (the opening day itself) to 365,
+     * and one is required, exactly as AT_START's is — the editor and the API fill the default 0, the
+     * command never guesses one. Asked of the one validator a command and a restore share.
+     */
+    @Test
+    fun theOpeningServiceOffsetIsAtStartsRange() {
+        val opening = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE
+        for (offset in listOf(0, 1, 14, 365)) {
+            assertEquals(emptyList(), policyProblems(opening, offset, hasTimeRule = true, groupTarget = false), "offset $offset")
+        }
+        for (offset in listOf(-1, 366, null)) {
+            assertEquals(
+                listOf(ScheduleProblem.PolicyOffsetInvalid),
+                policyProblems(opening, offset, hasTimeRule = true, groupTarget = false),
+                "offset $offset",
+            )
+            assertEquals(
+                policyProblems(ServicePolicy.IN_SERVICE_AT_START, offset, hasTimeRule = true, groupTarget = false),
+                policyProblems(opening, offset, hasTimeRule = true, groupTarget = false),
+                "AT_START's answer for $offset",
+            )
+        }
+    }
+
+    /**
+     * A meter-only schedule has no date for an offset to move (O-7): 0 is its only offset, and any
+     * other is `SeasonPolicyNeedsATimeRule`, ahead of the offset's own problem.
+     */
+    @Test
+    fun aMeterOnlyOpeningServiceScheduleTakesOnlyOffsetZero() {
+        val opening = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE
+        assertEquals(emptyList(), policyProblems(opening, 0, hasTimeRule = false, groupTarget = false))
+        for (offset in listOf(5, 365, 400, -1)) {
+            assertEquals(
+                listOf(ScheduleProblem.SeasonPolicyNeedsATimeRule),
+                policyProblems(opening, offset, hasTimeRule = false, groupTarget = false),
+                "meter-only, offset $offset",
+            )
+        }
+    }
+
+    /**
+     * Inv. 106: a group target is CONTINUOUS only, so the value is `SeasonFollowsAssetOnGroupTarget`
+     * there and nothing is written; and 1.3's three fields have no spelling for it (all null, as
+     * PRE_SERVICE's), whatever its offset.
+     */
+    @Test
+    fun aGroupTargetRefusesTheOpeningServiceAndItHasNoLegacySpelling() = runTest {
+        val head = seedAsset("a1")
+        val groupId = seedGroup("g1", head)
+        for (offset in listOf(0, 14)) {
+            val problems = assertFailsWith<ScheduleValidation> {
+                save.run(
+                    null,
+                    groupCommand(groupId).copy(
+                        servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = offset,
+                    ),
+                )
+            }.problems
+            assertEquals(listOf(ScheduleProblem.SeasonFollowsAssetOnGroupTarget), problems, "offset $offset")
+        }
+        assertEquals(emptyList(), schedules.all(), "a refusal writes nothing")
+
+        for (offset in listOf(0, 14, null)) {
+            assertEquals(
+                LegacySeasonMapping.Legacy(null, null, null),
+                LegacySeasonMapping.toLegacy(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, offset),
+                "offset $offset",
+            )
+        }
     }
 }

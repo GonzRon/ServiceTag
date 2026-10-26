@@ -46,7 +46,7 @@ class HealthClockTest {
      */
     private fun oracle(link: PolicyInputs, season: SeasonContext?, kind: HealthSubjectKind, today: LocalDate): Long {
         val due = link.postponedDueOn ?: link.rawDueOn ?: return 0
-        val inService = link.policy == ServicePolicy.IN_SERVICE_AT_START || link.policy == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
+        val inService = link.policy.followsTheSeason()
         val restart = if (kind == HealthSubjectKind.MEDIUM && inService) season?.latestCycleStartOnOrBefore(today) else null
         var counted = 0L
         var d = minOf(link.openedOn, due).minusDays(ORACLE_LEAD_DAYS)
@@ -73,15 +73,21 @@ class HealthClockTest {
             val season = inputs?.let(SeasonContext::of)
             val policy = ServicePolicy.entries.random(random)
             val offset = when (policy) {
-                ServicePolicy.IN_SERVICE_AT_START -> random.nextInt(0, 31)
+                ServicePolicy.IN_SERVICE_AT_START, ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE -> random.nextInt(0, 31)
                 ServicePolicy.PRE_SERVICE -> -random.nextInt(1, 61)
-                else -> null
+                ServicePolicy.CONTINUOUS, ServicePolicy.IN_SERVICE_RESUME_CLAMPED -> null
             }
             val base = BASE.plusDays(random.nextLong(0, 900))
             val raw = if (random.nextInt(12) == 0) null else base
             val opened = base.plusDays(random.nextLong(-240, 120))
             val postponement = if (raw != null && random.nextInt(3) == 0) base.plusDays(random.nextLong(-40, 200)) else null
-            val link = PolicyInputs(policy, offset, raw, postponement, opened)
+            // #124: the opening service is today's fact, fixed along the walk like the postponement.
+            val served = if (policy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE && random.nextInt(3) != 0) {
+                base.plusDays(random.nextLong(-200, 400))
+            } else {
+                null
+            }
+            val link = PolicyInputs(policy, offset, raw, postponement, opened, openingServiceOn = served)
             val kind = HealthSubjectKind.entries.random(random)
 
             if (raw != null && raw < opened) rawBeforeOpened++
@@ -97,7 +103,7 @@ class HealthClockTest {
                 if (expected > 0) late++
                 val a = ServicePolicyEngine.evaluate(link, season, today).actionableOn
                 if (a != null && a != (postponement ?: raw)) moved++
-                val inService = policy == ServicePolicy.IN_SERVICE_AT_START || policy == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
+                val inService = policy.followsTheSeason()
                 val rangeStart = raw?.let { minOf(opened, postponement ?: it).plusDays(1) }
                 val restart = season?.latestCycleStartOnOrBefore(today)
                 if (kind == HealthSubjectKind.MEDIUM && inService && rangeStart != null && restart != null && rangeStart < restart) {
@@ -281,6 +287,63 @@ class HealthClockTest {
         // H.3c: had the 20 Jun occurrence stayed open, the break days are late days and count.
         assertEquals(SubjectValue.Scored(11, HealthBand.CRITICAL, 164), oil("2026-12-01", emptyList()))
         assertEquals(SubjectValue.Scored(0, HealthBand.CRITICAL, 195), oil("2027-01-01", emptyList()))
+    }
+
+    /**
+     * #124 (C40, row 138): a schedule counting from the opening service, in season and waiting for it,
+     * has no actionable date, so it is never late — whatever its raw date and however long the wait.
+     * The same occurrence on AT_START has been late since 10 Oct.
+     */
+    @Test
+    fun noOverdueDayWhileWaitingForTheOpeningService() {
+        val heating = SeasonContext.of(SeasonFixtures.seasonOf(SeasonMode.CALENDAR, "10-01", "04-30"))
+        val waiting = PolicyInputs(
+            ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, 0, on("2026-10-10"), null, on("2026-06-01"), openingServiceOn = null,
+        )
+        for (kind in HealthSubjectKind.entries) {
+            for (today in listOf("2026-10-11", "2026-12-01", "2027-04-30")) {
+                assertEquals(0, HealthClock.countedDays(waiting, heating, kind, on(today)), "$kind on $today")
+                assertEquals(0, oracle(waiting, heating, kind, on(today)), "the oracle agrees: $kind on $today")
+            }
+        }
+        val atStart = waiting.copy(policy = ServicePolicy.IN_SERVICE_AT_START)
+        assertEquals(52, HealthClock.countedDays(atStart, heating, HealthSubjectKind.PART, on("2026-12-01")))
+    }
+
+    /**
+     * Row 138: once the opening service is known, the clock counts from the engine's date only — the
+     * 20 Oct opening, not the 10 Oct raw date — and the off-season days before the cycle are not late.
+     * The range starts in the off-season (O = 1 Jun), so a clock that does not split this policy's
+     * runs by the season reads the whole range as dormant.
+     */
+    @Test
+    fun onceReadyOverdueCountsFromTheEnginesDateOnly() {
+        val heating = SeasonContext.of(SeasonFixtures.seasonOf(SeasonMode.CALENDAR, "10-01", "04-30"))
+        val ready = PolicyInputs(
+            ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, 0, on("2026-10-10"), null, on("2026-06-01"),
+            openingServiceOn = on("2026-10-20"),
+        )
+        assertEquals(on("2026-10-20"), ServicePolicyEngine.evaluate(ready, heating, on("2026-12-01")).actionableOn)
+        for (kind in HealthSubjectKind.entries) {
+            assertEquals(42, HealthClock.countedDays(ready, heating, kind, on("2026-12-01")), "$kind: 21 Oct – 1 Dec")
+            assertEquals(0, HealthClock.countedDays(ready, heating, kind, on("2026-10-20")), "$kind: on the opening day")
+            assertEquals(1, HealthClock.countedDays(ready, heating, kind, on("2026-10-21")), "$kind: the day after")
+            for (today in listOf("2026-10-21", "2026-12-01", "2027-04-30")) {
+                assertEquals(oracle(ready, heating, kind, on(today)), HealthClock.countedDays(ready, heating, kind, on(today)))
+            }
+        }
+        // With 14 days after it, the first late day is 4 Nov.
+        val later = ready.copy(offsetDays = 14)
+        assertEquals(28, HealthClock.countedDays(later, heating, HealthSubjectKind.PART, on("2026-12-01")))
+    }
+
+    /** The spec's "IN_SERVICE" policies — the three that follow the season's phase — named exhaustively. */
+    private fun ServicePolicy.followsTheSeason(): Boolean = when (this) {
+        ServicePolicy.IN_SERVICE_AT_START,
+        ServicePolicy.IN_SERVICE_RESUME_CLAMPED,
+        ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE,
+        -> true
+        ServicePolicy.CONTINUOUS, ServicePolicy.PRE_SERVICE -> false
     }
 
     // ----------------------------------------------------------------------------------------

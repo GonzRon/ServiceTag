@@ -211,6 +211,8 @@ internal fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List
         ServicePolicy.IN_SERVICE_RESUME_CLAMPED ->
             PolicyChoice(PolicyOption.WHEN_SEASON_STARTS, StartCountingFrom.OWN_DATE)
                 .takeIf { PolicyOption.WHEN_SEASON_STARTS in options }
+        // #124: no answer shows it yet; never guessed at (the next commit loads it).
+        ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE -> null
     }
 
 /** S71's and S72's bounds: 1–365 before, 0–365 after (spec §4.2). */

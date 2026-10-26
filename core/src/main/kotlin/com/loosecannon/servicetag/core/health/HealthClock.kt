@@ -89,8 +89,13 @@ object HealthClock {
 }
 
 /**
- * The two policies that follow the season's phase: the clock's MEDIUM restart and the engine's
- * OUT_OF_SEASON case both ask this, and nothing else in the health package does.
+ * The three policies that follow the season's phase (#124 adds the opening service): the clock's
+ * MEDIUM restart and its runs by the season ask this, and nothing else in the health package does.
  */
-internal fun ServicePolicy.isInService(): Boolean =
-    this == ServicePolicy.IN_SERVICE_AT_START || this == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
+internal fun ServicePolicy.isInService(): Boolean = when (this) {
+    ServicePolicy.IN_SERVICE_AT_START,
+    ServicePolicy.IN_SERVICE_RESUME_CLAMPED,
+    ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE,
+    -> true
+    ServicePolicy.CONTINUOUS, ServicePolicy.PRE_SERVICE -> false
+}

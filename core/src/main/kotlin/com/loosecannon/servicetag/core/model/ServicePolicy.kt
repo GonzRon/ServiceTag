@@ -3,8 +3,19 @@ package com.loosecannon.servicetag.core.model
 /**
  * When a schedule's work is actionable relative to its asset's season and break (spec §4.1).
  * Stored as TEXT holding the enum name, in `maintenance_schedule.service_policy`.
+ *
+ * [IN_SERVICE_AFTER_OPENING_SERVICE] (#124) is the third in-service policy: in season it counts from
+ * the later of the season's opening service — the day its asset became ready for the season — and the
+ * cycle's start, plus its offset, and waits with no date until that service is known; out of season it
+ * is [IN_SERVICE_AT_START] with the same offset.
  */
-enum class ServicePolicy { CONTINUOUS, IN_SERVICE_AT_START, IN_SERVICE_RESUME_CLAMPED, PRE_SERVICE }
+enum class ServicePolicy {
+    CONTINUOUS,
+    IN_SERVICE_AT_START,
+    IN_SERVICE_RESUME_CLAMPED,
+    PRE_SERVICE,
+    IN_SERVICE_AFTER_OPENING_SERVICE,
+}
 
 /** Whether a schedule is surfacing work, or held while its asset is out of season. */
 enum class PolicyPhase { ACTIVE, DORMANT }
@@ -18,6 +29,12 @@ enum class PolicyReason {
     BEFORE_BREAK,
     POLICY_INAPPLICABLE,
     AWAITING_START,
+
+    /** #124: in season, waiting for the season's opening service; no date. Not a move, like [AWAITING_START]. */
+    AWAITING_OPENING_SERVICE,
+
+    /** #124: the date moved to count from an opening service done after the cycle's start. */
+    OPENING_SERVICE,
 }
 
 /**
@@ -67,12 +84,14 @@ object LegacySeasonMapping {
     /**
      * The reverse projection, reported as the derived compatibility triple. AT_START reverses to an
      * explicit [AT_START] and its offset, so the triple round-trips through [toPolicy] to the same
-     * policy and offset. `PRE_SERVICE` has no legacy spelling at all.
+     * policy and offset. `PRE_SERVICE` and `IN_SERVICE_AFTER_OPENING_SERVICE` have no legacy spelling at
+     * all.
      */
     fun toLegacy(policy: ServicePolicy, offsetDays: Int?): Legacy = when (policy) {
         ServicePolicy.CONTINUOUS -> Legacy(SeasonBehavior.IGNORE, null, null)
         ServicePolicy.IN_SERVICE_AT_START -> Legacy(SeasonBehavior.FOLLOW_ASSET, AT_START, offsetDays)
         ServicePolicy.IN_SERVICE_RESUME_CLAMPED -> Legacy(SeasonBehavior.FOLLOW_ASSET, RESUME_CLAMPED, null)
         ServicePolicy.PRE_SERVICE -> Legacy(null, null, null)
+        ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE -> Legacy(null, null, null)
     }
 }

@@ -76,6 +76,9 @@ fun whyLine(item: DueItem, format: (LocalDate) -> String): String? = when {
         PolicyReason.AFTER_BREAK,
         PolicyReason.POLICY_INAPPLICABLE,
         PolicyReason.AWAITING_START,
+        // #124: N3 draws P124-3 and P124-4; until then these rows say nothing more.
+        PolicyReason.AWAITING_OPENING_SERVICE,
+        PolicyReason.OPENING_SERVICE,
         -> null
     }
 }
