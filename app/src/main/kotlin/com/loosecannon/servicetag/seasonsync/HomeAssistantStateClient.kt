@@ -3,22 +3,15 @@ package com.loosecannon.servicetag.seasonsync
 import com.loosecannon.servicetag.core.fetch.DocumentTransport
 import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.fetch.TransportFailure
-import com.loosecannon.servicetag.core.seasonsync.EndpointCheck
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
-import com.loosecannon.servicetag.core.seasonsync.HaEndpoint
 import com.loosecannon.servicetag.core.seasonsync.HaEndpointPolicy
-import com.loosecannon.servicetag.core.seasonsync.HaHostKind
 import com.loosecannon.servicetag.core.seasonsync.HaHttpAnswer
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
-import com.loosecannon.servicetag.core.seasonsync.HaScheme
 import com.loosecannon.servicetag.core.seasonsync.HaStateReader
-import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
-import com.loosecannon.servicetag.core.seasonsync.eligibleNow
 import com.loosecannon.servicetag.core.seasonsync.isJsonMediaType
-import com.loosecannon.servicetag.core.seasonsync.isPrivateLanAddress
 import com.loosecannon.servicetag.core.seasonsync.mapHaAnswer
 import com.loosecannon.servicetag.core.seasonsync.mapHaStatesAnswer
 import com.loosecannon.servicetag.core.seasonsync.parseObject
@@ -78,6 +71,9 @@ class HomeAssistantStateClient(
     private val open: (URL) -> URLConnection = { it.openConnection(Proxy.NO_PROXY) },
 ) : HaStateReader {
 
+    /** C19 steps 1–2, shared with the publish client (#113/#114 C21); no timeout of its own. */
+    private val gate = HaRequestGate(networkPermissionGranted, currentNetwork, resolver, parse)
+
     /**
      * The port (C7): [baseUrl] must be the stored connection's address, whose setting then governs; any other
      * address, or none stored, is `ENDPOINT_REFUSED` with nothing opened (I10).
@@ -132,60 +128,12 @@ class HomeAssistantStateClient(
         path: String,
         token: Secret,
         maxBodyBytes: Int = MAX_BODY_BYTES,
-    ): Exchange {
-        val endpoint = when (val check = HaEndpointPolicy.classify(connection.baseUrl)) {
-            is EndpointCheck.Allowed -> check.endpoint
-            is EndpointCheck.Refused -> return failed(SyncErrorKind.ENDPOINT_REFUSED)
+    ): Exchange = withTimeoutOrNull(CALL_MILLIS) {
+        when (val answer = gate.check(connection, path)) {
+            is HaRequestGate.Answer.Allowed -> withContext(io) { get(answer.url, token, maxBodyBytes) }
+            is HaRequestGate.Answer.Refused -> failed(answer.kind, answer.detail)
         }
-        if (!networkPermissionGranted()) return failed(SyncErrorKind.DENIED)
-        return withTimeoutOrNull(CALL_MILLIS) { checkedExchange(connection, endpoint, path, token, maxBodyBytes) }
-            ?: failed(SyncErrorKind.TIMED_OUT)
-    }
-
-    private suspend fun checkedExchange(
-        connection: HaConnection,
-        endpoint: HaEndpoint,
-        path: String,
-        token: Secret,
-        maxBodyBytes: Int,
-    ): Exchange {
-        val homeOnly = when (endpoint.scheme) {
-            HaScheme.HTTP -> true
-            HaScheme.HTTPS -> when (connection.networkEligibility) {
-                NetworkEligibility.HOME_NETWORK_ONLY -> true
-                NetworkEligibility.ANY_NETWORK -> false
-            }
-        }
-        if (homeOnly) {
-            val reading = currentNetwork.read()
-            val asHome = connection.copy(networkEligibility = NetworkEligibility.HOME_NETWORK_ONLY)
-            if (!eligibleNow(asHome, reading.network)) {
-                return failed(SyncErrorKind.NOT_ON_LOCAL_NETWORK, reading.cause?.name)
-            }
-            when (endpoint.hostKind) {
-                HaHostKind.NAME -> resolvesOnlyPrivately(endpoint.host)?.let { return it }
-                HaHostKind.PRIVATE_IPV4 -> Unit
-            }
-        }
-        val url = try {
-            parse(endpoint.canonical + path)
-        } catch (_: Exception) {
-            return failed(SyncErrorKind.ENDPOINT_REFUSED)
-        }
-        if (!sameAsciiHost(url.host.orEmpty(), endpoint.host)) return failed(SyncErrorKind.ENDPOINT_REFUSED)
-        return withContext(io) { get(url, token, maxBodyBytes) }
-    }
-
-    /** C19 step 1b: null when every answer is private (C8 rule 5); else the outcome, nothing opened. */
-    private suspend fun resolvesOnlyPrivately(host: String): Exchange.Failed? {
-        val addresses = try {
-            resolver.resolve(host)
-        } catch (e: TransportFailure) {
-            return failed(kindOf(e.kind))
-        }
-        val local = addresses.isNotEmpty() && addresses.all(::isPrivateLanAddress)
-        return if (local) null else failed(SyncErrorKind.NAME_NOT_LOCAL)
-    }
+    } ?: failed(SyncErrorKind.TIMED_OUT)
 
     private suspend fun get(url: URL, token: Secret, maxBodyBytes: Int): Exchange {
         val connection = try {
@@ -256,7 +204,7 @@ class HomeAssistantStateClient(
         }
         val classified = transportFailureOf(e, phase, networkPermissionGranted)
         if (classified !is TransportFailure) throw classified
-        return failed(kindOf(classified.kind))
+        return failed(syncKindOf(classified.kind))
     }
 
     private companion object {
@@ -281,12 +229,6 @@ class HomeAssistantStateClient(
 
         fun refused(kind: SyncErrorKind): HaReadOutcome = HaReadOutcome.NoDecision(kind, null)
 
-        fun kindOf(kind: TransportFailure.Kind): SyncErrorKind = when (kind) {
-            TransportFailure.Kind.UNREACHABLE, TransportFailure.Kind.INTERRUPTED -> SyncErrorKind.UNREACHABLE
-            TransportFailure.Kind.TIMED_OUT -> SyncErrorKind.TIMED_OUT
-            TransportFailure.Kind.DENIED -> SyncErrorKind.DENIED
-        }
-
         /** N-3: Test connection's own map; the status is `detail` only for `HTTP_ERROR`. */
         fun testOutcomeOf(answer: HaHttpAnswer): ConnectionTestOutcome {
             val status = answer.status
@@ -299,12 +241,6 @@ class HomeAssistantStateClient(
             if (status == 401 || status == 403) return ConnectionTestOutcome.Failed(SyncErrorKind.AUTH_REFUSED, null)
             if (status in 300..399) return ConnectionTestOutcome.Failed(SyncErrorKind.REDIRECTED, null)
             return ConnectionTestOutcome.Failed(SyncErrorKind.HTTP_ERROR, status.toString())
-        }
-
-        /** Equal but for ASCII case: no locale, no Unicode case mapping (#85 review M1). */
-        fun sameAsciiHost(a: String, b: String): Boolean {
-            fun lower(c: Char) = if (c in 'A'..'Z') c + ('a' - 'A') else c
-            return a.length == b.length && a.indices.all { lower(a[it]) == lower(b[it]) }
         }
 
         /** Idempotent and never throws: it runs on cancel and cleanup paths. */
