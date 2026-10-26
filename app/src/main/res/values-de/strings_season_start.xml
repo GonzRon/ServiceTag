@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">%s ist archiviert, ausgemustert oder übergeben und kann deshalb keine Saisonstart-Wartung haben.</string>
     <string name="season_start_refused_already_covered">%1$s hat bereits eine Saisonstart-Wartung: „%2$s“. Beende zuerst deren Nutzung.</string>
     <string name="season_start_refused_group_member">Jedes Gerät in dieser Gruppe muss eine Saisonstart-Wartung haben können. %s</string>
+    <string name="season_start_ready">Bereit für die Saison · gewartet am %s</string>
+    <string name="season_start_not_ready_since_season_end">Nicht bereit: seit Saisonende am %s nicht gewartet</string>
+    <string name="season_start_not_ready_since_commissioning">Nicht bereit: keine gültige Wartung mit Datum am %s oder später.</string>
+    <string name="season_start_not_ready_details_pending">Nicht bereit: Die Details der Wartung müssen noch ausgefüllt werden</string>
+    <string name="season_start_not_ready_schedule_archived">Nicht bereit: Die Saisonstart-Wartung ist archiviert</string>
+    <string name="season_start_not_ready_role_not_allowed">Nicht bereit: Eine Saisonstart-Wartung gilt nur für ein Gerät mit Saison, das kein Untergerät ist oder eigene Untergeräte hat</string>
+    <string name="season_start_not_ready_two_roles">Nicht bereit: Zwei Saisonstart-Wartungen gelten für dieses Gerät. Beende die Nutzung einer davon.</string>
+    <string name="season_start_not_ready_future_dated">Noch nicht bereit: Die Wartung ist auf den %s datiert, also nach heute</string>
+    <string name="season_start_not_ready_no_role">Nicht bereit: keine Saisonstart-Wartung</string>
+    <string name="season_start_not_ready_inherited_service_only">Nicht bereit: Die vorhandene Wartung wurde auf einem anderen Telefon erfasst und kam mit diesem Gerät. Erfasse die Wartung dieser Saison auf diesem Telefon.</string>
+    <string name="season_start_not_ready_recorded_in_advance">Nicht bereit: Die Wartung vom %s wurde vor diesem Tag eingetragen und zählt daher nicht. Bearbeite sie an diesem Tag oder später, um sie zu bestätigen.</string>
+    <string name="season_start_source_ha_season_ended">Saisonende laut Home Assistant: %1$s · geprüft am %2$s</string>
+    <string name="season_start_source_ha_unverified">Saisonende seit %1$s nicht mit Home Assistant abgeglichen · verwendet wird %2$s</string>
+    <string name="season_start_source_phone_season_end">Saisonende wie auf diesem Telefon erfasst: %s</string>
+    <string name="season_start_source_calendar_window">Saisonende laut Saison mit festen Daten: %s</string>
+    <string name="season_start_source_commissioning">Gezählt ab dem Tag, an dem die Saisonstart-Wartung festgelegt wurde: %s</string>
+    <string name="season_start_cutoff">Wartungen mit Datum am %s oder später zählen.</string>
+    <string name="season_start_completion_marks_asset_ready">Wenn du das abschließt, wird %s als bereit für die Saison markiert.</string>
+    <string name="season_start_completion_marks_member_ready">Wenn du das für ein Gerät abschließt, wird dieses Gerät als bereit für die Saison markiert.</string>
 </resources>

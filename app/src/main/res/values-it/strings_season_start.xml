@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">L\'attrezzatura %s è archiviata, dismessa o trasferita, quindi non può avere una manutenzione di inizio stagione.</string>
     <string name="season_start_refused_already_covered">%1$s ha già una manutenzione di inizio stagione: “%2$s”. Smetti prima di usare quella.</string>
     <string name="season_start_refused_group_member">Ogni attrezzatura di questo gruppo deve poter avere una manutenzione di inizio stagione. %s</string>
+    <string name="season_start_ready">Pronta per la stagione · manutenzione del %s</string>
+    <string name="season_start_not_ready_since_season_end">Non pronta: nessuna manutenzione dalla fine della stagione del %s</string>
+    <string name="season_start_not_ready_since_commissioning">Non pronta: nessuna manutenzione valida con data dal %s in poi.</string>
+    <string name="season_start_not_ready_details_pending">Non pronta: i dettagli della manutenzione sono ancora da compilare</string>
+    <string name="season_start_not_ready_schedule_archived">Non pronta: la manutenzione di inizio stagione è archiviata</string>
+    <string name="season_start_not_ready_role_not_allowed">Non pronta: una manutenzione di inizio stagione si applica solo a un\'attrezzatura con stagioni che non è collegata a un\'altra o che ha attrezzature collegate</string>
+    <string name="season_start_not_ready_two_roles">Non pronta: due manutenzioni di inizio stagione coprono questa attrezzatura. Smetti di usarne una.</string>
+    <string name="season_start_not_ready_future_dated">Non ancora pronta: la manutenzione è datata %s, dopo oggi</string>
+    <string name="season_start_not_ready_no_role">Non pronta: nessuna manutenzione di inizio stagione</string>
+    <string name="season_start_not_ready_inherited_service_only">Non pronta: la manutenzione registrata è stata inserita su un altro telefono ed è arrivata con questa attrezzatura. Registra la manutenzione di questa stagione su questo telefono.</string>
+    <string name="season_start_not_ready_recorded_in_advance">Non pronta: la manutenzione datata %s è stata inserita prima di quel giorno, quindi non conta. Modificala in quel giorno o dopo per confermarla.</string>
+    <string name="season_start_source_ha_season_ended">Fine stagione da Home Assistant: %1$s · verificata il %2$s</string>
+    <string name="season_start_source_ha_unverified">Fine stagione non verificata con Home Assistant dal %1$s · in uso %2$s</string>
+    <string name="season_start_source_phone_season_end">Fine stagione registrata su questo telefono: %s</string>
+    <string name="season_start_source_calendar_window">Fine stagione dalla stagione a date fisse: %s</string>
+    <string name="season_start_source_commissioning">Conteggiato dal giorno in cui è stata impostata la manutenzione di inizio stagione: %s</string>
+    <string name="season_start_cutoff">Contano le manutenzioni con data dal %s in poi.</string>
+    <string name="season_start_completion_marks_asset_ready">Completare questa manutenzione segna l\'attrezzatura %s come pronta per la stagione.</string>
+    <string name="season_start_completion_marks_member_ready">Completare questa manutenzione per un\'attrezzatura la segna come pronta per la stagione.</string>
 </resources>

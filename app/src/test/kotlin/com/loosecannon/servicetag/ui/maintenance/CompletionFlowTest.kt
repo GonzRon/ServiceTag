@@ -7,6 +7,8 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
@@ -17,6 +19,7 @@ import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -457,5 +460,66 @@ class CompletionFlowTest {
         val written = (outcome.await() as CompletionOutcome.Completed).events.single()
         assertEquals("2026-04-15", written.occurredOn)
         assertEquals(1, sweep.runs)
+    }
+
+    // ---------------------------------------------------------------- #114: the completion line (C33, row 77)
+
+    /** A schedule written back with the Season Start role, past the command: the prompt reads what is stored. */
+    private suspend fun asSeasonStart(id: ScheduleId) = graph.uow.write {
+        graph.schedules.upsert(graph.schedules.get(id)!!.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01"))
+    }
+
+    /** The graph's flow with the asset store's name read, as the card's lines need it for P114-14. */
+    private fun namingFlow() = CompletionFlow(
+        graph.schedules, graph.definitions, graph.completeSchedule, graph.completeGroupMembers, graph.todayPort,
+        graph.eventOffers, { id -> graph.assets.get(id)?.name },
+    ) { ZoneOffset.UTC }
+
+    /**
+     * Row 77: completing a Season Start service says what it marks before the write — P114-14 with the asset's name for
+     * an asset's, P114-15 for a group's — and the answer still writes the one completion as before.
+     */
+    @Test fun aRoleScheduleShowsTheLine() = runTest {
+        val heater = graph.createAsset.run(AssetCommand(name = "Example Heater", category = "Heating"))
+        val own = graph.saveSchedule.run(null, quarterly(heater.id, title = "Example annual service"))
+        asSeasonStart(own.id)
+        val flow = namingFlow()
+        val asset = async { flow.complete(own.id) }
+        val prompt = flow.prompt.filterNotNull().first()
+        assertEquals("Completing this marks Example Heater ready for the season.", prompt.seasonStartLine)
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        assertTrue(asset.await() is CompletionOutcome.Completed)
+
+        val boiler = graph.createAsset.run(AssetCommand(name = "Example Boiler", category = "Heating"))
+        val group = graph.saveGroup.run(
+            null,
+            GroupCommand(name = "Example heating", members = listOf(GroupMemberInput(assetId = boiler.id))),
+        )
+        val check = graph.saveSchedule.run(
+            null,
+            quarterly(heater.id, title = "Example pre-season check").copy(targetAssetId = null, targetGroupId = group.id),
+        )
+        asSeasonStart(check.id)
+        val member = async { graph.completionFlow.complete(check.id, boiler.id) }
+        assertEquals(
+            "Completing this for an asset marks that asset ready for the season.",
+            graph.completionFlow.prompt.filterNotNull().first().seasonStartLine,
+        )
+        graph.completionFlow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, member.await())
+    }
+
+    /** Row 77: an ordinary schedule draws no line — a seasonal policy without the role included (keyed on the role). */
+    @Test fun anOrdinaryScheduleDoesNot() = runTest {
+        val heater = graph.createAsset.run(AssetCommand(name = "Example Heater", category = "Heating"))
+        val plain = graph.saveSchedule.run(null, quarterly(heater.id, title = "Example filter check"))
+        graph.uow.write {
+            graph.schedules.upsert(graph.schedules.get(plain.id)!!.copy(servicePolicy = ServicePolicy.IN_SERVICE_AT_START))
+        }
+        val flow = namingFlow()
+        val outcome = async { flow.complete(plain.id) }
+        assertNull(flow.prompt.filterNotNull().first().seasonStartLine)
+        flow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, outcome.await())
     }
 }

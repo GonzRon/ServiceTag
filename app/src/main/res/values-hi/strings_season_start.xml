@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">%s संग्रहित है, सेवा से हटाया गया है या ट्रांसफ़र किया गया है, इसलिए इसके लिए मौसम-आरंभ रखरखाव नहीं हो सकता।</string>
     <string name="season_start_refused_already_covered">%1$s के लिए पहले से एक मौसम-आरंभ रखरखाव है: “%2$s”। पहले उसका उपयोग बंद करें।</string>
     <string name="season_start_refused_group_member">इस समूह के हर उपकरण के लिए मौसम-आरंभ रखरखाव संभव होना चाहिए। %s</string>
+    <string name="season_start_ready">मौसम के लिए तैयार · रखरखाव %s को हुआ</string>
+    <string name="season_start_not_ready_since_season_end">तैयार नहीं: %s को मौसम खत्म होने के बाद से रखरखाव नहीं हुआ</string>
+    <string name="season_start_not_ready_since_commissioning">तैयार नहीं: %s या उसके बाद की तारीख वाला कोई मान्य रखरखाव नहीं है।</string>
+    <string name="season_start_not_ready_details_pending">तैयार नहीं: रखरखाव का विवरण अभी भरना बाकी है</string>
+    <string name="season_start_not_ready_schedule_archived">तैयार नहीं: मौसम-आरंभ रखरखाव संग्रहित है</string>
+    <string name="season_start_not_ready_role_not_allowed">तैयार नहीं: मौसम-आरंभ रखरखाव केवल ऐसे मौसम वाले उपकरण पर लागू होता है जो किसी दूसरे उपकरण का हिस्सा नहीं है या जिसके उप-उपकरण हैं</string>
+    <string name="season_start_not_ready_two_roles">तैयार नहीं: इस उपकरण पर दो मौसम-आरंभ रखरखाव लागू हैं। उनमें से एक का उपयोग बंद करें।</string>
+    <string name="season_start_not_ready_future_dated">अभी तैयार नहीं: रखरखाव की तारीख %s है, जो आज के बाद है</string>
+    <string name="season_start_not_ready_no_role">तैयार नहीं: कोई मौसम-आरंभ रखरखाव नहीं</string>
+    <string name="season_start_not_ready_inherited_service_only">तैयार नहीं: मौजूद रखरखाव किसी दूसरे फ़ोन पर दर्ज किया गया था और इस उपकरण के साथ आया। इस मौसम का रखरखाव इसी फ़ोन पर दर्ज करें।</string>
+    <string name="season_start_not_ready_recorded_in_advance">तैयार नहीं: %s की तारीख वाला रखरखाव उस दिन से पहले दर्ज किया गया था, इसलिए नहीं गिना जाता। पुष्टि करने के लिए उसे उसी दिन या उसके बाद संपादित करें।</string>
+    <string name="season_start_source_ha_season_ended">Home Assistant से मौसम का अंत: %1$s · %2$s को जाँचा गया</string>
+    <string name="season_start_source_ha_unverified">%1$s से Home Assistant के साथ मौसम का अंत नहीं जाँचा गया · %2$s का उपयोग हो रहा है</string>
+    <string name="season_start_source_phone_season_end">इस फ़ोन पर दर्ज मौसम का अंत: %s</string>
+    <string name="season_start_source_calendar_window">तारीखों वाले मौसम के अनुसार मौसम का अंत: %s</string>
+    <string name="season_start_source_commissioning">मौसम-आरंभ रखरखाव सेट किए जाने के दिन से गिना गया: %s</string>
+    <string name="season_start_cutoff">%s या उसके बाद की तारीख वाले रखरखाव गिने जाते हैं।</string>
+    <string name="season_start_completion_marks_asset_ready">इसे पूरा करने पर %s मौसम के लिए तैयार मार्क हो जाएगा।</string>
+    <string name="season_start_completion_marks_member_ready">किसी उपकरण के लिए इसे पूरा करने पर वह उपकरण मौसम के लिए तैयार मार्क हो जाएगा।</string>
 </resources>

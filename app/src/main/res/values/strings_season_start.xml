@@ -23,4 +23,57 @@
     <!-- P114-21: a group's refusal, wrapping the member's own sentence. %s: P114-16, P114-17, P114-18 or P114-20 for the
          first member refused, by name. -->
     <string name="season_start_refused_group_member">Every asset in this group must be able to have a Season Start service. %s</string>
+
+    <!-- ========================================== the season card's readiness lines (Readiness, C33; A5a) -->
+
+    <!-- P114-7: the asset is ready for the season (Ready). %s: the date of the qualifying service, as a date. -->
+    <string name="season_start_ready">Ready for the season · serviced %s</string>
+    <!-- P114-8: no qualifying service since the season ended (NOT_DONE_SINCE_SEASON_END). %s: the day the season
+         ended, as a date. -->
+    <string name="season_start_not_ready_since_season_end">Not ready: not serviced since the season ended on %s</string>
+    <!-- P114-9: no qualifying service since the Season Start service was set (NOT_DONE_SINCE_COMMISSIONING). %s: the
+         date services count from, as a date. -->
+    <string name="season_start_not_ready_since_commissioning">Not ready: no qualifying service dated on or after %s.</string>
+    <!-- P114-10: the only service in range still has its details to fill in (DETAILS_PENDING). -->
+    <string name="season_start_not_ready_details_pending">Not ready: the service\'s details are still to be filled in</string>
+    <!-- P114-11: the Season Start service, or its group, is archived (SCHEDULE_ARCHIVED). -->
+    <string name="season_start_not_ready_schedule_archived">Not ready: the Season Start service is archived</string>
+    <!-- P114-12: the asset cannot have a Season Start service (ROLE_NOT_ALLOWED). -->
+    <string name="season_start_not_ready_role_not_allowed">Not ready: a Season Start service applies only to an asset with seasons that has no parent or has child assets</string>
+    <!-- P114-13: two Season Start services cover the asset (TWO_ROLES). -->
+    <string name="season_start_not_ready_two_roles">Not ready: two Season Start services cover this asset. Stop using one of them.</string>
+    <!-- P114-29: the service is dated after today (FUTURE_DATED). %s: the service's date, as a date. -->
+    <string name="season_start_not_ready_future_dated">Not ready yet: the service is dated %s, after today</string>
+    <!-- P114-40: no Season Start service covers the asset (NO_ROLE); drawn only while a date binding exists (R-N1). -->
+    <string name="season_start_not_ready_no_role">Not ready: no Season Start service</string>
+    <!-- P114-46: the only service in range came with the asset from another phone (INHERITED_SERVICE_ONLY). -->
+    <string name="season_start_not_ready_inherited_service_only">Not ready: the service on record was recorded on another phone and came with this asset. Record this season\'s service on this phone.</string>
+    <!-- P114-54: the only service in range was entered before the day it is dated (RECORDED_IN_ADVANCE, O-16).
+         %s: the service's date, as a date. -->
+    <string name="season_start_not_ready_recorded_in_advance">Not ready: the service dated %s was entered before that day, so it does not count. Edit it on or after that day to confirm it.</string>
+
+    <!-- ============================== where the season end came from (BoundarySource), and the cutoff (C33, F) -->
+
+    <!-- P114-44: the season end is Home Assistant's, read recently (HA_SEASON_ENDED). %1$s: the season end, as a date.
+         %2$s: the day it was checked, as a date. -->
+    <string name="season_start_source_ha_season_ended">Season end from Home Assistant: %1$s · checked %2$s</string>
+    <!-- P114-45: Home Assistant decides the season end but has not been checked recently (HA_UNVERIFIED). %1$s: the
+         day of the last check, as a date. %2$s: the season end in use, as a date. -->
+    <string name="season_start_source_ha_unverified">Season end not checked with Home Assistant since %1$s · using %2$s</string>
+    <!-- P114-51: the season end the phone recorded (PHONE_SEASON_END). %s: the season end, as a date. -->
+    <string name="season_start_source_phone_season_end">Season end as recorded on this phone: %s</string>
+    <!-- P114-52: the season end of a calendar season (CALENDAR_WINDOW). %s: the season end, as a date. -->
+    <string name="season_start_source_calendar_window">Season end from the calendar season: %s</string>
+    <!-- P114-53: services count from the day the Season Start service was set (COMMISSIONING). %s: that day, as a
+         date. -->
+    <string name="season_start_source_commissioning">Counted from the day the Season Start service was set: %s</string>
+    <!-- P114-50: the cutoff line. %s: the date services count from, as a date. -->
+    <string name="season_start_cutoff">Services dated on or after %s count.</string>
+
+    <!-- ============================================== the completion line (C33; A5a): before the write -->
+
+    <!-- P114-14: completing a Season Start service of one asset. %s: the asset's name. -->
+    <string name="season_start_completion_marks_asset_ready">Completing this marks %s ready for the season.</string>
+    <!-- P114-15: completing a group's Season Start service for one of its assets. -->
+    <string name="season_start_completion_marks_member_ready">Completing this for an asset marks that asset ready for the season.</string>
 </resources>

@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">%s 已归档、已退役或已转出，因此不能有使用季开始保养。</string>
     <string name="season_start_refused_already_covered">%1$s 已有使用季开始保养：“%2$s”。请先停用它。</string>
     <string name="season_start_refused_group_member">此组中的每台设备都必须能够有使用季开始保养。%s</string>
+    <string name="season_start_ready">已为使用季做好准备 · 保养于 %s</string>
+    <string name="season_start_not_ready_since_season_end">未就绪：使用季于 %s 结束后尚未保养</string>
+    <string name="season_start_not_ready_since_commissioning">未就绪：没有日期在 %s 或之后的有效保养。</string>
+    <string name="season_start_not_ready_details_pending">未就绪：保养的详细信息尚待填写</string>
+    <string name="season_start_not_ready_schedule_archived">未就绪：使用季开始保养已归档</string>
+    <string name="season_start_not_ready_role_not_allowed">未就绪：使用季开始保养仅适用于有使用季、且不隶属于其他设备或拥有子设备的设备</string>
+    <string name="season_start_not_ready_two_roles">未就绪：有两项使用季开始保养涵盖此设备。请停用其中一项。</string>
+    <string name="season_start_not_ready_future_dated">尚未就绪：该保养的日期为 %s，晚于今天</string>
+    <string name="season_start_not_ready_no_role">未就绪：没有使用季开始保养</string>
+    <string name="season_start_not_ready_inherited_service_only">未就绪：现有保养记录是在另一部手机上记录的，随此设备一同转来。请在此手机上记录本使用季的保养。</string>
+    <string name="season_start_not_ready_recorded_in_advance">未就绪：日期为 %s 的保养是在该日期之前录入的，因此不计入。请在该日期当天或之后编辑它以确认。</string>
+    <string name="season_start_source_ha_season_ended">来自 Home Assistant 的使用季结束日期：%1$s · 检查于 %2$s</string>
+    <string name="season_start_source_ha_unverified">自 %1$s 起未与 Home Assistant 核对使用季结束日期 · 使用 %2$s</string>
+    <string name="season_start_source_phone_season_end">此手机记录的使用季结束日期：%s</string>
+    <string name="season_start_source_calendar_window">按日期设定的使用季结束日期：%s</string>
+    <string name="season_start_source_commissioning">从设置使用季开始保养的那天起计算：%s</string>
+    <string name="season_start_cutoff">日期在 %s 或之后的保养计入。</string>
+    <string name="season_start_completion_marks_asset_ready">完成此项会将 %s 标记为已为使用季做好准备。</string>
+    <string name="season_start_completion_marks_member_ready">为某台设备完成此项会将该设备标记为已为使用季做好准备。</string>
 </resources>

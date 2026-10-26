@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">%s はアーカイブ済み、使用終了、または移管済みのため、シーズン開始メンテナンスを設定できません。</string>
     <string name="season_start_refused_already_covered">%1$s にはすでにシーズン開始メンテナンス「%2$s」があります。先にそちらの使用をやめてください。</string>
     <string name="season_start_refused_group_member">このグループのすべての機器が、シーズン開始メンテナンスを設定できる必要があります。%s</string>
+    <string name="season_start_ready">シーズンの準備完了 · %s にメンテナンス済み</string>
+    <string name="season_start_not_ready_since_season_end">準備未完了：シーズン終了日（%s）以降にメンテナンスされていません</string>
+    <string name="season_start_not_ready_since_commissioning">準備未完了：%s 以降の日付の有効なメンテナンスがありません。</string>
+    <string name="season_start_not_ready_details_pending">準備未完了：メンテナンスの詳細がまだ入力されていません</string>
+    <string name="season_start_not_ready_schedule_archived">準備未完了：シーズン開始メンテナンスはアーカイブ済みです</string>
+    <string name="season_start_not_ready_role_not_allowed">準備未完了：シーズン開始メンテナンスは、シーズンがあり、親機器がないか子機器を持つ機器にのみ適用されます</string>
+    <string name="season_start_not_ready_two_roles">準備未完了：この機器には 2 件のシーズン開始メンテナンスが設定されています。どちらか一方の使用をやめてください。</string>
+    <string name="season_start_not_ready_future_dated">まだ準備未完了：メンテナンスの日付が %s で、今日より後です</string>
+    <string name="season_start_not_ready_no_role">準備未完了：シーズン開始メンテナンスがありません</string>
+    <string name="season_start_not_ready_inherited_service_only">準備未完了：記録されているメンテナンスは別のスマートフォンで記録され、この機器とともに移されたものです。今シーズンのメンテナンスをこのスマートフォンで記録してください。</string>
+    <string name="season_start_not_ready_recorded_in_advance">準備未完了：%s の日付のメンテナンスはその日より前に入力されたため、対象になりません。確認するには、その日以降に編集してください。</string>
+    <string name="season_start_source_ha_season_ended">Home Assistant のシーズン終了日：%1$s · %2$s に確認</string>
+    <string name="season_start_source_ha_unverified">%1$s 以降 Home Assistant でシーズン終了日を確認できていません · %2$s を使用</string>
+    <string name="season_start_source_phone_season_end">このスマートフォンで記録したシーズン終了日：%s</string>
+    <string name="season_start_source_calendar_window">日付指定のシーズンによるシーズン終了日：%s</string>
+    <string name="season_start_source_commissioning">シーズン開始メンテナンスを設定した日から数えます：%s</string>
+    <string name="season_start_cutoff">%s 以降の日付のメンテナンスが対象です。</string>
+    <string name="season_start_completion_marks_asset_ready">これを完了すると、%s はシーズンの準備完了になります。</string>
+    <string name="season_start_completion_marks_member_ready">機器に対してこれを完了すると、その機器はシーズンの準備完了になります。</string>
 </resources>

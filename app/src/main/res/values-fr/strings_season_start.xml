@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">%s est archivé, retiré du service ou transféré : il ne peut donc pas avoir d\'entretien de début de saison.</string>
     <string name="season_start_refused_already_covered">%1$s a déjà un entretien de début de saison : « %2$s ». Cessez d\'abord de l\'utiliser.</string>
     <string name="season_start_refused_group_member">Chaque équipement de ce groupe doit pouvoir avoir un entretien de début de saison. %s</string>
+    <string name="season_start_ready">Prêt pour la saison · entretien du %s</string>
+    <string name="season_start_not_ready_since_season_end">Pas prêt : aucun entretien depuis la fin de la saison le %s</string>
+    <string name="season_start_not_ready_since_commissioning">Pas prêt : aucun entretien valable daté du %s ou après.</string>
+    <string name="season_start_not_ready_details_pending">Pas prêt : les détails de l\'entretien restent à remplir</string>
+    <string name="season_start_not_ready_schedule_archived">Pas prêt : l\'entretien de début de saison est archivé</string>
+    <string name="season_start_not_ready_role_not_allowed">Pas prêt : un entretien de début de saison ne s\'applique qu\'à un équipement à saisons qui n\'est rattaché à aucun autre ou qui a des équipements rattachés</string>
+    <string name="season_start_not_ready_two_roles">Pas prêt : deux entretiens de début de saison couvrent cet équipement. Cessez d\'utiliser l\'un d\'eux.</string>
+    <string name="season_start_not_ready_future_dated">Pas encore prêt : l\'entretien est daté du %s, après aujourd\'hui</string>
+    <string name="season_start_not_ready_no_role">Pas prêt : aucun entretien de début de saison</string>
+    <string name="season_start_not_ready_inherited_service_only">Pas prêt : l\'entretien enregistré l\'a été sur un autre téléphone et est arrivé avec cet équipement. Enregistrez l\'entretien de cette saison sur ce téléphone.</string>
+    <string name="season_start_not_ready_recorded_in_advance">Pas prêt : l\'entretien daté du %s a été saisi avant ce jour, il ne compte donc pas. Modifiez-le ce jour-là ou après pour le confirmer.</string>
+    <string name="season_start_source_ha_season_ended">Fin de saison selon Home Assistant : %1$s · vérifiée le %2$s</string>
+    <string name="season_start_source_ha_unverified">Fin de saison non vérifiée avec Home Assistant depuis le %1$s · %2$s utilisé</string>
+    <string name="season_start_source_phone_season_end">Fin de saison enregistrée sur ce téléphone : %s</string>
+    <string name="season_start_source_calendar_window">Fin de saison selon la saison à dates fixes : %s</string>
+    <string name="season_start_source_commissioning">Compté à partir du jour où l\'entretien de début de saison a été défini : %s</string>
+    <string name="season_start_cutoff">Les entretiens datés du %s ou après comptent.</string>
+    <string name="season_start_completion_marks_asset_ready">Terminer cet entretien marque %s comme prêt pour la saison.</string>
+    <string name="season_start_completion_marks_member_ready">Terminer cet entretien pour un équipement marque cet équipement comme prêt pour la saison.</string>
 </resources>

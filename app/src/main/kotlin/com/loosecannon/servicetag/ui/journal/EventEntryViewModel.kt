@@ -57,6 +57,7 @@ import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedDecimal
 import com.loosecannon.servicetag.l10n.localizedDecimalSeparator
 import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
+import com.loosecannon.servicetag.ui.asset.ReadinessStrings
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.EntryOffers
 import com.loosecannon.servicetag.ui.condition.EventOffer
@@ -158,6 +159,11 @@ data class EventEntryState(
      * from it and the asset's name. Null for every entry but the combined flow's.
      */
     val alsoRecords: OperationalCondition? = null,
+    /**
+     * #114 (C33): P114-14 above Record entry when the schedule this entry completes is a Season Start service (P114-15
+     * for a group's); null for every other entry.
+     */
+    val seasonStartLine: String? = null,
 )
 
 /**
@@ -349,6 +355,7 @@ class EventEntryViewModel(
                     },
                     notes = existing?.notes ?: draft?.second.orEmpty(),
                     alsoRecords = pending?.condition,
+                    seasonStartLine = schedule?.let { ReadinessStrings.completionLine(it, assetName) },
                     loaded = true,
                 )
             }

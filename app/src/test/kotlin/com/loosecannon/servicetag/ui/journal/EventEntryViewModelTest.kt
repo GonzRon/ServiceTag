@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -1231,6 +1232,24 @@ class EventEntryViewModelTest {
         assertFalse("the form collected the details", stored.detailsPending)
         assertEquals(profile.id, stored.profileId)
         assertEquals("2026-05-01", dueOf(schedule.id))
+    }
+
+    /**
+     * #114 row 77 (C33): the form opened to complete a Season Start service says, above Record entry, what completing it
+     * marks — P114-14 with the asset's name — and the same form for an ordinary schedule, or no schedule, says nothing.
+     */
+    @Test fun theEntryFormCompletingARoleScheduleShowsTheLine() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        assertNull(formModel(spa.id, spa.profile.id, schedule.id).state.first { it.loaded }.seasonStartLine)
+        assertNull(formModel(spa.id, spa.profile.id, scheduleId = null).state.first { it.loaded }.seasonStartLine)
+
+        graph.schedules.upsert(schedule.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-02-01"))
+        assertEquals(
+            "Completing this marks Spa ready for the season.",
+            formModel(spa.id, spa.profile.id, schedule.id).state.first { it.loaded }.seasonStartLine,
+        )
     }
 
     /** V5 (pin): the same asset and profile without a schedule id — the asset screen's way in — log an ordinary entry. */

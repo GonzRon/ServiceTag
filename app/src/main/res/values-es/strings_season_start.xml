@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">%s está archivado, retirado o transferido, así que no puede tener un mantenimiento de inicio de temporada.</string>
     <string name="season_start_refused_already_covered">%1$s ya tiene un mantenimiento de inicio de temporada: “%2$s”. Deja de usar ese primero.</string>
     <string name="season_start_refused_group_member">Todos los equipos de este grupo deben poder tener un mantenimiento de inicio de temporada. %s</string>
+    <string name="season_start_ready">Listo para la temporada · mantenimiento hecho el %s</string>
+    <string name="season_start_not_ready_since_season_end">No está listo: sin mantenimiento desde que terminó la temporada el %s</string>
+    <string name="season_start_not_ready_since_commissioning">No está listo: no hay ningún mantenimiento válido con fecha del %s o posterior.</string>
+    <string name="season_start_not_ready_details_pending">No está listo: aún faltan por completar los detalles del mantenimiento</string>
+    <string name="season_start_not_ready_schedule_archived">No está listo: el mantenimiento de inicio de temporada está archivado</string>
+    <string name="season_start_not_ready_role_not_allowed">No está listo: un mantenimiento de inicio de temporada solo se aplica a un equipo con temporadas que no forma parte de otro o que tiene equipos incluidos</string>
+    <string name="season_start_not_ready_two_roles">No está listo: dos mantenimientos de inicio de temporada cubren este equipo. Deja de usar uno de ellos.</string>
+    <string name="season_start_not_ready_future_dated">Aún no está listo: el mantenimiento tiene fecha del %s, posterior a hoy</string>
+    <string name="season_start_not_ready_no_role">No está listo: no hay mantenimiento de inicio de temporada</string>
+    <string name="season_start_not_ready_inherited_service_only">No está listo: el mantenimiento registrado se anotó en otro teléfono y llegó con este equipo. Registra el mantenimiento de esta temporada en este teléfono.</string>
+    <string name="season_start_not_ready_recorded_in_advance">No está listo: el mantenimiento con fecha del %s se registró antes de ese día, así que no cuenta. Edítalo ese día o después para confirmarlo.</string>
+    <string name="season_start_source_ha_season_ended">Fin de temporada según Home Assistant: %1$s · comprobado el %2$s</string>
+    <string name="season_start_source_ha_unverified">Fin de temporada sin comprobar con Home Assistant desde el %1$s · se usa el %2$s</string>
+    <string name="season_start_source_phone_season_end">Fin de temporada registrado en este teléfono: %s</string>
+    <string name="season_start_source_calendar_window">Fin de temporada según la temporada por fechas: %s</string>
+    <string name="season_start_source_commissioning">Se cuenta desde el día en que se estableció el mantenimiento de inicio de temporada: %s</string>
+    <string name="season_start_cutoff">Cuentan los mantenimientos con fecha del %s o posterior.</string>
+    <string name="season_start_completion_marks_asset_ready">Completarlo marca %s como listo para la temporada.</string>
+    <string name="season_start_completion_marks_member_ready">Completarlo para un equipo marca ese equipo como listo para la temporada.</string>
 </resources>

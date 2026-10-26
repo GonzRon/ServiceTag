@@ -38,6 +38,7 @@ import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.DateField
+import com.loosecannon.servicetag.ui.asset.ReadinessStrings
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.EventOffer
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
@@ -102,6 +103,9 @@ sealed interface CompletionOutcome {
  * [today] is the day the prompt was opened on: a date after it is refused (O-16, C39), so Done is held and #82's S25
  * is drawn under the date field ([dateRefusal]). [occurredTime] and [meterValue] are blank on a first prompt and the
  * owner's own answer on a prompt asked again after the write refused its date.
+ *
+ * [seasonStartLine] is #114's completion line (C33), drawn before the write: P114-14 when the schedule is an asset's
+ * Season Start service, P114-15 when it is a group's, and null for every other schedule.
  */
 data class CompletionPrompt(
     val scheduleId: ScheduleId,
@@ -113,6 +117,7 @@ data class CompletionPrompt(
     val meterUnit: String? = null,
     val occurredTime: String = "",
     val meterValue: String = "",
+    val seasonStartLine: String? = null,
 ) {
     val needsMeterReading: Boolean get() = meterDefinitionId != null
 
@@ -184,6 +189,11 @@ class CompletionFlow(
     private val completeGroupMembers: CompleteGroupMembers,
     private val today: Today,
     private val offers: EventOffers,
+    /**
+     * #114 (C33): an asset's name, for P114-14 on a Season Start service's prompt. Null-answering by default, so the
+     * asset's line is not drawn until the graph passes the asset store's read; a group's line needs no name.
+     */
+    private val assetNames: suspend (AssetId) -> String? = { null },
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
 
@@ -323,6 +333,10 @@ class CompletionFlow(
     private suspend fun ask(schedule: MaintenanceSchedule, kept: CompletionAnswer? = null): CompletionAnswer? {
         if (pending != null) return null
         val meter = schedule.meterDefinitionId?.let { definitions.get(it) }
+        val assetName = when (val target = schedule.target) {
+            is ScheduleTarget.AssetTarget -> assetNames(target.assetId)
+            is ScheduleTarget.GroupTarget -> null
+        }
         val answer = CompletableDeferred<CompletionAnswer?>()
         pending = answer
         val day = today.localDate()
@@ -338,6 +352,7 @@ class CompletionFlow(
             meterDefinitionId = meter?.id,
             meterLabel = meter?.label,
             meterUnit = meter?.unit,
+            seasonStartLine = ReadinessStrings.completionLine(schedule, assetName),
         )
         return try {
             answer.await()
@@ -465,6 +480,8 @@ fun CompletionFlowHost(flow: CompletionFlow) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(open.scheduleTitle, style = MaterialTheme.typography.bodyMedium)
+                // #114 (C33): what completing a Season Start service means, before the write.
+                open.seasonStartLine?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 DateField(
                     value = occurredOn,
                     onValueChange = { occurredOn = it },

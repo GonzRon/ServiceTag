@@ -6,4 +6,23 @@
     <string name="season_start_refused_not_maintained_here">%s в архиве, списан или передан, поэтому у него не может быть обслуживания к началу сезона.</string>
     <string name="season_start_refused_already_covered">%1$s: обслуживание к началу сезона уже задано — «%2$s». Сначала перестаньте его использовать.</string>
     <string name="season_start_refused_group_member">Каждый объект в этой группе должен допускать обслуживание к началу сезона. %s</string>
+    <string name="season_start_ready">Готов к сезону · обслужен %s</string>
+    <string name="season_start_not_ready_since_season_end">Не готов: не обслуживался после окончания сезона %s</string>
+    <string name="season_start_not_ready_since_commissioning">Не готов: нет подходящего обслуживания с датой %s или позже.</string>
+    <string name="season_start_not_ready_details_pending">Не готов: сведения об обслуживании ещё не заполнены</string>
+    <string name="season_start_not_ready_schedule_archived">Не готов: обслуживание к началу сезона в архиве</string>
+    <string name="season_start_not_ready_role_not_allowed">Не готов: обслуживание к началу сезона применимо только к объекту с сезонами, который не входит в другой объект или имеет дочерние объекты</string>
+    <string name="season_start_not_ready_two_roles">Не готов: этот объект охватывают два обслуживания к началу сезона. Перестаньте использовать одно из них.</string>
+    <string name="season_start_not_ready_future_dated">Пока не готов: обслуживание датировано %s, это позже сегодняшнего дня</string>
+    <string name="season_start_not_ready_no_role">Не готов: нет обслуживания к началу сезона</string>
+    <string name="season_start_not_ready_inherited_service_only">Не готов: имеющееся обслуживание записано на другом телефоне и пришло вместе с этим объектом. Запишите обслуживание этого сезона на этом телефоне.</string>
+    <string name="season_start_not_ready_recorded_in_advance">Не готов: обслуживание с датой %s было внесено раньше этого дня, поэтому не учитывается. Измените его в этот день или позже, чтобы подтвердить.</string>
+    <string name="season_start_source_ha_season_ended">Окончание сезона по данным Home Assistant: %1$s · проверено %2$s</string>
+    <string name="season_start_source_ha_unverified">Окончание сезона не сверялось с Home Assistant с %1$s · используется %2$s</string>
+    <string name="season_start_source_phone_season_end">Окончание сезона, записанное на этом телефоне: %s</string>
+    <string name="season_start_source_calendar_window">Окончание сезона (сезон по датам): %s</string>
+    <string name="season_start_source_commissioning">Отсчёт со дня, когда было задано обслуживание к началу сезона: %s</string>
+    <string name="season_start_cutoff">Учитываются обслуживания с датой %s или позже.</string>
+    <string name="season_start_completion_marks_asset_ready">После выполнения объект %s будет отмечен как готовый к сезону.</string>
+    <string name="season_start_completion_marks_member_ready">После выполнения для объекта этот объект будет отмечен как готовый к сезону.</string>
 </resources>
