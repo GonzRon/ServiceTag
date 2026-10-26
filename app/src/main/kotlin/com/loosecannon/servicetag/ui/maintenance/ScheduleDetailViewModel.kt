@@ -571,6 +571,10 @@ class ScheduleDetailViewModel(
                 null
             } catch (refused: HealthSubjectIsPrimary) {
                 LinkGuardPrompt.Primary
+            } catch (refused: SeasonStartStrands) {
+                // #124 (C42): the role a schedule counts from is never archived in silence (P124-8).
+                restoreRefusal(refused)?.let { _messages.trySend(it) }
+                null
             }
         }
     }

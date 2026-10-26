@@ -211,7 +211,7 @@ class NoSuchSchedule(id: ScheduleId) : IllegalArgumentException("no schedule ${i
 /** The group a schedule names does not exist. */
 class NoSuchGroup(id: GroupId) : IllegalArgumentException("no group ${id.value}")
 
-/** A completion was aimed at an archived schedule: a refusal about state, not about the rule. */
+/** An operation (a completion, a pause or a resume) was aimed at an archived schedule: a refusal about state, not about the rule. */
 class ScheduleArchived(val id: ScheduleId) :
     IllegalStateException("schedule ${id.value} is archived")
 

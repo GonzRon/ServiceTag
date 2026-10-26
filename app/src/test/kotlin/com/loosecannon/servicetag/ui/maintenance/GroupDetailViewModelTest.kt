@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
@@ -436,6 +437,38 @@ class GroupDetailViewModelTest {
             assertEquals(groupId, listOf(sentence), said)
             assertEquals(groupId, archivedAt, graph.groups.get(GroupId(groupId))!!.archivedAt)
         }
+    }
+
+    /** #124 (N2b review M-2): archiving a role group a member's live schedule counts from is refused and said (P124-8). */
+    @Test fun archivingARoleGroupUnderAMembersCountingScheduleSaysP124_8() = runTest {
+        val heater = graph.createAsset.run(
+            AssetCommand(name = "Example Heater", category = "Heating", seasonStartMmdd = "10-01", seasonEndMmdd = "04-30"),
+        )
+        graph.groups.upsert(groupOf("g-heater", "Heater run", members = listOf(Triple(heater.id.value, "2026-01-01", null))))
+        graph.schedules.upsert(
+            scheduleOf("s-heater-run", assetId = null, groupId = "g-heater", title = "Pre-season check")
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        graph.schedules.upsert(
+            scheduleOf(
+                "s-check", assetId = heater.id.value, title = "Example filter check",
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0,
+            ),
+        )
+        val vm = viewModel("g-heater")
+        backgroundScope.launch { vm.state.collect() }
+        assertNotNull(vm.state.first { it != null })
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.collect { said += it } }
+
+        vm.setArchived(true)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("\"Example filter check\" counts from Example Heater's Season Start service. Change when it starts counting first."),
+            said,
+        )
+        assertNull("the group stays open", graph.groups.get(GroupId("g-heater"))!!.archivedAt)
     }
 
     /** A group that is no longer there sends the screen back rather than drawing an empty one. */

@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
@@ -1180,5 +1181,89 @@ class ScheduleDetailViewModelTest {
             assertEquals(id, listOf(sentence), said)
             assertEquals(id, ScheduleStatus.ARCHIVED, graph.schedules.get(ScheduleId(id))!!.status)
         }
+    }
+    /** An in-season heater whose "Heater service" holds the role, and whose "Example filter check" counts from it. */
+    private suspend fun aCountedRole(): ScheduleId {
+        val heater = graph.createAsset.run(
+            AssetCommand(name = "Example Heater", category = "Heating", seasonStartMmdd = "10-01", seasonEndMmdd = "04-30"),
+        )
+        graph.schedules.upsert(
+            scheduleOf("s-role", assetId = heater.id.value, title = "Heater service")
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        graph.schedules.upsert(
+            scheduleOf(
+                "s-check", assetId = heater.id.value, title = "Example filter check",
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0,
+            ),
+        )
+        return ScheduleId("s-role")
+    }
+
+    /**
+     * #124 (N2b review M-1, M-2): archiving the role a live schedule counts from is refused and said (P124-8), the role
+     * kept — straight, and through S141's "Archive both" when a health subject depends on the role.
+     */
+    @Test fun archivingTheRoleUnderACountingScheduleSaysP124_8() = runTest {
+        val role = aCountedRole()
+        val sentence = "\"Example filter check\" counts from Example Heater's Season Start service. Change when it starts counting first."
+        val vm = viewModel(role)
+        vm.state.first { it.loaded }
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.collect { said += it } }
+
+        vm.archive(true)
+        vm.state.first { !it.busy }
+        advanceUntilIdle()
+        assertEquals(listOf(sentence), said)
+        assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(role)!!.status)
+
+        val heater = (graph.schedules.get(role)!!.target as ScheduleTarget.AssetTarget).assetId
+        val subject = graph.saveHealthSubject.create(
+            heater,
+            HealthSubjectCommand(
+                name = "Burner", kind = HealthSubjectKind.PART, driver = HealthDriver.MAINTENANCE_OVERDUE, scheduleId = role,
+                nominalUntilDays = 0, warningFromDays = 7, criticalFromDays = 30,
+            ),
+        )
+        vm.archive(true)
+        assertEquals(LinkGuardPrompt.Asks("Burner"), vm.state.first { !it.busy && it.linkGuard != null }.linkGuard)
+        vm.archiveBoth()
+        val done = vm.state.first { !it.busy }
+        advanceUntilIdle()
+        assertNull("the dialog closes", done.linkGuard)
+        assertEquals("said again, through Archive both", listOf(sentence, sentence), said)
+        assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(role)!!.status)
+        assertNull("nor is the subject archived", graph.healthSubjects.get(subject.id)!!.archivedAt)
+    }
+
+    /** #124 (N2b review M-2): restoring a schedule counting from a service its asset does not have is refused (P124-5). */
+    @Test fun restoringACountingScheduleWithNoServiceSaysP124_5() = runTest {
+        val heater = graph.createAsset.run(
+            AssetCommand(name = "Example Heater", category = "Heating", seasonStartMmdd = "10-01", seasonEndMmdd = "04-30"),
+        )
+        graph.schedules.upsert(
+            scheduleOf(
+                "s-check", assetId = heater.id.value, title = "Example filter check",
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0, status = ScheduleStatus.ARCHIVED,
+            ),
+        )
+        val vm = viewModel(ScheduleId("s-check"))
+        vm.state.first { it.loaded }
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.collect { said += it } }
+
+        vm.archive(false)
+        vm.state.first { !it.busy }
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                "Example Heater has no Season Start service to count from. Use one of its schedules as its Season Start " +
+                    "service first.",
+            ),
+            said,
+        )
+        assertEquals(ScheduleStatus.ARCHIVED, graph.schedules.get(ScheduleId("s-check"))!!.status)
     }
 }

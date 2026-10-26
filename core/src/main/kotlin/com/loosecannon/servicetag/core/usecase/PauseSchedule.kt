@@ -17,6 +17,9 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * (invariant 25). `status` is a backup-format field, so the change itself is not hidden from a
  * merge.
  *
+ * An archived schedule is 409 [ScheduleArchived], paused or resumed alike: it comes back only through
+ * [ArchiveSchedule]'s restore and its Season Start rules (#114 C11, #124 I40). The row is read inside the write.
+ *
  * One `uow.write`.
  */
 class PauseSchedule(
@@ -24,15 +27,14 @@ class PauseSchedule(
     private val uow: UnitOfWork,
     private val recompute: RecomputeSchedules,
 ) {
-    suspend fun run(id: ScheduleId, paused: Boolean): MaintenanceSchedule {
+    suspend fun run(id: ScheduleId, paused: Boolean): MaintenanceSchedule = uow.write {
         val existing = schedules.get(id) ?: throw NoSuchSchedule(id)
+        if (existing.status == ScheduleStatus.ARCHIVED) throw ScheduleArchived(id)
         val saved = existing.copy(
             status = if (paused) ScheduleStatus.PAUSED else ScheduleStatus.ACTIVE,
         )
-        uow.write {
-            schedules.upsert(saved)
-            recompute.forSchedule(id)
-        }
-        return saved
+        schedules.upsert(saved)
+        recompute.forSchedule(id)
+        saved
     }
 }

@@ -137,10 +137,8 @@ class SetScheduleRole(
     }
 
     /** #124 (C41) — the assets [schedule]'s role covers, or covered: its asset, or its group's open members. */
-    private suspend fun coveredBy(schedule: MaintenanceSchedule): List<AssetId> = when (val target = schedule.target) {
-        is ScheduleTarget.AssetTarget -> listOf(target.assetId)
-        is ScheduleTarget.GroupTarget -> groups.get(target.groupId)?.openMembers().orEmpty().map { it.assetId }
-    }
+    private suspend fun coveredBy(schedule: MaintenanceSchedule): List<AssetId> =
+        assetsAimedAt(schedule, listOfNotNull((schedule.target as? ScheduleTarget.GroupTarget)?.let { groups.get(it.groupId) }))
 
     /**
      * #124 (C42) — clearing a live role that a live schedule of a covered asset counts from is 409 [SeasonStartStrands]

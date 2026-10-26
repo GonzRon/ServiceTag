@@ -193,7 +193,7 @@ class OpeningServiceRecomputeTest {
         assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the role kept")
     }
 
-    @Test fun aGroupRoleSetAndClearedMovesEveryMembersDependent() = runTest {
+    @Test fun aGroupRoleSetMovesEveryMembersDependentAndClearingItIsStranded() = runTest {
         calendar("heater")
         calendar("boiler")
         h.group("g1", Triple("heater", "2025-12-01", null), Triple("boiler", "2025-12-01", null))
@@ -210,6 +210,7 @@ class OpeningServiceRecomputeTest {
 
         // #124 (N2b, C42): clearing it while the members' dependents count from it is stranded.
         assertFailsWith<SeasonStartStrands> { h.setScheduleRole.run(ScheduleId("g1-check"), ScheduleRole.NONE) }
+        assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the group role kept")
         assertCounts("d-boiler", "2026-10-15", PolicyReason.OPENING_SERVICE, "the group role kept")
     }
 
@@ -230,6 +231,21 @@ class OpeningServiceRecomputeTest {
 
         h.archiveGroup.run(GroupId("g1"), archived = false)
         assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the role's group restored")
+    }
+
+    /** N2b review N-4: a role schedule's restore moves its asset's dependents, as a role group's restore does. */
+    @Test fun restoringARoleScheduleMovesItsAssetsDependent() = runTest {
+        calendar("heater")
+        yearly("s1", role = ScheduleRole.SEASON_START)
+        complete("s1", "2026-10-01")
+        h.archiveSchedule.run(ScheduleId("s1"), archived = true)
+        // A dependent stored while the role is archived (as only a merge could leave it): it waits, uncovered.
+        dependent("d-heater")
+        h.recompute.forAsset(AssetId("heater"))
+        assertWaiting("d-heater", "the role archived")
+
+        h.archiveSchedule.run(ScheduleId("s1"), archived = false)
+        assertCounts("d-heater", "2026-10-15", PolicyReason.OPENING_SERVICE, "the role restored")
     }
 
     @Test fun anEndAndAStartEachMoveTheDependent() = runTest {

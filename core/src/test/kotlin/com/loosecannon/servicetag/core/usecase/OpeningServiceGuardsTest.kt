@@ -15,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -197,6 +198,17 @@ class OpeningServiceGuardsTest {
         assertEquals(ScheduleStatus.ACTIVE, h.archiveSchedule.run(ScheduleId("d1"), archived = false).status)
     }
 
+    /** N2b review I-1: a pause or a resume never brings an archived schedule back past the restore's rule. */
+    @Test fun anArchivedScheduleIsNeitherResumedNorPausedBack() = runTest {
+        h.asset("heater")
+        dependent("d1", status = ScheduleStatus.ARCHIVED)
+        val pauseSchedule = PauseSchedule(h.schedules, h.raw.uow, h.recompute)
+
+        unchanged { assertFailsWith<ScheduleArchived> { pauseSchedule.run(ScheduleId("d1"), paused = false) } }
+        unchanged { assertFailsWith<ScheduleArchived> { pauseSchedule.run(ScheduleId("d1"), paused = true) } }
+        assertEquals(ScheduleStatus.ARCHIVED, h.stored("d1").status)
+    }
+
     // ---- Row 147 — stranded: HAS_DEPENDENT_SCHEDULES -----------------------------------------------------------------
 
     @Test fun clearingOrArchivingTheRoleWithALiveDependentIsStranded() = runTest {
@@ -303,6 +315,11 @@ class OpeningServiceGuardsTest {
             h.setSeasonMode.run(AssetId("heater"), SeasonModeCommand(SeasonMode.YEAR_ROUND)).seasonMode,
             "the asset goes all year",
         )
+        // While boiler, holding the archived d2, is still a member of the role group.
+        assertNotNull(h.archiveGroup.run(GroupId("g1"), archived = true).archivedAt, "the group archived")
+        assertNull(h.archiveGroup.run(GroupId("g1"), archived = false).archivedAt, "and restored")
+        assertEquals(ScheduleStatus.ARCHIVED, h.archiveSchedule.run(ScheduleId("sg"), archived = true).status, "the role archived")
+        assertEquals(ScheduleStatus.ACTIVE, h.archiveSchedule.run(ScheduleId("sg"), archived = false).status, "and restored")
         val stove = GroupMemberInput(AssetId("stove"), id = "g1-m2", sortOrder = 1)
         assertEquals(
             listOf(AssetId("stove")),
@@ -310,7 +327,5 @@ class OpeningServiceGuardsTest {
                 .map { it.assetId },
             "the member leaves",
         )
-        assertNotNull(h.archiveGroup.run(GroupId("g1"), archived = true).archivedAt, "the group archived")
-        assertEquals(ScheduleStatus.ARCHIVED, h.archiveSchedule.run(ScheduleId("sg"), archived = true).status, "the role archived")
     }
 }

@@ -82,6 +82,10 @@ class ArchiveSchedule(
             }
             schedules.upsert(saved)
             recompute.forSchedule(id)
+            // #124 (C41): a restored role moves readiness, so the schedules counting from it move with it (ArchiveGroup's rule).
+            if (!archived && existing.status == ScheduleStatus.ARCHIVED && existing.role == ScheduleRole.SEASON_START) {
+                assetsAimedAt(saved, groups.all()).forEach { recompute.forAsset(it) }
+            }
             saved
         }
 
