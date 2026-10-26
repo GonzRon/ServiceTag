@@ -254,6 +254,10 @@ class BackupFormat21Test {
             "an unknown action" to tree.with(
                 "scheduleSeasonActivations", JsonArray(listOf((rows.first() as JsonObject).with("action", JsonPrimitive("PAUSE")))),
             ),
+            "a day that is not a date" to tree.with(
+                "scheduleSeasonActivations",
+                JsonArray(listOf((rows.first() as JsonObject).with("occurredOn", JsonPrimitive("2025-13-40")))),
+            ),
         )
 
         for ((case, edited) in broken) {

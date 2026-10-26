@@ -107,7 +107,8 @@ class TransferRoundTripRoleTest {
         assertIs<TransferImportResult.Imported>(b.import(out.bytes))
         assertEquals(ScheduleSeasonSource.OWN, b.raw.schedules.get(ScheduleId("s-open"))!!.seasonSource)
         assertEquals(listOf(start), b.raw.scheduleSeasonActivations.forSchedule(ScheduleId("s-open")))
-        assertEquals(emptyList(), b.raw.scheduleSeasonBindings.all())
+        // A pin, not the proof: the byte scan in `SeasonSyncNeverTravelsTest` is.
+        assertEquals(emptyList(), b.raw.scheduleSeasonBindings.all(), "no merge path writes a binding")
         // B returns the schedule to its asset's season, and packs it back.
         b.raw.schedules.upsert(b.raw.schedules.get(ScheduleId("s-open"))!!.copy(seasonSource = ScheduleSeasonSource.ASSET))
         val back = b.pack("pack-back", "heater")

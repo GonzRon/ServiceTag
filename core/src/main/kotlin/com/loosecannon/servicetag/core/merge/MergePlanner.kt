@@ -797,7 +797,8 @@ internal fun mergePlanOf(
     }
     // #114 (C20): the row an INSERT writes — a carried row keeps this phone's role and boundary whatever the pack says
     // (A), and under a context any other `SEASON_START` row is recommissioned on the import day (O-8). #125 (U-C6): a
-    // carried row keeps this phone's season source too; any other row lands with the archive's, and with no binding.
+    // carried asset's schedule keeps this phone's season source too, never a group's (inv. 106); any other row lands
+    // with the archive's, and with no binding.
     fun insertedSchedule(dto: MaintenanceScheduleDto): MaintenanceSchedule {
         val row = dto.toDomain()
         val carried = carry.roles[row.id]
@@ -807,7 +808,13 @@ internal fun mergePlanOf(
                 row.copy(roleSinceOn = context.importDay.toString())
             else -> row
         }
-        return carry.seasonSources[row.id]?.let { roled.copy(seasonSource = it) } ?: roled
+        val carriedSource = carry.seasonSources[row.id] ?: return roled
+        return when (roled.target) {
+            is ScheduleTarget.AssetTarget -> roled.copy(seasonSource = carriedSource)
+            // inv. 106 (H2 review I1): a group's schedule reads no season of its own, whatever this phone's row was
+            // before it left; the archive's `ASSET` stands (the decoder refuses `OWN` on a group's row).
+            is ScheduleTarget.GroupTarget -> roled
+        }
     }
     // #114 (C19, O-9): one live Season Start role per asset, by C9's coverage (`roleCoverageOf`'s `covering`) over this
     // phone's rows and this plan's accepted groups and members. The claim map is seeded from the destination's live

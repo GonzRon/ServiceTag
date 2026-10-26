@@ -74,6 +74,7 @@ class TransferGraphTest {
         assertEquals(listOf("hs1"), pack.healthSubjects.map { it.id })
         assertEquals(listOf("s1", "sg"), pack.maintenanceSchedules.map { it.id })
         assertEquals(listOf("cl1", "cl2"), pack.occurrenceClosures.map { it.id })
+        assertEquals(listOf("ss1"), pack.scheduleSeasonActivations.map { it.id }, "a carried schedule's own season travels")
         assertEquals(listOf("sc1"), pack.serviceCases.map { it.id }, "an open case travels (R77-7)")
         assertEquals(listOf("n1"), pack.serviceCaseEntries.map { it.id })
     }

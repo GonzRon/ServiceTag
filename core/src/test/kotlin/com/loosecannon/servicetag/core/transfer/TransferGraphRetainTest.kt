@@ -65,6 +65,7 @@ class TransferGraphRetainTest {
         assertEquals(listOf(EMPTY_GROUP), kept.maintenanceGroups.map { it.id })
         assertEquals(listOf("s2"), kept.maintenanceSchedules.map { it.id })
         assertEquals(listOf("cl3"), kept.occurrenceClosures.map { it.id })
+        assertEquals(listOf("ss2"), kept.scheduleSeasonActivations.map { it.id }, "the held schedule's own season goes with it")
         assertEquals(emptyList(), kept.assetReferences + kept.seasonActivations + kept.assetConditions)
         assertEquals(listOf("hs2"), kept.healthSubjects.map { it.id })
         assertEquals(estate.assetCategories, kept.assetCategories, "the catalog is the sender's")

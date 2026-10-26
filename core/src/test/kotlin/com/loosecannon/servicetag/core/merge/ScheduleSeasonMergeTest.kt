@@ -5,10 +5,12 @@ import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
@@ -16,11 +18,14 @@ import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.SeasonFixtures.assetOf
 import com.loosecannon.servicetag.core.testing.backupOf
 import com.loosecannon.servicetag.core.testing.dayMillis
+import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.testing.scheduleSeasonActivationOf
 import com.loosecannon.servicetag.core.testing.scheduleSeasonBindingOf
 import kotlinx.coroutines.test.runTest
+import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -120,9 +125,9 @@ class ScheduleSeasonMergeTest {
     }
 
     /**
-     * Hazard Z4's other half: this phone's own export from before the link re-merges as a conflict. A format-20 archive
-     * cannot speak about a schedule's own season, so the local row compares without the source and the stamp the link
-     * moved; every other field still counts.
+     * Hazard Z4's other half: this phone's own export from before the link would re-merge as a conflict, but for this
+     * rule: a format-20 archive cannot speak about a schedule's own season, so the local row compares without the source
+     * and the stamp the link moved; every other field still counts.
      */
     @Test
     fun thisPhonesFormat20ExportReMergesIdenticalAgainstALocalOwnSchedule() {
@@ -161,6 +166,49 @@ class ScheduleSeasonMergeTest {
 
         assertEquals(ScheduleSeasonSource.OWN, target.schedules.get(ScheduleId("s-open"))!!.seasonSource)
         assertEquals(rows.sortedBy { it.occurredOn }, target.scheduleSeasonActivations.forSchedule(ScheduleId("s-open")))
-        assertEquals(emptyList(), target.scheduleSeasonBindings.all())
+        // A pin, not the proof: no merge path holds the binding port; `SeasonSyncNeverTravelsTest`'s byte scan is the proof.
+        assertEquals(emptyList(), target.scheduleSeasonBindings.all(), "no merge path writes a binding")
+    }
+
+    /**
+     * Inv. 106 (H2 review I1): a return carries this phone's `OWN` source for a schedule it removed, but the pack's row
+     * may have come back as a group's schedule (unlinked and retargeted on the other phone). A group's schedule reads no
+     * season of its own, so the carried source never lands on it; the row keeps the archive's `ASSET`.
+     */
+    @Test
+    fun aCarriedOwnSourceNeverLandsOnAGroupsSchedule() {
+        val heaters = groupOf("g-heaters", "Example heaters", members = listOf(Triple("heater", "2025-09-01", null)))
+        val grouped = opening.copy(target = ScheduleTarget.GroupTarget(GroupId("g-heaters")))
+        val pack = backupOf(
+            BackupData(
+                listOf(heater.toDto()), emptyList(), emptyList(),
+                maintenanceGroups = listOf(heaters.toDto()),
+                maintenanceSchedules = listOf(grouped.toDto()),
+            ),
+        )
+        val carry = ReturnCarry(emptyMap(), emptyMap(), mapOf(ScheduleId("s-open") to ScheduleSeasonSource.OWN))
+
+        val plan = mergePlanOf(pack, here(), carry = carry)
+
+        assertTrue(plan.applicable)
+        assertEquals(ScheduleSeasonSource.ASSET, plan.writes.schedules.single().seasonSource)
+        // the carry still applies to an asset's schedule
+        val own = mergePlanOf(archive(schedules = listOf(opening), seasonRows = emptyList()), here(), carry = carry)
+        assertEquals(ScheduleSeasonSource.OWN, own.writes.schedules.single().seasonSource)
+    }
+
+    /** H2 review m3: a link or unlink between the preview and the import makes the plan stale, as the role's carry does. */
+    @Test
+    fun aPlanCarryingAnotherSourceIsStale() {
+        val pack = archive(schedules = listOf(opening), seasonRows = emptyList())
+        val context = ImportContext(LocalDate.parse("2026-10-20"))
+        fun carried(source: ScheduleSeasonSource) = ReturnCarry(emptyMap(), emptyMap(), mapOf(ScheduleId("s-open") to source))
+
+        val asset = mergePlanOf(pack, here(), context = context, carry = carried(ScheduleSeasonSource.ASSET))
+        val own = mergePlanOf(pack, here(), context = context, carry = carried(ScheduleSeasonSource.OWN))
+
+        assertEquals(asset.decisions, own.decisions)
+        assertNotEquals(asset.fingerprint, own.fingerprint)
+        assertEquals(own.fingerprint, mergePlanOf(pack, here(), context = context, carry = carried(ScheduleSeasonSource.OWN)).fingerprint)
     }
 }

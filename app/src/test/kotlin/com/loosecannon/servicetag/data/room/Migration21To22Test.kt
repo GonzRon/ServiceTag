@@ -90,7 +90,7 @@ class Migration21To22Test {
     }
 
     @Test
-    fun theThreeTablesExistEmptyWithTheirIndicesAndKeys() = runTest {
+    fun theFiveTablesExistEmptyWithTheirIndicesAndKeys() = runTest {
         migrating { file, before ->
             withConnection(file) { m ->
                 assertEquals("the five new tables", V22_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys)

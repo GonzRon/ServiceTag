@@ -27,6 +27,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ReferenceOwner
+import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -44,6 +45,7 @@ import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
+import com.loosecannon.servicetag.core.testing.scheduleSeasonActivationOf
 import com.loosecannon.servicetag.core.testing.seasonalAssetOf
 import com.loosecannon.servicetag.core.testing.subjectOf
 
@@ -169,6 +171,11 @@ object TransferFixtures {
     )
 
     val activations = listOf(activationOf("sa1", HEATER))
+    /** #125: each asset schedule's own season row, so `select` and `retain` are pinned for the list (H2 review m1). */
+    val scheduleSeasonRows = listOf(
+        scheduleSeasonActivationOf("ss1", "s1", SeasonAction.START, "2026-03-01", createdAt = 100L),
+        scheduleSeasonActivationOf("ss2", "s2", SeasonAction.START, "2026-04-01", createdAt = 100L),
+    )
     val conditions = listOf(conditionOf("co1", HEATER))
     val subjects = listOf(subjectOf("hs1", HEATER, scheduleId = "s1"), subjectOf("hs2", COMPRESSOR))
     val cases = listOf(caseOf("sc1", HEATER), caseOf("sc2", COMPRESSOR))
@@ -198,6 +205,7 @@ object TransferFixtures {
         serviceCases = cases.map { it.toDto() },
         serviceCaseEntries = caseEntries.map { it.toDto() },
         assetLoans = loans.map { it.toDto() },
+        scheduleSeasonActivations = scheduleSeasonRows.map { it.toDto() },
     )
 
     /** The same estate in an install's stores, and every MANAGED row's bytes in its store. */
@@ -220,6 +228,7 @@ object TransferFixtures {
         cases.forEach { install.serviceCases.upsert(it) }
         caseEntries.forEach { install.caseEntries.insert(it) }
         loans.forEach { install.loans.upsert(it) }
+        scheduleSeasonRows.forEach { install.scheduleSeasonActivations.insert(it) }
         bytesByLocator.forEach { (locator, bytes) -> install.storage.store.files[locator] = bytes }
     }
 
