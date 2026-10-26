@@ -181,6 +181,8 @@ internal class ApiHandlers(
     private val appVersion: String,
     private val schemaVersion: Int,
     internal val haEntities: HaEntityHandlers = HaEntityHandlers { null },
+    /** #113/#114 (C35): the publishing read; a suite that wires none answers its route 404. */
+    internal val haPublishing: HaPublishingHandlers? = null,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles, graph.events,
@@ -200,6 +202,7 @@ internal class ApiHandlers(
         InstalledComponentHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
         HaEntityHandlers(graph),
+        HaPublishingHandlers(graph),
     )
 
     // --- status ---------------------------------------------------------------------------

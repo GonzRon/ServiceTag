@@ -1,6 +1,5 @@
 package com.loosecannon.servicetag.hapublish
 
-import com.loosecannon.servicetag.core.hapublish.DecommissionState
 import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
 import com.loosecannon.servicetag.core.hapublish.PublishKind
@@ -59,10 +58,13 @@ class ControlDispatchTest {
         return binding
     }
 
-    /** What the control's own request brought: the helper read, written and read back. */
+    /** What the control's own request brought: the helper read, written and read back (a let-go helper's aside). */
     private suspend fun ScenarioRig.theHelperIsReadAndWritten(entityId: String = DATE) {
         graph.awaitDispatched()
-        assertEquals(listOf("GET $entityId", "POST $entityId=2025-11-15", "GET $entityId"), ha.log)
+        assertEquals(
+            listOf("GET $entityId", "POST $entityId=2025-11-15", "GET $entityId"),
+            ha.log.filter { it == "GET $entityId" || it.startsWith("POST $entityId=") },
+        )
         assertEquals("2025-11-15", ha.state(entityId))
     }
 
@@ -113,9 +115,8 @@ class ControlDispatchTest {
 
     /**
      * Disable of the heater's date binding while the boiler's stays enabled: the tombstone is committed and the
-     * dispatch asked at once — its rule applied (FOREGROUND_ONLY: both works cancelled) and its drain run. The
-     * tombstone's `1970-01-01` is delivered by B5's half of the drain, which C30 gives to B5 (B4a's note); until then
-     * it stays PENDING and owed.
+     * dispatch asked at once — its rule applied (FOREGROUND_ONLY: both works cancelled) and its drain run, which
+     * delivers the tombstone's `1970-01-01` to the old helper and reads it back (C34), then deletes the row.
      */
     @Test
     fun disablingOneDateBindingWhileAnotherStaysEnabledAsksForDelivery() = rig.run {
@@ -126,6 +127,7 @@ class ControlDispatchTest {
             BOILER, PublishKind.SEASON_SERVICE_DATE, BOILER_DATE, fresh(BOILER_DATE, PublishKind.SEASON_SERVICE_DATE, BOILER),
             null, graph.installationIdentity.id(),
         )
+        ha.helpers[DATE] = dateHelper(DATE, "2025-11-15") // Home Assistant holds the published date again
         val before = graph.deliveryRequests.get()
 
         graph.publishControls.disable(heater, PublishKind.SEASON_SERVICE_DATE)
@@ -133,9 +135,12 @@ class ControlDispatchTest {
 
         assertEquals(before + 1, graph.deliveryRequests.get())
         assertEquals(RecordingPublishWork.Call.Cancel, graph.publishWork.calls.last())
-        val owed = graph.publishDecommissions.all().single()
-        assertEquals(DATE, owed.entityId)
-        assertEquals(DecommissionState.PENDING, owed.state)
+        assertEquals(
+            listOf("GET $DATE", "POST $DATE=$INVALID_SERVICE_DATE", "GET $DATE"),
+            ha.log.filter { it == "GET $DATE" || it.startsWith("POST $DATE=") },
+        )
+        assertEquals(INVALID_SERVICE_DATE, ha.state(DATE))
+        assertTrue("the obligation read back and deleted", graph.publishDecommissions.all().isEmpty())
         assertTrue(graph.publishBindings.forAsset(BOILER).single().enabled)
     }
 

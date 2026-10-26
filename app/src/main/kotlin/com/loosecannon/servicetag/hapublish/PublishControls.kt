@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
+import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
@@ -60,6 +61,7 @@ class PublishControls(
     private val revalidatePublishing: RevalidatePublishing,
     private val dismissDecommission: DismissDecommission,
     private val saveHaConnection: SaveHaConnection,
+    private val forgetHaConnection: ForgetHaConnection,
     private val bindings: PublishBindingRepository,
     private val deliveries: PublishDeliveryRepository,
     private val connections: HaConnectionRepository,
@@ -122,6 +124,20 @@ class PublishControls(
         backgroundChecks: BackgroundChecks?,
     ): HaConnection = saveHaConnection.run(baseUrl, token, cadence, networkEligibility, homeNetworkSsid, backgroundChecks)
         .also { requester.requestDelivery() }
+
+    /**
+     * #16's Forget, the one way the phone disconnects (C28, C34, O-11): first the runner's [PublishRunner.drainBeforeForget]
+     * — one attempt to deliver and read back `1970-01-01` for each enabled date binding and each PENDING tombstone of
+     * the connection, in the foreground and bounded by the client's timeouts — then the command, which in its own write
+     * turns every obligation not read back into an UNDELIVERABLE tombstone, drawn until the owner dismisses it; then the
+     * works' rule is applied again (no connection: both works cancelled). Answers what the drain came to.
+     */
+    suspend fun forgetConnection(): ForgetDrain {
+        val drained = runner.drainBeforeForget()
+        forgetHaConnection.run()
+        requester.requestDelivery()
+        return drained
+    }
 
     /**
      * C35b — Publish now for [assetId]: in one write, the bindings a reconcile pass would read back (enabled, activated

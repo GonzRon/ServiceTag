@@ -3,7 +3,7 @@ package com.loosecannon.servicetag.hapublish
 import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.hapublish.DecommissionRepository
 import com.loosecannon.servicetag.core.hapublish.DecommissionState
-import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
+import com.loosecannon.servicetag.core.hapublish.oweInvalidation
 import com.loosecannon.servicetag.core.hapublish.DeliverySteps
 import com.loosecannon.servicetag.core.hapublish.DeliveryTrigger
 import com.loosecannon.servicetag.core.hapublish.Desired
@@ -159,28 +159,13 @@ class PublishProjector(
         return seasonReadiness(asset, everyAsset, everySchedule, everyGroup, events.forAsset(asset.id), own, today, zone, boundary)
     }
 
-    /** C34 for a binding whose asset row is gone: the obligation first (an enabled date binding), then the row. */
+    /**
+     * C34 for a binding whose asset row is gone: the row deleted, and in the same write an enabled one's obligation
+     * owed by core's [oweInvalidation] (the date kind only, I19).
+     */
     private suspend fun retire(binding: PublishBinding) {
         bindings.delete(binding.id)
-        val owes = binding.enabled && when (binding.kind) {
-            PublishKind.EQUIPMENT_STATUS -> false
-            PublishKind.SEASON_SERVICE_DATE -> true
-        }
-        if (!owes || bindings.byTarget(binding.connectionId, binding.entityId).any { it.enabled }) return
-        decommissions.upsertMerging(
-            DecommissionTombstone(
-                id = ids.newId(),
-                connectionId = binding.connectionId,
-                entityId = binding.entityId,
-                assetId = binding.assetId,
-                installationId = binding.activatedInstallationId.orEmpty(),
-                state = DecommissionState.PENDING,
-                requestedAt = clock.nowMillis(),
-                errorKind = null,
-                errorAt = null,
-                revision = 1,
-            ),
-        )
+        if (binding.enabled) oweInvalidation(binding, bindings, decommissions, ids, clock.nowMillis())
     }
 }
 

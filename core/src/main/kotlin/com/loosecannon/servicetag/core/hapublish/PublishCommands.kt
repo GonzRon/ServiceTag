@@ -251,42 +251,6 @@ private fun shapeRefusal(kind: PublishKind): PublishRefusal = when (kind) {
 private fun refuse(reason: PublishRefusal, field: String = FIELD_ENTITY_ID): Nothing = throw PublishRefused(reason, field)
 
 /**
- * C34, R-1, I19, F-25 — [left] no longer writes its date helper: `1970-01-01` is owed to it by a PENDING tombstone
- * carrying the binding's installation id, written or merged in the caller's write — **skipped** while an enabled
- * binding claims that helper (its owner writes its own value). The status kind owes nothing (F-10).
- */
-private suspend fun oweInvalidation(
-    left: PublishBinding,
-    bindings: PublishBindingRepository,
-    tombstones: DecommissionRepository,
-    ids: IdGenerator,
-    now: Long,
-) {
-    when (left.kind) {
-        PublishKind.EQUIPMENT_STATUS -> return
-        PublishKind.SEASON_SERVICE_DATE -> Unit
-    }
-    if (bindings.byTarget(left.connectionId, left.entityId).any { it.enabled }) return
-    tombstones.upsertMerging(
-        tombstoneFor(left, DecommissionState.PENDING, ids, now),
-    )
-}
-
-private fun tombstoneFor(left: PublishBinding, state: DecommissionState, ids: IdGenerator, now: Long) =
-    DecommissionTombstone(
-        id = ids.newId(),
-        connectionId = left.connectionId,
-        entityId = left.entityId,
-        assetId = left.assetId,
-        installationId = left.activatedInstallationId.orEmpty(),
-        state = state,
-        requestedAt = now,
-        errorKind = null,
-        errorAt = null,
-        revision = 1,
-    )
-
-/**
  * #113/#114 (C25) — **Enable**: validates the plan step's fresh read of [entityId] (and, for a `MANUAL` asset whose
  * season Home Assistant drives, of its season-ended helper) and writes the binding enabled and activated on
  * [installationId] (C27). [expectedPlanId], the API's, must still equal [planIdOf] here, else `STALE_PLAN` before any

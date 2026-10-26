@@ -72,8 +72,8 @@ the one body key it is about, then the `problems` in parentheses.
   below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
 - **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
   tools — refuses an app whose `schemaVersion` is below 22 the same way, from the same read, naming the feature
-  "season readiness and Home Assistant publishing". So do `set_schedule_role` and `list_ha_entities`, the block's
-  next two.
+  "season readiness and Home Assistant publishing". So do `set_schedule_role`, `list_ha_entities` and
+  `get_ha_publishing`, the block's next three.
 
 ## Using it
 
@@ -366,6 +366,14 @@ friendly name and shape — a dropdown's `options`, a date helper's `hasDate` an
 address, the Wi-Fi name or the token. A two-minute read budget; `HA_PUBLISH_REFUSED` (`NO_CONNECTION`) and
 `HA_HELPER_READ_FAILED` (409) name what stopped it. `docs/api/v1.md`'s **Home Assistant helper discovery (#113,
 #114)** section is the contract.
+
+**Home Assistant publishing (#113/#114; needs schema 22)** — `get_ha_publishing`: `GET /v1/assets/{id}/ha-publishing`,
+read only. How an asset's two publications stand — its condition to a dropdown helper, its season service date (or
+`1970-01-01`) to a date helper — each with its derived `state`, the values it should hold, was written, was read
+back and last read, its last error, and its delivery flags; and the helpers it let go of that are still owed
+`1970-01-01`, `PENDING` or `UNDELIVERABLE`. Derived on the phone from its own records: nothing is read from Home
+Assistant, and the answer never carries the address, the Wi-Fi name, the token or an installation id.
+`docs/api/v1.md`'s **Home Assistant publishing (#113, #114)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 

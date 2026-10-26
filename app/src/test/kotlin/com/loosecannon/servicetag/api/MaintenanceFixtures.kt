@@ -104,6 +104,15 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
     uow = graph.uow,
     today = graph.todayPort,
     zone = { ZoneOffset.UTC },
+    publishBindings = graph.publishBindings,
+    publishDeliveries = graph.publishDeliveries,
+    clock = graph.clock,
+)
+
+/** #113/#114 (C35): the publishing read over a [FakeGraph], wired as `HaPublishingHandlers(graph)` wires it. */
+internal fun haPublishingHandlersFor(graph: FakeGraph): HaPublishingHandlers = HaPublishingHandlers(
+    graph.assets, graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.haConnections,
+    graph.secretStore, graph.transferRecords, graph.installationIdentity::id, graph.uow,
 )
 
 /**
@@ -221,6 +230,7 @@ internal class V1Client(
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
             haEntities = HaEntityHandlers(haEntities),
+            haPublishing = haPublishingHandlersFor(graph),
         ),
         token,
     )

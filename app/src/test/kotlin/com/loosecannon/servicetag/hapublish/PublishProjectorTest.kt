@@ -663,6 +663,8 @@ class PublishProjectorTest {
             graph.revalidatePublishing.run(heater, PublishKind.EQUIPMENT_STATUS, fresh(STATUS, PublishKind.EQUIPMENT_STATUS), null)
             eventually("a generation move alone asks once") { graph.deliveryRequests.get() == n + 1 }
             assertFalse(answers.last())
+            // That request's pass drains tombstones too (C34): let it end, so the obligation below is the observer's.
+            graph.awaitDispatched()
 
             graph.disablePublishing.run(heater, PublishKind.SEASON_SERVICE_DATE)
             eventually("a new obligation alone asks once") { graph.deliveryRequests.get() == n + 2 }

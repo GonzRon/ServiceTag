@@ -16,20 +16,18 @@ import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.testing.RiggedFailure
-import com.loosecannon.servicetag.core.testing.ScriptedPublishTransport
 import com.loosecannon.servicetag.core.testing.tombstoneOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * #113/#114 (C25, C26, C27, C9a, F-1, F-9, R-1, N-2; rows 60, 60a, 63, 64, 93, 94, 96, 97) — the publishing commands:
+ * #113/#114 (C25, C26, C27, C9a, F-1, F-9, R-1, N-2; rows 60, 60a, 63, 64, 96, 97; 93 and 94 on the runner) — the publishing commands:
  * one write each, no HTTP inside; the fresh read re-validated and its provenance checked in the same transaction; the
  * claim per enabled binding; a date helper let go only with a tombstone for it in the same write; and what a sender
  * pass after them sends. Every asset, helper and address is fictional.
@@ -317,34 +315,7 @@ class PublishCommandsTest {
         assertTrue(p.tombstones.rows.isEmpty())
     }
 
-    // Row 93 (F-1, AC114-6).
-
-    @Test
-    fun reEnableAfterDecommissionSendsAgain() = runTest {
-        val p = harness()
-        val connection = p.connect()
-        val first = p.enableDate()
-        p.project(first, "2026-06-01")
-        assertIs<DeliveryPlan.ReadFirst>(p.pass.run(first.id))
-        assertEquals("2026-06-01", p.transport.stateOf(DATE))
-
-        p.disable.run(AssetId(HEATER), PublishKind.SEASON_SERVICE_DATE)
-        assertEquals(1, p.pass.drainTombstones().size)
-        assertEquals(INVALID_SERVICE_DATE, p.transport.stateOf(DATE))
-        assertNull(p.tombstones.byTarget(connection.id, DATE))
-
-        val again = p.enableDate()
-        p.transport.posts.clear()
-        assertEquals(DeliveryPlan.Skip(PublishState.PENDING, reproject = true), p.pass.run(again.id))
-        assertTrue(p.transport.posts.isEmpty(), "the re-enable waits for the projector's value")
-        p.project(again, "2026-06-01")
-        p.pass.run(again.id)
-        assertEquals(listOf(ScriptedPublishTransport.Post(HaServiceAction.SET_DATE, DATE, "2026-06-01")), p.transport.posts)
-        assertEquals("2026-06-01", p.transport.stateOf(DATE))
-        val delivery = p.deliveries.get(again.id)!!
-        assertEquals("2026-06-01", delivery.lastPublishedValue)
-        assertEquals(again.revision, delivery.publishedBindingRevision)
-    }
+    // Rows 93 and 94 (F-1) run on the runner: `T/hapublish/DecommissionScenarioTest` (B5).
 
     // I1 (owner §3, G23 "ServiceTag reports facts"): the projector reads only enabled bindings, so a value held while
     // the binding was disabled, or activated on another installation, is not a fact.
@@ -376,49 +347,6 @@ class PublishCommandsTest {
         val here = p.enableStatus()
         assertEquals("installation-b", here.activatedInstallationId)
         assertNull(p.deliveries.get(here.id)!!.desiredValue)
-    }
-
-    // Row 94 (F-1, #113 "never attributed").
-
-    @Test
-    fun aTargetChangePublishesToTheNewHelper() = runTest {
-        val p = harness()
-        p.connect()
-        val first = p.enableStatus()
-        p.project(first, STATUS_UP)
-        p.pass.run(first.id)
-        assertEquals(STATUS_UP, p.transport.stateOf(STATUS))
-
-        val moved = p.change.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS, STATUS_2, p.read(STATUS_2), null, INSTALLATION)
-        p.transport.posts.clear()
-        p.pass.run(moved.id)
-        assertEquals(listOf(ScriptedPublishTransport.Post(HaServiceAction.SELECT_OPTION, STATUS_2, STATUS_UP)), p.transport.posts)
-        assertEquals(STATUS_UP, p.transport.stateOf(STATUS), "the old helper keeps the last reported value")
-    }
-
-    @Test
-    fun aNewTargetShowsNoInheritedPublishedLine() = runTest {
-        val p = harness()
-        p.connect()
-        val first = p.enableStatus()
-        p.project(first, STATUS_UP)
-        p.pass.run(first.id)
-        val published = p.deliveries.get(first.id)!!
-        assertEquals(STATUS_UP, published.lastPublishedValue)
-        assertNotNull(published.lastAttemptAt, "an attempt was made to the old helper")
-
-        p.change.run(AssetId(HEATER), PublishKind.EQUIPMENT_STATUS, STATUS_2, p.read(STATUS_2), null, INSTALLATION)
-        val reset = p.deliveries.get(first.id)!!
-        // M5: the old helper's attempts are never the new one's.
-        val expected = PublishDelivery(
-            bindingId = first.id,
-            desiredValue = published.desiredValue,
-            desiredRevision = published.desiredRevision,
-            desiredAt = published.desiredAt,
-            attemptsAtRevision = 0,
-            lastAttemptAt = null,
-        )
-        assertEquals(expected, reset, "nothing published to, verified on or read from the old helper is inherited")
     }
 
     // Rows 96, 97 (R-1, I19).

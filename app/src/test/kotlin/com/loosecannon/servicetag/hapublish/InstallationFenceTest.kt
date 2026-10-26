@@ -2,7 +2,7 @@ package com.loosecannon.servicetag.hapublish
 
 import com.loosecannon.servicetag.core.hapublish.DecommissionState
 import com.loosecannon.servicetag.core.hapublish.HaServiceAction
-import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
+import com.loosecannon.servicetag.core.hapublish.PublishErrorKind
 import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.hapublish.PublishState
 import com.loosecannon.servicetag.core.hapublish.RemoteEntity
@@ -24,8 +24,8 @@ import org.junit.Test
  * #113/#114 (C27, K7, A08, F-25; row 69) — the installation fence over Room. A binding whose rows came back on another
  * installation (a rebuilt graph over the same database, a new installation id, the token entered again) sends nothing;
  * Check helper validates it but never activates it, also after another rebuild; only Enable on this installation
- * re-stamps it, and then it sends. A copied tombstone is drawn, never drained. The sender is the runner (B4a) over each
- * graph's scripted Home Assistant; the tombstone drain is still a model here (B5's); the helpers are fictional.
+ * re-stamps it, and then it sends. A copied tombstone is drawn as UNDELIVERABLE, never drained. The sender is the runner (B4a) over each
+ * graph's scripted Home Assistant, the tombstone drain included (B5); the helpers are fictional.
  */
 class InstallationFenceTest {
 
@@ -39,7 +39,6 @@ class InstallationFenceTest {
         status to RemoteEntity(status, "unknown", listOf("UP", "DEGRADED", "DOWN"), null, null),
         date to RemoteEntity(date, "2026-05-01", null, true, false),
     )
-    private val posts = mutableListOf<Pair<HaServiceAction, String>>()
 
     @After fun close() = original.db.close()
 
@@ -62,19 +61,6 @@ class InstallationFenceTest {
 
     /** One Publish now of [heater] on this graph: what its one binding's pass came to. */
     private suspend fun FakeGraph.publishNow(): PassResult = publishRunner.publishNow(heater).outcomes.single().result
-
-    /** C34, F-25: a tombstone is drained only by the installation that activated it. */
-    private suspend fun FakeGraph.drain(installationId: String): Int {
-        var drained = 0
-        for (t in publishDecommissions.all()) {
-            if (t.state != DecommissionState.PENDING || t.installationId != installationId) continue
-            posts += HaServiceAction.SET_DATE to INVALID_SERVICE_DATE
-            helpers[t.entityId] = helpers.getValue(t.entityId).copy(state = INVALID_SERVICE_DATE)
-            publishDecommissions.delete(t.id)
-            drained += 1
-        }
-        return drained
-    }
 
     private suspend fun enabledStatusOnTheOriginal(): String {
         original.assets.upsert(Asset(id = heater, name = "Example Heater", createdAt = 500L, updatedAt = 500L))
@@ -129,6 +115,11 @@ class InstallationFenceTest {
         assertEquals(listOf(ScriptedHaPublish.Call(HaServiceAction.SELECT_OPTION, status, "UP")), restarted.haPublish.posts)
     }
 
+    /**
+     * B3's M3: a PENDING tombstone another installation activated is never drained here — no read, no POST — and is
+     * marked UNDELIVERABLE as `COPIED_INSTALLATION` at once, so it is drawn with its dismissal and never blocks an
+     * address change.
+     */
     @Test
     fun aCopiedBindingsTombstoneIsDrawnNeverDrained() = runBlocking<Unit> {
         original.assets.upsert(Asset(id = heater, name = "Example Heater", createdAt = 500L, updatedAt = 500L))
@@ -139,12 +130,21 @@ class InstallationFenceTest {
         )
         original.disablePublishing.run(heater, PublishKind.SEASON_SERVICE_DATE)
 
-        val copy = copied()
+        val copy = copied().scripted()
         copy.connect()
-        assertEquals(0, copy.drain(copy.installationIdentity.id()))
-        assertTrue(posts.isEmpty())
+        copy.publishRunner.drain()
+        copy.publishRunner.publishNow(null)
+
+        assertTrue("the copy reads and POSTs nothing", copy.haPublish.log.isEmpty())
         val drawn = copy.publishDecommissions.all().single()
         assertEquals(date, drawn.entityId)
         assertEquals(original.installationIdentity.id(), drawn.installationId)
+        assertEquals(DecommissionState.UNDELIVERABLE, drawn.state)
+        assertEquals(PublishErrorKind.COPIED_INSTALLATION, drawn.errorKind)
+        copy.saveHaConnection.run(
+            "http://192.168.0.11:8123", Secret("fictional-token-1"), null, NetworkEligibility.HOME_NETWORK_ONLY,
+            "ExampleHomeWifi", null,
+        )
+        assertEquals("no longer blocks an address change", "http://192.168.0.11:8123", copy.haConnections.get()!!.baseUrl)
     }
 }

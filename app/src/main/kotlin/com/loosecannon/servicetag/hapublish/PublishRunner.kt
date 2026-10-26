@@ -2,12 +2,16 @@ package com.loosecannon.servicetag.hapublish
 
 import com.loosecannon.servicetag.core.hapublish.DecommissionRepository
 import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionSteps
+import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
 import com.loosecannon.servicetag.core.hapublish.DeliveryPlan
 import com.loosecannon.servicetag.core.hapublish.DeliveryRecord
 import com.loosecannon.servicetag.core.hapublish.DeliverySteps
 import com.loosecannon.servicetag.core.hapublish.DeliveryTrigger
 import com.loosecannon.servicetag.core.hapublish.FIELD_BOUNDARY_ENTITY_ID
 import com.loosecannon.servicetag.core.hapublish.FIELD_ENTITY_ID
+import com.loosecannon.servicetag.core.hapublish.HaServiceAction
+import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
 import com.loosecannon.servicetag.core.hapublish.PublishBinding
 import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.hapublish.PublishDelivery
@@ -19,6 +23,8 @@ import com.loosecannon.servicetag.core.hapublish.ReadStep
 import com.loosecannon.servicetag.core.hapublish.RemoteRead
 import com.loosecannon.servicetag.core.hapublish.RetryClass
 import com.loosecannon.servicetag.core.hapublish.Snap
+import com.loosecannon.servicetag.core.hapublish.TombstonePlan
+import com.loosecannon.servicetag.core.hapublish.TombstoneStep
 import com.loosecannon.servicetag.core.hapublish.ValidationResult
 import com.loosecannon.servicetag.core.hapublish.boundaryCache
 import com.loosecannon.servicetag.core.hapublish.boundaryDateOf
@@ -90,14 +96,43 @@ data class BindingOutcome(
 private fun PassResult.Failed?.isTransient(): Boolean =
     this != null && retryClassOf(kind, detail) == RetryClass.TRANSIENT
 
-/** #113/#114 (C30) — one call's bindings, in the order they were passed. */
-data class PublishPass(val outcomes: List<BindingOutcome>) {
+/** #114 (C34) — what one tombstone's drain came to, as it was recorded. */
+sealed interface TombstoneResult {
+    /** The helper was read back holding `1970-01-01` and the row deleted by its id; [posted] when our POST made it so. */
+    data class Cleared(val posted: Boolean) : TombstoneResult
+
+    /** Still PENDING with [kind] (a `TRANSIENT` or `WAIT` class): drawn with P114-36 and drained again. */
+    data class Pending(val kind: PublishErrorKind, val detail: String?) : TombstoneResult
+
+    /** UNDELIVERABLE with [kind]: drawn with P114-37 until the owner dismisses it (P114-38). */
+    data class Undeliverable(val kind: PublishErrorKind) : TombstoneResult
+
+    /** The row moved or went while this drain held it (a merge, an Enable's supersession): nothing was recorded. */
+    data object Superseded : TombstoneResult
+}
+
+/** #114 (C34) — one tombstone's drain: its id, helper and asset (for display only), and what it came to. */
+data class TombstoneOutcome(val id: String, val entityId: String, val assetId: AssetId?, val result: TombstoneResult) {
+    /** C32 — a PENDING row whose error is TRANSIENT is work the one-time work's backoff retries. */
+    val leavesTransientWork: Boolean
+        get() = result is TombstoneResult.Pending && retryClassOf(result.kind, result.detail) == RetryClass.TRANSIENT
+}
+
+/** #113/#114 (C30) — one call's bindings, in the order they were passed, and the tombstones it drained (C34). */
+data class PublishPass(val outcomes: List<BindingOutcome>, val tombstones: List<TombstoneOutcome> = emptyList()) {
     /** C32 — TRANSIENT work remains: an error of that class or an unknown outcome, or a reconcile such a failure left. */
-    val transientWorkRemains: Boolean get() = outcomes.any { it.leavesTransientWork }
+    val transientWorkRemains: Boolean
+        get() = outcomes.any { it.leavesTransientWork } || tombstones.any { it.leavesTransientWork }
 
     /** C31, N-1 — some helper's read completed (the resume window counts from it; a gate refusal never does). */
     val readCompleted: Boolean get() = outcomes.any { it.readCompleted }
 }
+
+/**
+ * #114 (C34, O-11) — what Forget's drain came to: one attempt for each enabled date binding of the connection, with
+ * `1970-01-01` as its desired value ([bindings]), and one for each of its PENDING tombstones ([tombstones]).
+ */
+data class ForgetDrain(val bindings: List<BindingOutcome>, val tombstones: List<TombstoneOutcome>)
 
 /** #113/#114 (C30, A09, F) — what `validate` read, or why it read nothing it can stand on. */
 sealed interface Validation {
@@ -137,7 +172,9 @@ sealed interface Validation {
  * otherwise when the cache is not fresh, one read of the season-ended helper; a valid date is cached by
  * [boundaryCache] at the snapshot's binding revision, then [reconciler] projects before this pass sends. A failed or
  * malformed read keeps the old cache; a helper that fails its validator clears the validation, as the target's does.
- * The decommission tombstones are drained by B5's half.
+ * The decommission tombstones (C34) are drained in every [drain] and [publishNow] after the bindings, and by
+ * [drainBeforeForget]: one at a time, the gate, a read, a POST of `1970-01-01` and its read-back, each record the row's
+ * revision compare-and-set, a read equal to it deleting the row by its id.
  */
 class PublishRunner(
     private val bindings: PublishBindingRepository,
@@ -159,14 +196,45 @@ class PublishRunner(
 ) {
     private val lock = Mutex()
 
-    /** Waits for a running pass, then reads back every enabled binding of [assetId], or of every asset (#113). */
+    /**
+     * Waits for a running pass, then reads back every enabled binding of [assetId], or of every asset (#113), and
+     * drains the PENDING tombstones of that asset, or every one (C34).
+     */
     suspend fun publishNow(assetId: AssetId? = null): PublishPass = lock.withLock {
-        pass(DeliveryTrigger.RECONCILE) { assetId == null || it.assetId == assetId }
+        pass(DeliveryTrigger.RECONCILE, { assetId == null || it.assetId == assetId }) {
+            assetId == null || it.assetId == assetId
+        }
     }
 
-    /** Waits for a running pass, then delivers what C17 selects under [trigger]; true when TRANSIENT work remains. */
+    /**
+     * Waits for a running pass, then delivers what C17 selects under [trigger] and drains every PENDING tombstone
+     * (C34); true when TRANSIENT work remains.
+     */
     suspend fun drain(trigger: DeliveryTrigger = DeliveryTrigger.CHANGE): Boolean = lock.withLock {
-        pass(trigger) { true }.transientWorkRemains
+        pass(trigger, { true }, { true }).transientWorkRemains
+    }
+
+    /**
+     * C34, O-11 — Forget's drain, run by `PublishControls.forgetConnection` before the command, under the lock: for each
+     * enabled date binding of the stored connection, `1970-01-01` made its desired value at its own pair (the
+     * projector's compare-and-set write) and **one** attempt to deliver and read it back, with no boundary read and no
+     * projection, so the binding is left verified at its current pair (B3's ruling) or the command owes it; then one
+     * attempt for each PENDING tombstone of the connection. Each request is bounded by the client's timeouts (C22).
+     */
+    suspend fun drainBeforeForget(): ForgetDrain = lock.withLock {
+        val connectionId = database { uow.read { connections.get()?.id } }
+            ?: return@withLock ForgetDrain(emptyList(), emptyList())
+        val dates = database {
+            uow.read {
+                bindings.all().filter {
+                    it.connectionId == connectionId && it.enabled && it.kind == PublishKind.SEASON_SERVICE_DATE
+                }
+            }
+        }
+        val invalidated = dates.mapNotNull { binding ->
+            if (invalidate(binding.id)) deliver(binding.id, DeliveryTrigger.CHANGE, forgetting = true) else null
+        }
+        ForgetDrain(invalidated, drainTombstones { it.connectionId == connectionId })
     }
 
     /**
@@ -223,7 +291,11 @@ class PublishRunner(
         return seasonSyncScheduleOf(connection, anyWork, backgroundAllowed)
     }
 
-    private suspend fun pass(trigger: DeliveryTrigger, wanted: (PublishBinding) -> Boolean): PublishPass {
+    private suspend fun pass(
+        trigger: DeliveryTrigger,
+        wanted: (PublishBinding) -> Boolean,
+        tombstonesWanted: (DecommissionTombstone) -> Boolean,
+    ): PublishPass {
         val selected = database {
             uow.read {
                 bindings.all().filter { binding ->
@@ -231,12 +303,111 @@ class PublishRunner(
                 }
             }
         }
-        return PublishPass(selected.mapNotNull { deliver(it.id, trigger) })
+        val outcomes = selected.mapNotNull { deliver(it.id, trigger) }
+        return PublishPass(outcomes, drainTombstones(tombstonesWanted))
     }
 
-    /** One binding, from its own snapshot; null when it was deleted meanwhile. */
-    private suspend fun deliver(bindingId: String, trigger: DeliveryTrigger): BindingOutcome? {
+    /**
+     * B3's ruling for Forget: `1970-01-01` as the binding's desired value, written through the projector's own
+     * compare-and-set at the pair just read (a new desired revision, its error cleared). False when the binding or its
+     * delivery went meanwhile, or the write lost its compare-and-set (the command then owes the helper).
+     */
+    private suspend fun invalidate(bindingId: String): Boolean = database {
+        uow.write {
+            val binding = bindings.get(bindingId) ?: return@write false
+            val delivery = deliveries.get(bindingId) ?: return@write false
+            delivery.desiredValue == INVALID_SERVICE_DATE || deliveries.writeDesired(
+                binding.id, binding.revision, delivery.desiredRevision, INVALID_SERVICE_DATE, clock.nowMillis(),
+            )
+        }
+    }
+
+    /**
+     * C34 — each PENDING tombstone [wanted], one at a time from its own snapshot: the gate ([DecommissionSteps.plan]),
+     * then a read, and a POST of `1970-01-01` and its read-back while the helper holds anything else; a read equal to
+     * it deletes the row **by its id**. Every record is the row's revision compare-and-set; no transaction is held
+     * across a request; a transport failure is a recorded value.
+     */
+    private suspend fun drainTombstones(wanted: (DecommissionTombstone) -> Boolean): List<TombstoneOutcome> {
+        val pending = database {
+            uow.read { decommissions.all().filter { it.state == DecommissionState.PENDING && wanted(it) } }
+        }
+        return pending.mapNotNull { drainTombstone(it.id) }
+    }
+
+    private suspend fun drainTombstone(id: String): TombstoneOutcome? {
+        val (held, connection) = database { uow.read { decommissions.get(id) to connections.get() } }
+        if (held == null) return null
+        val token = connection?.takeIf { it.id == held.connectionId }?.let { secrets.get(it.id) }
+        val outcome = { result: TombstoneResult -> TombstoneOutcome(held.id, held.entityId, held.assetId, result) }
+        val plan = DecommissionSteps.plan(held, installationId(), connection?.id, token != null, clock.nowMillis())
+        when (plan) {
+            TombstonePlan.Wait -> return null
+            is TombstonePlan.GiveUp -> return outcome(recordTombstone(TombstoneStep.Record(plan.record)))
+            TombstonePlan.ReadFirst -> Unit
+        }
+        // The gate passed, so the connection is the tombstone's and its token is here.
+        val target = checkNotNull(connection)
+        val secret = checkNotNull(token)
+        val read = transport.read(target, held.entityId, secret)
+        when (val next = DecommissionSteps.afterRead(held, read, clock.nowMillis())) {
+            TombstoneStep.Cleared -> return outcome(clearTombstone(held, posted = false))
+            is TombstoneStep.Record -> return outcome(recordTombstone(next))
+            TombstoneStep.Post -> Unit
+        }
+        // Still owed as read: a merge, an Enable's supersession or a dismissal meanwhile leaves it to the next pass.
+        val still = database { uow.read { decommissions.get(id) } }
+        if (still != held) return outcome(TombstoneResult.Superseded)
+        val call = transport.call(target, HaServiceAction.SET_DATE, held.entityId, INVALID_SERVICE_DATE, secret)
+        val after = when (call) {
+            CallOutcome.Accepted -> {
+                val back = transport.read(target, held.entityId, secret)
+                DecommissionSteps.afterPostAccepted(held, back, clock.nowMillis())
+            }
+            is CallOutcome.Refused -> DecommissionSteps.afterPostRefused(held, call.kind, call.detail, clock.nowMillis())
+            is CallOutcome.Unknown -> DecommissionSteps.afterPostUnknown(held, call.detail, clock.nowMillis())
+        }
+        return when (after) {
+            TombstoneStep.Cleared -> outcome(clearTombstone(held, posted = true))
+            is TombstoneStep.Record -> outcome(recordTombstone(after))
+            // A read-back never asks for a second POST.
+            TombstoneStep.Post -> outcome(TombstoneResult.Superseded)
+        }
+    }
+
+    /** The helper read back as `1970-01-01`: the row deleted by its id, never by its pair. */
+    private suspend fun clearTombstone(held: DecommissionTombstone, posted: Boolean): TombstoneResult {
+        database { uow.write { decommissions.delete(held.id) } }
+        return TombstoneResult.Cleared(posted)
+    }
+
+    /** [step]'s state and error by the row's revision compare-and-set; a moved or deleted row records nothing. */
+    private suspend fun recordTombstone(step: TombstoneStep.Record): TombstoneResult {
+        val record = step.record
+        val wrote = database { uow.write { decommissions.update(record) } }
+        val kind = checkNotNull(record.errorKind) { "a tombstone record carries its kind" }
+        if (!wrote) return TombstoneResult.Superseded
+        return when (record.state) {
+            DecommissionState.UNDELIVERABLE -> TombstoneResult.Undeliverable(kind)
+            DecommissionState.PENDING -> TombstoneResult.Pending(kind, step.detail)
+        }
+    }
+
+    /**
+     * One binding, from its own snapshot; null when it was deleted meanwhile. [forgetting]: Forget's one attempt at
+     * `1970-01-01` — no boundary step, no projection, and nothing sent once the desired value is another.
+     */
+    private suspend fun deliver(
+        bindingId: String,
+        trigger: DeliveryTrigger,
+        forgetting: Boolean = false,
+    ): BindingOutcome? {
         val state = PassState()
+        if (forgetting) {
+            state.reprojected = true
+            state.boundaryStepped = true
+            state.forgetting = true
+        }
         while (true) {
             val loaded = load(bindingId) ?: return null
             val binding = loaded.snap.binding
@@ -267,6 +438,8 @@ class PublishRunner(
             DeliveryPlan.Done -> return Step.Finished(PassResult.Current)
             is DeliveryPlan.ReadFirst -> plan.value to plan.reconcile
         }
+        // Forget sends only 1970-01-01: a projection that moved the desired value meanwhile leaves it owed.
+        if (state.forgetting && value != INVALID_SERVICE_DATE) return Step.Finished(PassResult.Superseded)
         // The gate passed, so the connection is the binding's and its token is here.
         val connection = checkNotNull(loaded.connection)
         val token = checkNotNull(loaded.token)
@@ -430,6 +603,8 @@ class PublishRunner(
         var boundaryPending = false
         var boundaryFailure: PassResult.Failed? = null
         var readCompleted = false
+        /** Forget's attempt: `1970-01-01` only. */
+        var forgetting = false
     }
 
     private sealed interface Step {

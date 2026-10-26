@@ -282,6 +282,9 @@ internal class ApiRouter(
                 "season-sync" to "GET" -> handlers.seasonHealth.getSeasonSync(rest[1])
                 // #114 — the twenty-ninth: the asset's season readiness, derived for today, read only.
                 "season-readiness" to "GET" -> handlers.seasonHealth.getSeasonReadiness(rest[1])
+                // #113/#114 (C35) — the thirtieth: the asset's Home Assistant publishing and its obligations, read only.
+                "ha-publishing" to "GET" ->
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).get(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 

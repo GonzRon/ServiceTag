@@ -186,6 +186,8 @@ TOOL_NAMES: tuple[str, ...] = (
     # A4w (C29b): the Season Start role write and helper discovery, taking the total to 93.
     "set_schedule_role",
     "list_ha_entities",
+    # B5 (C35): the asset's publishing read, taking the total to 94.
+    "get_ha_publishing",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -4528,6 +4530,42 @@ def list_ha_entities(scope: str) -> dict[str, Any]:
         raise ToolError("scope must be input_boolean, input_select or input_datetime; nothing was sent")
     _require_ha_publishing_schema("list_ha_entities")
     return _call("GET", f"/v1/ha-connection/entities/{scope}", timeout=_HA_READ_TIMEOUT)
+
+
+@mcp.tool()
+def get_ha_publishing(asset_id: str) -> dict[str, Any]:
+    """How one asset's Home Assistant publishing stands, read only: `GET /v1/assets/{id}/ha-publishing` →
+    `{assetId, bindings: [ … ], pendingDecommissions: [ … ]}`, answered as the phone sends it. Derived on the phone from
+    its own records when it is read: nothing is read from Home Assistant, nothing is written, and no tool takes a
+    value, a date to publish or a ready flag. An asset may publish its recorded condition (`UP`, `DEGRADED`, `DOWN`)
+    to a dropdown helper and its season service date (`1970-01-01` whenever it has none) to a date helper; Home
+    Assistant decides what to do with them.
+
+    `bindings` holds at most one per kind, each with `kind` (`EQUIPMENT_STATUS` or `SEASON_SERVICE_DATE`),
+    `entityId`, `boundaryEntityId` (the date kind's season-ended helper, read and never written; else `null`),
+    `enabled`, `state`, `desiredValue`, `lastPublished` and `lastVerified` (`null` or `{value, at, current}`),
+    `lastError` (`null` or `{kind, detail, at, current}`), `revision` (the binding's generation), `validated`,
+    `validatedAt`, `remote` (`null` or `{value, readAt}`, the last value read), `needsDelivery`, `reconcilePending`,
+    `outcomeUnknownSince`, `lastAttemptAt`, `boundary` (`null` or `{value, readAt, atCurrentRevision}`, the cached
+    season-ended read — whether it is fresh is `get_season_readiness`'s answer) and `request` (`null` or
+    `{id, at, progress}`, the last API Publish now that covered it, `progress` one of `ACCEPTED`, `PUBLISHED`,
+    `VERIFIED` and `FAILED`). `current` means the line holds for the binding's current generation and desired value.
+    `state` is one of `NOT_ENABLED`, `COPIED_INSTALLATION`, `NEEDS_VALIDATION`, `NEEDS_TOKEN`, `WAITING_FOR_SOURCE`,
+    `NOT_MAINTAINED_HERE`, `PENDING`, `OUTCOME_UNKNOWN`, `ERROR`, `PUBLISHED` (this phone's write, read back),
+    `MATCHES` (Home Assistant already held it) and `INVALIDATED_INELIGIBLE` (`1970-01-01` read back while the asset
+    is not maintained here). Times are epoch milliseconds.
+
+    `pendingDecommissions` lists the helpers the asset let go of that are still owed `1970-01-01`, each
+    `{id, entityId, state, requestedAt, lastError}`: `PENDING` while the phone is still delivering it,
+    `UNDELIVERABLE` once it cannot, until the owner says it was cleared in Home Assistant. The answer carries never
+    the address, the Wi-Fi name, the token or an installation id.
+
+    An unknown asset is `no_such_asset`. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/ha-publishing"
+    _require_ha_publishing_schema("get_ha_publishing")
+    return _call("GET", path)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

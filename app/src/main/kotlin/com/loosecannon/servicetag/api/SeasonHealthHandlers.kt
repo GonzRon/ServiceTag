@@ -14,11 +14,17 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
-import com.loosecannon.servicetag.core.season.HaBoundary
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
+import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
+import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.hapublish.boundaryCache
+import com.loosecannon.servicetag.core.hapublish.haBoundaryOf
+import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.season.seasonReadiness
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.currentSeasonSyncState
 import com.loosecannon.servicetag.core.usecase.ArchiveHealthSubject
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
@@ -91,6 +97,11 @@ internal class SeasonHealthHandlers(
     private val uow: UnitOfWork,
     private val today: Today,
     private val zone: () -> ZoneId,
+    // #114 (C29, C9a): the date binding whose season-ended read decides a MANUAL asset's boundary, and the clock that
+    // says whether that read is still fresh.
+    private val publishBindings: PublishBindingRepository,
+    private val publishDeliveries: PublishDeliveryRepository,
+    private val clock: Clock,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.seasonActivations, graph.conditions, graph.healthSubjects,
@@ -100,6 +111,7 @@ internal class SeasonHealthHandlers(
         graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.transferRecords,
         graph.seasonSyncBackgroundAllowed,
         graph.schedules, graph.groups, graph.events, graph.uow, graph.today, { ZoneId.systemDefault() },
+        graph.publishBindings, graph.publishDeliveries, graph.clock,
     )
 
     // --- the season ---------------------------------------------------------------------------
@@ -167,18 +179,32 @@ internal class SeasonHealthHandlers(
      * #114 (C29) — the twenty-ninth `/v1/assets/{id}/…` sub-resource, read only: whether the asset is ready for its
      * season, computed now by C9 ([seasonReadiness]) from one `uow.read` snapshot, today from the shipped [Today] and
      * an event's unresolvable zone read in the phone's own. An asset that is not there is the shipped 404
-     * `no_such_asset`. Until B5 reads the date binding's boundary cache, the Home Assistant boundary is
-     * [HaBoundary.NotUsed]: no date binding exists before B6a. Nothing here writes — no recompute, no state row.
+     * `no_such_asset`. The Home Assistant boundary (C9a) is [haBoundaryOf] over the asset's date binding and its
+     * cached season-ended read, the asset's mode and #16 binding, the connection's cadence and the newest activation,
+     * fresh or unverified as of the clock's `now` — the card's own inputs. Nothing here writes — no recompute, no state
+     * row.
      */
     suspend fun getSeasonReadiness(assetId: String): ApiResponse {
         val id = AssetId(assetId)
         val day = today.localDate()
+        val now = clock.nowMillis()
         val answer = uow.read {
             val asset = assets.get(id) ?: throw NoSuchAsset(id)
             val everySchedule = schedules.all()
+            val own = activations.forAsset(id)
+            val date = publishBindings.forAsset(id).firstOrNull { it.kind == PublishKind.SEASON_SERVICE_DATE }
+            val boundary = haBoundaryOf(
+                cache = date?.let { publishDeliveries.get(it.id)?.boundaryCache },
+                binding = date,
+                assetMode = asset.seasonMode,
+                inboundEnabled = seasonSyncBindings.get(id)?.enabled == true,
+                // With no connection no #16 binding is enabled, so the cadence decides nothing (as the card reads it).
+                cadence = haConnections.get()?.cadence ?: SyncCadence.DAILY,
+                newestActivationCreatedAt = own.maxOfOrNull { it.createdAt },
+                now = now,
+            )
             seasonReadiness(
-                asset, assets.all(), everySchedule, groups.all(), events.forAsset(id), activations.forAsset(id),
-                day, zone(), HaBoundary.NotUsed,
+                asset, assets.all(), everySchedule, groups.all(), events.forAsset(id), own, day, zone(), boundary,
             ).toResponse(id, everySchedule)
         }
         return ok(SeasonReadinessResponse.serializer(), answer)

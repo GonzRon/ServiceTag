@@ -162,6 +162,8 @@ class ApiReadsWriteNothingTest {
             "/v1/ha-connection/entities/input_select",
             "/v1/ha-connection/entities/input_datetime",
             "/v1/ha-connection/entities/input_boolean",
+            // #113/#114 (C35): the asset's publishing, derived from its rows and written nowhere.
+            "/v1/assets/$generator/ha-publishing",
         )) {
             val response = api.call("GET", path)
             assertEquals("$path: ${response.bodyText()}", 200, response.status)

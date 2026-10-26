@@ -155,6 +155,40 @@ object DeliverySteps {
         return if (reconcile || !isCurrent(binding, delivery)) DeliveryPlan.ReadFirst(value, reconcile) else DeliveryPlan.Done
     }
 
+    /**
+     * C14, C34 — the binding's [PublishState] for display and the API, derived from [snap] and never stored: the gate's
+     * state when it would send nothing; then a current error (A04) — `OUTCOME_UNKNOWN` for that kind, else `ERROR`; an
+     * outstanding unknown outcome; then, verified at the current pair with nothing outstanding ([isCurrent]),
+     * `INVALIDATED_INELIGIBLE` for a date binding whose asset is no longer maintained here (`1970-01-01` **read back**:
+     * the quiet state comes only after the read), `PUBLISHED` when our POST at this pair made it so, `MATCHES` when Home
+     * Assistant already held it; otherwise `PENDING`.
+     */
+    fun stateOf(snap: Snap): PublishState {
+        // Reconcile mode skips for no error, so only the gate's own states come back as a Skip.
+        when (val gate = plan(snap, DeliveryTrigger.RECONCILE)) {
+            is DeliveryPlan.Skip -> return gate.state
+            DeliveryPlan.Done, is DeliveryPlan.ReadFirst -> Unit
+        }
+        val binding = snap.binding
+        val delivery = snap.delivery
+        val error = delivery.errorKind?.takeIf { delivery.errorIsCurrent(binding) }
+        if (error != null) {
+            return if (error == PublishErrorKind.OUTCOME_UNKNOWN) PublishState.OUTCOME_UNKNOWN else PublishState.ERROR
+        }
+        if (delivery.outcomeUnknownSince != null) return PublishState.OUTCOME_UNKNOWN
+        if (!isCurrent(binding, delivery)) return PublishState.PENDING
+        val eligible = snap.asset?.maintainedHere(snap.held) == true
+        val quiet = when (binding.kind) {
+            PublishKind.EQUIPMENT_STATUS -> false
+            PublishKind.SEASON_SERVICE_DATE -> !eligible && delivery.desiredValue == INVALID_SERVICE_DATE
+        }
+        if (quiet) return PublishState.INVALIDATED_INELIGIBLE
+        val ours = delivery.lastPublishedValue == delivery.desiredValue &&
+            delivery.publishedBindingRevision == binding.revision &&
+            delivery.publishedDesiredRevision == delivery.desiredRevision
+        return if (ours) PublishState.PUBLISHED else PublishState.MATCHES
+    }
+
     /** C — reconcile mode's write-ahead, before its GET(s): `reconcilePending := true`. */
     fun reconcileWriteAhead(binding: PublishBinding, delivery: PublishDelivery): DeliveryRecord =
         DeliveryRecord(binding.revision, delivery.desiredRevision, delivery.copy(reconcilePending = true))
@@ -297,8 +331,8 @@ object DeliverySteps {
 
     /**
      * A04 — [kind] recorded **with its pair**; everything else as [delivery] holds it, and [clearValidation] clears the
-     * binding's `validatedRevision` in the same write. Also the boundary helper's failed read (C9a: `reconcilePending`
-     * kept) or its validator failure (`clearValidation = true`).
+     * binding's `validatedRevision` in the same write. Also the boundary helper's validator failure
+     * (`clearValidation = true`).
      */
     fun failed(
         binding: PublishBinding,

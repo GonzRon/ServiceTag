@@ -565,8 +565,8 @@ class FakeGraph(
     }
     val publishControls: PublishControls = PublishControls(
         enablePublishing, changePublishTarget, disablePublishing, revalidatePublishing, dismissDecommission,
-        saveHaConnection, publishBindings, publishDeliveries, haConnections, secretStore, assets, transferRecords,
-        installationIdentity::id, publishRunner, deliveryRequester, uow, ids, clock, dispatchScope,
+        saveHaConnection, forgetHaConnection, publishBindings, publishDeliveries, haConnections, secretStore, assets,
+        transferRecords, installationIdentity::id, publishRunner, deliveryRequester, uow, ids, clock, dispatchScope,
         log = { publishLogged += it },
     )
 

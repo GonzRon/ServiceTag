@@ -1,7 +1,8 @@
 """#113/#114's tools (C29, C29a; rows 84, 109, 110, 111): the "#113/#114" block, appended last after #16's.
 
 A4 opens it with `get_season_readiness`, a read of `GET /v1/assets/{id}/season-readiness` answered as the phone
-sends it, behind a schema-22 gate. Readiness is derived on the phone and only read here: no tool takes a value, a
+sends it, behind a schema-22 gate; B5 adds `get_ha_publishing`, the read of `GET /v1/assets/{id}/ha-publishing` (C35,
+rows 84 and 107), on the same terms. Readiness is derived on the phone and only read here: no tool takes a value, a
 date to publish or READY. Beside the block, A4's wire duties: every schedule read names `role` and `roleSinceOn` and
 `update_schedule` never sends them; `list_events` names the read-only `imported` marker; the four routes that can
 strand a Season Start role name `SEASON_START_STRANDED`; and `import_merge` reads format 1–21. Every name here is
@@ -30,10 +31,10 @@ STATUS_22: dict = {
 }
 STATUS_21: dict = dict(STATUS_22, schemaVersion=21, backupFormatVersion=20)
 
-HA_PUBLISHING_TOOLS = ("get_season_readiness", "set_schedule_role", "list_ha_entities")
+HA_PUBLISHING_TOOLS = ("get_season_readiness", "set_schedule_role", "list_ha_entities", "get_ha_publishing")
 """The "#113/#114" block in C1's order, appended last after #16's (the R16-17 tail-pin precedent). A4 opens it with
-one tool, taking the registered total to **91**, and A4w appends two, taking it to **93**; each later brief appends
-its tools here and moves the pin."""
+one tool, taking the registered total to **91**, A4w appends two, taking it to **93**, and B5 appends the publishing
+read, taking it to **94**; each later brief appends its tools here and moves the pin."""
 
 READINESS_KEYS = {
     "assetId", "readyForSeason", "seasonServiceDoneOn", "reason", "roleScheduleId", "roleTarget", "roleSinceOn",
@@ -278,3 +279,127 @@ def test_import_merge_reads_format_1_to_21_and_names_the_two_season_start_reason
     for word in ("`role`", "`roleSinceOn`", "`imported`", "`SEASON_START_HELD_BY_A_LOCAL_ROW`",
                  "`SEASON_START_DUPLICATED_IN_ARCHIVE`"):
         assert word in section, word
+
+
+# --- get_ha_publishing (C35, G-R1, C35b; rows 84, 107) ------------------------------------------------------------
+
+PUBLISHING_KEYS = {"assetId", "bindings", "pendingDecommissions"}
+"""C35's three keys, exactly."""
+
+BINDING_KEYS = {
+    "kind", "entityId", "boundaryEntityId", "enabled", "state", "desiredValue", "lastPublished", "lastVerified",
+    "lastError", "revision", "validated", "validatedAt", "remote", "needsDelivery", "reconcilePending",
+    "outcomeUnknownSince", "lastAttemptAt", "boundary", "request",
+}
+"""C35's binding with rev 4.1's delivery facts (G-R1) and rev 5's `request` (C35b)."""
+
+PUBLISHING_STATES = (
+    "NOT_ENABLED", "COPIED_INSTALLATION", "NEEDS_VALIDATION", "NEEDS_TOKEN", "WAITING_FOR_SOURCE",
+    "NOT_MAINTAINED_HERE", "PENDING", "OUTCOME_UNKNOWN", "ERROR", "PUBLISHED", "MATCHES", "INVALIDATED_INELIGIBLE",
+)
+
+
+def publishing() -> dict:
+    """The fictional "Example Heater": its status published, its date helper let go and still owed 1970-01-01."""
+    return {
+        "assetId": "a1",
+        "bindings": [
+            {
+                "kind": "EQUIPMENT_STATUS", "entityId": "input_select.example_heater_equipment_status",
+                "boundaryEntityId": None, "enabled": True, "state": "PUBLISHED", "desiredValue": "UP",
+                "lastPublished": {"value": "UP", "at": 1_000, "current": True},
+                "lastVerified": {"value": "UP", "at": 1_000, "current": True}, "lastError": None, "revision": 1,
+                "validated": True, "validatedAt": 900, "remote": {"value": "UP", "readAt": 1_000},
+                "needsDelivery": False, "reconcilePending": False, "outcomeUnknownSince": None, "lastAttemptAt": 990,
+                "boundary": None, "request": {"id": "r1", "at": 950, "progress": "PUBLISHED"},
+            },
+        ],
+        "pendingDecommissions": [
+            {
+                "id": "t1", "entityId": "input_datetime.example_heater_service_done", "state": "PENDING",
+                "requestedAt": 800, "lastError": {"kind": "UNREACHABLE", "at": 850},
+            },
+        ],
+    }
+
+
+def test_get_ha_publishing_is_registered_guarded_listed_last_and_takes_only_an_asset_id() -> None:
+    assert callable(server_module.get_ha_publishing)
+    tool = server_module.mcp._tool_manager.get_tool("get_ha_publishing")
+    assert tool is not None and tool.parameters.get("additionalProperties") is False
+    assert list(inspect.signature(server_module.get_ha_publishing).parameters) == ["asset_id"]
+    assert set(tool.parameters.get("properties", {})) == {"asset_id"}
+    assert server_module.TOOL_NAMES[-1] == "get_ha_publishing"
+    assert len(server_module.TOOL_NAMES) == 94
+
+
+def test_the_publishing_read_reads_the_route_once_and_answers_the_body_as_sent(phone22) -> None:
+    phone22.reply("GET", "/v1/assets/a1/ha-publishing", 200, publishing())
+    answer = server_module.get_ha_publishing(asset_id="a1")
+    assert answer == publishing()
+    assert set(answer) == PUBLISHING_KEYS
+    assert set(answer["bindings"][0]) == BINDING_KEYS
+    assert paths(phone22) == [("GET", "/v1/status"), ("GET", "/v1/assets/a1/ha-publishing")]
+    assert phone22.last().body == b""
+
+
+def test_the_publishing_read_on_a_schema_21_phone_is_refused_with_nothing_sent(paired) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_21)
+    try:
+        answer = server_module.get_ha_publishing(asset_id="a1")
+    except ToolError as refused:
+        text = str(refused)
+    else:
+        text = f"answered {answer!r}"
+    assert paths(paired) == [("GET", "/v1/status")], "a schema-21 phone must be sent only the status read"
+    assert "APP_SCHEMA_TOO_OLD" in text, text
+    assert "reports schema 21; get_ha_publishing needs schema 22" in text, text
+
+
+def test_the_publishing_read_takes_no_value_and_refuses_an_empty_id(paired) -> None:
+    """G17, I33: no argument takes a value, a date to publish or READY, and no argument reaches the connection."""
+    with pytest.raises(ToolError, match="must not be empty"):
+        server_module.get_ha_publishing(asset_id="")
+    for extra in ({"desired_value": "UP"}, {"value": "2026-02-10"}, {"enabled": True}, {"entity_id": "x.y"}):
+        with pytest.raises(ToolError, match="does not accept"):
+            asyncio.run(server_module.mcp.call_tool("get_ha_publishing", {"asset_id": "a1", **extra}))
+    assert paired.requests == []
+
+
+def test_the_publishing_read_names_no_such_asset(phone22) -> None:
+    phone22.reply(
+        "GET", "/v1/assets/a9/ha-publishing", 404,
+        {"error": {"code": "no_such_asset", "message": "no asset a9", "problems": []}},
+    )
+    with pytest.raises(ToolError) as raised:
+        asyncio.run(server_module.mcp.call_tool("get_ha_publishing", {"asset_id": "a9"}))
+    assert "404 no_such_asset: no asset a9" in str(raised.value)
+
+
+def test_the_publishing_docstring_names_the_route_its_keys_and_states() -> None:
+    doc = flat(server_module.get_ha_publishing.__doc__)
+    for words in (
+        "GET /v1/assets/{id}/ha-publishing", "read only", "`no_such_asset`", "`APP_SCHEMA_TOO_OLD`", "schema 22",
+        "1970-01-01", "`pendingDecommissions`", "`UNDELIVERABLE`", "never the address",
+    ):
+        assert words in doc, words
+    for key in BINDING_KEYS:
+        assert f"`{key}`" in doc, key
+    for name in PUBLISHING_STATES + ("ACCEPTED", "VERIFIED", "FAILED"):
+        assert f"`{name}`" in doc, name
+    lowered = doc.lower()
+    for word in NEVER_SAID:
+        assert word not in lowered, word
+
+
+def test_the_readme_and_v1_list_the_publishing_read_and_its_gate() -> None:
+    readme = README.read_text(encoding="utf-8")
+    entry = paragraph(readme, "**Home Assistant publishing (#113/#114; needs schema 22)**")
+    v1 = section(V1.read_text(encoding="utf-8"), "### Home Assistant publishing (#113, #114)")
+    for name, text in (("README", entry), ("v1.md", v1)):
+        assert "/v1/assets/{id}/ha-publishing" in text, name
+        lowered = flat(text).lower()
+        for word in NEVER_SAID:
+            assert word not in lowered, (name, word)
+    assert "`get_ha_publishing`" in entry
+    assert "`get_ha_publishing`" in flat(paragraph(readme, "- **The season readiness tool needs schema 22.**"))
