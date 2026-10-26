@@ -194,12 +194,12 @@ class SeasonSyncModelTest {
 
         val connectionColumns = listOf(
             "id", "base_url", "cadence", "network_eligibility", "home_network_ssid", "background_checks", "created_at",
-            "updated_at",
+            "updated_at", "config_generation",
         )
         assertEquals(
             connectionColumns.map(::camel).sorted(),
             instanceFieldsOf(HaConnection::class.java),
-            "ha_connection (C9): its eight columns; no token, no display name, no secret marker",
+            "ha_connection (C9, #113/#114 F): its nine columns; no token, no display name, no secret marker",
         )
     }
 

@@ -422,7 +422,8 @@ class HomeAssistantViewModelTest {
         screen.model.save()
         advanceUntilIdle()
         val after = graph.haConnections.get()!!
-        assertEquals(saved.copy(updatedAt = after.updatedAt), after)
+        // #113/#114 (C28, F): every save moves the generation by one.
+        assertEquals(saved.copy(updatedAt = after.updatedAt, configGeneration = saved.configGeneration + 1), after)
         assertEquals(Secret("fictional-token-2"), graph.secretStore.get(saved.id))
         assertTrue(screen.state.tokenPresent)
         assertNull(screen.state.statusLine)
