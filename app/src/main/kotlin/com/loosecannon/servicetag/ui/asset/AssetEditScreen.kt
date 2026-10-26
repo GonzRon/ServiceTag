@@ -80,6 +80,7 @@ import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.attachments.rememberDocumentPicker
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.components.localizedDateText
 import com.loosecannon.servicetag.ui.components.localizedMonthDayText
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -247,7 +248,8 @@ val CATEGORY_FIELD: String get() = localized(R.string.asset_edit_category_field)
 /**
  * Create ([assetId] null) or edit one asset: the grouped form of spec §9 — IDENTITY, PLACEMENT,
  * PURCHASE, WARRANTY, NOTES, and on a new asset only, TEMPLATE. Save sits in the app bar and
- * again at the bottom so it is reachable with the keyboard open (G1 §1.3).
+ * again at the bottom; with the keyboard up the column ends at the keyboard's top, so the bottom
+ * Save is reached by scrolling (#121).
  *
  * [parentId] is the "Part of" a new asset opens with, which is how "+ Add child asset" on a
  * parent's screen makes a child. Every rule belongs to the use cases; the screen only draws what
@@ -335,6 +337,7 @@ fun AssetEditScreen(
     }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(

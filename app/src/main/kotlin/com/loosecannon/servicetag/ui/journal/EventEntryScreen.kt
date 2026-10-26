@@ -56,6 +56,7 @@ import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.components.localizedDateText
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
@@ -74,10 +75,9 @@ import com.loosecannon.servicetag.ui.theme.MonoText
  * one row per profile field under a READING / VALUE / TARGET header; the materials that went in,
  * kept deliberately apart from the readings (D12 §9 — measurement ≠ intervention); a note; and the
  * one commit button at the foot, "Record entry" on a new entry and "Save entry" on an edit, at the
- * end of the scrolling column (#118: the app bar has no Save). The button is reachable once the
- * keyboard closes; with the keyboard open it can sit under it, and #121 (1.8.2) makes it reachable
- * while typing. Anything the asset derives from those inputs reads back live under them, never as
- * a field (spec §5).
+ * end of the scrolling column (#118: the app bar has no Save). With the keyboard up the column ends
+ * at the keyboard's top, so the button is reached by scrolling (#121). Anything the asset derives
+ * from those inputs reads back live under them, never as a field (spec §5).
  *
  * The form knows nothing about what kind of asset this is: the rows come from the profile and the
  * control in each row comes from its definition's value type.
@@ -150,6 +150,7 @@ fun EventEntryScreen(
         .joinToString(" · ") { it.uppercase() }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(

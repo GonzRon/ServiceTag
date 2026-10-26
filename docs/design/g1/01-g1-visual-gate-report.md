@@ -53,7 +53,7 @@ a 16dp glyph. Touch targets ≥ 44dp (48dp in production). TalkBack: every badge
 | Measurement row | 3-column grid (1fr / 92dp / 72dp); name 15sp Medium; state badge under the name; value is an **outlined field** (`outline`, 6dp, `surface` fill) holding a 22sp mono number with a 12sp unit inside the field; target column shows a 10sp "TARGET" eyebrow over the range. A 3dp left rail in the state colour spans the row. Nothing else in the row is tinted. |
 | States | `↑ HIGH`, `↓ LOW`, `✓ IN RANGE` from D12 §5, plus **`NO TARGET SET`** (neutral, `surfaceContainerHigh` / `onSurfaceVariant`) for a definition without a configured range — required by the owner's data (TDS logged without a range) and missing from D12 (§3 correction f). |
 | Treatment | Separate section; rows "product · quantity (mono) unit (small) · remove"; "+ Add treatment" outlined full-width; quantities keep the unit the user chose (oz, ppm, g). Measurements and treatments save as one event with one timestamp (D4 §7), matching how the owner's log interleaves them. |
-| Keyboard | Numeric keypad for value fields; focus moves down the column; the one commit button ends the scrolling column, so it sits at the foot of the form and is reachable once the keyboard closes; #121 (1.8.2) makes it reachable while typing. |
+| Keyboard | Numeric keypad for value fields; focus moves down the column; the one commit button ends the scrolling column, so it sits at the foot of the form; with the keyboard up the column ends at the keyboard's top, so the button is reached by scrolling (#121, 1.8.2). |
 | Light/dark | Value fields are the brightest surfaces on the sheet in both themes (`surface`), so the numbers read first. |
 
 ### 1.4 NFC interaction

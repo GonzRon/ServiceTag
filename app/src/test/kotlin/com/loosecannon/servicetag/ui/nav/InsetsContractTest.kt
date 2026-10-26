@@ -274,10 +274,17 @@ class InsetsContractTest {
         val GROUP_C_WITHOUT_SCAFFOLD = setOf("ui/scan/TagResultSheet.kt")
 
         /**
-         * The group B screens that pass `contentWindowInsets = formContentInsets`: empty until T4 (B1–B6) and T5
-         * (B7–B15) fill it; T5 closes it on group B.
+         * The group B screens that pass `contentWindowInsets = formContentInsets`: B1–B6 (T4); T5 adds B7–B15 and
+         * closes it on group B.
          */
-        val FORM_SCREENS = emptySet<String>()
+        val FORM_SCREENS = setOf(
+            "ui/journal/EventEntryScreen.kt",
+            "ui/asset/AssetEditScreen.kt",
+            "ui/setup/DefinitionEditScreen.kt",
+            "ui/setup/ProfileEditScreen.kt",
+            "ui/supplies/SupplyEditScreen.kt",
+            "ui/health/HealthSubjectEditScreen.kt",
+        )
 
         /** Group E (§4.5): the files whose bottom sheets take typed input. */
         val GROUP_E = setOf(

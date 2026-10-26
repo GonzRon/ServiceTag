@@ -58,6 +58,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.l10n.localizedPlural
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
@@ -65,8 +66,9 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * One reading of an asset, new ([definitionId] null) or edited (spec §9). Outlined fields on the
- * 6dp control corner, Save in the app bar and again at the bottom so it survives an open keyboard
- * (G1 §1.3), and every refused field named under itself.
+ * 6dp control corner, Save in the app bar and again at the bottom, and every refused field named
+ * under itself. With the keyboard up the column ends at the keyboard's top, so the bottom Save is
+ * reached by scrolling (#121).
  *
  * Three controls can be locked: once measurements exist, `key`, `kind` and `valueType` are how
  * those measurements are read back, so the form disables them and says how many entries fixed
@@ -114,6 +116,7 @@ fun DefinitionEditScreen(
     val titleRes = if (state.editing) R.string.setup_definition_title_edit else R.string.setup_definition_title_new
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(

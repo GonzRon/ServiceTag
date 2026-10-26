@@ -37,6 +37,7 @@ import com.loosecannon.servicetag.ui.asset.CATEGORY_FIELD
 import com.loosecannon.servicetag.ui.asset.MANUFACTURER_FIELD
 import com.loosecannon.servicetag.ui.asset.MODEL_FIELD
 import com.loosecannon.servicetag.ui.attachments.NOTES_LABEL
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceSectionTitle
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -67,6 +68,7 @@ fun SupplyEditScreen(
     LaunchedEffect(model) { model.saved.collect { onDone(it) } }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = { Text(SUPPLY_ITEM) },

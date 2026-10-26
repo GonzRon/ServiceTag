@@ -50,6 +50,7 @@ import com.loosecannon.servicetag.ui.asset.ChoiceRow
 import com.loosecannon.servicetag.ui.asset.FieldLabel
 import com.loosecannon.servicetag.ui.asset.RefusalLine
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.components.formContentInsets
 import com.loosecannon.servicetag.ui.maintenance.LinkGuardDialog
 import com.loosecannon.servicetag.ui.maintenance.LinkGuardPrompt
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -194,6 +195,7 @@ fun HealthSubjectEditScreen(
     }
 
     Scaffold(
+        contentWindowInsets = formContentInsets,
         topBar = {
             TopAppBar(
                 title = {
