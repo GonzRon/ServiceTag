@@ -193,7 +193,7 @@ class BackupFormat8Test {
                 "profileId", "remindersEnabled", "status", "postponedDueOn", "createdAt", "updatedAt",
                 "ruleChangedAt", "providers",
                 // Format 21 (#114) appends the Season Start role and its boundary (`BackupFormat21Test`).
-                "role", "roleSinceOn",
+                "role", "roleSinceOn", "seasonSource",
             ),
             MaintenanceScheduleDto.serializer().descriptor.names,
         )
@@ -309,7 +309,7 @@ class BackupFormat8Test {
         assertEquals(1, counts["healthSubjects"])
         // Twenty through format 8, format 9's `assetCategories`, format 12's two case lists, format 13's
         // `assetLoans`, format 14's `transferRecords`, format 15's `assetSuccessions`, format 18's three (#15) and format 19's two (#47).
-        assertEquals(31, counts.size)
+        assertEquals(32, counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

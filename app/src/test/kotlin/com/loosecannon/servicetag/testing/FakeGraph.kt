@@ -232,11 +232,18 @@ import com.loosecannon.servicetag.hapublish.PublishInputs
 import com.loosecannon.servicetag.hapublish.PublishProjector
 import com.loosecannon.servicetag.hapublish.PublishTriggers
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.seasonsync.LinkScheduleSeason
 import com.loosecannon.servicetag.core.seasonsync.OutboundTargets
+import com.loosecannon.servicetag.core.seasonsync.RecordScheduleSeasonSyncResult
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
+import com.loosecannon.servicetag.core.seasonsync.UnlinkScheduleSeason
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
 import com.loosecannon.servicetag.data.room.RoomDecommissionRepository
 import com.loosecannon.servicetag.data.room.RoomPublishBindingRepository
 import com.loosecannon.servicetag.data.room.RoomPublishDeliveryRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleSeasonActivationRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleSeasonBindingRepository
 import com.loosecannon.servicetag.fetch.CacheStagingArea
 import java.io.File
 import java.time.ZoneOffset
@@ -325,6 +332,11 @@ class FakeGraph(
     // 1.4's three data ports, mirroring `AppGraph`'s fields by name.
     val seasonActivations: SeasonActivationRepository =
         heldWriteGuard.activations(RoomSeasonActivationRepository(db.seasonActivationDao()))
+    /** #125 (U-C1): a schedule's own season rows and its device-local binding, mirroring `AppGraph`'s fields by name. */
+    val scheduleSeasonActivations: ScheduleSeasonActivationRepository =
+        RoomScheduleSeasonActivationRepository(db.scheduleSeasonActivationDao())
+    val scheduleSeasonBindings: ScheduleSeasonBindingRepository =
+        RoomScheduleSeasonBindingRepository(db.scheduleSeasonSyncBindingDao())
     val conditions: ConditionRepository = heldWriteGuard.conditions(RoomConditionRepository(db.assetConditionDao()))
     val healthSubjects: HealthSubjectRepository =
         heldWriteGuard.subjects(RoomHealthSubjectRepository(db.healthSubjectDao()))
@@ -357,6 +369,7 @@ class FakeGraph(
         schedules, scheduleStates, events, closures, groups, assets, seasonActivations, todayPort, clock,
         // #124 (C41): as `AppGraph` wires it — asked at each rebuild, the reader below with its Home Assistant stores.
         openingService = { openingServiceReader.openingServiceOn(it) },
+        scheduleActivations = scheduleSeasonActivations,
         zone = { ZoneOffset.UTC },
     )
 
@@ -515,17 +528,29 @@ class FakeGraph(
     val forgetHaConnection: ForgetHaConnection =
         ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow, outboundTargets)
 
+    /** #125 (U-C3, U-C5) — the link, the unlink and the applier, mirroring `AppGraph`'s fields by name. */
+    val linkScheduleSeason: LinkScheduleSeason = LinkScheduleSeason(
+        schedules, assets, transferRecords, scheduleSeasonBindings, haConnections, secretStore, recomputeSchedules,
+        seasonSyncRunner, uow, clock, outboundTargets,
+    )
+    val unlinkScheduleSeason: UnlinkScheduleSeason =
+        UnlinkScheduleSeason(schedules, scheduleSeasonBindings, recomputeSchedules, seasonSyncRunner, uow, clock)
+    val recordScheduleSeasonSyncResult: RecordScheduleSeasonSyncResult = RecordScheduleSeasonSyncResult(
+        scheduleSeasonBindings, schedules, assets, scheduleSeasonActivations, transferRecords, recomputeSchedules, uow,
+        ids, clock, todayPort,
+    )
+
     /**
      * #113/#114 (C25, C25a) — the publishing controls, one write each and no HTTP inside: the app layer reads the helper
      * first (C30) and asks for delivery after the commit (C32).
      */
     val enablePublishing: EnablePublishing = EnablePublishing(
         publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
-        transferRecords, uow, ids, clock,
+        transferRecords, uow, ids, clock, scheduleSeasons = scheduleSeasonBindings,
     )
     val changePublishTarget: ChangePublishTarget = ChangePublishTarget(
         publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
-        transferRecords, uow, ids, clock,
+        transferRecords, uow, ids, clock, scheduleSeasons = scheduleSeasonBindings,
     )
     val disablePublishing: DisablePublishing = DisablePublishing(publishBindings, publishDecommissions, uow, ids, clock)
     val revalidatePublishing: RevalidatePublishing =
@@ -715,6 +740,7 @@ class FakeGraph(
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords,
         assetSuccessions, supplyItems, assetSupplies, installedComponents, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
@@ -724,12 +750,13 @@ class FakeGraph(
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },
+        scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, supplyItems, assetSupplies,
-        installedComponents, attachmentStorage, uow,
+        installedComponents, attachmentStorage, uow, scheduleSeasonActivations,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -741,6 +768,7 @@ class FakeGraph(
         serviceCases, serviceCaseEntries, loans, transferRecords, roomAssetSuccessions, supplyItems, assetSupplies,
         installedComponents, attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
+        scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val importBackupMerge: ImportBackupMerge =
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
@@ -749,7 +777,7 @@ class FakeGraph(
     val backupRepositories = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
-        transferRecords, assetSuccessions, supplyItems, assetSupplies, installedComponents,
+        transferRecords, assetSuccessions, supplyItems, assetSupplies, installedComponents, scheduleSeasonActivations,
     )
     val createTransferPack: CreateTransferPack = CreateTransferPack(
         backupRepositories, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
@@ -799,7 +827,10 @@ class FakeGraph(
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
     val archiveSchedule: ArchiveSchedule =
-        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock, groups, transferRecords)
+        ArchiveSchedule(
+            schedules, uow, recomputeSchedules, healthSubjects, assets, clock, groups, transferRecords,
+            scheduleSeasons = scheduleSeasonBindings,
+        )
     val setScheduleRole: SetScheduleRole =
         SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, todayPort, recomputeSchedules)
     val closeRound: CloseRound =

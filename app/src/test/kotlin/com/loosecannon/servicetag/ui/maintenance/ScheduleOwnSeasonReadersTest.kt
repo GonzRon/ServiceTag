@@ -4,10 +4,8 @@ import com.loosecannon.servicetag.core.health.NotTrackedReason
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
-import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -17,27 +15,19 @@ import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
-import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
-import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
-import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
-import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import java.time.LocalDate
-import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -57,9 +47,8 @@ import org.junit.Test
  * yearly due long reached) follows the winterize switch, which comes on 10-20; it is done 10-22; the weekly check
  * (`IN_SERVICE_AFTER_OPENING_SERVICE`, 7) keeps the asset's season.
  *
- * Room holds no season source and no schedule season rows until H2, so the stored rows are read through [schedules],
- * which marks the opening service `OWN` as H2's mapper will hand it, and [rows] stands in for the table. The readers
- * are built here exactly as `FakeGraph` builds them, over those two.
+ * Over the real tables (H2): the opening service is stored `OWN` in `maintenance_schedule.season_source`, its switch's
+ * rows in `schedule_season_activation`, and the readers are `FakeGraph`'s own, wired as `AppGraph` wires them.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScheduleOwnSeasonReadersTest {
@@ -77,59 +66,13 @@ class ScheduleOwnSeasonReadersTest {
         Dispatchers.resetMain()
     }
 
-    // ---------------------------------------------------------------- the seams H2 will fill
+    // ---------------------------------------------------------------- the graph's own readers, over the real tables
 
-    private val own = mutableSetOf(OPEN)
-
-    private fun MaintenanceSchedule.marked() =
-        if (id in own) copy(seasonSource = ScheduleSeasonSource.OWN) else this
-
-    private val schedules: ScheduleRepository by lazy {
-        object : ScheduleRepository by graph.schedules {
-            override suspend fun get(id: ScheduleId) = graph.schedules.get(id)?.marked()
-            override suspend fun all() = graph.schedules.all().map { it.marked() }
-            override suspend fun forAsset(assetId: AssetId) = graph.schedules.forAsset(assetId).map { it.marked() }
-            override suspend fun forGroup(groupId: GroupId) = graph.schedules.forGroup(groupId).map { it.marked() }
-            override fun observeAll() = graph.schedules.observeAll().map { all -> all.map { it.marked() } }
-        }
-    }
-
-    private val rows = object : ScheduleSeasonActivationRepository {
-        val stored = mutableListOf<ScheduleSeasonActivation>()
-        override suspend fun insert(row: ScheduleSeasonActivation) {
-            stored += row
-        }
-
-        override suspend fun forSchedule(scheduleId: ScheduleId) = stored.filter { it.scheduleId == scheduleId }
-        override suspend fun all() = stored.toList()
-        override fun observeForSchedule(scheduleId: ScheduleId): Flow<List<ScheduleSeasonActivation>> =
-            flowOf(stored.filter { it.scheduleId == scheduleId })
-    }
-
-    private val recompute by lazy {
-        RecomputeSchedules(
-            schedules, graph.scheduleStates, graph.events, graph.closures, graph.groups, graph.assets, graph.seasonActivations,
-            graph.todayPort, graph.clock,
-            openingService = { graph.openingServiceReader.openingServiceOn(it) },
-            scheduleActivations = rows,
-            zone = { ZoneOffset.UTC },
-        )
-    }
-
-    private val health by lazy {
-        AssetHealthReadModel(
-            graph.assets, graph.healthSubjects, schedules, graph.scheduleStates, graph.events, graph.profiles,
-            graph.seasonActivations, graph.conditions, recompute, graph.todayPort, zone = { ZoneOffset.UTC },
-            transfers = graph.transferRecords,
-        )
-    }
-
-    private val due by lazy {
-        DueReadModel(
-            schedules, graph.assets, graph.groups, graph.definitions, recompute, graph.todayPort, health,
-            snoozedUntilOf = { null }, transfers = graph.transferRecords,
-        )
-    }
+    private val schedules get() = graph.schedules
+    private val rows get() = graph.scheduleSeasonActivations
+    private val recompute get() = graph.recomputeSchedules
+    private val health get() = graph.assetHealthReadModel
+    private val due get() = graph.dueReadModel
 
     // ---------------------------------------------------------------- the story
 
@@ -145,7 +88,7 @@ class ScheduleOwnSeasonReadersTest {
                 OPEN.value, assetId = HEATER.value, title = "Example opening service", timeInterval = 1,
                 timeUnit = RecurrenceUnit.YEAR, anchorOn = "2026-01-15", servicePolicy = ServicePolicy.IN_SERVICE_AT_START,
                 policyOffsetDays = 0,
-            ).copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01"),
+            ).copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01", seasonSource = ScheduleSeasonSource.OWN),
         )
         graph.schedules.upsert(
             scheduleOf(

@@ -177,7 +177,8 @@ class MaintenanceCommandShapeTest {
     @Test fun theScheduleRowIsTheArchiveRowPlusTheDerivedTriple() {
         assertEquals(
             // #114 (C29): format 21's `role` and `roleSinceOn` are archive fields, so the `/v1` row carries them too.
-            MaintenanceScheduleDto.serializer().descriptor.names +
+            // #125: format 21's `seasonSource` reaches the `/v1` row with H3 (U-C7, h16), which drops this subtraction.
+            MaintenanceScheduleDto.serializer().descriptor.names.filterNot { it == "seasonSource" } +
                 listOf("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays"),
             ScheduleRowResponse.serializer().descriptor.names,
         )

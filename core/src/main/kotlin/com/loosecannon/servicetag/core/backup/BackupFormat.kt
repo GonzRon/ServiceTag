@@ -67,6 +67,8 @@ import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
@@ -379,6 +381,13 @@ data class MaintenanceScheduleDto(
      */
     val role: String = "NONE",
     val roleSinceOn: String? = null,
+    /**
+     * Format 21 (#125, U-C6). The season the schedule's due rules read, a [ScheduleSeasonSource] name: `ASSET` (its
+     * asset's) or `OWN` (its own Home Assistant season, made of its [ScheduleSeasonActivationDto] rows). Written as an
+     * explicit value and defaulting to `ASSET`, so a format ≤20 archive decodes as following its asset; one carrying
+     * another value was built by hand. The schedule's binding never travels: an imported `OWN` schedule is stranded.
+     */
+    val seasonSource: String = "ASSET",
 )
 
 /**
@@ -480,6 +489,20 @@ data class SeasonActivationDto(
     val action: String,
     val occurredOn: String,
     val eventId: String?,
+    val createdAt: Long,
+)
+
+/**
+ * Format 21 (#125, U-C6). One row of a schedule's own season: [SeasonActivationDto]'s shape with [scheduleId] in the
+ * asset's place and no `eventId` (a schedule's season writes no journal entry). An immutable fact, so there is no
+ * `updatedAt`; its one owner is its schedule.
+ */
+@Serializable
+data class ScheduleSeasonActivationDto(
+    val id: String,
+    val scheduleId: String,
+    val action: String,
+    val occurredOn: String,
     val createdAt: Long,
 )
 
@@ -805,6 +828,12 @@ data class BackupData(
      * one that does (an empty list is accepted).
      */
     val installedComponents: List<InstalledComponentDto> = emptyList(),
+    /**
+     * Format 21 (#125, U-C6); a schedule's own season rows, ordered by id. Empty on every format ≤20 archive, which
+     * never carries a **row** — the codec refuses one that does (an empty list is accepted). The schedule bindings are
+     * device-local and are in no archive.
+     */
+    val scheduleSeasonActivations: List<ScheduleSeasonActivationDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1299,6 +1328,7 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto
         providers = providers.map { it.toDto() },
         role = role.name,
         roleSinceOn = roleSinceOn,
+        seasonSource = seasonSource.name,
     )
 
 /**
@@ -1330,6 +1360,13 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
                 "and no other role carries one",
         )
     }
+    // #125 (U-C6, inv. 106): a group's schedule follows no season of its own, so no writer puts `OWN` on one.
+    val source = enumOrCorrupt<ScheduleSeasonSource>(seasonSource, "schedule season source", "schedule $id")
+    val ownOnAGroup = when (source) {
+        ScheduleSeasonSource.ASSET -> false
+        ScheduleSeasonSource.OWN -> groupId != null
+    }
+    if (ownOnAGroup) throw BackupCorrupt("schedule $id is a group's schedule and carries its own season")
     return MaintenanceSchedule(
         id = ScheduleId(id),
         target = assetId?.let { ScheduleTarget.AssetTarget(AssetId(it)) }
@@ -1358,6 +1395,7 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
         providers = providers.map { it.toDomain() },
         role = scheduleRole,
         roleSinceOn = roleSinceOn,
+        seasonSource = source,
     )
 }
 
@@ -1444,6 +1482,24 @@ fun SeasonActivationDto.toDomain(): SeasonActivation = SeasonActivation(
     action = enumOrCorrupt<SeasonAction>(action, "season action", "activation $id"),
     occurredOn = occurredOn,
     eventId = eventId?.let(::EventId),
+    createdAt = createdAt,
+)
+
+// --- format 21: a schedule's own season (#125) ------------------------------------------------------
+
+fun ScheduleSeasonActivation.toDto(): ScheduleSeasonActivationDto = ScheduleSeasonActivationDto(
+    id = id,
+    scheduleId = scheduleId.value,
+    action = action.name,
+    occurredOn = occurredOn,
+    createdAt = createdAt,
+)
+
+fun ScheduleSeasonActivationDto.toDomain(): ScheduleSeasonActivation = ScheduleSeasonActivation(
+    id = id,
+    scheduleId = ScheduleId(scheduleId),
+    action = enumOrCorrupt<SeasonAction>(action, "season action", "schedule season row $id"),
+    occurredOn = occurredOn,
     createdAt = createdAt,
 )
 

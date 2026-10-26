@@ -65,6 +65,8 @@ object TransferTables {
         "supplyItems" to TransferTableClass.GLOBAL_IN_USE,
         "assetSupplies" to TransferTableClass.ASSET_OWNED,
         "installedComponents" to TransferTableClass.ASSET_OWNED,
+        // #125 (U-C6): a schedule's own season rows travel with their schedule, as its closures do.
+        "scheduleSeasonActivations" to TransferTableClass.ASSET_OWNED,
     )
 
     /** Whether any row of [table] can be in a pack. An unclassified list never travels. */
@@ -265,6 +267,10 @@ object TransferGraph {
             maintenanceGroups = if (TransferTables.travels("maintenanceGroups")) groups else emptyList(),
             maintenanceSchedules = schedules,
             occurrenceClosures = carry("occurrenceClosures", data.occurrenceClosures) { it.scheduleId in scheduleIds },
+            // #125 (U-C6): a schedule's own season rows go with their schedule, as its closures; its binding never.
+            scheduleSeasonActivations = carry("scheduleSeasonActivations", data.scheduleSeasonActivations) {
+                it.scheduleId in scheduleIds
+            },
             assetReferences = carry("assetReferences", data.assetReferences) {
                 it.assetId in selected || it.installedComponentId in componentIds || it.supplyItemId in supplyIdsInUse
             },
@@ -325,6 +331,8 @@ object TransferGraph {
             maintenanceGroups = data.maintenanceGroups.filterNot { it.id in droppedGroups },
             maintenanceSchedules = data.maintenanceSchedules.filterNot { it.id in droppedSchedules },
             occurrenceClosures = data.occurrenceClosures.filterNot { it.scheduleId in droppedSchedules },
+            // #125 (U-C6): a dropped schedule's own season rows go with it; they name nothing else, so never entangle.
+            scheduleSeasonActivations = data.scheduleSeasonActivations.filterNot { it.scheduleId in droppedSchedules },
             assetReferences = data.assetReferences.filterNot {
                 it.assetId in heldIds || it.installedComponentId in droppedComponents
             },
@@ -462,5 +470,6 @@ object TransferGraph {
         supplyItems = supplyItems.sortedBy { it.id },
         assetSupplies = assetSupplies.sortedBy { it.id },
         installedComponents = installedComponents.sortedBy { it.id },
+        scheduleSeasonActivations = scheduleSeasonActivations.sortedBy { it.id },
     )
 }

@@ -95,7 +95,7 @@ class StageABundleConformanceTest {
         assertEquals(
             BackupData.serializer().descriptor.elementNames.toSet() -
                 FORMAT_6_TABLES - FORMAT_7_TABLES - FORMAT_8_TABLES - FORMAT_9_TABLES - FORMAT_12_TABLES - FORMAT_13_TABLES -
-                FORMAT_14_TABLES - FORMAT_15_TABLES - FORMAT_18_TABLES - FORMAT_19_TABLES,
+                FORMAT_14_TABLES - FORMAT_15_TABLES - FORMAT_18_TABLES - FORMAT_19_TABLES - FORMAT_21_TABLES,
             data.keys,
             "data.json root",
         )
@@ -219,5 +219,8 @@ class StageABundleConformanceTest {
 
         /** #47's one list: default empty, and the format-5 generator never emits it. */
         private val FORMAT_19_TABLES = setOf("installedComponents")
+
+        /** #125's one list: default empty, and the format-5 generator never emits it. */
+        private val FORMAT_21_TABLES = setOf("scheduleSeasonActivations")
     }
 }

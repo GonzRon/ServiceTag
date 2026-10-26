@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SuccessionProblem
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.heldIds
@@ -194,6 +195,11 @@ import kotlinx.serialization.json.JsonObject
  * Transfer Pack's rows is the planner's (C19, C20). The manifest gains no key: no installation identifier travels.
  * #124 (C42): format 21 also carries `servicePolicy` `IN_SERVICE_AFTER_OPENING_SERVICE` by its name, a value no format
  * ≤20 writer knew, so a format ≤20 archive carrying it is refused the same way.
+ * #125 (U-C6): format 21 also appends `seasonSource` to every `maintenanceSchedules[]` row (a `ScheduleSeasonSource`
+ * name, explicit, defaulting to `ASSET`) and adds one list, `scheduleSeasonActivations` — a schedule's own season rows,
+ * each naming a schedule in the file — with its manifest count key. An `OWN` source or a row in a format ≤20 archive
+ * was built by hand and is refused the same way; a group's schedule carrying `OWN` is refused at decode. The schedule's
+ * Home Assistant binding is device-local and in no archive, so an imported `OWN` schedule arrives stranded.
  *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
@@ -347,6 +353,8 @@ object BackupCodec {
             installedComponents = data.installedComponents.sortedBy { it.id }.map { row ->
                 row.copy(composition = row.composition.sortedWith(compareBy({ it.sortOrder }, { it.id })))
             },
+            // Format 21 (#125): one immutable row per own-season change.
+            scheduleSeasonActivations = data.scheduleSeasonActivations.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -389,6 +397,7 @@ object BackupCodec {
                 "assetSupplies" to sorted.assetSupplies.size,
                 "installedComponents" to sorted.installedComponents.size,
                 "compositionEntries" to sorted.installedComponents.sumOf { it.composition.size },
+                "scheduleSeasonActivations" to sorted.scheduleSeasonActivations.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -531,6 +540,19 @@ object BackupCodec {
                         "(event ${marked.id})",
                 )
             }
+            // #125 (U-C6): so is a schedule's own season — its source and its rows — which only a format-21 writer knew.
+            data.maintenanceSchedules.firstOrNull { it.seasonSource != ScheduleSeasonSource.ASSET.name }?.let { own ->
+                throw BackupCorrupt(
+                    "maintenanceSchedules: a format ${manifest.formatVersion} archive cannot carry a schedule's own " +
+                        "season (schedule ${own.id})",
+                )
+            }
+            if (data.scheduleSeasonActivations.isNotEmpty()) {
+                throw BackupCorrupt(
+                    "scheduleSeasonActivations: a format ${manifest.formatVersion} archive cannot carry a schedule's " +
+                        "own season rows",
+                )
+            }
         }
 
         // #79, the same rule for the warranty reminder's lead: the key did not exist before format 11,
@@ -630,6 +652,7 @@ object BackupCodec {
         data.supplyItems.forEach { it.toDomain() }
         data.assetSupplies.forEach { it.toDomain() }
         data.installedComponents.forEach { it.toDomain() }
+        data.scheduleSeasonActivations.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -877,6 +900,17 @@ object BackupCodec {
                 throw BackupCorrupt(
                     "occurrenceClosures: closure ${closure.id} points at schedule " +
                         "${closure.scheduleId}, which is not in maintenanceSchedules",
+                )
+            }
+        }
+
+        // #125 (U-C6): a schedule's own season row is its schedule's, a real foreign key, as a closure is.
+        uniqueIds("scheduleSeasonActivations", data.scheduleSeasonActivations.map { it.id })
+        data.scheduleSeasonActivations.forEach { row ->
+            if (row.scheduleId !in scheduleIds) {
+                throw BackupCorrupt(
+                    "scheduleSeasonActivations: row ${row.id} points at schedule " +
+                        "${row.scheduleId}, which is not in maintenanceSchedules",
                 )
             }
         }

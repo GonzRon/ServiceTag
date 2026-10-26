@@ -66,6 +66,7 @@ import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AssetSupply
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.SuccessionProblem
 import com.loosecannon.servicetag.core.model.successionProblems
@@ -97,6 +98,8 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 import java.io.IOException
 import java.security.MessageDigest
 
@@ -328,6 +331,7 @@ internal fun mergePlanOf(
     val localReferencesByPair = snapshot.references
         .associateBy { it.owner to it.uri }
     val localActivations = snapshot.seasonActivations.associateBy { it.id }
+    val localScheduleSeasonRows = snapshot.scheduleSeasonActivations.associateBy { it.id }
     val localConditions = snapshot.conditions.associateBy { it.id }
     val localSubjects = snapshot.healthSubjects.associateBy { it.id.value }
 
@@ -776,27 +780,34 @@ internal fun mergePlanOf(
     // `roleSinceOn` and the stamp the role write moved (the reference role's shape), so this phone's own pre-role export
     // re-merges IDENTICAL; one without a role compares as always, and a format-21 archive compares everything. A
     // Transfer Pack's row (C20) compares without the role fields at every format: the import re-dated them here.
+    // #125 (U-C6): `seasonSource` is format 21's too, so it is compared exactly as the role is: against an older
+    // archive a local row on its own season compares without the source and the stamp the link moved, and a format-21
+    // archive — a pack's row included — compares it.
     val scheduleRolesCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_SCHEDULE_ROLE_FORMAT
     val noRole = ScheduleRole.NONE.name
+    val assetSeason = ScheduleSeasonSource.ASSET.name
     fun sameSchedule(incoming: MaintenanceScheduleDto, here: MaintenanceScheduleDto): Boolean = when {
         context != null -> incoming.copy(role = here.role, roleSinceOn = here.roleSinceOn).ordered() == here.ordered()
         scheduleRolesCompared -> incoming.ordered() == here.ordered()
-        here.role == noRole && here.roleSinceOn == null ->
-            incoming.copy(role = noRole, roleSinceOn = null).ordered() == here.ordered()
-        else -> incoming.copy(role = noRole, roleSinceOn = null, updatedAt = here.updatedAt).ordered() ==
-            here.copy(role = noRole, roleSinceOn = null).ordered()
+        here.role == noRole && here.roleSinceOn == null && here.seasonSource == assetSeason ->
+            incoming.copy(role = noRole, roleSinceOn = null, seasonSource = assetSeason).ordered() == here.ordered()
+        else ->
+            incoming.copy(role = noRole, roleSinceOn = null, seasonSource = assetSeason, updatedAt = here.updatedAt)
+                .ordered() == here.copy(role = noRole, roleSinceOn = null, seasonSource = assetSeason).ordered()
     }
     // #114 (C20): the row an INSERT writes — a carried row keeps this phone's role and boundary whatever the pack says
-    // (A), and under a context any other `SEASON_START` row is recommissioned on the import day (O-8).
+    // (A), and under a context any other `SEASON_START` row is recommissioned on the import day (O-8). #125 (U-C6): a
+    // carried row keeps this phone's season source too; any other row lands with the archive's, and with no binding.
     fun insertedSchedule(dto: MaintenanceScheduleDto): MaintenanceSchedule {
         val row = dto.toDomain()
         val carried = carry.roles[row.id]
-        return when {
+        val roled = when {
             carried != null -> row.copy(role = carried.first, roleSinceOn = carried.second)
             context != null && row.role == ScheduleRole.SEASON_START ->
                 row.copy(roleSinceOn = context.importDay.toString())
             else -> row
         }
+        return carry.seasonSources[row.id]?.let { roled.copy(seasonSource = it) } ?: roled
     }
     // #114 (C19, O-9): one live Season Start role per asset, by C9's coverage (`roleCoverageOf`'s `covering`) over this
     // phone's rows and this plan's accepted groups and members. The claim map is seeded from the destination's live
@@ -939,6 +950,33 @@ internal fun mergePlanOf(
                 closureWrites += dto.toDomain()
                 claimedClosurePairs[pair] = id
                 MergeDecision(MergeTable.CLOSURES, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    // --- a schedule's own season (#125, U-C6) ---------------------------------------------------
+    // Immutable facts, as the asset's activations: identity is the row id and nothing else, a re-import is IDENTICAL,
+    // and two phones' rows are two inserts. The only owner is the schedule, as a closure's is. The binding never
+    // travels, so an inserted `OWN` schedule lands stranded (#16's carry rule).
+    val scheduleSeasonWrites = mutableListOf<ScheduleSeasonActivation>()
+    for (dto in data.scheduleSeasonActivations) {
+        val id = dto.id
+        val local = localScheduleSeasonRows[id]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.SCHEDULE_SEASON_ACTIVATIONS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(
+                    MergeTable.SCHEDULE_SEASON_ACTIVATIONS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id,
+                )
+            !scheduleAvailable(dto.scheduleId) ->
+                MergeDecision(
+                    MergeTable.SCHEDULE_SEASON_ACTIVATIONS, id, MergeVerdict.CONFLICT,
+                    MergeReason.OWNER_NOT_AVAILABLE, dto.scheduleId,
+                )
+            else -> {
+                scheduleSeasonWrites += dto.toDomain()
+                MergeDecision(MergeTable.SCHEDULE_SEASON_ACTIVATIONS, id, MergeVerdict.INSERT)
             }
         }
     }
@@ -1530,6 +1568,9 @@ internal fun mergePlanOf(
                 profileWrites.map { Triple(MergeTable.PROFILES, it.id.value, TransferOwnership.of(it)) } +
                 scheduleWrites.map { Triple(MergeTable.SCHEDULES, it.id.value, TransferOwnership.of(it)) } +
                 closureWrites.map { Triple(MergeTable.CLOSURES, it.id, TransferOwnership.of(it)) } +
+                scheduleSeasonWrites.map {
+                    Triple(MergeTable.SCHEDULE_SEASON_ACTIVATIONS, it.id, TransferOwnership.of(it))
+                } +
                 linkWrites.map { Triple(MergeTable.LINKS, it.id.value, TransferOwnership.of(it)) } +
                 tagWrites.map { Triple(MergeTable.TAGS, it.id.value, TransferOwnership.of(it)) } +
                 eventWrites.map { Triple(MergeTable.EVENTS, it.id.value, TransferOwnership.of(it)) } +
@@ -1562,6 +1603,7 @@ internal fun mergePlanOf(
             maintenanceGroups = groupsById.values.map { it.toDto() },
             maintenanceSchedules = schedulesById.values.map { it.toDto() },
             occurrenceClosures = (snapshot.closures + closureWrites).map { it.toDto() },
+            scheduleSeasonActivations = (snapshot.scheduleSeasonActivations + scheduleSeasonWrites).map { it.toDto() },
             assetReferences = (snapshot.references + referenceWrites).map { it.toDto() },
             seasonActivations = (snapshot.seasonActivations + activationWrites).map { it.toDto() },
             assetConditions = (snapshot.conditions + conditionWrites).map { it.toDto() },
@@ -1622,6 +1664,7 @@ internal fun mergePlanOf(
                 profiles = profileWrites,
                 schedules = scheduleWrites,
                 closures = closureWrites,
+                scheduleSeasonActivations = scheduleSeasonWrites,
                 links = linkWrites,
                 tags = tagWrites,
                 events = eventWrites,
@@ -1790,7 +1833,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Twenty-three reads. **The caller owns the transaction** — see each use case for which one.
+ * Twenty-four reads (#125 adds a schedule's own season rows). **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -1824,6 +1867,8 @@ internal suspend fun mergeSnapshotOf(
     installedComponents: InstalledComponentRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
+    /** #125 — a schedule's own season rows (format 21). Its bindings are device-local and never read here. */
+    scheduleSeasonActivations: ScheduleSeasonActivationRepository,
 ): MergeSnapshot = MergeSnapshot(
     assets = assets.all(),
     groups = groups.all(),
@@ -1848,6 +1893,7 @@ internal suspend fun mergeSnapshotOf(
     supplyItems = supplyItems.all(),
     assetSupplies = assetSupplies.all(),
     installedComponents = installedComponents.all(),
+    scheduleSeasonActivations = scheduleSeasonActivations.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

@@ -450,6 +450,8 @@ class BackupUseCasesTest {
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
                 // Format 19's two keys (#47), at zero here for the same reason.
                 "installedComponents" to 0, "compositionEntries" to 0,
+                // Format 21's key (#125), at zero here for the same reason.
+                "scheduleSeasonActivations" to 0,
             ),
             decoded.manifest.counts,
         )

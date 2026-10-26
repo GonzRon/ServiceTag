@@ -27,6 +27,8 @@ import com.loosecannon.servicetag.data.room.dao.NfcTagDao
 import com.loosecannon.servicetag.data.room.dao.OccurrenceClosureDao
 import com.loosecannon.servicetag.data.room.dao.ProfileDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleLocalDeliveryDao
+import com.loosecannon.servicetag.data.room.dao.ScheduleSeasonActivationDao
+import com.loosecannon.servicetag.data.room.dao.ScheduleSeasonSyncBindingDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
 import com.loosecannon.servicetag.data.room.dao.SeasonActivationDao
 import com.loosecannon.servicetag.data.room.dao.SeasonSyncBindingDao
@@ -66,6 +68,8 @@ import com.loosecannon.servicetag.data.room.entities.ProfileConsumableEntity
 import com.loosecannon.servicetag.data.room.entities.ProfileFieldEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleLocalDeliveryEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleProviderEntity
+import com.loosecannon.servicetag.data.room.entities.ScheduleSeasonActivationEntity
+import com.loosecannon.servicetag.data.room.entities.ScheduleSeasonSyncBindingEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
 import com.loosecannon.servicetag.data.room.entities.SeasonSyncBindingEntity
 import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntity
@@ -114,6 +118,8 @@ import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
         HaPublishBindingEntity::class,
         HaPublishDeliveryEntity::class,
         HaPublishDecommissionEntity::class,
+        ScheduleSeasonActivationEntity::class,
+        ScheduleSeasonSyncBindingEntity::class,
     ],
     version = 22,
     exportSchema = true,
@@ -150,4 +156,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun haPublishBindingDao(): HaPublishBindingDao
     abstract fun haPublishDeliveryDao(): HaPublishDeliveryDao
     abstract fun haPublishDecommissionDao(): HaPublishDecommissionDao
+    abstract fun scheduleSeasonActivationDao(): ScheduleSeasonActivationDao
+    abstract fun scheduleSeasonSyncBindingDao(): ScheduleSeasonSyncBindingDao
 }

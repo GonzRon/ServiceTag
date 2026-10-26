@@ -998,9 +998,15 @@ val MIGRATION_20_21: Migration = object : Migration(20, 21) {
  *     `connection_id` indexed.
  *  3. `ha_publish_delivery`: keyed by its binding, CASCADE.
  *  4. `ha_publish_decommission`: no foreign key (it outlives a Forget); `UNIQUE(connection_id, entity_id)`.
+ *  5. #125 (U-C1), in this same unreleased step: `maintenance_schedule.season_source` (`'ASSET'`, so every existing
+ *     schedule follows its asset's season); `schedule_season_activation`, a schedule's own season rows, owned by the
+ *     schedule (CASCADE) and indexed by it — it travels in backups and packs; and `schedule_season_sync_binding`,
+ *     #16's binding keyed by the schedule, owned by the schedule and by the connection (both CASCADE), the connection
+ *     indexed — device-local.
  *
  * Each statement is copied verbatim from the exported `22.json` (for an `ADD COLUMN`, the column's definition there),
- * so Room validates the result on open; none of the three tables is named by any export, merge or pack.
+ * so Room validates the result on open; none of the three publishing tables, nor the schedule binding, is named by any
+ * export, merge or pack.
  */
 val MIGRATION_21_22: Migration = object : Migration(21, 22) {
     override suspend fun migrate(connection: SQLiteConnection) {
@@ -1057,6 +1063,38 @@ val MIGRATION_21_22: Migration = object : Migration(21, 22) {
         connection.execSQL(
             "CREATE UNIQUE INDEX IF NOT EXISTS `index_ha_publish_decommission_connection_id_entity_id` " +
                 "ON `ha_publish_decommission` (`connection_id`, `entity_id`)",
+        )
+
+        // #125 (U-C1)
+        connection.execSQL(
+            "ALTER TABLE `maintenance_schedule` ADD COLUMN `season_source` TEXT NOT NULL DEFAULT 'ASSET'",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_season_activation` (`id` TEXT NOT NULL, " +
+                "`schedule_id` TEXT NOT NULL, `action` TEXT NOT NULL, `occurred_on` TEXT NOT NULL, " +
+                "`created_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`schedule_id`) " +
+                "REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_schedule_season_activation_schedule_id` " +
+                "ON `schedule_season_activation` (`schedule_id`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_season_sync_binding` (`schedule_id` TEXT NOT NULL, " +
+                "`connection_id` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `mode` TEXT NOT NULL, " +
+                "`enabled` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `observed_state` TEXT, " +
+                "`observed_changed_at` TEXT, `last_success_at` INTEGER, `last_attempt_at` INTEGER, " +
+                "`error_kind` TEXT, `error_detail` TEXT, `error_at` INTEGER, `applied_action` TEXT, " +
+                "`applied_on` TEXT, `applied_at` INTEGER, `last_applied_source` TEXT, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`schedule_id`), " +
+                "FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`connection_id`) REFERENCES `ha_connection`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_schedule_season_sync_binding_connection_id` " +
+                "ON `schedule_season_sync_binding` (`connection_id`)",
         )
     }
 }

@@ -83,18 +83,19 @@ internal class TransferInstall(
     val repos = BackupRepositories(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, successions,
-        raw.supplyItems, assetSupplies, installedComponents,
+        raw.supplyItems, assetSupplies, installedComponents, raw.scheduleSeasonActivations,
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
         successions, raw.supplyItems, assetSupplies, installedComponents, storage, raw.uow,
+        raw.scheduleSeasonActivations,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
         raw.successions, raw.supplyItems, assetSupplies, installedComponents, storage, raw.uow,
-        rebuildAll = { rebuilds += 1 },
+        rebuildAll = { rebuilds += 1 }, scheduleSeasonActivations = raw.scheduleSeasonActivations,
     )
     val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, storage, raw.uow, Clock { now }, Today { today })
 
@@ -152,6 +153,9 @@ private fun reproduceRoomCascades(raw: BackupInstall) {
         raw.schedules.rows.keys.removeAll(doomed)
         raw.closures.rows.values.removeIf { it.scheduleId.value in doomed }
         raw.subjects.rows.values.removeIf { it.scheduleId?.value in doomed }
+        // #125: a schedule's own season rows and its binding go with it.
+        raw.scheduleSeasonActivations.rows.values.removeIf { it.scheduleId.value in doomed }
+        raw.scheduleSeasonBindings.rows.keys.removeAll(doomed)
     }
     raw.assets.cascadesTo { id ->
         raw.definitions.rows.values.removeIf { it.assetId == id }

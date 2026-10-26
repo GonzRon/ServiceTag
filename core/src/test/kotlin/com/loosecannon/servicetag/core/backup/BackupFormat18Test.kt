@@ -123,7 +123,7 @@ class BackupFormat18Test {
         }
         assertEquals(listOf("id", "name", "defaultQuantity", "unit", "sortOrder", "supplyId"), ProfileConsumableDto.serializer().descriptor.names)
         assertEquals(listOf("id", "name", "quantity", "unit", "sortOrder", "supplyId"), ConsumableUsageDto.serializer().descriptor.names)
-        assertEquals(listOf("supplyItems", "assetSupplies"), BackupData.serializer().descriptor.names.dropLast(1).takeLast(2))
+        assertEquals(listOf("supplyItems", "assetSupplies"), BackupData.serializer().descriptor.names.dropLast(2).takeLast(2))
     }
 
     // --- row 8: the format ≤ 17 gate -------------------------------------------------------------
@@ -331,7 +331,7 @@ class BackupFormat18Test {
         assertEquals(2, counts["supplyItems"])
         assertEquals(3, counts["supplySpecifications"])
         assertEquals(2, counts["assetSupplies"])
-        assertEquals(31, counts.size)
+        assertEquals(32, counts.size)
         val none = BackupCodec.decode(archiveOf(unlinked)).manifest.counts
         assertEquals(listOf(0, 0, 0), listOf("supplyItems", "supplySpecifications", "assetSupplies").map { none[it] }, "present at zero")
     }

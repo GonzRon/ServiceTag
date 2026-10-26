@@ -243,7 +243,7 @@ internal val V21_TABLES = setOf("ha_connection", "season_sync_binding")
  * them; an older step's test, whose chain runs on to v22, sets them aside.
  */
 internal val V22_COLUMNS_BY_TABLE = mapOf(
-    "maintenance_schedule" to setOf("role", "role_since_on"),
+    "maintenance_schedule" to setOf("role", "role_since_on", "season_source"),
     "asset_event" to setOf("imported"),
     "ha_connection" to setOf("config_generation"),
 )
@@ -254,8 +254,15 @@ internal val V22_COLUMNS_BY_TABLE = mapOf(
  */
 internal fun v22ColumnsOf(table: String): Set<String> = V22_COLUMNS_BY_TABLE[table].orEmpty()
 
-/** The three tables schema v22 added (#113/#114): device-local, never exported, merged or packed. */
-internal val V22_TABLES = setOf("ha_publish_binding", "ha_publish_delivery", "ha_publish_decommission")
+/**
+ * The five tables schema v22 added: #113/#114's three publishing tables (device-local, never exported, merged or
+ * packed), and #125's two — a schedule's own season history, which travels, and its device-local binding, which does
+ * not.
+ */
+internal val V22_TABLES = setOf(
+    "ha_publish_binding", "ha_publish_delivery", "ha_publish_decommission",
+    "schedule_season_activation", "schedule_season_sync_binding",
+)
 
 /** The two material-line tables schema v18 appends a column to (#15). */
 internal val V18_LINE_TABLES = setOf("profile_consumable", "consumable_usage")

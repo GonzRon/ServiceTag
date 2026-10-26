@@ -261,7 +261,7 @@ class BackupCodecTest {
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
                 // Format 19's two keys (#47), at zero here for the same reason.
-                "installedComponents" to 0, "compositionEntries" to 0,
+                "installedComponents" to 0, "compositionEntries" to 0, "scheduleSeasonActivations" to 0,
             ),
             manifest.counts,
         )
@@ -495,7 +495,7 @@ class BackupCodecTest {
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
                 // Format 19's two keys (#47), at zero here for the same reason.
-                "installedComponents" to 0, "compositionEntries" to 0,
+                "installedComponents" to 0, "compositionEntries" to 0, "scheduleSeasonActivations" to 0,
             ),
             decoded.manifest.counts,
         )

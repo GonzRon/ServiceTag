@@ -34,6 +34,7 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 
 /**
  * Decides what merging one archive into this install would do, and **writes nothing** (1.1.0, #46;
@@ -86,6 +87,11 @@ class BuildBackupMergePlan(
     private val installedComponents: InstalledComponentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
+    /**
+     * #125 — a schedule's own season rows (format 21), read like the rest. Defaulted (F-6) so every shipped
+     * construction compiles unchanged; production passes the table.
+     */
+    private val scheduleSeasonActivations: ScheduleSeasonActivationRepository = ScheduleSeasonActivationRepository.NONE,
 ) {
     suspend fun run(bytes: ByteArray): MergePlan = run(BackupCodec.decode(bytes), emptyMap(), emptySet())
 
@@ -116,7 +122,7 @@ class BuildBackupMergePlan(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
                 events, attachments, references, seasonActivations, conditions, healthSubjects,
                 categories, serviceCases, caseEntries, loans, transfers, successions, supplyItems, assetSupplies,
-                installedComponents, stored + overlay, configured,
+                installedComponents, stored + overlay, configured, scheduleSeasonActivations,
             )
         }
         val scope = ReturnScope.of(snapshot, returning)

@@ -505,6 +505,8 @@ class InMemoryGroupRepository : GroupRepository, Rollbackable, Witnessed {
 class InMemoryScheduleRepository(
     private val cascadesTo: InMemoryClosureRepository? = null,
     private val statesCascadeTo: InMemoryScheduleStateRepository? = null,
+    /** #125: the schema's CASCADE to a schedule's own season rows, for a store that asks for it. */
+    private val seasonRowsCascadeTo: (() -> Unit)? = null,
 ) : ScheduleRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, MaintenanceSchedule>()
     override var witness: TransactionWitness? = null
@@ -545,6 +547,7 @@ class InMemoryScheduleRepository(
         version.value += 1
         cascadesTo?.cascadeFromSchedules()
         statesCascadeTo?.cascadeFromSchedules()
+        seasonRowsCascadeTo?.invoke()
     }
 
     override fun observeAll(): Flow<List<MaintenanceSchedule>> = version.map {

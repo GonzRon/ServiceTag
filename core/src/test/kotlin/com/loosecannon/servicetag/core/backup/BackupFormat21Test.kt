@@ -3,6 +3,9 @@ package com.loosecannon.servicetag.core.backup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.testing.scheduleSeasonActivationOf
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.dataTreeOf
@@ -12,6 +15,7 @@ import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.testing.sealed
 import com.loosecannon.servicetag.core.testing.with
 import com.loosecannon.servicetag.core.testing.without
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -80,7 +84,7 @@ class BackupFormat21Test {
             .map { it as JsonObject }.single { it["id"]!!.jsonPrimitive.content == "s-role" }
         assertEquals(JsonPrimitive("SEASON_START"), role["role"])
         assertEquals(JsonPrimitive("2025-10-01"), role["roleSinceOn"])
-        assertEquals(listOf("providers", "role", "roleSinceOn"), role.keys.toList().takeLast(3))
+        assertEquals(listOf("providers", "role", "roleSinceOn", "seasonSource"), role.keys.toList().takeLast(4))
     }
 
     @Test
@@ -170,5 +174,93 @@ class BackupFormat21Test {
 
         assertEquals("assetEvents: a format 20 archive cannot carry an imported marker (event e-pack)", message)
         assertFalse(BackupCodec.decode(sealed(format20Tree(), formatVersion = 20)).data.assetEvents.any { it.imported })
+    }
+
+    // --- #125 (U-C6, h8): a schedule's own season -----------------------------------------------------------------
+
+    private val opening: MaintenanceSchedule = scheduleOf(
+        id = "s-open", assetId = "heater", title = "Example opening service", timeInterval = 1,
+        timeUnit = RecurrenceUnit.YEAR, anchorOn = "2025-10-01",
+    ).copy(seasonSource = ScheduleSeasonSource.OWN)
+
+    private val ownRows = listOf(
+        scheduleSeasonActivationOf("r-start", "s-open", SeasonAction.START, "2025-10-20", createdAt = 2_000L),
+        scheduleSeasonActivationOf("r-end", "s-open", SeasonAction.END, "2026-04-01", createdAt = 3_000L),
+    )
+
+    private fun ownData(): BackupData = data().copy(
+        maintenanceSchedules = data().maintenanceSchedules + opening.toDto(),
+        scheduleSeasonActivations = ownRows.map { it.toDto() },
+    )
+
+    @Test
+    fun aSchedulesOwnSeasonAndItsRowsRoundTrip() {
+        val bytes = archiveOf(ownData())
+        val tree = dataTreeOf(bytes)
+
+        val decoded = BackupCodec.decode(bytes)
+
+        assertEquals(setOf(annual, filter, opening), decoded.data.maintenanceSchedules.map { it.toDomain() }.toSet())
+        assertEquals(ownRows.sortedBy { it.id }, decoded.data.scheduleSeasonActivations.map { it.toDomain() })
+        assertEquals(2, decoded.manifest.counts["scheduleSeasonActivations"])
+        // explicit on every row, and last: the plain row says ASSET
+        val schedules = (tree["maintenanceSchedules"] as JsonArray).map { it as JsonObject }
+        assertEquals(JsonPrimitive("ASSET"), schedules.single { it["id"]!!.jsonPrimitive.content == "s-plain" }["seasonSource"])
+        assertEquals(JsonPrimitive("OWN"), schedules.single { it["id"]!!.jsonPrimitive.content == "s-open" }["seasonSource"])
+        assertEquals("seasonSource", schedules.first().keys.last())
+        assertEquals("scheduleSeasonActivations", tree.keys.last())
+        // an archive with none still says so: an empty list and a zero count
+        assertEquals(0, BackupCodec.decode(archiveOf(data())).manifest.counts["scheduleSeasonActivations"])
+    }
+
+    @Test
+    fun aFormat20ArchiveCarryingAnOwnSeasonOrItsRowsIsRefused() {
+        val format20 = dataTreeOf(archiveOf(ownData()))
+            .editRows("maintenanceSchedules") { it.without("role", "roleSinceOn", "seasonSource") }
+            .editRows("assetEvents") { it.without("imported") }
+            .without("scheduleSeasonActivations")
+        val withSource = format20.editRow("maintenanceSchedules", "s-open") { it.with("seasonSource", JsonPrimitive("OWN")) }
+        val withRows = format20.with("scheduleSeasonActivations", dataTreeOf(archiveOf(ownData()))["scheduleSeasonActivations"]!!)
+
+        assertEquals(
+            "maintenanceSchedules: a format 20 archive cannot carry a schedule's own season (schedule s-open)",
+            refusalOf(sealed(withSource, formatVersion = 20)),
+        )
+        assertEquals(
+            "scheduleSeasonActivations: a format 20 archive cannot carry a schedule's own season rows",
+            refusalOf(sealed(withRows, formatVersion = 20)),
+        )
+        // no key at all, or the explicit default, is a schedule following its asset
+        val decoded = BackupCodec.decode(sealed(format20, formatVersion = 20))
+        assertTrue(decoded.data.maintenanceSchedules.all { it.toDomain().seasonSource == ScheduleSeasonSource.ASSET })
+        BackupCodec.decode(
+            sealed(format20.editRows("maintenanceSchedules") { it.with("seasonSource", JsonPrimitive("ASSET")) }, formatVersion = 20),
+        )
+        // the same rows at format 21 are what this build writes
+        BackupCodec.decode(sealed(withSource.with("scheduleSeasonActivations", JsonArray(emptyList())), formatVersion = 21))
+    }
+
+    @Test
+    fun anUnknownSourceAGroupsOwnSeasonOrARowNamingNoScheduleIsCorrupt() {
+        val tree = dataTreeOf(archiveOf(ownData()))
+        val rows = tree["scheduleSeasonActivations"] as JsonArray
+        val broken = mapOf(
+            "an unknown source" to tree.editRow("maintenanceSchedules", "s-open") { it.with("seasonSource", JsonPrimitive("FORCED")) },
+            "a row naming no schedule in the file" to tree.with(
+                "scheduleSeasonActivations",
+                JsonArray(rows + (rows.first() as JsonObject).with("id", JsonPrimitive("r-lost")).with("scheduleId", JsonPrimitive("s-gone"))),
+            ),
+            "a row id twice" to tree.with("scheduleSeasonActivations", JsonArray(rows + rows.first())),
+            "an unknown action" to tree.with(
+                "scheduleSeasonActivations", JsonArray(listOf((rows.first() as JsonObject).with("action", JsonPrimitive("PAUSE")))),
+            ),
+        )
+
+        for ((case, edited) in broken) {
+            assertFailsWith<BackupCorrupt>(case) { BackupCodec.decode(sealed(edited, formatVersion = 21)) }
+        }
+        assertTrue("s-gone" in refusalOf(sealed(broken.getValue("a row naming no schedule in the file"), formatVersion = 21)))
+        // inv. 106: a group's schedule follows no season of its own
+        assertFailsWith<BackupCorrupt> { opening.toDto().copy(assetId = null, groupId = "g-heaters").toDomain() }
     }
 }

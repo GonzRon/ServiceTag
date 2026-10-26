@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -85,6 +86,8 @@ fun GroupMember.toEntity(groupId: GroupId): MaintenanceGroupMemberEntity =
  * #114 (C13): `role` by its enum name and `role_since_on` verbatim. A row that breaks R1 (a boundary exactly while
  * the role is `SEASON_START`) fails only a debug assertion — JVM assertions, off on the device — and is otherwise
  * mapped as stored, which readiness reads as `NO_ROLE`: a merged row never crashes a read model.
+ *
+ * #125 (U-C1): `season_source` by its enum name, both ways, so every full-row write keeps it.
  */
 fun ScheduleWithProviders.toDomain(): MaintenanceSchedule = MaintenanceSchedule(
     id = ScheduleId(schedule.id),
@@ -113,6 +116,7 @@ fun ScheduleWithProviders.toDomain(): MaintenanceSchedule = MaintenanceSchedule(
     providers = providers.sortedBy { it.provider }.map { it.toDomain() },
     role = enumValueOf<ScheduleRole>(schedule.role),
     roleSinceOn = schedule.roleSinceOn,
+    seasonSource = enumValueOf<ScheduleSeasonSource>(schedule.seasonSource),
 ).also { mapped ->
     assert((mapped.roleSinceOn != null) == (mapped.role == ScheduleRole.SEASON_START)) {
         "schedule ${mapped.id.value} breaks R1: role ${mapped.role} with roleSinceOn ${mapped.roleSinceOn}"
@@ -159,6 +163,7 @@ fun MaintenanceSchedule.toEntity(): MaintenanceScheduleEntity = MaintenanceSched
     ruleChangedAt = ruleChangedAt,
     role = role.name,
     roleSinceOn = roleSinceOn,
+    seasonSource = seasonSource.name,
 )
 
 fun ScheduleProviderRow.toEntity(scheduleId: ScheduleId): ScheduleProviderEntity =

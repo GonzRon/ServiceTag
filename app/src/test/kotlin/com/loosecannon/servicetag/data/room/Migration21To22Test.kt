@@ -30,9 +30,23 @@ class Migration21To22Test {
             withConnection(file) { m ->
                 assertEquals(
                     listOf("role TEXT notnull=1 default='NONE' pk=0", "role_since_on TEXT notnull=0 default=- pk=0"),
-                    m.columnsOf("maintenance_schedule").takeLast(2),
+                    m.columnsOf("maintenance_schedule").takeLast(3).take(2),
                 )
-                assertEquals(listOf("s1|NONE|NULL"), m.lines("SELECT id, role, role_since_on FROM maintenance_schedule"))
+                assertEquals(
+                    listOf("s1|NONE|NULL", "s2|NONE|NULL"),
+                    m.lines("SELECT id, role, role_since_on FROM maintenance_schedule ORDER BY id"),
+                )
+            }
+        }
+    }
+
+    /** #125 (U-C1, h7): every v21 schedule follows its asset's season. */
+    @Test
+    fun theSeasonSourceDefaultsToAsset() = runTest {
+        migrating { file, _ ->
+            withConnection(file) { m ->
+                assertEquals("season_source TEXT notnull=1 default='ASSET' pk=0", m.columnsOf("maintenance_schedule").last())
+                assertEquals(listOf("s1|ASSET", "s2|ASSET"), m.lines("SELECT id, season_source FROM maintenance_schedule ORDER BY id"))
             }
         }
     }
@@ -79,7 +93,7 @@ class Migration21To22Test {
     fun theThreeTablesExistEmptyWithTheirIndicesAndKeys() = runTest {
         migrating { file, before ->
             withConnection(file) { m ->
-                assertEquals("the three new tables", V22_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys)
+                assertEquals("the five new tables", V22_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys)
                 for (table in V22_TABLES) {
                     assertEquals("$table is empty", listOf("0"), m.lines("SELECT COUNT(*) FROM $table"))
                 }
@@ -199,6 +213,76 @@ class Migration21To22Test {
     }
 
     /**
+     * #125 (U-C1, h7): a schedule's own season history, owned by its schedule (CASCADE) and indexed by it; and the
+     * device-local schedule binding, keyed by the **schedule** — so two schedules of one asset each hold one — owned by
+     * the schedule and by the connection (both CASCADE), the connection indexed.
+     */
+    @Test
+    fun theTwoScheduleSeasonTablesExistEmptyKeyedByTheSchedule() = runTest {
+        migrating { file, _ ->
+            withConnection(file) { m ->
+                assertEquals(
+                    listOf(
+                        "id TEXT notnull=1 default=- pk=1",
+                        "schedule_id TEXT notnull=1 default=- pk=0",
+                        "action TEXT notnull=1 default=- pk=0",
+                        "occurred_on TEXT notnull=1 default=- pk=0",
+                        "created_at INTEGER notnull=1 default=- pk=0",
+                    ),
+                    m.columnsOf("schedule_season_activation"),
+                )
+                assertEquals(listOf("id"), m.primaryKeyOf("schedule_season_activation"))
+                assertEquals(
+                    listOf("schedule_id -> maintenance_schedule(id) ON DELETE CASCADE"),
+                    m.foreignKeysOf("schedule_season_activation"),
+                )
+                assertEquals(
+                    listOf(
+                        "index_schedule_season_activation_schedule_id | CREATE INDEX " +
+                            "`index_schedule_season_activation_schedule_id` ON `schedule_season_activation` (`schedule_id`)",
+                        "sqlite_autoindex_schedule_season_activation_1 | (implicit)",
+                    ),
+                    m.indexDefinitionsOn("schedule_season_activation"),
+                )
+
+                // #16's binding columns, the schedule in the asset's place
+                assertEquals(
+                    listOf("schedule_id TEXT notnull=1 default=- pk=1") +
+                        m.columnsOf("season_sync_binding").drop(1),
+                    m.columnsOf("schedule_season_sync_binding"),
+                )
+                assertEquals(listOf("schedule_id"), m.primaryKeyOf("schedule_season_sync_binding"))
+                assertEquals(
+                    listOf(
+                        "connection_id -> ha_connection(id) ON DELETE CASCADE",
+                        "schedule_id -> maintenance_schedule(id) ON DELETE CASCADE",
+                    ),
+                    m.foreignKeysOf("schedule_season_sync_binding"),
+                )
+                assertEquals(
+                    listOf(
+                        "index_schedule_season_sync_binding_connection_id | CREATE INDEX " +
+                            "`index_schedule_season_sync_binding_connection_id` ON `schedule_season_sync_binding` " +
+                            "(`connection_id`)",
+                        "sqlite_autoindex_schedule_season_sync_binding_1 | (implicit)",
+                    ),
+                    m.indexDefinitionsOn("schedule_season_sync_binding"),
+                )
+
+                // two schedules of one asset each hold their own binding: the key is the schedule
+                for (schedule in listOf("s1", "s2")) {
+                    m.execSQL(
+                        "INSERT INTO schedule_season_sync_binding (schedule_id, connection_id, entity_id, mode, enabled, " +
+                            "revision, created_at, updated_at) VALUES ('$schedule', 'c1', " +
+                            "'input_boolean.example_heater_winterize_season', 'FOLLOW', 1, 1, 2000, 2000)",
+                    )
+                }
+                assertEquals(listOf("s1", "s2"), m.lines("SELECT schedule_id FROM schedule_season_sync_binding ORDER BY schedule_id"))
+            }
+        }
+    }
+
+    /**
      * Every table the v21 file had is the same table afterwards — its columns, key, foreign keys and indices — holding
      * the same rows in every column it had; `maintenance_schedule`, `asset_event` and `ha_connection` differ by their
      * appended columns only, and no other table gains one.
@@ -311,6 +395,8 @@ class Migration21To22Test {
             "maintenance_schedule" to listOf(
                 "role TEXT notnull=1 default='NONE' pk=0",
                 "role_since_on TEXT notnull=0 default=- pk=0",
+                // #125 (U-C1)
+                "season_source TEXT notnull=1 default='ASSET' pk=0",
             ),
             "asset_event" to listOf("imported INTEGER notnull=1 default=0 pk=0"),
             "ha_connection" to listOf("config_generation INTEGER notnull=1 default=0 pk=0"),
@@ -339,6 +425,8 @@ class Migration21To22Test {
                     "service_policy,policy_offset_days,completion_mode,profile_id,reminders_enabled,status," +
                     "postponed_due_on,created_at,updated_at,rule_changed_at) VALUES " +
                     "('s1','a1',NULL,'Example annual service','',1,'YEARS','FROM_COMPLETION','2025-09-01',14," +
+                    "NULL,NULL,NULL,NULL,'IN_SERVICE_AT_START',NULL,'QUICK',NULL,1,'ACTIVE',NULL,1100,1200,1100), " +
+                    "('s2','a1',NULL,'Example weekly check','',1,'WEEKS','FROM_COMPLETION','2025-11-01',0," +
                     "NULL,NULL,NULL,NULL,'IN_SERVICE_AT_START',NULL,'QUICK',NULL,1,'ACTIVE',NULL,1100,1200,1100)",
             )
             c.execSQL(

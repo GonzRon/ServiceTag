@@ -3,6 +3,9 @@ package com.loosecannon.servicetag.backup
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
@@ -10,6 +13,8 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
 import com.loosecannon.servicetag.core.seasonsync.LastAppliedSource
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
@@ -19,6 +24,7 @@ import com.loosecannon.servicetag.data.room.entities.HaPublishBindingEntity
 import com.loosecannon.servicetag.data.room.entities.HaPublishDecommissionEntity
 import com.loosecannon.servicetag.data.room.entities.HaPublishDeliveryEntity
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.scheduleOf
 import java.io.ByteArrayInputStream
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.test.runTest
@@ -39,6 +45,9 @@ import org.junit.Test
  * `ha_publish_delivery` and `ha_publish_decommission`: no export, merge, Transfer Pack or replace restore names them,
  * a merge leaves every row and revision, and a replace restore's wipe leaves them for the projector (the binding's
  * asset is a soft link, C34). Tripwires: schema 22's own RED is row 22's.
+ *
+ * #125 (U-C6, h8) adds the schedule binding (`schedule_season_sync_binding`): its schedule's source and own rows travel,
+ * the binding never.
  */
 class SeasonSyncNeverTravelsTest {
 
@@ -247,6 +256,60 @@ class SeasonSyncNeverTravelsTest {
         assertEquals("the connection stays", connection, graph.haConnections.get())
     }
 
+    // --- #125 (U-C6, h8): a schedule's own binding ----------------------------------------------------------------
+
+    private val opening = scheduleOf(
+        id = "s-open", assetId = heater.value, title = "Example opening service", timeInterval = 1,
+        timeUnit = RecurrenceUnit.YEAR, anchorOn = "2026-01-15",
+    ).copy(seasonSource = ScheduleSeasonSource.OWN)
+
+    private val ownStart = ScheduleSeasonActivation("r-own-start", ScheduleId("s-open"), SeasonAction.START, "2026-10-20", 4_000L)
+
+    /** A schedule binding with every optional field set, so any column that leaked would carry a marker. */
+    private val scheduleBinding = ScheduleSeasonBinding(
+        scheduleId = ScheduleId("s-open"), connectionId = CONNECTION, entityId = SCHEDULE_ENTITY, mode = SyncMode.FOLLOW,
+        enabled = true, revision = 4, observedState = HaSwitchState.ON, observedChangedAt = "2026-10-19T23:30:00+00:00",
+        lastSuccessAt = 3_900L, lastAttemptAt = 3_950L, errorKind = SyncErrorKind.TIMED_OUT,
+        errorDetail = "schedule-fetch-detail-x", errorAt = 3_950L, appliedAction = SeasonAction.START,
+        appliedOn = "2026-10-20", appliedAt = 4_000L, lastAppliedSource = LastAppliedSource.HOME_ASSISTANT,
+        createdAt = 3_000L, updatedAt = 4_000L,
+    )
+
+    /**
+     * The schedule's source and its own rows are data and travel; its binding is device-local and never does: no
+     * export, Transfer Pack or manifest key names it, a merge leaves it, and a replace restore takes it with the wiped
+     * schedule — which comes back on its own season with its rows, stranded (#16's carry rule).
+     */
+    @Test
+    fun aSchedulesOwnSeasonTravelsAndItsBindingNever() = runTest {
+        graph.assets.upsert(heaterRow)
+        graph.schedules.upsert(opening)
+        graph.scheduleSeasonActivations.insert(ownStart)
+        graph.haConnections.upsert(connection)
+        graph.scheduleSeasonBindings.insert(scheduleBinding)
+
+        val archive = graph.exportBackupSet.run().data
+
+        assertNoMarker("the export", textOf(archive), SCHEDULE_MARKERS)
+        assertTrue("the source travels", "\"seasonSource\": \"OWN\"" in textOf(archive))
+        assertTrue("its rows travel", "r-own-start" in textOf(archive))
+        val draft = (graph.createTransferPack.run(listOf(heater), "") as CreateTransferPackResult.Created).draft
+        assertNoMarker("the pack's data", textOf(draft.data), SCHEDULE_MARKERS)
+        assertNoMarker("the pack's counts", draft.counts.keys.joinToString(","), SCHEDULE_MARKERS)
+        assertTrue("the pack carries the rows", "r-own-start" in textOf(draft.data))
+
+        val dehumidifier = Asset(id = AssetId("asset-dehumidifier"), name = "Example Dehumidifier", createdAt = 1_000L, updatedAt = 1_000L)
+        source.assets.upsert(dehumidifier)
+        graph.importBackupMerge.run(source.exportBackupSet.run().data)
+        assertEquals("a merge leaves it", listOf(scheduleBinding), graph.scheduleSeasonBindings.all())
+
+        graph.importBackupReplace.run(archive)
+        assertEquals("a replace restore takes it", emptyList<ScheduleSeasonBinding>(), graph.scheduleSeasonBindings.all())
+        assertEquals(ScheduleSeasonSource.OWN, graph.schedules.get(ScheduleId("s-open"))!!.seasonSource)
+        assertEquals(listOf(ownStart), graph.scheduleSeasonActivations.forSchedule(ScheduleId("s-open")))
+        assertEquals("the connection stays", connection, graph.haConnections.get())
+    }
+
     // --- the bytes -----------------------------------------------------------------------------
 
     private fun assertNoMarker(what: String, text: String, markers: List<String> = MARKERS) {
@@ -289,6 +352,14 @@ class SeasonSyncNeverTravelsTest {
         const val BOUNDARY_ENTITY = "input_datetime.example_heater_season_ended"
         const val OLD_DATE_ENTITY = "input_datetime.example_old_service_done"
         const val INSTALLATION = "example-installation-1"
+
+        const val SCHEDULE_ENTITY = "input_boolean.example_heater_winterize_season"
+
+        /** #125: every name and value the schedule binding holds that no other row of the fixture does. */
+        val SCHEDULE_MARKERS = MARKERS + listOf(
+            "schedule_season_sync", "scheduleSeasonBinding", "ScheduleSeasonBinding", SCHEDULE_ENTITY,
+            "schedule-fetch-detail-x", "2026-10-19T23:30:00", "TIMED_OUT",
+        )
 
         /** #113/#114 (C6): every name and value the three publishing tables hold that no other row of the fixture does. */
         val PUBLISH_MARKERS = MARKERS + listOf(

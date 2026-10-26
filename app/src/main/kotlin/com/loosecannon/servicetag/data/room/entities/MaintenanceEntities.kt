@@ -159,6 +159,11 @@ data class MaintenanceScheduleEntity(
     @ColumnInfo(name = "role", defaultValue = "NONE") val role: String = "NONE",
     /** Schema v22 (#114, C4.1): the role's boundary day, set exactly while the role is `SEASON_START` (I1). */
     @ColumnInfo(name = "role_since_on") val roleSinceOn: String? = null,
+    /**
+     * Schema v22 (#125, U-C1): `ASSET` or `OWN`, the stored name of the season the schedule's due rules read. Appended
+     * last, after the role pair, so the migration's `ADD COLUMN` and a fresh v22 agree on the column order.
+     */
+    @ColumnInfo(name = "season_source", defaultValue = "ASSET") val seasonSource: String = "ASSET",
 )
 
 /**

@@ -291,7 +291,7 @@ class BackupFormat6Test {
             listOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures"),
             tables.subList(7, 10),
         )
-        assertEquals(23, tables.size)
+        assertEquals(24, tables.size)
         // and neither derived nor delivery state is a table of this format
         assertTrue(tables.none { it.startsWith("scheduleState") || it.startsWith("scheduleLocal") })
     }
@@ -406,11 +406,11 @@ class BackupFormat6Test {
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
                 // Format 19's two keys (#47), at zero here for the same reason.
-                "installedComponents" to 0, "compositionEntries" to 0,
+                "installedComponents" to 0, "compositionEntries" to 0, "scheduleSeasonActivations" to 0,
             ),
             manifest.counts,
         )
-        assertEquals(31, manifest.counts.size)
+        assertEquals(32, manifest.counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

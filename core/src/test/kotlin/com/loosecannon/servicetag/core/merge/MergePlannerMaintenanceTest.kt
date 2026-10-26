@@ -275,6 +275,8 @@ class MergePlannerMaintenanceTest {
                 MergeTable.SUPPLY_ITEMS, MergeTable.ASSET_SUPPLIES,
                 // #47 (format 19; `MergePlannerInstalledComponentTest`): appended last, decided after the applicability rows.
                 MergeTable.INSTALLED_COMPONENTS,
+                // #125 (format 21; `ScheduleSeasonMergeTest`): appended, a row after its schedule.
+                MergeTable.SCHEDULE_SEASON_ACTIVATIONS,
             ),
             MergeTable.entries.toList(),
         )

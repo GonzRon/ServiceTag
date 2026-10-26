@@ -23,7 +23,7 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val attachments = InMemoryAttachmentRepository()
     val groups = InMemoryGroupRepository()
     val closures = InMemoryClosureRepository()
-    val schedules = InMemoryScheduleRepository(closures)
+    val schedules = InMemoryScheduleRepository(closures, seasonRowsCascadeTo = { scheduleSeasonActivations.rows.clear() })
     val references = InMemoryReferenceRepository()
     val activations = InMemorySeasonActivationRepository()
     val conditions = InMemoryConditionRepository()
@@ -58,11 +58,21 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
      */
     val seasonSyncBindings = InMemorySeasonSyncRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
     val haConnections = InMemoryHaConnectionRepository(seasonSyncBindings)
+    /**
+     * #125 (U-C1): a schedule's own season rows, which travel, and its device-local binding, which does not: only the
+     * rows are handed to the export, the replace and the merge below. The schedule double's wipe takes the rows, as the
+     * schema's CASCADE does.
+     */
+    val scheduleSeasonActivations = InMemoryScheduleSeasonActivationRepository()
+    val scheduleSeasonBindings = InMemoryScheduleSeasonBindingRepository().also {
+        haConnections.cascadesTo(it::cascadeFromConnection)
+    }
     val storage = FakeAttachmentStorage()
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
         successions, supplyItems, assetSupplies, installedComponents, seasonSyncBindings, haConnections,
+        scheduleSeasonActivations, scheduleSeasonBindings,
     )
 
     var rebuilds = 0
@@ -72,22 +82,23 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
         successions, supplyItems, assetSupplies, installedComponents,
         uow, IdGenerator { setId }, Clock { now }, appVersion = "1.4.1", schemaVersion = 9,
+        scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val replace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
         successions, supplyItems, assetSupplies, installedComponents, storage, uow,
-        rebuildAll = { rebuilds += 1 },
+        rebuildAll = { rebuilds += 1 }, scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies, installedComponents, storage, uow,
+        successions, supplyItems, assetSupplies, installedComponents, storage, uow, scheduleSeasonActivations,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
         successions, supplyItems, assetSupplies, installedComponents, storage, uow,
-        rebuildAll = { rebuilds += 1 },
+        rebuildAll = { rebuilds += 1 }, scheduleSeasonActivations = scheduleSeasonActivations,
     )
 }

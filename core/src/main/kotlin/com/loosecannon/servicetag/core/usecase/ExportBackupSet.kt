@@ -38,6 +38,7 @@ import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.transfer.TransferRetention
 
@@ -104,11 +105,16 @@ class ExportBackupSet(
     private val clock: Clock,
     private val appVersion: String,
     private val schemaVersion: Int,
+    /**
+     * #125 — a schedule's own season rows (format 21), every one but those of a schedule held here (`retain` drops
+     * them). Defaulted (F-6) so every shipped construction compiles unchanged; production passes the table.
+     */
+    private val scheduleSeasonActivations: ScheduleSeasonActivationRepository = ScheduleSeasonActivationRepository.NONE,
 ) {
     private val repos = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies, installedComponents,
+        successions, supplyItems, assetSupplies, installedComponents, scheduleSeasonActivations,
     )
 
     /**
@@ -167,6 +173,11 @@ class BackupRepositories(
     val assetSupplies: AssetSupplyRepository,
     /** #47 — the installed components, each with its composition (format 19). */
     val installedComponents: InstalledComponentRepository,
+    /**
+     * #125 — a schedule's own season rows (format 21). Defaulted (F-6) so every shipped construction compiles
+     * unchanged; production passes the table.
+     */
+    val scheduleSeasonActivations: ScheduleSeasonActivationRepository = ScheduleSeasonActivationRepository.NONE,
 )
 
 /**
@@ -213,6 +224,8 @@ suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
         // Format 19: every installed component, current and removed, each with its composition; the export's `retain`
         // drops a held asset's rows (#47, C13).
         installedComponents = installedComponents.all().map { it.toDto() },
+        // Format 21: every schedule's own season rows; the export's `retain` drops a held asset's schedules' rows (#125).
+        scheduleSeasonActivations = scheduleSeasonActivations.all().map { it.toDto() },
     )
 }
 
