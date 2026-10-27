@@ -32,7 +32,7 @@ surface was the optional Todoist client.
 > writers on one helper (one enabled publication per helper per installation, never a helper a season link reads,
 > and the read-back reports a stranger's write); and a workstation driving publishing (the Developer API's controls
 > take no value, a date to publish or a ready flag, enable only through a plan the caller confirms, and never reach
-> the token, the address, Forget or the season link). ServiceTag reports facts; Home Assistant's automations decide
+> the token, the address, Forget or an Asset's season link). ServiceTag reports facts; Home Assistant's automations decide
 > what equipment does. #125 adds no surface: a schedule's own season reads one on/off helper through #16's client.
 
 ## Surface-by-surface analysis

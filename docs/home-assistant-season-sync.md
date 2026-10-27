@@ -212,18 +212,31 @@ alone, made only of the rows its helper writes, with no calendar window, and wit
 - **Follow only.** The same rules as an Asset's link apply — the same connection, token, network rule, interval and
   `input_boolean` helpers, and the same "on starts, off ends, compared first" — but there is no Force: the schedule
   follows Home Assistant or it uses the Asset's season.
-- **On the phone**, the schedule's page shows its season ("Season: Example Heater's season", or "Season: follows
-  input_boolean.example_heater_service_window in Home Assistant"), with **Follow Home Assistant**, which opens the
-  same entity sheet as an Asset's link, and **Use the asset's season**, which asks first: "Stop following Home
-  Assistant? This schedule will use Example Heater's season again, and its own season history is kept."
+- **On the phone**, an Asset's schedule shows its season on its page, in one of three states, each with its own
+  action (a group's schedule shows none, and no action is offered while the Asset is transferred out from here):
+  - **Using the Asset's season:** "Season: Example Heater's season", with **Follow Home Assistant** while the
+    schedule is live and a connection is saved; it opens the same entity sheet as an Asset's link.
+  - **Following its own:** "Season: follows input_boolean.example_heater_service_window in Home Assistant", with the
+    link's lines as an Asset's card draws them — the last successful check (or that there is none yet), "Not checked
+    successfully within the chosen interval.", the time Home Assistant changed it, the last change the link made and
+    the latest problem — and **Use the asset's season**, which asks first: "Stop following Home Assistant? This
+    schedule will use Example Heater's season again, and its own season history is kept."
+  - **Stranded**, on its own season with no link (after Disconnect, or a schedule imported with its own season): "No
+    longer linked to Home Assistant: this schedule keeps its own season as it was. Follow Home Assistant again, or use
+    the asset's season.", with both **Follow Home Assistant** (while the schedule is live) and **Use the asset's
+    season**.
 - **Refused**, with nothing written: a group's schedule ("A group's schedule follows no season of its own."); an
   archived schedule; an Asset no longer maintained here; a helper this phone publishes to; and a schedule done before
   the season starts on an Asset with no maintenance break ("This schedule is done before the season starts, and a
   Home Assistant season has no start date to be ready before. Change when it should be done first."). A year-round
   Asset's schedule may follow a season of its own.
+- **No start is predicted.** A Home Assistant season has no calendar: out of its own season the schedule shows "Out
+  of season until you start it" and no next date until its helper turns `on`, and from linking until the first check
+  reads the helper it is out of its season. The Assets list's Home Assistant mark is the Asset's own and does not
+  show a schedule's link.
 - **Nothing falls back by itself.** Only **Use the asset's season** and archiving the schedule return it to the
-  Asset's season. After Disconnect it keeps its own season as it was and says "No longer linked to Home Assistant:
-  this schedule keeps its own season as it was. Follow Home Assistant again, or use the asset's season."
+  Asset's season. After Disconnect it keeps its own season as it was, stranded, until you follow Home Assistant again
+  or use the Asset's season.
 - **The season travels; the link does not.** Its own season rows are in every ServiceTag backup, merge and Transfer
   Pack; the link is this phone's alone, so an imported schedule that followed its own season arrives unlinked.
 
@@ -231,9 +244,9 @@ alone, made only of the rows its helper writes, with no calendar window, and wit
 
 One schedule can be an Asset's **Season Start service**: the service that makes it ready for its season. The Asset
 is **ready for the season** exactly when that schedule has a qualifying completion of this Asset dated on or after
-the later of two days — the day the role was set (its commissioning boundary) and the day the Asset's season last
-ended. ServiceTag reads nothing else for it: no condition, health, reminder or due date, and no name, category or
-template. Whether an Asset has a season, and when it ended, are that Asset's own settings.
+the later of two days — the role's **Services count from** date (its commissioning boundary) and the day the
+Asset's season last ended. ServiceTag reads nothing else for it: no condition, health, reminder or due date, and no
+name, category or template. Whether an Asset has a season, and when it ended, are that Asset's own settings.
 
 - **Setting the role.** On a schedule's page, **Use as Season Start service** asks: "Use "Example annual service" as
   Example Heater's Season Start service? Completing it marks Example Heater ready for the season. Services dated on or
@@ -253,7 +266,7 @@ template. Whether an Asset has a season, and when it ended, are that Asset's own
   latest such date is the service date.
 - **The date guard.** A schedule's completion cannot be dated after today, on the phone, the Developer API or the
   MCP: the completion prompt and the entry form will not save it and say "The date cannot be later than today." An
-  older record dated ahead keeps its date but never counts —
+  older record dated ahead keeps its date and does not count until it is edited on or after that day —
   before its day it reads "Not ready yet: the service is dated %s, after today", and from then on "Not ready: the
   service dated %s was entered before that day, so it does not count. Edit it on or after that day to confirm it." A
   record written in advance never becomes a service because midnight came.
@@ -287,8 +300,9 @@ count from the Season Start service". Out of season it behaves as "When the seas
 Asset's own schedules with a time rule, on a calendar or manual season, never on a group's schedule, and never on the
 Season Start service itself; an Asset with no Season Start service has nothing to count from, and the editor says so.
 While a schedule counts from it, the Season Start service cannot be cleared or archived, its group cannot be
-archived, the Asset cannot leave that group and cannot become year-round: the phone names the schedule that counts
-from it and says "Change when it starts counting first."
+archived and the Asset cannot leave that group: the phone names the schedule that counts from it and says "Change
+when it starts counting first." (An Asset with a Season Start service cannot become year-round in any case: "…so it
+needs seasons.")
 
 ## Publishing to Home Assistant (#113, #114)
 
@@ -357,22 +371,24 @@ input_datetime:
 
 For an Asset whose **manual** season Home Assistant drives through a season link, the date publication also names
 the helper Home Assistant stamps when the season ends — "Season-ended helper (the date Home Assistant records when
-the season ends)" — required then, and offered only then. The phone reads it at every read-back, and before it sends
-a date whenever its last read is no longer fresh. Readiness then counts from Home Assistant's date rather than the
-day the phone happened to see the season end:
+the season ends)" — required then, and offered only then. The phone reads it whenever it reads every helper back —
+on opening and returning, on Publish now and at the background check — and before it sends a date whenever its last
+read is no longer fresh. Readiness then counts from Home Assistant's date rather than the day the phone happened to
+see the season end:
 
 - **Fresh** while the last good read was made for the publication as it stands now, no longer ago than a week or the
   check interval if that is longer, and not before the Asset's newest season entry.
 - **Unverified** otherwise: readiness uses the later of the last date read and the phone's own END, the card says
   "Season end not checked with Home Assistant since %1$s · using %2$s", and the date is still published. Unverified
-  only ever withholds a date; it never lets one through that Home Assistant's own comparison would not.
+  never loosens the rule: it takes the later of the two dates. A date published then can still be older than a season
+  end the phone has not read, and Home Assistant's own comparison with the season-ended helper refuses it.
 - A calendar season's end is its window's, and Home Assistant's date never overrides it. Any other manual season
   uses the phone's END. A date publication turned on before its Asset was linked names no season-ended helper and
   uses the phone's END until you stop publishing and turn it on again naming one.
 
-Stamp the season-ended helper from the in-season helper, once per season, at a real `on` → `off` change only —
-never from `unavailable` or `unknown`, and never at Home Assistant start — and set it explicitly once when you
-commission it:
+Stamp the season-ended helper from the in-season helper at a real `on` → `off` change only (the example below stamps
+every such change; see the next paragraph for a cold spell) — never from `unavailable` or `unknown`, and never at
+Home Assistant start — and set it explicitly once when you commission it:
 
 ```yaml
 automation:
@@ -644,7 +660,8 @@ on the phone.
 - **Proven on an emulator, not yet on a phone.** A phone's own Wi-Fi, its private DNS and Android's battery saving
   (Doze) have not been observed, and a background check's read of the Wi-Fi name is proven only on an emulator.
 - **The entity list shows one kind of helper at a time**, read through the REST states list: `input_boolean` for a
-  season, `input_select` or `input_datetime` for a publication; a switch or a sensor is entered by hand for a season.
+  season, `input_select` or `input_datetime` for a publication; a switch or a sensor is entered by hand for an
+  Asset's season (a schedule's own season takes an `input_boolean` only).
   Devices are not shown: Home Assistant's device and display registries are not read. Lists past the first 2,000
   helpers are cut, and the sheet asks you to search; a list over 8 MiB is refused as unreadable, and manual entry
   remains.
