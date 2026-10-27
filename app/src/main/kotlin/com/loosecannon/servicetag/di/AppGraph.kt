@@ -99,6 +99,7 @@ import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationReposi
 import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
 import com.loosecannon.servicetag.core.seasonsync.SetSeasonSyncMode
 import com.loosecannon.servicetag.core.seasonsync.StopSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.UnlinkSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.UnlinkScheduleSeason
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
@@ -995,6 +996,8 @@ class AppGraph(private val context: Context) {
     val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
     val resumeSeasonSync: ResumeSeasonSync =
         ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
+    /** #129 (L-C1, L-C5): Remove link, one asset's binding; the runner's cancel keeps an enabled schedule binding's work. */
+    val unlinkSeasonSync: UnlinkSeasonSync = UnlinkSeasonSync(seasonSyncBindings, seasonSyncRunner, uow)
     val saveHaConnection: SaveHaConnection = SaveHaConnection(
         haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock, outboundTargets,
         // #125 (ruling 2b): a re-authorised save moves the schedule bindings too, and reads each enabled one afresh.

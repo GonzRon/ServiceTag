@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.seasonsync.SaveHaConnection
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SetSeasonSyncMode
 import com.loosecannon.servicetag.core.seasonsync.StopSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.UnlinkSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
@@ -529,6 +530,8 @@ class FakeGraph(
     val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
     val resumeSeasonSync: ResumeSeasonSync =
         ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
+    /** #129 (L-C5): as `AppGraph`'s. */
+    val unlinkSeasonSync: UnlinkSeasonSync = UnlinkSeasonSync(seasonSyncBindings, seasonSyncRunner, uow)
     val saveHaConnection: SaveHaConnection = SaveHaConnection(
         haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock, outboundTargets,
         // #125 (ruling 2b): a re-authorised save moves the schedule bindings too, and reads each enabled one afresh.

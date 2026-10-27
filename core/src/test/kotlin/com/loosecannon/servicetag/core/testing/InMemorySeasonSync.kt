@@ -75,6 +75,11 @@ class InMemorySeasonSyncRepository : SeasonSyncRepository, Rollbackable, Witness
         return true
     }
 
+    /** #129 (L-C2): one asset's row, rolled back with its write ([snapshot]); a missing row is a no-op. */
+    override suspend fun delete(assetId: AssetId) {
+        if (rows.remove(assetId.value) != null) version.value += 1
+    }
+
     override suspend fun anyEnabled(): Boolean = rows.values.any { it.enabled }
 
     /** The schema's CASCADE from `asset`: this asset's binding goes. */

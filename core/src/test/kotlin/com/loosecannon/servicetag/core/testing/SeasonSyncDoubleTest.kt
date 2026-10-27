@@ -148,6 +148,46 @@ class SeasonSyncDoubleTest {
         assertEquals("http://192.168.0.10:8123", install.haConnections.get()?.baseUrl, "the connection as it was")
     }
 
+    /**
+     * #129 (L-C2; row k6) — the double's per-binding delete, as Room's: one asset's row goes, rolled back with a write
+     * that throws; a committed delete makes `observeFor` emit null and `observeAll` the shorter list, each seen by a
+     * collector started before it; a missing row deletes nothing.
+     */
+    @Test
+    fun aDeleteRollsBackWithItsWriteAndBothFlowsEmit() = runTest {
+        seed()
+        val heaters = mutableListOf<String?>()
+        val links = mutableListOf<List<String>>()
+        backgroundScope.launch { bindings.observeFor(heater).collect { heaters += it?.entityId } }
+        backgroundScope.launch { bindings.observeAll().collect { rows -> links += rows.map { it.assetId.value } } }
+        runCurrent()
+
+        assertFailsWith<IllegalStateException> {
+            install.uow.write {
+                bindings.delete(heater)
+                assertNull(bindings.get(heater), "deleted inside the write")
+                error("a later step failed")
+            }
+        }
+        runCurrent()
+
+        assertEquals(1, install.uow.rollbacks)
+        assertEquals(listOf(heater, cooler), bindings.all().map { it.assetId }, "rolled back")
+
+        install.uow.write { bindings.delete(heater) }
+        runCurrent()
+        bindings.delete(AssetId("nobody"))
+        runCurrent()
+
+        assertNull(bindings.get(heater))
+        assertEquals(listOf(cooler), bindings.all().map { it.assetId }, "the cooler keeps its own")
+        assertEquals("input_boolean.example_heater_in_season", heaters.first())
+        assertNull(heaters.last(), "observeFor emits null")
+        assertEquals(listOf("h1", "x1"), links.first())
+        assertEquals(listOf("x1"), links.last(), "observeAll emits the shorter list")
+        assertEquals("conn-1", install.haConnections.get()?.id, "the connection stays")
+    }
+
     @Test
     fun theScriptedReaderRecordsEachCallAndCanHoldOne() = runTest {
         val reader = ScriptedHaStateReader()
