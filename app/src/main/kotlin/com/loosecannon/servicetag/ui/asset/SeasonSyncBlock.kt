@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +28,7 @@ import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.ui.homeassistant.LocationAsks
 import com.loosecannon.servicetag.ui.homeassistant.NoticeAction
 import com.loosecannon.servicetag.ui.homeassistant.NoticeLine
+import com.loosecannon.servicetag.ui.supplies.REMOVE_LINK
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
@@ -35,6 +38,10 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
  * location; or, after the foreground grant, P16-73 and the app's settings page on API 30+, the system dialog on 29),
  * launched by [LocationAsks], which the Home Assistant screen shares; every grant is read again on resume. [onLink]
  * and [onReconcile] open the setup sheet (B8b2); while null, neither action is drawn.
+ *
+ * #129 (L-C6): an enabled or a stopped link also draws Change helper (P129-1), which opens the sheet on the stored
+ * helper through [onChangeHelper] (not drawn while null), and Remove link (P15-23), which asks P129-2 first in a
+ * dialog with no typed input — Remove link or Cancel; back and the scrim cancel — as the schedule row's confirm does.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -43,6 +50,7 @@ internal fun SeasonSyncBlock(
     state: SeasonSyncBlockState,
     onLink: (() -> Unit)? = null,
     onReconcile: (() -> Unit)? = null,
+    onChangeHelper: (() -> Unit)? = null,
 ) {
     LocationAsks(
         requests = model.requests,
@@ -77,19 +85,48 @@ internal fun SeasonSyncBlock(
                             Text(SEASON_SYNC_STOP)
                         }
                     }
+                    LinkActions(model, state, onChangeHelper)
                 }
             }
             SeasonSyncBlockKind.STOPPED -> {
                 listOfNotNull(state.stoppedLine, state.stateLine).forEach { Line(it) }
                 val resume = if (state.resumeOpensSheet) onReconcile else model::resumeSyncing
-                if (state.offersResume && resume != null) {
-                    OutlinedButton(onClick = resume, enabled = !state.busy, shape = ControlShape) {
-                        Text(SEASON_SYNC_RESUME)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (state.offersResume && resume != null) {
+                        OutlinedButton(onClick = resume, enabled = !state.busy, shape = ControlShape) {
+                            Text(SEASON_SYNC_RESUME)
+                        }
                     }
+                    LinkActions(model, state, onChangeHelper)
                 }
             }
         }
         state.notices.forEach { NoticeLine(it, act) }
+    }
+    state.removeAsk?.let { question ->
+        AlertDialog(
+            onDismissRequest = model::dismissRemoveLink,
+            text = { Text(question) },
+            confirmButton = {
+                TextButton(onClick = model::confirmRemoveLink, enabled = !state.busy) { Text(REMOVE_LINK) }
+            },
+            dismissButton = { TextButton(onClick = model::dismissRemoveLink) { Text(CANCEL_BUTTON) } },
+        )
+    }
+}
+
+/** #129: Change helper (P129-1) and Remove link (P15-23), each when offered; Remove link only asks (P129-2). */
+@Composable
+private fun LinkActions(model: SeasonSyncBlockViewModel, state: SeasonSyncBlockState, onChangeHelper: (() -> Unit)?) {
+    if (state.offersChangeHelper && onChangeHelper != null) {
+        OutlinedButton(onClick = onChangeHelper, enabled = !state.busy, shape = ControlShape) {
+            Text(SEASON_SYNC_CHANGE_HELPER)
+        }
+    }
+    if (state.offersRemoveLink) {
+        OutlinedButton(onClick = model::askRemoveLink, enabled = !state.busy, shape = ControlShape) {
+            Text(REMOVE_LINK)
+        }
     }
 }
 

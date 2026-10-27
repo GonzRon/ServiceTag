@@ -229,3 +229,16 @@ internal val SEASON_SYNC_NO_MATCH: String get() = localized(R.string.season_sync
 
 /** P105-10 — more matched than are drawn; [shown] is the number drawn. */
 internal fun seasonSyncOnlyFirstShown(shown: Int): String = localized(R.string.season_sync_only_first_shown, shown)
+
+// #129 (L-C6, L-C7) — Change helper and Remove link on a linked season card, P129-1…3 RATIFIED 2026-10-27; Remove link
+// itself is P15-23 (`REMOVE_LINK`), reused with `common_cancel` and P105-2.
+
+/** P129-1 — the block's action on an enabled or a stopped link; it opens the sheet on the stored helper. */
+internal val SEASON_SYNC_CHANGE_HELPER: String get() = localized(R.string.season_sync_change_helper)
+
+/** P129-2 — Remove link's confirm; [entityId] is the link's helper. */
+internal fun seasonSyncRemoveLinkConfirm(entityId: String): String =
+    localized(R.string.season_sync_remove_link_confirm, entityId)
+
+/** P129-3 — the Change helper sheet's sentence, over Save, whatever the link's mode (I2). */
+internal val SEASON_SYNC_CHANGE_HELPER_SENTENCE: String get() = localized(R.string.season_sync_change_helper_sentence)

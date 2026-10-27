@@ -539,6 +539,7 @@ fun AssetDetailScreen(
                             sync,
                             onLink = { openSyncSheet(SeasonSyncSheetPurpose.LINK) },
                             onReconcile = { openSyncSheet(SeasonSyncSheetPurpose.RESUME) },
+                            onChangeHelper = { openSyncSheet(SeasonSyncSheetPurpose.CHANGE_ENTITY) },
                         )
                     },
                 )

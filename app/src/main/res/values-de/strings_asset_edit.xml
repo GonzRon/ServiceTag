@@ -174,4 +174,10 @@
     <string name="season_sync_no_date_helpers">Keine Datumshelfer in Home Assistant gefunden. Lege einen in Home Assistant an oder gib eine Entitäts-ID manuell ein.</string>
     <string name="season_sync_no_match">Keine Entität passt zu deiner Suche.</string>
     <string name="season_sync_only_first_shown">Nur die ersten %1$d werden angezeigt. Suche, um die Liste einzugrenzen.</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">Helfer ändern</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">Verknüpfung mit %1$s entfernen? Dieses Gerät folgt ihm nicht mehr und behält seine aktuelle Saison und sein Protokoll. Deine Verbindung zu Home Assistant und andere Verknüpfungen bleiben bestehen.</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">Die Verknüpfung liest den gewählten Helfer ab der nächsten Prüfung. Der Saisonverlauf dieses Geräts bleibt unverändert.</string>
 </resources>

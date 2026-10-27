@@ -174,4 +174,10 @@
     <string name="season_sync_no_date_helpers">Nessun aiutante data trovato in Home Assistant. Creane uno in Home Assistant, oppure inserisci un ID entità manualmente.</string>
     <string name="season_sync_no_match">Nessuna entità corrisponde alla ricerca.</string>
     <string name="season_sync_only_first_shown">Sono mostrate solo le prime %1$d. Cerca per restringere l\'elenco.</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">Cambia aiutante</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">Rimuovere il collegamento a %1$s? Questa attrezzatura smette di seguirlo e mantiene la stagione attuale e la sua cronologia. La tua connessione a Home Assistant e gli altri collegamenti restano.</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">Il collegamento legge l\'aiutante che scegli dal prossimo controllo. La cronologia della stagione di questa attrezzatura resta com\'è.</string>
 </resources>

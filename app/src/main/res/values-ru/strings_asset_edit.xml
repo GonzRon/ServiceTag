@@ -178,4 +178,10 @@
     <string name="season_sync_no_date_helpers">В Home Assistant не найдено вспомогательных объектов даты. Создайте его в Home Assistant или введите ID сущности вручную.</string>
     <string name="season_sync_no_match">Ни одна сущность не соответствует вашему запросу.</string>
     <string name="season_sync_only_first_shown">Показаны только первые %1$d. Уточните запрос, чтобы сократить список.</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">Изменить вспомогательный объект</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">Убрать связь с %1$s? Этот объект перестанет следовать за ним и сохранит текущий сезон и историю. Ваше подключение к Home Assistant и другие связи останутся.</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">Связь будет читать выбранный вами вспомогательный объект начиная со следующей проверки. История сезонов этого объекта остаётся без изменений.</string>
 </resources>

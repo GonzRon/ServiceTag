@@ -89,6 +89,15 @@ internal data class SeasonSyncBlockState(
     val busy: Boolean = false,
     /** P16-73, while it waits for the owner's Open app settings or Cancel. */
     val backgroundAsk: String? = null,
+    /**
+     * #129 (L-C6, D4): Change helper (P129-1) and Remove link (P15-23), on an enabled or a stopped binding while the
+     * asset is not held here — the gate Stop and Resume use, not "maintained here", so an archived or retired asset's
+     * link can still be changed or removed.
+     */
+    val offersChangeHelper: Boolean = false,
+    val offersRemoveLink: Boolean = false,
+    /** P129-2 with the binding's helper, while Remove link waits for the owner's confirm or Cancel. */
+    val removeAsk: String? = null,
 ) {
     /** While a binding is enabled it owns the season (R16-1): the shipped Start and End are not drawn. */
     val hidesStartAndEnd: Boolean get() = kind == SeasonSyncBlockKind.ENABLED
@@ -118,6 +127,8 @@ internal class SeasonSyncBlockViewModel(
     /** Android's own label for the background option, asked on API 30+ only. */
     private val backgroundOptionLabel: () -> String,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
+    /** #129 (L-C6): Remove link, core's `UnlinkSeasonSync`. A construction without it fails loudly when asked. */
+    private val unlink: suspend (AssetId) -> Unit = NO_UNLINK,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, assetId: AssetId, platform: NetworkPlatform, backgroundOptionLabel: () -> String) :
@@ -126,12 +137,15 @@ internal class SeasonSyncBlockViewModel(
             graph.transferRecords, graph.setSeasonSyncMode, graph.stopSeasonSync, graph.resumeSeasonSync,
             { graph.seasonSyncRunner.syncNow(it) }, graph.seasonSyncBackgroundAllowed, graph.clock, platform,
             backgroundOptionLabel,
+            unlink = { graph.unlinkSeasonSync.run(it) },
         )
 
     private data class Pending(
         val busy: Boolean = false,
         val notices: List<Notice> = emptyList(),
         val backgroundAsk: String? = null,
+        /** #129: Remove link's confirm is up; it names the live binding's helper. */
+        val removeAsked: Boolean = false,
     )
 
     private val pending = MutableStateFlow(Pending())
@@ -154,6 +168,7 @@ internal class SeasonSyncBlockViewModel(
             busy = pending.busy,
             notices = pending.notices.filterNot { it.text == built.stateLine },
             backgroundAsk = pending.backgroundAsk,
+            removeAsk = binding?.takeIf { pending.removeAsked }?.let { seasonSyncRemoveLinkConfirm(it.entityId) },
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SeasonSyncBlockState())
 
@@ -168,6 +183,26 @@ internal class SeasonSyncBlockViewModel(
 
     /** Resume on a MANUAL asset; on any other the screen opens the setup sheet ([SeasonSyncBlockState.resumeOpensSheet]). */
     fun resumeSyncing() = command { resume.run(assetId) }
+
+    /** #129: Remove link asks P129-2 first; asking writes nothing. */
+    fun askRemoveLink() {
+        if (!state.value.offersRemoveLink) return
+        pending.update { it.copy(removeAsked = true) }
+    }
+
+    /** Cancel, back or the scrim: the ask goes, nothing is written. */
+    fun dismissRemoveLink() = pending.update { it.copy(removeAsked = false) }
+
+    /**
+     * The confirm: the ask goes and this asset's binding is deleted through the shipped [command] (one in flight; a
+     * store failure draws nothing). The binding flow then emits null, so the card offers Link again and Start and End
+     * return. A second tap finds no ask and does nothing.
+     */
+    fun confirmRemoveLink() {
+        if (!pending.value.removeAsked) return
+        pending.update { it.copy(removeAsked = false) }
+        command { unlink(assetId) }
+    }
 
     /** A line's button: Allow again re-runs the matching flow (P16-76, C26), or the app's settings page. */
     fun act(action: NoticeAction) = when (action) {
@@ -254,6 +289,8 @@ internal class SeasonSyncBlockViewModel(
                 kind = SeasonSyncBlockKind.STOPPED,
                 mode = binding.mode,
                 offersResume = writable,
+                offersChangeHelper = writable,
+                offersRemoveLink = writable,
                 resumeOpensSheet = asset?.seasonMode != SeasonMode.MANUAL,
                 stateLine = stateLine,
                 stoppedLine = SEASON_SYNC_STOPPED,
@@ -269,6 +306,8 @@ internal class SeasonSyncBlockViewModel(
             mode = binding.mode,
             offersControls = here,
             offersStop = writable,
+            offersChangeHelper = writable,
+            offersRemoveLink = writable,
             sourceLine = seasonSyncSourceLine(binding.mode, binding.entityId),
             lastSuccessLine = binding.lastSuccessAt?.let { seasonSyncLastSuccess(dateTime(Instant.ofEpochMilli(it))) }
                 ?: SEASON_SYNC_NO_READING_YET,
@@ -320,5 +359,8 @@ internal class SeasonSyncBlockViewModel(
     private companion object {
         /** API 30: background location is granted on the app's settings page, no longer in a dialog (C32). */
         const val SETTINGS_PAGE_API = 30
+
+        /** A card built without Remove link (#16's constructions): reaching it is a wiring fault, not a fallback. */
+        val NO_UNLINK: suspend (AssetId) -> Unit = { error("this card was built without Remove link") }
     }
 }
