@@ -37,8 +37,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** What the setup sheet does on Save (C27): link an unlinked asset, or resume a stopped binding (R16-19). */
-internal enum class SeasonSyncSheetPurpose { LINK, RESUME }
+/**
+ * What the setup sheet does on Save (C27): link an unlinked asset, resume a stopped binding (R16-19), or (#129, L-C7)
+ * point a linked asset's binding at another helper through the shipped `EditSeasonSyncEntity`.
+ */
+internal enum class SeasonSyncSheetPurpose { LINK, RESUME, CHANGE_ENTITY }
 
 /** How the sheet ended: closed, or closed onto the asset's schedules (#78's P78-2). */
 internal enum class SeasonSheetExit { CLOSED, REVIEW_SCHEDULES }
@@ -75,12 +78,12 @@ internal data class EntityBrowseState(
 
 /**
  * #16 (C27) — the setup sheet as drawn, one immutable value. [sentence] is the asset's mode's reconciliation sentence
- * (P16-44/45/46), null until the asset is read; Save is held until it is there, so nothing is written before the owner
- * has seen it. [entityLine] is P16-49 under the field; [refusal] is S55 or another refusal's sentence, the sheet open;
+ * (P16-44/45/46), or for Change helper (#129) P129-3, null until the asset (or its stored helper) is read; Save is held
+ * until it is there, so nothing is written before the owner has seen it. [entityLine] is P16-49 under the field; [refusal] is S55 or another refusal's sentence, the sheet open;
  * [prompt] is #78's question after a written link or resume out of YEAR_ROUND; [finished] tells the screen to close.
  * #105: [chosen] is the candidate picked in the browser, [manualEntry] whether the typed field is shown instead of the
  * Choose entity row, and [browse] the browser while it is open; [entityToLink] is what Save sends — the picked id,
- * else the trimmed text — through the shipped link, unchanged.
+ * else the trimmed text — through the shipped link, unchanged, or, for Change helper, through the shipped edit.
  */
 internal data class LinkSeasonSyncState(
     val purpose: SeasonSyncSheetPurpose,
@@ -96,18 +99,39 @@ internal data class LinkSeasonSyncState(
     val chosen: HaEntityCandidate? = null,
     val manualEntry: Boolean = false,
     val browse: EntityBrowseState? = null,
+    /** #129: the helper the binding follows now, for [SeasonSyncSheetPurpose.CHANGE_ENTITY]; null otherwise. */
+    val storedEntityId: String? = null,
 ) {
-    /** Link also waits for something to send (#105 row 16): a pick, or typed text. Resume sends no entity. */
+    /**
+     * Link also waits for something to send (#105 row 16): a pick, or typed text. Resume sends no entity. Change helper
+     * (#129) waits for a helper other than the stored one: choosing the same one writes nothing, and Save is held.
+     */
     val canSave: Boolean get() = (sentence != null || scheduleTarget) && !saving && prompt == null &&
-        finished == null &&
-        (purpose == SeasonSyncSheetPurpose.RESUME || entityToLink.isNotEmpty())
+        finished == null && sendsSomething
+
+    private val sendsSomething: Boolean get() = when (purpose) {
+        SeasonSyncSheetPurpose.LINK -> entityToLink.isNotEmpty()
+        SeasonSyncSheetPurpose.RESUME -> true
+        SeasonSyncSheetPurpose.CHANGE_ENTITY -> entityToLink.isNotEmpty() && entityToLink != storedEntityId
+    }
+
+    /**
+     * The entity row, the browser and manual entry: Link and Change helper choose a helper; Resume names none. Change
+     * helper draws them once the stored helper is read, so a pick or typed text is never overwritten by that read.
+     */
+    val choosesEntity: Boolean get() = when (purpose) {
+        SeasonSyncSheetPurpose.LINK -> true
+        SeasonSyncSheetPurpose.CHANGE_ENTITY -> storedEntityId != null
+        SeasonSyncSheetPurpose.RESUME -> false
+    }
 
     val entityToLink: String get() = chosen?.entityId ?: entityId.trim()
 }
 
 /**
  * #16 (C27; R16-Q-C, R16-Q-G, R16-19) — the setup sheet's model. It reads the asset once for its sentence and writes
- * only through the shipped [LinkSeasonSync] or [ResumeSeasonSync] on Save; each refusal comes back as a code or a
+ * only through the shipped [LinkSeasonSync] or [ResumeSeasonSync] on Save, or, for Change helper (#129),
+ * `EditSeasonSyncEntity` through [changeEntity]; each refusal comes back as a code or a
  * shipped exception and is drawn as its ratified sentence. After a write that left YEAR_ROUND it asks #78's question
  * with core's [liveContinuousCount], never silently; the answer writes nothing.
  *
@@ -133,7 +157,35 @@ internal class LinkSeasonSyncViewModel(
      * construction. No default: a wiring that forgets it does not compile.
      */
     private val listEntities: suspend () -> HaListOutcome?,
+    /**
+     * #129 (L-C7): the asset's stored binding's entity (`seasonSyncBindings.get(…)?.entityId`), null with no binding.
+     * Read once, on construction, for [SeasonSyncSheetPurpose.CHANGE_ENTITY] only.
+     */
+    private val storedEntity: suspend (AssetId) -> String?,
+    /** #129 (L-C7): Change helper's Save, the shipped `EditSeasonSyncEntity`. */
+    private val changeEntity: suspend (AssetId, String) -> Unit,
 ) : ViewModel() {
+
+    /**
+     * #125's construction, as shipped: no Change helper. Kept as its own constructor, not as defaults on the two seams
+     * above, so a call passing [listEntities] last — positionally or as a trailing lambda — still binds it. Reaching
+     * either seam from here is a wiring fault: [storedEntity] throws on opening; [changeEntity] throws inside Save,
+     * which reads it as a failed store (nothing written, nothing drawn).
+     */
+    constructor(
+        target: SeasonSyncSheetTarget,
+        purpose: SeasonSyncSheetPurpose,
+        assets: AssetRepository,
+        schedules: ScheduleRepository,
+        connections: HaConnectionRepository,
+        link: LinkSeasonSync,
+        resume: ResumeSeasonSync,
+        linkSchedule: suspend (ScheduleId, String) -> Unit,
+        listEntities: suspend () -> HaListOutcome?,
+    ) : this(
+        target, purpose, assets, schedules, connections, link, resume, linkSchedule, listEntities, NO_STORED_ENTITY,
+        NO_CHANGE_ENTITY,
+    )
 
     /** #16's asset sheet, as shipped. */
     constructor(
@@ -158,6 +210,8 @@ internal class LinkSeasonSyncViewModel(
             graph.seasonSyncRunner.requestScheduleRead(scheduleId)
         },
         graph.listHaEntities,
+        { assetId -> graph.seasonSyncBindings.get(assetId)?.entityId },
+        { assetId, entityId -> graph.editSeasonSyncEntity.run(assetId, entityId) },
     )
 
     private val _state = MutableStateFlow(
@@ -168,13 +222,39 @@ internal class LinkSeasonSyncViewModel(
     init {
         when (target) {
             is SeasonSyncSheetTarget.Asset -> viewModelScope.launch {
-                val mode = assets.get(target.assetId)?.seasonMode
-                _state.update { it.copy(sentence = mode?.let(::seasonSyncLinkSentence)) }
+                when (purpose) {
+                    SeasonSyncSheetPurpose.LINK, SeasonSyncSheetPurpose.RESUME -> {
+                        val mode = assets.get(target.assetId)?.seasonMode
+                        _state.update { it.copy(sentence = mode?.let(::seasonSyncLinkSentence)) }
+                    }
+                    SeasonSyncSheetPurpose.CHANGE_ENTITY -> openOnStoredHelper(target.assetId)
+                }
             }
             // #125: the asset's mode is not changed by a schedule's link, so there is no sentence to reconcile; and a
-            // schedule's binding is never stopped in 1.9.0 (H-3), so its sheet only links.
+            // schedule's binding is never stopped in 1.9.0 (H-3) nor re-pointed (#129: a schedule's link changes by
+            // unlink and link), so its sheet only links.
             is SeasonSyncSheetTarget.Schedule ->
-                require(purpose == SeasonSyncSheetPurpose.LINK) { "a schedule's season is never resumed" }
+                require(purpose == SeasonSyncSheetPurpose.LINK) { "a schedule's season is only linked here" }
+        }
+    }
+
+    /**
+     * #129 (L-C7): Change helper opens on the stored helper, chosen as a pick with no friendly name (so the row reads
+     * the id with Change beside it), under P129-3 whatever the link's mode. With no binding — it went with a
+     * Disconnect, or another way — the sheet closes onto the card, as the edit's `SeasonSyncNotLinked` would.
+     */
+    private suspend fun openOnStoredHelper(assetId: AssetId) {
+        val stored = storedEntity(assetId)
+        _state.update {
+            if (stored == null) {
+                it.copy(finished = SeasonSheetExit.CLOSED)
+            } else {
+                it.copy(
+                    chosen = HaEntityCandidate(stored, friendlyName = null),
+                    storedEntityId = stored,
+                    sentence = SEASON_SYNC_CHANGE_HELPER_SENTENCE,
+                )
+            }
         }
     }
 
@@ -296,20 +376,24 @@ internal class LinkSeasonSyncViewModel(
         viewModelScope.launch {
             val next = try {
                 when (target) {
-                    is SeasonSyncSheetTarget.Asset -> {
-                        val written = when (asked.purpose) {
-                            SeasonSyncSheetPurpose.LINK -> link.run(target.assetId, asked.entityToLink)
-                            SeasonSyncSheetPurpose.RESUME -> resume.run(target.assetId)
+                    is SeasonSyncSheetTarget.Asset -> when (asked.purpose) {
+                        SeasonSyncSheetPurpose.LINK ->
+                            afterWrite(target.assetId, link.run(target.assetId, asked.entityToLink))
+                        SeasonSyncSheetPurpose.RESUME -> afterWrite(target.assetId, resume.run(target.assetId))
+                        // #129: the edit moves no season mode, so #78's question is never asked after it.
+                        SeasonSyncSheetPurpose.CHANGE_ENTITY -> {
+                            changeEntity(target.assetId, asked.entityToLink)
+                            Done(SeasonSheetExit.CLOSED)
                         }
-                        afterWrite(target.assetId, written)
                     }
                     is SeasonSyncSheetTarget.Schedule -> when (asked.purpose) {
                         SeasonSyncSheetPurpose.LINK -> {
                             linkSchedule(target.scheduleId, asked.entityToLink)
                             Done(SeasonSheetExit.CLOSED)
                         }
-                        // Refused at construction (`init`); the arm is the exhaustive `when`'s, never reached.
-                        SeasonSyncSheetPurpose.RESUME -> Done(SeasonSheetExit.CLOSED)
+                        // Refused at construction (`init`); the arms are the exhaustive `when`'s, never reached.
+                        SeasonSyncSheetPurpose.RESUME, SeasonSyncSheetPurpose.CHANGE_ENTITY ->
+                            Done(SeasonSheetExit.CLOSED)
                     }
                 }
             } catch (e: CancellationException) {
@@ -390,5 +474,14 @@ internal class LinkSeasonSyncViewModel(
     private companion object {
         /** The asset sheet's constructions link no schedule; reaching this is a wiring fault, never a fallback. */
         val NO_SCHEDULE_LINK: suspend (ScheduleId, String) -> Unit = { _, _ -> error("this sheet links an asset") }
+
+        /**
+         * #125's construction has no Change helper; reaching either seam is a wiring fault, never a fallback: the first
+         * throws on opening, the second inside Save, which reads it as a failed store (nothing written, nothing drawn).
+         */
+        val NO_STORED_ENTITY: suspend (AssetId) -> String? = { error("this sheet was built without Change helper") }
+
+        val NO_CHANGE_ENTITY: suspend (AssetId, String) -> Unit =
+            { _, _ -> error("this sheet was built without Change helper") }
     }
 }

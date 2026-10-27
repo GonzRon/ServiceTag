@@ -330,4 +330,13 @@
     <string name="season_sync_no_match">No entities match your search.</string>
     <!-- P105-10: more matched than are drawn; %1$d is the number drawn. -->
     <string name="season_sync_only_first_shown">Only the first %1$d are shown. Search to narrow the list.</string>
+    <!-- P129-1 (#129): the season card's action on an enabled or a stopped link; it opens the setup sheet on
+         the stored helper. -->
+    <string name="season_sync_change_helper">Change helper</string>
+    <!-- P129-2 (#129): the Remove link confirm's body; the dialog has no title. %1$s: the entity ID the link
+         follows. Its buttons are "Remove link" (P15-23) and "Cancel". -->
+    <string name="season_sync_remove_link_confirm">Remove the link to %1$s? This asset stops following it and keeps its current season and history. Your Home Assistant connection and other links stay.</string>
+    <!-- P129-3 (#129): the setup sheet's sentence when it changes a link's helper, over Save, whatever the
+         link's mode. -->
+    <string name="season_sync_change_helper_sentence">The link reads the helper you choose from its next check. This asset\'s season history stays as it is.</string>
 </resources>

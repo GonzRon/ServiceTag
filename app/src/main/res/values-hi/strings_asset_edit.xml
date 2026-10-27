@@ -174,4 +174,10 @@
     <string name="season_sync_no_date_helpers">Home Assistant में कोई तारीख हेल्पर नहीं मिला। Home Assistant में एक बनाएँ, या एंटिटी ID मैन्युअल रूप से दर्ज करें।</string>
     <string name="season_sync_no_match">आपकी खोज से कोई एंटिटी मेल नहीं खाती।</string>
     <string name="season_sync_only_first_shown">केवल पहली %1$d दिखाई जा रही हैं। सूची छोटी करने के लिए खोजें।</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">हेल्पर बदलें</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">%1$s से लिंक हटाएँ? यह उपकरण इसके अनुसार चलना बंद कर देगा और इसका मौजूदा मौसम और इतिहास बना रहेगा। आपका Home Assistant कनेक्शन और दूसरे लिंक बने रहेंगे।</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">लिंक अगली जाँच से आपका चुना हुआ हेल्पर पढ़ेगा। इस उपकरण के मौसम का इतिहास जैसा है वैसा ही रहेगा।</string>
 </resources>

@@ -174,4 +174,10 @@
     <string name="season_sync_no_date_helpers">Aucune entrée de date trouvée dans Home Assistant. Créez-en une dans Home Assistant, ou saisissez un ID d\'entité manuellement.</string>
     <string name="season_sync_no_match">Aucune entité ne correspond à votre recherche.</string>
     <string name="season_sync_only_first_shown">Seules les %1$d premières sont affichées. Recherchez pour affiner la liste.</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">Changer d\'entrée</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">Retirer le lien vers %1$s ? Cet équipement cesse de le suivre et conserve sa saison actuelle et son historique. Votre connexion à Home Assistant et les autres liens restent en place.</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">Le lien lit l\'entrée que vous choisissez à partir de sa prochaine vérification. L\'historique des saisons de cet équipement reste tel quel.</string>
 </resources>
