@@ -267,6 +267,8 @@ class ApiReadsWriteNothingTest {
             "/v1/ha-publishing",
             // #125 (U-C7, row h15): a schedule's own season, derived for today — its phase, binding state and rows.
             "/v1/schedules/$held/season-sync",
+            // #16, pinned by #129 (k20) now that a POST writes the shape: the asset's link read writes nothing.
+            "/v1/assets/$tub/season-sync",
         )) {
             val response = api.call("GET", path)
             assertEquals("$path: ${response.bodyText()}", 200, response.status)

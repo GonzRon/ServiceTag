@@ -113,6 +113,16 @@ internal fun scheduleSeasonHandlersFor(graph: FakeGraph): ScheduleSeasonHandlers
     graph.linkScheduleSeason, graph.unlinkScheduleSeason, graph.seasonSyncRunner::requestScheduleRead,
 )
 
+/**
+ * #129 (L-C8): an asset's season link written over a [FakeGraph], wired as `SeasonSyncHandlers(graph)` wires it — the
+ * fake graph's own commands, whose fresh reads run on its season sync scope, which `awaitSeasonSyncReads` joins.
+ */
+internal fun seasonSyncHandlersFor(graph: FakeGraph): SeasonSyncHandlers = SeasonSyncHandlers(
+    graph.assets, graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.transferRecords,
+    graph.seasonSyncBackgroundAllowed, graph.linkSeasonSync, graph.editSeasonSyncEntity, graph.stopSeasonSync,
+    graph.resumeSeasonSync, graph.setSeasonSyncMode, graph.unlinkSeasonSync,
+)
+
 /** #113/#114 (C35): the publishing read over a [FakeGraph], wired as `HaPublishingHandlers(graph)` wires it. */
 internal fun haPublishingHandlersFor(
     graph: FakeGraph,
@@ -245,6 +255,7 @@ internal class V1Client(
             haEntities = HaEntityHandlers(haEntities),
             haPublishing = haPublishingHandlersFor(graph, haPublishingPlans),
             scheduleSeason = scheduleSeasonHandlersFor(graph),
+            seasonSyncWrites = seasonSyncHandlersFor(graph),
         ),
         token,
     )

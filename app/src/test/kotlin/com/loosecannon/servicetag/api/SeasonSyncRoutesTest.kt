@@ -229,13 +229,16 @@ class SeasonSyncRoutesTest {
         assertEquals("no_such_asset", response.errorDetail().code)
     }
 
-    /** Read only: every other verb falls to the sub-resource convention's 404, and nothing is written. */
-    @Test fun postIs404NotA405() {
+    /**
+     * Every verb but `GET` and #129's `POST` falls to the sub-resource convention's 404, and nothing is written. Since
+     * #129 `POST` routes (`SeasonSyncWriteRoutesTest`).
+     */
+    @Test fun anotherVerbIs404NotA405() {
         val heater = api.asset("Example Heater")
         connect()
         link(heater)
         val before = runBlocking { graph.seasonSyncBindings.get(AssetId(heater)) }
-        for (method in listOf("POST", "PATCH", "DELETE")) {
+        for (method in listOf("PATCH", "DELETE")) {
             val response = call(method, "/v1/assets/$heater/season-sync", if (method == "DELETE") "" else "{}")
             assertEquals("$method: ${response.bodyText()}", 404, response.status)
             assertEquals(method, "not_found", response.errorDetail().code)

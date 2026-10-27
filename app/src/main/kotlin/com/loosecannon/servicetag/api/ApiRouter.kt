@@ -189,9 +189,12 @@ internal class ApiRouter(
      * deletes a link or a file, and none moves one to another owner — a move is the phone's remove and a new add.
      *
      * #16 added one row over one shape: the twenty-eighth `/v1/assets/{id}/…` sub-resource, the asset's Home
-     * Assistant season sync, read only (R16-9): the binding's non-secret state and status and the connection's
-     * settings, never its address or token. **No route writes season sync**: linking, the mode, Sync now, stopping,
-     * resuming and the connection itself are the phone's alone, so every other verb on the shape is a 404.
+     * Assistant season sync, read (R16-9): the binding's non-secret state and status and the connection's settings,
+     * never its address or token. Since #129 (L-C8, R16-9 narrowed for the asset link) `POST` on the same shape writes
+     * the link — link, change of helper, stop, resume, Follow or Force, and unlink, each through the phone's command
+     * and the two with the caller's own confirmation. **Sync now and the connection stay the phone's alone**: no route
+     * reaches the token, the address, the connection's save or Forget, and `PATCH`, `PUT` and `DELETE` on the shape
+     * are a 404.
      *
      * #114 added one row over one shape: the twenty-ninth `/v1/assets/{id}/…` sub-resource, the asset's season
      * readiness, read only (C29): C9's answer, derived when it is read and stored nowhere. **No route writes readiness**:
@@ -302,6 +305,9 @@ internal class ApiRouter(
                 "installed-components" to "GET" -> handlers.installedComponents.listForAsset(rest[1])
                 // #16 — the twenty-eighth: the asset's Home Assistant season sync, its non-secret state, read only.
                 "season-sync" to "GET" -> handlers.seasonHealth.getSeasonSync(rest[1])
+                // #129 (L-C8) — its write: the asset's link driven by the phone's own commands; another verb a 404.
+                "season-sync" to "POST" ->
+                    (handlers.seasonSyncWrites ?: throw ApiFailure.notFound(request.path)).act(rest[1], request)
                 // #114 — the twenty-ninth: the asset's season readiness, derived for today, read only.
                 "season-readiness" to "GET" -> handlers.seasonHealth.getSeasonReadiness(rest[1])
                 // #113/#114 (C35) — the thirtieth: the asset's Home Assistant publishing and its obligations, read only.

@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.seasonsync.SyncErrorKind
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * #16 (C3, C24; R16-9) — `GET /v1/assets/{id}/season-sync`: the path's asset, this installation's one Home Assistant
@@ -24,6 +25,34 @@ internal data class SeasonSyncResponse(
     val assetId: String,
     val connection: SeasonSyncConnectionDto,
     val binding: SeasonSyncBindingDto?,
+)
+
+/**
+ * #129 (L-C8) — the body of `POST /v1/assets/{id}/season-sync`, strict like every request: exactly these keys. No key
+ * carries a season state, an observation, an applied action, a phase, a date, the address, the Wi-Fi name or the
+ * token. [action] is a [SeasonSyncAction] name and [mode] a `SyncMode` name, each checked by name (400 otherwise);
+ * [confirmUnlink] is kept as JSON so that only the JSON `true` confirms an unlink, never `"true"` or `1`.
+ */
+@Serializable
+internal data class SeasonSyncRequest(
+    val action: String,
+    val entityId: String? = null,
+    val confirmEntityId: String? = null,
+    val mode: String? = null,
+    val confirmUnlink: JsonElement? = null,
+)
+
+/**
+ * #129 (L-C8) — the answer of `POST /v1/assets/{id}/season-sync`: `GET`'s three keys built again after the write, and
+ * [switchedFrom], the season mode a `LINK` or a `RESUME` switched the asset out of into MANUAL (`CALENDAR` or
+ * `YEAR_ROUND`), else `null`. It informs and asks nothing (D3).
+ */
+@Serializable
+internal data class SeasonSyncActionResponse(
+    val assetId: String,
+    val connection: SeasonSyncConnectionDto,
+    val binding: SeasonSyncBindingDto?,
+    val switchedFrom: String?,
 )
 
 /**
