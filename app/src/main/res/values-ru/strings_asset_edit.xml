@@ -172,6 +172,10 @@
     <string name="season_sync_scope_line">Показаны вспомогательные переключатели (вкл./выкл.) Home Assistant (input_boolean).</string>
     <string name="season_sync_refresh">Обновить</string>
     <string name="season_sync_no_helpers">В Home Assistant не найдено вспомогательных переключателей (вкл./выкл.). Создайте его в Home Assistant или введите ID сущности вручную.</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">В Home Assistant не найдено раскрывающихся списков. Создайте его в Home Assistant или введите ID сущности вручную.</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">В Home Assistant не найдено вспомогательных объектов даты. Создайте его в Home Assistant или введите ID сущности вручную.</string>
     <string name="season_sync_no_match">Ни одна сущность не соответствует вашему запросу.</string>
     <string name="season_sync_only_first_shown">Показаны только первые %1$d. Уточните запрос, чтобы сократить список.</string>
 </resources>

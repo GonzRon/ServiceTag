@@ -233,7 +233,7 @@ class ScheduleRoleViewModelTest {
 
     /**
      * A5b review, minor 5: a failure the confirm has no sentence for never closes it silently — it stays open as typed,
-     * nothing written, so the owner can try again or cancel. Only a schedule gone meanwhile closes it.
+     * saying P190-2, nothing written, so the owner can try again or cancel. Only a schedule gone meanwhile closes it.
      */
     @Test fun anUnexpectedFailureKeepsTheConfirmOpen() = runTest {
         heater()
@@ -249,6 +249,7 @@ class ScheduleRoleViewModelTest {
 
         val after = confirmed(vm)
         assertEquals("still open, as typed", open.sinceOn, after.confirm?.sinceOn)
+        assertEquals("Could not save this schedule.", after.confirm?.problem)
         assertFalse(after.busy)
         assertEquals(ScheduleRole.NONE, graph.schedules.get(ScheduleId("annual"))!!.role)
 

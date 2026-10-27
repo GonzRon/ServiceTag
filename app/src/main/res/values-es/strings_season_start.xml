@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">Este plan se completa con un toque y sin detalles del mantenimiento. Aun así, completarlo con un toque marcará el equipo como listo.</string>
     <string name="season_start_counts_from">Los mantenimientos cuentan desde</string>
     <string name="season_start_refused_schedule_archived">Este plan está archivado. Desarchívalo primero.</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">No se pudo guardar este grupo.</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">No se pudo guardar este plan.</string>
     <string name="season_start_refused_no_members">Este grupo no tiene equipos que marcar como listos.</string>
     <string name="season_start_refused_date_in_future">La fecha desde la que cuentan los mantenimientos no puede ser posterior a hoy.</string>
     <string name="season_start_refused_bad_date">Introduce la fecha desde la que cuentan los mantenimientos como una fecha del calendario.</string>

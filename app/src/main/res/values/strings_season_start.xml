@@ -95,6 +95,10 @@
     <string name="season_start_counts_from">Services count from</string>
     <!-- P114-19: refused because the schedule is archived (SCHEDULE_ARCHIVED). -->
     <string name="season_start_refused_schedule_archived">This schedule is archived. Restore it first.</string>
+    <!-- P190-1: the group editor's save refused by a Season Start strand that has no sentence of its own (no asset to name). -->
+    <string name="season_start_could_not_save_group">Could not save this group.</string>
+    <!-- P190-2: the Season Start confirm, after a failure that is not a refusal; the confirm stays open. -->
+    <string name="season_start_could_not_save_schedule">Could not save this schedule.</string>
     <!-- P114-22: refused because the group is archived or has no assets (GROUP_HAS_NO_MEMBERS, GROUP_ARCHIVED). -->
     <string name="season_start_refused_no_members">This group has no assets to mark ready.</string>
     <!-- P114-23: refused because the date is after today (DATE_IN_FUTURE). -->

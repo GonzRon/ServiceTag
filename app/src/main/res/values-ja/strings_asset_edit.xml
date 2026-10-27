@@ -166,6 +166,10 @@
     <string name="season_sync_scope_line">Home Assistantのオン/オフのヘルパー（input_boolean）を表示しています。</string>
     <string name="season_sync_refresh">更新</string>
     <string name="season_sync_no_helpers">Home Assistantにオン/オフのヘルパーが見つかりません。Home Assistantで作成するか、エンティティIDを手動で入力してください。</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">Home Assistantにドロップダウンヘルパーが見つかりません。Home Assistantで作成するか、エンティティIDを手動で入力してください。</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">Home Assistantに日付ヘルパーが見つかりません。Home Assistantで作成するか、エンティティIDを手動で入力してください。</string>
     <string name="season_sync_no_match">検索に一致するエンティティはありません。</string>
     <string name="season_sync_only_first_shown">最初の%1$d件のみ表示しています。検索して絞り込んでください。</string>
 </resources>

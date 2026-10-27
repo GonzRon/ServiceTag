@@ -4,17 +4,22 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.GroupProblem
 import com.loosecannon.servicetag.core.usecase.GroupValidation
+import com.loosecannon.servicetag.core.usecase.SaveGroup
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
@@ -349,5 +354,28 @@ class GroupEditViewModelTest {
             vm.state.first { !it.saving }.seasonStartRefusal,
         )
         assertEquals(listOf(AssetId("heater")), openMembers("pre").map { it.assetId })
+    }
+
+    /**
+     * A5b review, minor 3: a Season Start strand with no asset to name has no sentence of its own, so the refused save
+     * says P190-1 rather than no line at all, and writes nothing.
+     */
+    @Test fun aStrandWithNoAssetToNameSaysTheGroupCouldNotBeSaved() = runTest {
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler"))
+        val strands = object : GroupRepository by graph.groups {
+            override suspend fun upsert(group: MaintenanceGroup) =
+                throw SeasonStartStrands(null, SeasonStartStrandCause.MEMBER_NOT_ELIGIBLE, emptyList())
+        }
+        val save = SaveGroup(
+            strands, graph.assets, graph.uow, graph.ids, graph.clock, graph.schedules, graph.transferRecords,
+        )
+
+        val vm = GroupEditViewModel(graph.groups, graph.assets, save, null)
+        loaded(vm)
+        vm.onName("Example run")
+        vm.toggle(AssetId("boiler"))
+        vm.save()
+        assertEquals("Could not save this group.", vm.state.first { !it.saving }.seasonStartRefusal)
+        assertTrue(graph.groups.all().isEmpty())
     }
 }

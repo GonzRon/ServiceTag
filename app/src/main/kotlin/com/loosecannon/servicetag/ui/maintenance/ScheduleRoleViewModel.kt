@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -19,6 +20,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -170,19 +172,23 @@ class ScheduleRoleViewModel(
         if (_state.value.busy) return
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
-            val failure = runCatching {
+            // Each outcome is its own arm, with no catch-all `when`: written (closed), each domain refusal its
+            // sentence, gone meanwhile (closed), and any other failure — which wrote nothing either — P190-2 with the
+            // confirm open as typed, never a silent close (A5b review minor 5). A cancellation goes back out.
+            val next: SeasonStartConfirm? = try {
                 setScheduleRole.run(scheduleId, ScheduleRole.SEASON_START, open.sinceOn.trim(), quickElected = open.quickElected)
-            }.exceptionOrNull()
-            if (failure is CancellationException) throw failure
-            val next = when (failure) {
-                null -> null
-                is SeasonStartBadDate -> open.copy(problem = SeasonStartStrings.badDate())
-                is SeasonStartRefused -> refusedConfirm(open, failure.reason)
+                null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SeasonStartBadDate) {
+                open.copy(problem = SeasonStartStrings.badDate())
+            } catch (e: SeasonStartRefused) {
+                refusedConfirm(open, e.reason)
+            } catch (e: NoSuchSchedule) {
                 // Gone meanwhile: there is nothing left to confirm, and the screen re-derives.
-                is NoSuchSchedule -> null
-                // Anything else wrote nothing either; the confirm stays open as typed — never a silent close — so the
-                // owner can try again or cancel. (A Throwable is not a sealed set: this arm is every other failure.)
-                else -> open
+                null
+            } catch (e: Exception) {
+                open.copy(problem = localized(R.string.season_start_could_not_save_schedule))
             }
             load()
             _state.update { it.copy(busy = false, confirm = next) }

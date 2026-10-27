@@ -168,6 +168,10 @@
     <string name="season_sync_scope_line">Sono mostrati gli helper on/off di Home Assistant (input_boolean).</string>
     <string name="season_sync_refresh">Aggiorna</string>
     <string name="season_sync_no_helpers">Nessun helper on/off trovato in Home Assistant. Creane uno in Home Assistant, oppure inserisci un ID entità manualmente.</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">Nessun aiutante a elenco a discesa trovato in Home Assistant. Creane uno in Home Assistant, oppure inserisci un ID entità manualmente.</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">Nessun aiutante data trovato in Home Assistant. Creane uno in Home Assistant, oppure inserisci un ID entità manualmente.</string>
     <string name="season_sync_no_match">Nessuna entità corrisponde alla ricerca.</string>
     <string name="season_sync_only_first_shown">Sono mostrate solo le prime %1$d. Cerca per restringere l\'elenco.</string>
 </resources>

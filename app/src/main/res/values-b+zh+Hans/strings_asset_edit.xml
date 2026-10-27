@@ -166,6 +166,10 @@
     <string name="season_sync_scope_line">显示 Home Assistant 的开关型辅助元素（input_boolean）。</string>
     <string name="season_sync_refresh">刷新</string>
     <string name="season_sync_no_helpers">未在 Home Assistant 中找到开关型辅助元素。请在 Home Assistant 中创建一个，或手动输入实体 ID。</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">未在 Home Assistant 中找到下拉列表辅助元素。请在 Home Assistant 中创建一个，或手动输入实体 ID。</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">未在 Home Assistant 中找到日期辅助元素。请在 Home Assistant 中创建一个，或手动输入实体 ID。</string>
     <string name="season_sync_no_match">没有与搜索匹配的实体。</string>
     <string name="season_sync_only_first_shown">仅显示前 %1$d 个。请通过搜索缩小范围。</string>
 </resources>

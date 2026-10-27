@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">यह शेड्यूल एक टैप से, रखरखाव के विवरण के बिना पूरा होता है। एक टैप से पूरा करने पर भी उपकरण तैयार मार्क हो जाएगा।</string>
     <string name="season_start_counts_from">रखरखाव इस तारीख से गिने जाएँगे</string>
     <string name="season_start_refused_schedule_archived">यह शेड्यूल संग्रहित है। पहले इसे संग्रह से निकालें।</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">यह समूह सहेजा नहीं जा सका।</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">यह शेड्यूल सहेजा नहीं जा सका।</string>
     <string name="season_start_refused_no_members">इस समूह में तैयार मार्क करने के लिए कोई उपकरण नहीं है।</string>
     <string name="season_start_refused_date_in_future">जिस तारीख से रखरखाव गिने जाते हैं, वह आज के बाद की नहीं हो सकती।</string>
     <string name="season_start_refused_bad_date">जिस तारीख से रखरखाव गिने जाते हैं, उसे कैलेंडर की तारीख के रूप में दर्ज करें।</string>

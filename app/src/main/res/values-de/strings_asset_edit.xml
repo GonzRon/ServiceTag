@@ -168,6 +168,10 @@
     <string name="season_sync_scope_line">Angezeigt werden die Ein/Aus-Helfer von Home Assistant (input_boolean).</string>
     <string name="season_sync_refresh">Aktualisieren</string>
     <string name="season_sync_no_helpers">Keine Ein/Aus-Helfer in Home Assistant gefunden. Lege einen in Home Assistant an oder gib eine Entitäts-ID manuell ein.</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">Keine Dropdown-Helfer in Home Assistant gefunden. Lege einen in Home Assistant an oder gib eine Entitäts-ID manuell ein.</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">Keine Datumshelfer in Home Assistant gefunden. Lege einen in Home Assistant an oder gib eine Entitäts-ID manuell ein.</string>
     <string name="season_sync_no_match">Keine Entität passt zu deiner Suche.</string>
     <string name="season_sync_only_first_shown">Nur die ersten %1$d werden angezeigt. Suche, um die Liste einzugrenzen.</string>
 </resources>

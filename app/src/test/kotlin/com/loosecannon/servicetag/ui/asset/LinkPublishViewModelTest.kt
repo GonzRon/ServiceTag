@@ -190,14 +190,20 @@ class LinkPublishViewModelTest {
     }
 
     @Test fun anEmptyDropdownScopeNeverSaysOnOffHelpers() {
-        // B6a review I1: P105-8 sends the owner to make an on/off helper, which only #16's own browser lists. The
-        // publishing scopes have no ratified sentence, so their scope line over an empty list says it.
+        // B6a review I1: P105-8 sends the owner to make an on/off helper, which only #16's own browser lists. Each
+        // publishing scope says its own (P190-3, P190-4, ratified 2026-10-26).
         assertEquals(
             "No Home Assistant on/off helpers found. Create one in Home Assistant, or enter an entity ID manually.",
             browserNoHelpers(EntityScope.INPUT_BOOLEANS),
         )
-        assertNull(browserNoHelpers(EntityScope.INPUT_SELECTS))
-        assertNull(browserNoHelpers(EntityScope.INPUT_DATETIMES))
+        assertEquals(
+            "No Home Assistant dropdown helpers found. Create one in Home Assistant, or enter an entity ID manually.",
+            browserNoHelpers(EntityScope.INPUT_SELECTS),
+        )
+        assertEquals(
+            "No Home Assistant date helpers found. Create one in Home Assistant, or enter an entity ID manually.",
+            browserNoHelpers(EntityScope.INPUT_DATETIMES),
+        )
     }
 
     @Test fun aCopiedSetupOpensOnItsStoredHelper() = runTest(scheduler) {

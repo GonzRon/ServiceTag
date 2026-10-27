@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">Этот график выполняется одним нажатием, без сведений об обслуживании. Выполнение одним нажатием всё равно отметит объект как готовый.</string>
     <string name="season_start_counts_from">Обслуживания учитываются с</string>
     <string name="season_start_refused_schedule_archived">Этот график в архиве. Сначала верните его из архива.</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">Не удалось сохранить эту группу.</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">Не удалось сохранить этот график.</string>
     <string name="season_start_refused_no_members">В этой группе нет объектов, которые можно отметить как готовые.</string>
     <string name="season_start_refused_date_in_future">Дата, с которой учитываются обслуживания, не может быть позже сегодняшней.</string>
     <string name="season_start_refused_bad_date">Введите дату, с которой учитываются обслуживания, как календарную дату.</string>

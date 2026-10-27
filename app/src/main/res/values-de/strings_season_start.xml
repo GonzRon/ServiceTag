@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">Dieser Plan wird mit einem Tippen und ohne Wartungsdetails abgeschlossen. Auch ein Abschluss mit einem Tippen markiert das Gerät als bereit.</string>
     <string name="season_start_counts_from">Wartungen zählen ab</string>
     <string name="season_start_refused_schedule_archived">Dieser Plan ist archiviert. Hebe zuerst die Archivierung auf.</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">Diese Gruppe konnte nicht gespeichert werden.</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">Dieser Plan konnte nicht gespeichert werden.</string>
     <string name="season_start_refused_no_members">Diese Gruppe hat keine Geräte, die als bereit markiert werden können.</string>
     <string name="season_start_refused_date_in_future">Das Datum, ab dem Wartungen zählen, darf nicht nach heute liegen.</string>
     <string name="season_start_refused_bad_date">Gib das Datum, ab dem Wartungen zählen, als Kalenderdatum ein.</string>

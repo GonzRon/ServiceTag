@@ -168,6 +168,10 @@
     <string name="season_sync_scope_line">Mostrando os auxiliares liga/desliga do Home Assistant (input_boolean).</string>
     <string name="season_sync_refresh">Atualizar</string>
     <string name="season_sync_no_helpers">Nenhum auxiliar liga/desliga encontrado no Home Assistant. Crie um no Home Assistant ou insira um ID de entidade manualmente.</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">Nenhum auxiliar de lista suspensa encontrado no Home Assistant. Crie um no Home Assistant ou insira um ID de entidade manualmente.</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">Nenhum auxiliar de data encontrado no Home Assistant. Crie um no Home Assistant ou insira um ID de entidade manualmente.</string>
     <string name="season_sync_no_match">Nenhuma entidade corresponde à sua busca.</string>
     <string name="season_sync_only_first_shown">Apenas os primeiros %1$d são mostrados. Busque para restringir a lista.</string>
 </resources>

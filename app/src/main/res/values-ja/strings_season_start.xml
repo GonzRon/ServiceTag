@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">このスケジュールはワンタップで完了し、メンテナンスの詳細は記録されません。ワンタップでの完了でも機器は準備完了になります。</string>
     <string name="season_start_counts_from">メンテナンスの対象開始日</string>
     <string name="season_start_refused_schedule_archived">このスケジュールはアーカイブ済みです。先にアーカイブを解除してください。</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">このグループを保存できませんでした。</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">このスケジュールを保存できませんでした。</string>
     <string name="season_start_refused_no_members">このグループには準備完了にする機器がありません。</string>
     <string name="season_start_refused_date_in_future">メンテナンスの対象開始日を今日より後にすることはできません。</string>
     <string name="season_start_refused_bad_date">メンテナンスの対象開始日をカレンダーの日付で入力してください。</string>

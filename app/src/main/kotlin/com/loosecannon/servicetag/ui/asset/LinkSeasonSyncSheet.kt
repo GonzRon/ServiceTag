@@ -35,12 +35,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.seasonsync.EntityScope
 import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.MAX_LISTED_ENTITIES
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.attachments.SAVE_LABEL
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.maintenance.SCHEDULE_SEASON_ENTITY_ID_HELP
@@ -283,7 +285,7 @@ internal fun EntityBrowser(
         if (browse.loading) QuietLine(SEASON_SYNC_READING_ENTITIES)
         browse.failure.forEach { RefusalLine(it.text) }
         if (browse.truncatedList) QuietLine(seasonSyncOnlyFirstShown(MAX_LISTED_ENTITIES))
-        if (browse.failure.isEmpty() && browse.scopeEmpty) browserNoHelpers(scope)?.let { QuietLine(it) }
+        if (browse.failure.isEmpty() && browse.scopeEmpty) QuietLine(browserNoHelpers(scope))
         if (browse.noMatch) QuietLine(SEASON_SYNC_NO_MATCH)
         // Bounded, because a lazy list cannot measure inside a scrolling column without a height of its own.
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
@@ -308,13 +310,13 @@ private fun browserTitle(scope: EntityScope): String = when (scope) {
 }
 
 /**
- * B6a review I1 — what an empty scope says: P105-8 only for #16's on/off helpers, whose sentence it is. No ratified
- * sentence fits the publishing scopes (a candidate for the owner's string batch), so their scope line (P113-4 / P114-31)
- * over an empty list says it.
+ * B6a review I1 — what an empty scope says: P105-8 only for #16's on/off helpers, whose sentence it is; each publishing
+ * scope its own (P190-3 for dropdown helpers, P190-4 for date helpers, ratified 2026-10-26).
  */
-internal fun browserNoHelpers(scope: EntityScope): String? = when (scope) {
+internal fun browserNoHelpers(scope: EntityScope): String = when (scope) {
     EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_NO_HELPERS
-    EntityScope.INPUT_SELECTS, EntityScope.INPUT_DATETIMES -> null
+    EntityScope.INPUT_SELECTS -> localized(R.string.season_sync_no_dropdown_helpers)
+    EntityScope.INPUT_DATETIMES -> localized(R.string.season_sync_no_date_helpers)
 }
 
 /** The scope line (P105-6, P113-4, P114-31): the date kind's is B6b's, read through its words. */

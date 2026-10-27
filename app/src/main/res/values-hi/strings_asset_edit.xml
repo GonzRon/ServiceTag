@@ -168,6 +168,10 @@
     <string name="season_sync_scope_line">Home Assistant के चालू/बंद हेल्पर (input_boolean) दिखाए जा रहे हैं।</string>
     <string name="season_sync_refresh">रीफ़्रेश करें</string>
     <string name="season_sync_no_helpers">Home Assistant में कोई चालू/बंद हेल्पर नहीं मिला। Home Assistant में एक बनाएँ, या एंटिटी ID मैन्युअल रूप से दर्ज करें।</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">Home Assistant में कोई ड्रॉपडाउन हेल्पर नहीं मिला। Home Assistant में एक बनाएँ, या एंटिटी ID मैन्युअल रूप से दर्ज करें।</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">Home Assistant में कोई तारीख हेल्पर नहीं मिला। Home Assistant में एक बनाएँ, या एंटिटी ID मैन्युअल रूप से दर्ज करें।</string>
     <string name="season_sync_no_match">आपकी खोज से कोई एंटिटी मेल नहीं खाती।</string>
     <string name="season_sync_only_first_shown">केवल पहली %1$d दिखाई जा रही हैं। सूची छोटी करने के लिए खोजें।</string>
 </resources>

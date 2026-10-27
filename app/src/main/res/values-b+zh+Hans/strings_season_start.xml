@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">此保养计划点按一次即可完成，不记录保养详情。点按一次完成仍会将设备标记为已做好准备。</string>
     <string name="season_start_counts_from">保养计入起始日期</string>
     <string name="season_start_refused_schedule_archived">此保养计划已归档。请先取消归档。</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">无法保存此保养组。</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">无法保存此保养计划。</string>
     <string name="season_start_refused_no_members">此保养组没有可标记为已做好准备的设备。</string>
     <string name="season_start_refused_date_in_future">保养计入起始日期不能晚于今天。</string>
     <string name="season_start_refused_bad_date">请以日历日期输入保养计入起始日期。</string>

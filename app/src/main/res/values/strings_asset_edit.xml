@@ -322,6 +322,10 @@
     <string name="season_sync_refresh">Refresh</string>
     <!-- P105-8: the scope is empty. -->
     <string name="season_sync_no_helpers">No Home Assistant on/off helpers found. Create one in Home Assistant, or enter an entity ID manually.</string>
+    <!-- P190-3: the entity browser, the dropdown scope (input_select) is empty. -->
+    <string name="season_sync_no_dropdown_helpers">No Home Assistant dropdown helpers found. Create one in Home Assistant, or enter an entity ID manually.</string>
+    <!-- P190-4: the entity browser, the date scope (input_datetime) is empty. -->
+    <string name="season_sync_no_date_helpers">No Home Assistant date helpers found. Create one in Home Assistant, or enter an entity ID manually.</string>
     <!-- P105-9: the search matches nothing. -->
     <string name="season_sync_no_match">No entities match your search.</string>
     <!-- P105-10: more matched than are drawn; %1$d is the number drawn. -->

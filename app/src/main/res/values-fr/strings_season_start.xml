@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">Ce plan se termine en un seul appui, sans détails d\'entretien. Un entretien terminé en un seul appui marquera quand même l\'équipement comme prêt.</string>
     <string name="season_start_counts_from">Les entretiens comptent à partir du</string>
     <string name="season_start_refused_schedule_archived">Ce plan est archivé. Désarchivez-le d\'abord.</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">Impossible d\'enregistrer ce groupe.</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">Impossible d\'enregistrer ce plan.</string>
     <string name="season_start_refused_no_members">Ce groupe n\'a aucun équipement à marquer comme prêt.</string>
     <string name="season_start_refused_date_in_future">La date à partir de laquelle les entretiens comptent ne peut pas être postérieure à aujourd\'hui.</string>
     <string name="season_start_refused_bad_date">Saisissez la date à partir de laquelle les entretiens comptent sous forme de date du calendrier.</string>

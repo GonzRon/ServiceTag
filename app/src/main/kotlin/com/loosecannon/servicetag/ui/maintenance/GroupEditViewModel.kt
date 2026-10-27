@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.GroupId
@@ -17,6 +18,7 @@ import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.l10n.localized
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -167,7 +169,12 @@ class GroupEditViewModel(
                         it.copy(
                             saving = false,
                             problems = (failure as? GroupValidation)?.problems.orEmpty(),
-                            seasonStartRefusal = strands?.let { refused -> SeasonStartStrings.strand(refused, name) },
+                            // A5b review minor 3: a strand with no sentence of its own (no asset to name) says P190-1,
+                            // never no line at all.
+                            seasonStartRefusal = strands?.let { refused ->
+                                SeasonStartStrings.strand(refused, name)
+                                    ?: localized(R.string.season_start_could_not_save_group)
+                            },
                         )
                     }
                 },

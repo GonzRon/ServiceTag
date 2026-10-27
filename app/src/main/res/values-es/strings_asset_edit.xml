@@ -169,6 +169,10 @@
     <string name="season_sync_scope_line">Se muestran los ayudantes de encendido/apagado de Home Assistant (input_boolean).</string>
     <string name="season_sync_refresh">Actualizar</string>
     <string name="season_sync_no_helpers">No se encontraron ayudantes de encendido/apagado en Home Assistant. Crea uno en Home Assistant o introduce un ID de entidad manualmente.</string>
+    <!-- P190-3 -->
+    <string name="season_sync_no_dropdown_helpers">No se encontraron ayudantes de lista desplegable en Home Assistant. Crea uno en Home Assistant o introduce un ID de entidad manualmente.</string>
+    <!-- P190-4 -->
+    <string name="season_sync_no_date_helpers">No se encontraron ayudantes de fecha en Home Assistant. Crea uno en Home Assistant o introduce un ID de entidad manualmente.</string>
     <string name="season_sync_no_match">Ninguna entidad coincide con tu búsqueda.</string>
     <string name="season_sync_only_first_shown">Solo se muestran los primeros %1$d. Busca para acotar la lista.</string>
 </resources>

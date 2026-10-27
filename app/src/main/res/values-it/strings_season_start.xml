@@ -33,6 +33,10 @@
     <string name="season_start_quick_note">Questo piano si completa con un tocco e senza dettagli della manutenzione. Un completamento con un tocco segnerà comunque l\'attrezzatura come pronta.</string>
     <string name="season_start_counts_from">Le manutenzioni contano dal</string>
     <string name="season_start_refused_schedule_archived">Questo piano è in archivio. Toglilo prima dall\'archivio.</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">Impossibile salvare questo gruppo.</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">Impossibile salvare questo piano.</string>
     <string name="season_start_refused_no_members">Questo gruppo non ha attrezzature da segnare come pronte.</string>
     <string name="season_start_refused_date_in_future">La data da cui contano le manutenzioni non può essere successiva a oggi.</string>
     <string name="season_start_refused_bad_date">Inserisci la data da cui contano le manutenzioni come data del calendario.</string>
