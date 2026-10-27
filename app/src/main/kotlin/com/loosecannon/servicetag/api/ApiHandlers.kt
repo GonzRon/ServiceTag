@@ -66,7 +66,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Thirty-two collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Thirty-six collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the

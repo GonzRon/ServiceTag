@@ -680,6 +680,8 @@ on the phone.
   with at most one change.
 - **The last change is kept only on the link.** Season history lists the starts and ends like any other. Disconnect
   and Remove link delete the link's record of its last change; the season history keeps its entries.
+- **Removing a link and at once linking the same helper again** can let a check that was already under way count
+  for the new link. It is a real reading of that helper, and the new link's own check follows it.
 - **Proven on an emulator, not yet on a phone.** A phone's own Wi-Fi, its private DNS and Android's battery saving
   (Doze) have not been observed, and a background check's read of the Wi-Fi name is proven only on an emulator.
 - **The entity list shows one kind of helper at a time**, read through the REST states list: `input_boolean` for a

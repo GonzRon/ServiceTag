@@ -21,9 +21,9 @@ import kotlinx.serialization.json.JsonPrimitive
 /**
  * #125 (U-C7; the controller's decision, narrowing R16-9 and G17 for schedule links only) — a schedule's own Home
  * Assistant season over `/v1`: `GET` and `POST /v1/schedules/{id}/season-sync`, mirroring the asset's season sync read.
- * Follow only: no Force, and a group's schedule is refused (inv. 106). The asset's link, Force, the token, the connection
- * and Forget stay the phone's alone; nothing here reaches them, and no answer carries the address, the home Wi-Fi's
- * name or the token.
+ * Follow only: no Force, and a group's schedule is refused (inv. 106). Force, the token, the connection and Forget stay
+ * the phone's alone here, and an asset's own link travels over `POST /v1/assets/{id}/season-sync` (#129); nothing here
+ * reaches them, and no answer carries the address, the home Wi-Fi's name or the token.
  *
  * Reached from the router as `handlers.scheduleSeason.*`. [postLinkCheck] is the runner's `requestScheduleRead`, which
  * launches the schedule's first read on the app's scope and returns: the link's answer never waits on Home Assistant.

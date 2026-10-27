@@ -50,7 +50,9 @@ class RoomSeasonSyncRepository(private val dao: SeasonSyncBindingDao) : SeasonSy
         ) == 1
     }
 
-    /** #129 (L-C2): Remove link's one row; Room's table flows then emit, so the card and the publishing inputs redraw. */
+    /**
+     * #129 (L-C2): Remove link's one row; Room's table flows then emit, so the card and the publishing inputs redraw.
+     */
     override suspend fun delete(assetId: AssetId) = dao.delete(assetId.value)
 
     override suspend fun anyEnabled(): Boolean = dao.anyEnabled()

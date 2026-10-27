@@ -21,8 +21,9 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * #129 (L-C8; R16-9 narrowed for the asset link) — `POST /v1/assets/{id}/season-sync`: an asset's Home Assistant season
- * link linked, pointed at another helper, stopped, resumed, set to Follow or Force, or removed, each through the phone's
- * own command. Sync now, the connection, the token and Forget stay the phone's alone: nothing here reaches them, and no
+ * link linked, pointed at another helper, stopped, resumed, set to Follow or Force, or removed, each through the
+ * phone's own command. Sync now, the connection, the token and Forget stay the phone's alone: nothing here reaches
+ * them, and no
  * answer carries the address, the home Wi-Fi's name or the token.
  *
  * Reached from the router as `handlers.seasonSyncWrites.act`. No handler launches a read: the link, the edit of an
@@ -126,7 +127,12 @@ internal class SeasonSyncHandlers(
     }
 
     /** Step 3.1: a confirmation [action] does not take, `confirmEntityId` before `confirmUnlink`, is the 422. */
-    private fun refuseConfirmations(action: SeasonSyncAction, body: SeasonSyncRequest, entity: Boolean, unlink: Boolean) {
+    private fun refuseConfirmations(
+        action: SeasonSyncAction,
+        body: SeasonSyncRequest,
+        entity: Boolean,
+        unlink: Boolean,
+    ) {
         if (entity && body.confirmEntityId != null) {
             throw SeasonSyncConfirmationRequired(FIELD_CONFIRM_ENTITY_ID, action, taken = true)
         }

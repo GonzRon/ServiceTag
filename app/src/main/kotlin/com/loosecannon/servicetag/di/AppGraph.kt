@@ -996,7 +996,10 @@ class AppGraph(private val context: Context) {
     val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
     val resumeSeasonSync: ResumeSeasonSync =
         ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
-    /** #129 (L-C1, L-C5): Remove link, one asset's binding; the runner's cancel keeps an enabled schedule binding's work. */
+    /**
+     * #129 (L-C1, L-C5): Remove link, one asset's binding; the runner's cancel keeps an enabled schedule binding's
+     * work.
+     */
     val unlinkSeasonSync: UnlinkSeasonSync = UnlinkSeasonSync(seasonSyncBindings, seasonSyncRunner, uow)
     val saveHaConnection: SaveHaConnection = SaveHaConnection(
         haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock, outboundTargets,
