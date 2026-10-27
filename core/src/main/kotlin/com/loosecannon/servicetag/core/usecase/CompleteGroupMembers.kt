@@ -76,8 +76,10 @@ class CompleteGroupMembers(
      * "Complete all": every required member that is not yet done, in one write.
      *
      * The list is derived here rather than passed in so that a surface cannot accidentally complete
-     * a member the round does not oblige — and a second run writes nothing, because by then there is
-     * nothing in the round left to do.
+     * a member the round does not oblige. A second run never writes this round again: the write that
+     * covers the required set finishes it and moves the schedule on, so a second run opens the next
+     * round and completes that round's required members. The empty answer comes from [run] naming
+     * members already done.
      */
     suspend fun all(id: ScheduleId, cmd: CompletionCommand): List<AssetEvent> {
         val round = openRound(id)

@@ -12,7 +12,7 @@ The tag itself carries only a stable ServiceTag identity. The useful information
 
 ServiceTag is **local-first**. It does not require an account or a cloud service to identify equipment, keep maintenance history, calculate due work, or deliver local reminders. The phone remains the source of truth. Files can live in storage you control, backups are portable, and a deliberately narrow local Developer API and MCP bridge make larger maintenance inventories automatable without turning the app into a hosted service.
 
-The current **ServiceTag 1.8.1** release includes maintenance scheduling and reminders, operating seasons and maintenance policy, condition and derived health, lending and ownership handoff, SupplyItems, fitted Installed Components and replacement history, documents/references on Assets and their supporting records, and optional Home Assistant operating-season synchronization, in English and nine more languages.
+The current **ServiceTag 1.9.0** release includes maintenance scheduling and reminders, operating seasons and maintenance policy, condition and derived health, lending and ownership handoff, SupplyItems, fitted Installed Components and replacement history, documents/references on Assets and their supporting records, and optional Home Assistant operating-season synchronization and publishing, in English and nine more languages.
 
 ## Learn more
 
@@ -22,15 +22,15 @@ ServiceTag's documentation uses **progressive disclosure**: start here, then ope
 - **[NFC privacy: what is actually on the tag?](docs/nfc-privacy.md)** — why the tag needs no battery or internet connection, how the phone powers it, and what another person can learn by scanning it.
 - **[What ServiceTag can do today](docs/capabilities.md)** — the released feature set and product boundaries.
 - **[Local-first design, privacy, and Android permissions](docs/local-first-and-permissions.md)** — where data lives, when ServiceTag uses the network, and why permissions exist.
-- **[Home Assistant season sync](docs/home-assistant-season-sync.md)** — setup, behavior, network choices, and security boundaries.
+- **[Home Assistant: season sync and publishing](docs/home-assistant-season-sync.md)** — setup, behavior, network choices, and security boundaries.
 - **[Developer API v1](docs/api/v1.md)** and **[MCP tools](tools/servicetag-mcp/README.md)** — local workstation automation.
 - **[Building and testing](docs/building-and-testing.md)** — clone, build, JVM gates, and emulator tests.
 - **[Documentation index](docs/README.md)** — architecture, design, specifications, releases, and deeper references.
 
 ## Project status
 
-Latest released baseline: **[ServiceTag 1.8.1](https://github.com/GonzRon/ServiceTag/releases/tag/servicetag-v1.8.1)**  
-Release details: **[1.8.1 release notes](docs/releases/1.8.1.md)**; the previous releases: [1.8.0 release notes](docs/releases/1.8.0.md), [1.7.0 release notes](docs/releases/1.7.0.md)  
+Latest released baseline: **[ServiceTag 1.9.0](https://github.com/GonzRon/ServiceTag/releases/tag/servicetag-v1.9.0)**  
+Release details: **[1.9.0 release notes](docs/releases/1.9.0.md)**; the previous releases: [1.8.1 release notes](docs/releases/1.8.1.md), [1.8.0 release notes](docs/releases/1.8.0.md), [1.7.0 release notes](docs/releases/1.7.0.md)  
 Current roadmap and release sequencing: **[issue #104](https://github.com/GonzRon/ServiceTag/issues/104)**
 
 ServiceTag is distinct from [NoteTag](https://github.com/GonzRon/NoteTag): ServiceTag tags identify physical equipment and open its maintenance record; NoteTag handles the separate tag-to-note/link use case.
