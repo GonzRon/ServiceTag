@@ -354,7 +354,7 @@ internal fun EmptyList(
  * **#71 (plan C4, E2, E5).** The badges wrap under the name — Retired, Out of season, Archived, their
  * words, families, glyphs and order unchanged — so no count of them, at any width or font scale, can
  * run past the row. While the row is a health surface ([AssetRow.health]) the same line goes on with
- * the condition badge for a DOWN or DEGRADED asset, then the health badge (the band's glyph and word,
+ * the health badge (the condition badge before it, as #116 amends below) (the band's glyph and word,
  * no score), and under it one quiet line per CRITICAL subject (S109) and per DOWN or DEGRADED
  * component (S27), in the detail's order and words. The NFC disc anchors the right edge; it is a
  * glyph with a description, never a control, so a tap on it opens the asset as a tap anywhere does.

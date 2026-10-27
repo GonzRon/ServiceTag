@@ -220,7 +220,8 @@ data class AssetRow(
     /**
      * #71 (plan E2, E4): the read model's own health view, the one `forAsset` gives, while the row is
      * a health surface — the asset in service (lifecycle, E1) and tracked (a non-null aggregate) —
-     * and null otherwise, when the row draws no health and no condition beside it ([rowHealthOf]).
+     * and null otherwise, when the row draws no health (#116, U-C4: the condition badge is drawn from [condition] on
+     * every in-service row) ([rowHealthOf]).
      */
     val health: AssetHealthView? = null,
     /**
@@ -249,7 +250,8 @@ data class AssetRow(
 /**
  * #71's gate (plan E2): the row shows health only for an asset **in service** — active and not
  * retired; its season plays no part — whose health is **tracked**. A row that shows no health shows
- * none of the group, the condition badge included (R71-6, R71-11). Decided here, never in Compose.
+ * none of the group but its condition badge, which #116 (U-C4) draws from [AssetRow.condition] on every in-service
+ * row (R71-11 amended). Decided here, never in Compose.
  *
  * In service is asked of both the view and the list's own [asset] row: the view is the read model's
  * snapshot, and a view kept across a restart (review MINOR-1) or a pass still running can be older
@@ -316,7 +318,7 @@ enum class EmptyReason {
 
 data class AssetsState(
     val items: List<AssetRow> = emptyList(),
-    /** The three controls, exactly as the owner left them. */
+    /** The four controls, exactly as the owner left them. */
     val filters: AssetFilters = AssetFilters(),
     /** How many rows are archived, so the blank-query empty state can say how many are behind it. */
     val archivedCount: Int = 0,

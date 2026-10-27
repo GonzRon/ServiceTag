@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.health.AssetHealthResult
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
@@ -71,6 +72,8 @@ import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.ui.app
+import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.health.AssetHealthView
 import com.loosecannon.servicetag.ui.health.ComponentCondition
 import com.loosecannon.servicetag.ui.health.ConditionView
@@ -96,12 +99,14 @@ import org.junit.runner.RunWith
  * [LocalDensity] whose font scale stands in for the Android font-size setting — #71's `AssetsIndicatorsTest`
  * technique, whose reading helpers are repeated here. A row's facts are built as the list builds them: through
  * `rowFactsOf`, from a fictional asset and its condition rows. Every word and description expected here is written
- * out, never read from the code under test.
+ * out, never read from the code under test, but in [theTabDrawsTheConditionControlAfterType], which draws the whole
+ * tab and reads its words from the app's string resources through the target context.
  *
  * [theFourRowsInLightAndDark] writes its two captures under the app's external files, `issue-116-ui-proof/`, for the
  * gate evidence (plan §7): the gate pulls them with `adb pull` while the app is still installed.
  *
- * Emulator only (`emulator-5554`), never a phone. Nothing here touches the app's data.
+ * Emulator only (`emulator-5554`), never a phone. One case clears the install, as `AssetsSearchTest` does; the only
+ * other write is the two captures under the app's external files (`issue-116-ui-proof/`).
  */
 @RunWith(AndroidJUnit4::class)
 class AssetsRowFactsTest {
@@ -293,6 +298,25 @@ class AssetsRowFactsTest {
         assertEquals(listOf("Condition"), chipValue(SemanticsProperties.ContentDescription))
         assertEquals("Down", chipValue(SemanticsProperties.StateDescription))
         rule.onNode(hasContentDescription("Type") and hasClickAction()).assert(hasText("Type"))
+    }
+
+    /**
+     * U-C4's wiring (the U2 review's Minor 1): the Assets tab itself hands the filter row its `onPickCondition`, so the
+     * tab draws the Condition control — a dropdown stating All — after the Type control. Drawn over a cleared install.
+     */
+    @Test fun theTabDrawsTheConditionControlAfterType() {
+        clearInstall()
+        rule.setContent { ServiceTagTheme { AssetsScreen(graph = app.graph, onOpenAsset = {}, onNewAsset = {}) } }
+
+        val condition = rule.onNode(hasContentDescription(string(R.string.assets_filter_condition)) and hasClickAction())
+        condition
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.DropdownList))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.assets_filter_all)))
+        val type = rule.onNode(hasContentDescription(string(R.string.assets_filter_type)) and hasClickAction())
+        assertTrue(
+            "the tab draws Condition after Type",
+            before(type.getUnclippedBoundsInRoot(), condition.getUnclippedBoundsInRoot()),
+        )
     }
 
     /** U-C4's empty state, P116-2: CONDITION_HIDDEN draws its one quiet line and offers no button. */
@@ -575,6 +599,9 @@ class AssetsRowFactsTest {
     private fun conditionChip(): SemanticsNodeInteraction = rule.onNode(hasContentDescription("Condition") and hasClickAction())
 
     private fun <T> chipValue(key: SemanticsPropertyKey<T>): T? = conditionChip().fetchSemanticsNode().config.getOrNull(key)
+
+    /** A word from the app's own string resources, through the target context. */
+    private fun string(id: Int): String = ApplicationProvider.getApplicationContext<Context>().getString(id)
 
     /** A row of the open menu: clickable, inside the popup. */
     private fun menuItem(): SemanticsMatcher = hasAnyAncestor(isPopup()) and hasClickAction()
