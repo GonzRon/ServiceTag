@@ -7,9 +7,13 @@ import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.SecretStore
 import com.loosecannon.servicetag.core.seasonsync.currentSeasonSyncState
@@ -48,6 +52,10 @@ import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
  * the token store's `has`, and writes nothing. Its season writes answer `SEASON_SYNC_ENABLED` from their use cases'
  * guard while a binding is enabled; nothing here re-checks it.
  *
+ * #114 adds one read, the asset's season readiness (C29): C9's rule over one `uow.read` snapshot of the asset tree,
+ * the schedules, the groups and this asset's events and activations, for today. It writes nothing, and the season
+ * writes answer `SEASON_START_STRANDED` from their use cases while a Season Start role would be stranded.
+ *
  * A read that names an asset answers the shipped 404 `no_such_asset` when it is not there, before
  * any read model is asked: the health and season views of a vanished asset are empty rather than
  * errors, which is right on a screen and wrong on a wire.
@@ -72,6 +80,13 @@ internal class SeasonHealthHandlers(
     private val secrets: SecretStore,
     private val transfers: TransferRecordRepository,
     private val backgroundAllowed: () -> Boolean,
+    // #114 (C29, C9a): the readiness read — the one reader of C9 with its Home Assistant boundary (#124's C41), the
+    // schedules its answer names and the transaction it reads in.
+    private val schedules: ScheduleRepository,
+    private val uow: UnitOfWork,
+    private val readiness: SeasonReadinessReader,
+    // #125 (U-C6): the schedules' own season rows, counted beside the asset's under the archive's list name.
+    private val scheduleActivations: ScheduleSeasonActivationRepository,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.seasonActivations, graph.conditions, graph.healthSubjects,
@@ -80,6 +95,7 @@ internal class SeasonHealthHandlers(
         graph.assetHealthReadModel, graph.attentionReadModel,
         graph.seasonSyncBindings, graph.haConnections, graph.secretStore, graph.transferRecords,
         graph.seasonSyncBackgroundAllowed,
+        graph.schedules, graph.uow, graph.openingServiceReader, graph.scheduleSeasonActivations,
     )
 
     // --- the season ---------------------------------------------------------------------------
@@ -139,6 +155,25 @@ internal class SeasonHealthHandlers(
             found.toDto(currentSeasonSyncState(found, secrets, assets, transfers))
         }
         return ok(SeasonSyncResponse.serializer(), SeasonSyncResponse(assetId, connection, binding))
+    }
+
+    // --- season readiness (#114) ---------------------------------------------------------------
+
+    /**
+     * #114 (C29) — the twenty-ninth `/v1/assets/{id}/…` sub-resource, read only: whether the asset is ready for its
+     * season, C9's answer for today read through [SeasonReadinessReader.readiness] — the one reader #124's engine reads
+     * too (C41) — in one `uow.read` snapshot. An asset that is not there is the shipped 404 `no_such_asset`. The Home
+     * Assistant boundary (C9a) is the reader's: the asset's date binding and its cached season-ended read, its mode and
+     * #16 binding, the connection's cadence and the newest activation, fresh or unverified as of the clock's `now`.
+     * Nothing here writes — no recompute, no state row.
+     */
+    suspend fun getSeasonReadiness(assetId: String): ApiResponse {
+        val id = AssetId(assetId)
+        val answer = uow.read {
+            val readiness = readiness.readiness(id) ?: throw NoSuchAsset(id)
+            readiness.toResponse(id, schedules.all())
+        }
+        return ok(SeasonReadinessResponse.serializer(), answer)
     }
 
     // --- condition ----------------------------------------------------------------------------
@@ -213,13 +248,14 @@ internal class SeasonHealthHandlers(
     suspend fun listAttention(): ApiResponse =
         ok(AttentionResponse.serializer(), AttentionResponse(attention.items().map { it.toDto() }))
 
-    // --- the three counts `/v1/status` gained -------------------------------------------------
+    // --- the four counts `/v1/status` gained -------------------------------------------------
 
-    /** Under the archive's own list names, as `assetReferences` is. */
+    /** Under the archive's own list names, as `assetReferences` is; #125's (format 21) last. */
     suspend fun counts(): Map<String, Int> = mapOf(
         "seasonActivations" to activations.all().size,
         "assetConditions" to conditions.all().size,
         "healthSubjects" to healthSubjects.all().size,
+        "scheduleSeasonActivations" to scheduleActivations.all().size,
     )
 
     // --- plumbing -----------------------------------------------------------------------------

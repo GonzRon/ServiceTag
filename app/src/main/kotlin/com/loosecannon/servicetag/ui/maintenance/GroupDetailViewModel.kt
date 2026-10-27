@@ -18,6 +18,7 @@ import com.loosecannon.servicetag.core.schedule.listedForDue
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
@@ -198,8 +199,18 @@ class GroupDetailViewModel(
                 archiveGroup.run(id, archived)
             } catch (e: AssetTransferredOut) {
                 _messages.trySend(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+            } catch (refused: SeasonStartStrands) {
+                // #114 (C11 erratum): a restore that would strand a Season Start role is refused and said; nothing changed.
+                restoreRefusal(refused)?.let { _messages.trySend(it) }
             }
         }
+    }
+
+    /** The sentence for a refused restore of this group: every role schedule aimed at it comes back with it. */
+    private suspend fun restoreRefusal(refused: SeasonStartStrands): String? {
+        val name = refused.assetId?.let { assets.get(it) }?.name ?: return null
+        val restored = schedules.forGroup(id).mapTo(mutableSetOf()) { it.id }
+        return SeasonStartStrings.strand(refused, name, restored, throughAGroup = true)
     }
 
     /**

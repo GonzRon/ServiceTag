@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.GroupId
@@ -14,8 +15,10 @@ import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.GroupProblem
 import com.loosecannon.servicetag.core.usecase.GroupValidation
 import com.loosecannon.servicetag.core.usecase.SaveGroup
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.l10n.localized
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -60,6 +63,11 @@ data class GroupEditState(
     val saving: Boolean = false,
     val loaded: Boolean = false,
     val problems: List<GroupProblem> = emptyList(),
+    /**
+     * #114 (C11): P114-27 when an asset this save adds would come under the group's Season Start service and may not
+     * (`MEMBER_NOT_ELIGIBLE`, `MEMBER_ALREADY_COVERED`). Nothing was written; the selection stays as the owner left it.
+     */
+    val seasonStartRefusal: String? = null,
 ) {
     /** A group with no name is not identifiable by a human, and `SaveGroup` refuses one. */
     val canSave: Boolean get() = name.isNotBlank() && !saving
@@ -125,7 +133,7 @@ class GroupEditViewModel(
     fun save() {
         val current = _state.value
         if (!current.canSave) return
-        _state.update { it.copy(saving = true, problems = emptyList()) }
+        _state.update { it.copy(saving = true, problems = emptyList(), seasonStartRefusal = null) }
         viewModelScope.launch {
             val command = GroupCommand(
                 name = current.name.trim(),
@@ -151,10 +159,22 @@ class GroupEditViewModel(
                     _saved.tryEmit(group.id.value)
                 },
                 onFailure = { failure ->
+                    val strands = failure as? SeasonStartStrands
+                    // The asset's stored name, else the name this form lists for it (A5b review): a refused member is
+                    // always on the form, so P114-27 never comes out blank.
+                    val name = strands?.assetId?.let { refusedId ->
+                        assets.get(refusedId)?.name ?: current.candidates.firstOrNull { it.assetId == refusedId }?.name
+                    }
                     _state.update {
                         it.copy(
                             saving = false,
                             problems = (failure as? GroupValidation)?.problems.orEmpty(),
+                            // A5b review minor 3: a strand with no sentence of its own (no asset to name) says P190-1,
+                            // never no line at all.
+                            seasonStartRefusal = strands?.let { refused ->
+                                SeasonStartStrings.strand(refused, name)
+                                    ?: localized(R.string.season_start_could_not_save_group)
+                            },
                         )
                     }
                 },

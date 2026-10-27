@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Spanish translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">Publicar la fecha de inicio de temporada en Home Assistant</string>
+    <string name="ha_publish_scope_datetimes">Ayudantes de fecha (input_datetime)</string>
+    <string name="ha_publish_date_not_date_only">%s debe ser un ayudante de fecha con fecha y sin hora.</string>
+    <string name="ha_publish_date_confirm">¿Publicar la fecha de inicio de temporada de %1$s en %2$s? Mientras %1$s esté listo para la temporada, ServiceTag establece la fecha del mantenimiento; si no, establece %3$s, que significa que no está listo. Las automatizaciones de Home Assistant deben leerlo y nunca establecerlo.</string>
+    <string name="ha_publish_date_not_a_date_helper">%s no es un ayudante de fecha (input_datetime).</string>
+    <string name="ha_publish_stop_date_confirm">¿Dejar de publicar en %1$s? ServiceTag primero lo establece en %2$s, para que Home Assistant deje de tratar la fecha anterior como un mantenimiento.</string>
+    <string name="ha_publish_date_not_yet_cleared">Aún no se ha borrado en Home Assistant: %1$s puede seguir permitiendo arranques. ServiceTag sigue intentándolo; si este teléfono no puede llegar a Home Assistant, establécelo allí en %2$s.</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTag ya no puede llegar a %1$s. Puede seguir permitiendo arranques: establécelo en %2$s en Home Assistant.</string>
+    <string name="ha_publish_date_cleared_by_hand">Lo borré en Home Assistant</string>
+    <string name="ha_publish_date_cleared">Borrado en Home Assistant: %1$s es %2$s. No se envía nada más mientras el equipo esté archivado, retirado o transferido.</string>
+    <string name="ha_publish_boundary_field">Ayudante de fin de temporada (la fecha que Home Assistant registra cuando termina la temporada)</string>
+    <string name="ha_publish_boundary_is_target">%s es el ayudante que establece ServiceTag. Elige el ayudante de fecha en el que Home Assistant registra el fin de la temporada.</string>
+</resources>

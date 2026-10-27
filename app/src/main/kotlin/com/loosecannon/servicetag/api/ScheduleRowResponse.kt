@@ -48,6 +48,19 @@ internal data class ScheduleRowResponse(
     val updatedAt: Long,
     val ruleChangedAt: Long,
     val providers: List<ScheduleProviderDto>,
+    /**
+     * #114 (C29): format 21's passive Season Start role, `NONE` or `SEASON_START`, and its commissioning boundary
+     * (`YYYY-MM-DD`, null without a role). Response only: no schedule command takes either, so a body carrying one is
+     * the shipped 400 (G18), and a full-replace edit keeps the stored role.
+     */
+    val role: String,
+    val roleSinceOn: String?,
+    /**
+     * #125 (U-C7): format 21's season source, `ASSET` (the schedule's due rules read its asset's season) or `OWN` (its
+     * own Home Assistant season, `GET /v1/schedules/{id}/season-sync`). Response only: the link and the unlink are their
+     * own command, so a schedule body carrying it is the shipped 400, and a full-replace edit keeps the stored source.
+     */
+    val seasonSource: String,
     /** Derived: `IGNORE` or `FOLLOW_ASSET`, or null for `PRE_SERVICE`. */
     val seasonBehavior: String?,
     /** Derived: `AT_START` or `RESUME_CLAMPED` for an in-service policy, else null. */
@@ -86,6 +99,9 @@ internal fun MaintenanceSchedule.rowResponse(): ScheduleRowResponse {
         updatedAt = row.updatedAt,
         ruleChangedAt = row.ruleChangedAt,
         providers = row.providers,
+        role = row.role,
+        roleSinceOn = row.roleSinceOn,
+        seasonSource = row.seasonSource,
         seasonBehavior = legacy.seasonBehavior?.name,
         seasonReentry = legacy.seasonReentry,
         seasonReentryOffsetDays = legacy.seasonReentryOffsetDays,

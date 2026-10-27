@@ -116,6 +116,10 @@
     <string name="assets_both_hidden">匹配的设备已被隐藏。开启“子设备”和“已归档”即可查看。</string>
     <string name="assets_only_child_assets">这里只有子设备。开启“子设备”即可查看。</string>
     <string name="assets_type_hidden">匹配的设备属于其他类型。请将“类型”设为“全部”。</string>
+    <string name="assets_ha_linked">已关联到 Home Assistant</string>
+    <string name="assets_condition_hidden">匹配的设备处于其他状况。请将“状况”设为“全部”。</string>
+    <string name="assets_in_season">使用季内</string>
+    <string name="assets_filter_condition">状况</string>
 
     <string name="assets_search_hint">搜索设备</string>
     <string name="assets_clear_search">清除搜索</string>

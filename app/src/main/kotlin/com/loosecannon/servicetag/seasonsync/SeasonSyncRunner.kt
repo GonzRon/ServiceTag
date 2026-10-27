@@ -2,8 +2,13 @@ package com.loosecannon.servicetag.seasonsync
 
 import android.util.Log
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
@@ -12,7 +17,10 @@ import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
 import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaStateReader
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.RecordScheduleSeasonSyncResult
 import com.loosecannon.servicetag.core.seasonsync.RecordSeasonSyncResult
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBinding
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncScheduler
@@ -42,7 +50,10 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 enum class SeasonSyncSchedule { PERIODIC, FOREGROUND_ONLY, PAUSED, NONE }
 
-/** C22's rule over the stored connection, whether any binding is enabled, and whether Android grants a background read. */
+/**
+ * C22's rule over the stored connection, whether any binding is enabled — an asset's or (#125) a schedule's — and
+ * whether Android grants a background read.
+ */
 fun seasonSyncScheduleOf(connection: HaConnection?, anyEnabled: Boolean, backgroundAllowed: Boolean): SeasonSyncSchedule {
     if (connection == null || !anyEnabled) return SeasonSyncSchedule.NONE
     return when (connection.networkEligibility) {
@@ -73,8 +84,45 @@ class SeasonSyncDatabaseFailed(cause: Throwable) : SeasonSyncPassFailed(cause)
 /** The token store itself failed (a key store that cannot load, B4): never a retry. */
 class SeasonSyncKeyStoreFailed(cause: Throwable) : SeasonSyncPassFailed(cause)
 
-/** What one pass read: each request's outcome (or NEEDS_TOKEN, sent nowhere), in binding order. */
+/**
+ * What one pass read: each request's outcome (or NEEDS_TOKEN, sent nowhere), in binding order — the asset bindings',
+ * then (#125) the schedule bindings'.
+ */
 data class SeasonSyncPass(val outcomes: List<HaReadOutcome>)
+
+/**
+ * #125 (U-C5) — what the runner's schedule pass reads and writes: the schedule bindings, the schedules they name, and
+ * the applier that records each read ([RecordScheduleSeasonSyncResult], the one writer of a schedule's own season).
+ * `AppGraph` and `FakeGraph` pass one; a construction without it (#16's shipped ones) polls asset bindings only.
+ */
+class ScheduleSeasonPolling(
+    val bindings: ScheduleSeasonBindingRepository,
+    val schedules: ScheduleRepository,
+    val record: RecordScheduleSeasonSyncResult,
+)
+
+/**
+ * #125 (U-C5, U-C7) — a schedule binding's state, #16's derivation in #16's order (C17): [SeasonSyncState.NEEDS_TOKEN]
+ * when the connection's token is not on this phone; [SeasonSyncState.STOPPED] when the binding is not enabled;
+ * [SeasonSyncState.NOT_MAINTAINED_HERE] when the schedule is gone, archived or a group's, or its asset is gone or not
+ * maintained here; else [SeasonSyncState.ACTIVE]. Derived when it is read, never stored; only an ACTIVE one is read.
+ */
+suspend fun currentScheduleSeasonState(
+    binding: ScheduleSeasonBinding,
+    secrets: SecretStore,
+    schedules: ScheduleRepository,
+    assets: AssetRepository,
+    transfers: TransferRecordRepository,
+): SeasonSyncState {
+    if (!secrets.has(binding.connectionId)) return SeasonSyncState.NEEDS_TOKEN
+    if (!binding.enabled) return SeasonSyncState.STOPPED
+    val schedule = schedules.get(binding.scheduleId)
+    val target = schedule?.target as? ScheduleTarget.AssetTarget
+    val asset = target?.let { assets.get(it.assetId) }
+    val here = schedule != null && schedule.status != ScheduleStatus.ARCHIVED && asset != null &&
+        asset.maintainedHere(transfers.heldIds())
+    return if (here) SeasonSyncState.ACTIVE else SeasonSyncState.NOT_MAINTAINED_HERE
+}
 
 /**
  * #16 (C21; R16-7, R16-Q-D as amended) — **the one poller.** One per graph, one [Mutex]: a single flight, so two
@@ -91,6 +139,11 @@ data class SeasonSyncPass(val outcomes: List<HaReadOutcome>)
  * asset's read on [scope] and returns.
  *
  * [log] takes G5's line when a launched pass fails (C33(6)); `AppGraph` keeps the default, a JVM test records it.
+ *
+ * #125 (U-C5; the master plan's G3 as amended): with [scheduleSeasons] it also polls the schedule bindings, **behind
+ * the same lock**, through the same client, gate, 30 s bound and stale rule, each read handed to the schedule
+ * applier at its revision. [syncNow] with no asset, [refreshIfStale] and [runAll] read both kinds; an enabled schedule
+ * binding counts in C22's "any enabled", so it alone keeps the periodic work.
  */
 class SeasonSyncRunner(
     private val bindings: SeasonSyncRepository,
@@ -106,6 +159,7 @@ class SeasonSyncRunner(
     private val clock: Clock,
     private val io: CoroutineContext = Dispatchers.IO,
     private val log: (String) -> Unit = { Log.w("SeasonSyncRunner", it) },
+    private val scheduleSeasons: ScheduleSeasonPolling? = null,
 ) : SeasonSyncScheduler {
 
     private val lock = Mutex()
@@ -117,11 +171,28 @@ class SeasonSyncRunner(
     private val secrets: SecretStore = KeyStoreSteps(secrets)
 
     /**
-     * **Sync now** (explicit): waits for a running pass, then reads [assetId]'s binding, or every active binding,
-     * whatever their staleness; the eligibility still applies to each request (C19).
+     * **Sync now** (explicit): waits for a running pass, then reads [assetId]'s binding, or every active binding —
+     * the schedule bindings too (#125) — whatever their staleness; the eligibility still applies to each request (C19).
      */
     suspend fun syncNow(assetId: AssetId? = null): SeasonSyncPass = lock.withLock {
-        pass { assetId == null || it.assetId == assetId }
+        val read = pass { assetId == null || it.assetId == assetId }
+        if (assetId == null) read + schedulePass { true } else read
+    }
+
+    /**
+     * #125 (U-C5, U-C7) — one schedule's read, as [syncNow] reads one asset's: waits for a running pass, then reads
+     * [scheduleId]'s binding when it is active, whatever its staleness.
+     */
+    suspend fun syncSchedule(scheduleId: ScheduleId): SeasonSyncPass = lock.withLock {
+        SeasonSyncPass(schedulePass { it.scheduleId == scheduleId })
+    }
+
+    /**
+     * #125 (U-C3, U-C7) — the post-link check: [syncSchedule] launched on [scope] and never awaited, so the link's
+     * answer never waits on Home Assistant; the schedule binding's status shows its result.
+     */
+    fun requestScheduleRead(scheduleId: ScheduleId) {
+        launchQuietly { syncSchedule(scheduleId) }
     }
 
     /**
@@ -147,7 +218,8 @@ class SeasonSyncRunner(
 
     private suspend fun staleOnes(now: Long): SeasonSyncPass {
         val cadence = database { connections.get() }?.cadence ?: return SeasonSyncPass(emptyList())
-        return pass { binding -> seasonSyncStale(binding.lastSuccessAt, cadence, now) }
+        return pass { binding -> seasonSyncStale(binding.lastSuccessAt, cadence, now) } +
+            schedulePass { binding -> seasonSyncStale(binding.lastSuccessAt, cadence, now) }
     }
 
     /**
@@ -157,7 +229,7 @@ class SeasonSyncRunner(
      * to foreground-only behaviour (R16-20 as amended).
      */
     suspend fun runAll(): SeasonSyncPass {
-        val pass = lock.withLock { pass { true } }
+        val pass = lock.withLock { pass { true } + schedulePass { true } }
         reconcile(onlyWhenDrifted = true)
         return pass
     }
@@ -169,7 +241,18 @@ class SeasonSyncRunner(
         reconcile(onlyWhenDrifted = false)
     }
 
+    /**
+     * #16's commands cancel when no **asset** binding is left enabled (Stop, a cadence change) or when Forget deleted
+     * the connection. #125: an enabled schedule binding still needs the work, so with the schedule pass wired, cancel is
+     * C22's rule applied under [scheduleLock] — read and act in one hold, with no check outside it (H3 review n1); with
+     * no enabled binding of either kind, or no connection, that rule cancels. Without the pass (#16's shipped
+     * constructions) it is the plain cancel.
+     */
     override suspend fun cancel() {
+        if (scheduleSeasons != null) {
+            reconcile(onlyWhenDrifted = false)
+            return
+        }
         scheduleLock.withLock { withContext(io) { work.cancel() } }
     }
 
@@ -203,12 +286,47 @@ class SeasonSyncRunner(
         database { currentSeasonSyncState(binding, secrets, assets, transfers) }
 
     /**
+     * #125 (U-C5) — the schedule pass, under [lock] like [pass]: each ACTIVE schedule binding [wanted] is read at its
+     * revision through the same [reader] and recorded by the schedule applier; NEEDS_TOKEN is recorded with nothing sent.
+     */
+    private suspend fun schedulePass(wanted: (ScheduleSeasonBinding) -> Boolean): List<HaReadOutcome> {
+        val polling = scheduleSeasons ?: return emptyList()
+        val connection = database { connections.get() } ?: return emptyList()
+        val outcomes = mutableListOf<HaReadOutcome>()
+        for (binding in database { polling.bindings.all() }) {
+            if (!wanted(binding) || scheduleState(polling, binding) != SeasonSyncState.ACTIVE) continue
+            val startedAt = clock.nowMillis()
+            val outcome = when (val token: Secret? = secrets.get(binding.connectionId)) {
+                null -> HaReadOutcome.NoDecision(SyncErrorKind.NEEDS_TOKEN, null)
+                else -> reader.read(connection.baseUrl, binding.entityId, token)
+            }
+            val fetchedAt = clock.nowMillis()
+            database {
+                polling.record.run(
+                    binding.scheduleId, binding.revision, startedAt, fetchedAt, outcome, readEntityId = binding.entityId,
+                )
+            }
+            outcomes += outcome
+        }
+        return outcomes
+    }
+
+    private suspend fun scheduleState(polling: ScheduleSeasonPolling, binding: ScheduleSeasonBinding): SeasonSyncState =
+        database { currentScheduleSeasonState(binding, secrets, polling.schedules, assets, transfers) }
+
+    private operator fun SeasonSyncPass.plus(more: List<HaReadOutcome>): SeasonSyncPass = SeasonSyncPass(outcomes + more)
+
+    private operator fun SeasonSyncPass.plus(more: SeasonSyncPass): SeasonSyncPass = SeasonSyncPass(outcomes + more.outcomes)
+
+    /**
      * Under [scheduleLock], so a resume's or a run's drift check that read the old row can never act after a command's
      * own check (a stray work after Forget or the last Stop, a cancelled one after a switch to periodic).
      */
     private suspend fun reconcile(onlyWhenDrifted: Boolean): SeasonSyncSchedule = scheduleLock.withLock {
         val connection = database { connections.get() }
-        val schedule = seasonSyncScheduleOf(connection, database { bindings.anyEnabled() }, backgroundAllowed())
+        val polling = scheduleSeasons
+        val anyEnabled = database { bindings.anyEnabled() || (polling != null && polling.bindings.anyEnabled()) }
+        val schedule = seasonSyncScheduleOf(connection, anyEnabled, backgroundAllowed())
         withContext(io) {
             when (schedule) {
                 SeasonSyncSchedule.PERIODIC -> if (connection != null && (!onlyWhenDrifted || !work.isEnqueued())) {

@@ -41,6 +41,7 @@
     <string name="ha_precise_location_why">एक्सेस टोकन भेजने से पहले यह जाँचने के लिए कि यह फ़ोन आपके घर के Wi-Fi पर है, ServiceTag को Wi-Fi नेटवर्क का नाम पढ़ना होगा। Android इसकी अनुमति सिर्फ़ सटीक जगह की जानकारी की अनुमति के साथ देता है, इसलिए “सटीक” चुनें। ServiceTag आपकी जगह की जानकारी का इस्तेमाल नहीं करता, लेकिन Android इसे उन ऐप में दिखाएगा जिन्होंने जगह की जानकारी का इस्तेमाल किया है।</string>
     <string name="ha_precise_location_refused">सटीक जगह की जानकारी की अनुमति के बिना, ServiceTag यह नहीं बता सकता कि यह कौन-सा Wi-Fi है, इसलिए “सिर्फ़ घर के इस Wi-Fi पर” बंद रहता है।</string>
     <string name="ha_http_needs_home_wifi">http:// पते के लिए “सिर्फ़ घर के इस Wi-Fi पर” ज़रूरी है। इसे चुनें, या https:// पता इस्तेमाल करें।</string>
+    <string name="ha_publishing_blocks_address_change">पता बदलने से पहले सीज़न शुरू होने की तारीखें प्रकाशित करना बंद करें: पुराने Home Assistant को पहले बताना ज़रूरी है।</string>
     <string name="ha_turn_on_location">जगह की जानकारी चालू करें, ताकि ServiceTag Wi-Fi नेटवर्क का नाम पढ़ सके, फिर दोबारा कोशिश करें।</string>
     <string name="ha_background_off">बैकग्राउंड जाँच बंद होने पर, ServiceTag तब जाँच करता है जब आप चुने गए अंतराल के बाद ऐप खोलते हैं या उस पर लौटते हैं, और जब आप “अभी सिंक करें” पर टैप करते हैं। ऐप इस्तेमाल में रहने के दौरान इसे अब भी सटीक जगह की जानकारी चाहिए।</string>
     <string name="ha_background_checks">घर के इस नेटवर्क पर बैकग्राउंड जाँच</string>

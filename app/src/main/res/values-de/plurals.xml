@@ -13,4 +13,8 @@
         <item quantity="one">Innerhalb der %1$d-tägigen Schonfrist</item>
         <item quantity="other">Innerhalb der %1$d-tägigen Schonfrist</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="one">%1$d Datumshelfer in Home Assistant enthält noch ein Saisonstart-Datum. Beim Trennen wird er zuerst auf %2$s gesetzt, wenn das möglich ist; sonst behält er sein Datum, bis du ihn in Home Assistant leerst.</item>
+        <item quantity="other">%1$d Datumshelfer in Home Assistant enthalten noch ein Saisonstart-Datum. Beim Trennen werden sie zuerst auf %2$s gesetzt, wo das möglich ist; alle, die nicht erreichbar sind, behalten ihr Datum, bis du sie in Home Assistant leerst.</item>
+    </plurals>
 </resources>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">उपकरण की स्थिति Home Assistant में प्रकाशित करें</string>
+    <string name="ha_publish_helper_field">Home Assistant हेल्पर</string>
+    <string name="ha_publish_choose_helper">हेल्पर चुनें</string>
+    <string name="ha_publish_scope_selects">ड्रॉपडाउन हेल्पर (input_select)</string>
+    <string name="ha_publish_status_confirm">%1$s की उपकरण स्थिति %2$s में प्रकाशित करें? जब भी दर्ज स्थिति बदलती है, ServiceTag यह हेल्पर सेट करता है: चालू → UP, कमज़ोर → DEGRADED, बंद → DOWN। Home Assistant ऑटोमेशन को इसे पढ़ना चाहिए और कभी सेट नहीं करना चाहिए।</string>
+    <string name="ha_publish_confirm_button">प्रकाशित करें</string>
+    <string name="ha_publish_waiting_for_status">प्रतीक्षा: कोई उपकरण स्थिति दर्ज नहीं है, इसलिए कुछ नहीं भेजा जाता।</string>
+    <string name="ha_publish_not_published_yet">अभी तक प्रकाशित नहीं हुआ।</string>
+    <string name="ha_publish_sending">%s भेजा जा रहा है…</string>
+    <string name="ha_publish_published">प्रकाशित %1$s · %2$s</string>
+    <string name="ha_publish_matches">Home Assistant %1$s दिखा रहा है, जो ServiceTag से मेल खाता है · जाँचा गया %2$s</string>
+    <string name="ha_publish_now">अभी प्रकाशित करें</string>
+    <string name="ha_publish_stop">प्रकाशित करना बंद करें</string>
+    <string name="ha_publish_stop_status_confirm">%s में प्रकाशित करना बंद करें? Home Assistant अपना मौजूदा मान रखेगा।</string>
+    <string name="ha_publish_options_mismatch">%s ऐसा ड्रॉपडाउन हेल्पर होना चाहिए जिसके विकल्प ठीक UP, DOWN और DEGRADED हों।</string>
+    <string name="ha_publish_not_a_dropdown">%s ड्रॉपडाउन हेल्पर (input_select) नहीं है।</string>
+    <string name="ha_publish_service_refused">Home Assistant ने %2$s के लिए मान %1$s अस्वीकार कर दिया।</string>
+    <string name="ha_publish_write_forbidden">Home Assistant ने एक्सेस टोकन के उपयोगकर्ता के लिए यह बदलाव अस्वीकार कर दिया। उस उपयोगकर्ता को हेल्पर बदलने की अनुमति चाहिए।</string>
+    <string name="ha_publish_outcome_unknown">Home Assistant ने बदलाव की पुष्टि नहीं की। फिर से भेजने से पहले ServiceTag हेल्पर की जाँच करेगा।</string>
+    <string name="ha_publish_remote_differs">बदलाव के बाद Home Assistant %1$s दिखा रहा है; हो सकता है कोई और %2$s सेट कर रहा हो।</string>
+    <string name="ha_publish_copied_installation">यह सेटअप किसी दूसरे फ़ोन के बैकअप से आया है, इसलिए यह फ़ोन प्रकाशित नहीं करता। हेल्पर जाँचें और यहाँ प्रकाशन फिर से चालू करें।</string>
+    <string name="ha_publish_target_in_use">%s को इस फ़ोन पर पहले से कोई दूसरा उपकरण सेट करता है।</string>
+    <string name="ha_publish_inbound_source">%s वह हेल्पर है जिसका इस उपकरण का मौसम अनुसरण करता है। कोई दूसरा चुनें: ServiceTag कभी वह हेल्पर सेट नहीं करता जिसे वह पढ़ता है।</string>
+    <string name="ha_publish_status_not_maintained">नहीं भेजा जा रहा: उपकरण संग्रहित, सेवा से हटाया गया या ट्रांसफ़र किया गया है। Home Assistant अपना पिछला मान रखता है।</string>
+    <string name="ha_publish_check_helper">हेल्पर जाँचें</string>
+    <string name="ha_publish_delivery_limit">फ़ोन जब भेज सके तब भेजा जाता है: खोलने पर, “अभी प्रकाशित करें” पर, या जहाँ अनुमति हो वहाँ बैकग्राउंड में। यह तुरंत नहीं होता।</string>
+    <string name="ha_publish_http_error">Home Assistant ने %s उत्तर दिया।</string>
+    <string name="ha_publish_checking">हेल्पर की जाँच हो रही है…</string>
+    <string name="ha_publish_choose_helper_first">पहले एक हेल्पर चुनें।</string>
+    <string name="ha_publish_needs_validation">ServiceTag के इसमें प्रकाशित करने से पहले हेल्पर को फिर से जाँचें।</string>
+    <string name="ha_publish_stale_read">जाँच के दौरान हेल्पर बदल गया। इसे फिर से जाँचें।</string>
+    <string name="ha_publish_asset_not_maintained">%s संग्रहित, सेवा से हटाया गया या ट्रांसफ़र किया गया है, इसलिए यह Home Assistant में प्रकाशित नहीं कर सकता।</string>
+    <string name="ha_publish_stale_plan">इस हेल्पर की जाँच के बाद कुछ बदल गया है। इसे फिर से जाँचें।</string>
+    <string name="ha_publish_write_disclosure">जब कोई उपकरण Home Assistant में प्रकाशित करता है, तो यह फ़ोन इस टोकन से वह हेल्पर भी सेट करता है। टोकन के उपयोगकर्ता को केवल ज़रूरी अधिकार दें।</string>
+</resources>

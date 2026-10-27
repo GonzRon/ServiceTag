@@ -81,6 +81,11 @@ data class AssetEvent(              // aggregate root; saved and loaded with its
     val occurrenceOn: String? = null,
     /** True only for a minimal completion against a FORM schedule: the details are still owed. */
     val detailsPending: Boolean = false,
+    /**
+     * #114 (C7, B): true only on an event a Transfer Pack import inserted here. No command sets it and none
+     * clears it; an imported event never counts toward the recipient's readiness.
+     */
+    val imported: Boolean = false,
 )
 
 /**

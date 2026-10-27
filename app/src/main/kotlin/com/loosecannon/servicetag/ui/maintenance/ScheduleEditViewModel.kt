@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonInputs
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -31,11 +32,15 @@ import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
 import com.loosecannon.servicetag.core.usecase.PreServiceNeedsDates
+import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localizedDecimal
 import com.loosecannon.servicetag.l10n.parseLocalizedDecimal
@@ -128,8 +133,12 @@ fun fieldOf(problem: ScheduleProblem): String = when (problem) {
  */
 enum class PolicyOption { BEFORE_SEASON, BEFORE_BREAK, WHEN_SEASON_STARTS, AFTER_BREAK, WHENEVER_DUE }
 
-/** S73 "Start counting from", under S67: S74 is AT_START ([SEASON_START]), S75 RESUME_CLAMPED ([OWN_DATE]). */
-enum class StartCountingFrom { SEASON_START, OWN_DATE }
+/**
+ * S73 "Start counting from", under S67: S74 is AT_START ([SEASON_START]), S75 RESUME_CLAMPED ([OWN_DATE]).
+ * [OPENING_SERVICE] is #124's IN_SERVICE_AFTER_OPENING_SERVICE, P124-1, its offset held in the same "Days
+ * after" text and drawn under P124-2; it is offered only with a time rule ([ScheduleEditState.startCountingOptions]).
+ */
+enum class StartCountingFrom { SEASON_START, OWN_DATE, OPENING_SERVICE }
 
 /**
  * S140–S141, and S137 when the answer to "Archive both" is that the subject is the one its asset's
@@ -194,7 +203,8 @@ internal data class PolicyChoice(
  * Which answer a stored row is, among [options] — or null when none of them is it, which the editor
  * never guesses at: PRE_SERVICE −14 is the "Before…" option with 14, AT_START 5 is S67 · S74 · 5,
  * RESUME_CLAMPED is S67 · S75, CONTINUOUS is S68. AT_START is S70 only at offset 0, because S70 has no
- * field to show another offset in.
+ * field to show another offset in. #124's AFTER_OPENING_SERVICE 7 is S67 · [StartCountingFrom.OPENING_SERVICE]
+ * · 7, never AT_START, which would count from the wrong day.
  */
 internal fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List<PolicyOption>): PolicyChoice? =
     when (policy) {
@@ -211,6 +221,12 @@ internal fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List
         ServicePolicy.IN_SERVICE_RESUME_CLAMPED ->
             PolicyChoice(PolicyOption.WHEN_SEASON_STARTS, StartCountingFrom.OWN_DATE)
                 .takeIf { PolicyOption.WHEN_SEASON_STARTS in options }
+        ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE ->
+            PolicyChoice(
+                PolicyOption.WHEN_SEASON_STARTS,
+                StartCountingFrom.OPENING_SERVICE,
+                daysAfter = (offsetDays ?: 0).toString(),
+            ).takeIf { PolicyOption.WHEN_SEASON_STARTS in options }
     }
 
 /** S71's and S72's bounds: 1–365 before, 0–365 after (spec §4.2). */
@@ -258,6 +274,11 @@ data class ScheduleEditState(
     val meterLead: String = "",
     /** The target asset's season and break, read once; null for a group target, which has neither. */
     val season: SeasonInputs? = null,
+    /**
+     * #124 (C43, the fold ruling after #125): the target **asset's** own season mode, read once; null for a group target.
+     * P124-1 reads it, never [season], which for a schedule following its own Home Assistant season is that season's.
+     */
+    val assetSeasonMode: SeasonMode? = null,
     /** The answer to S65; null while it stands unanswered. */
     val policyOption: PolicyOption? = PolicyOption.WHENEVER_DUE,
     val startCountingFrom: StartCountingFrom = StartCountingFrom.SEASON_START,
@@ -273,6 +294,13 @@ data class ScheduleEditState(
     val noBoundary: Boolean = false,
     /** The link-guard dialog, when a save was refused for a health subject it would strand. */
     val linkGuard: LinkGuardPrompt? = null,
+    /**
+     * #114 (C33, O-2, F-22): a Season Start service's FORM → QUICK edit asks the owner's election first — P114-5 with
+     * the confirm P114-42 — and the save is repeated with it only when the owner confirms.
+     */
+    val quickElection: Boolean = false,
+    /** #114 (C11): why a save would strand the Season Start role (P114-26, or P114-43 after the election is declined). */
+    val seasonStartRefusal: String? = null,
     /** The day S84 measures the season from: its current span, or the next one. */
     val todayOn: LocalDate = LocalDate.of(1970, 1, 1),
     val completionMode: CompletionMode = CompletionMode.QUICK,
@@ -328,6 +356,31 @@ data class ScheduleEditState(
     /** Whether S65 is drawn at all. When it is not, the policy is CONTINUOUS (inv. 106). */
     val questionDrawn: Boolean get() = policyOptions.isNotEmpty()
 
+    /**
+     * S73's answers under S67, in order: S74, S75 and #124's P124-1, "The Season Start service". P124-1 is offered only for
+     * an asset target whose **asset** is CALENDAR or MANUAL ([assetSeasonMode]), so never on a YEAR_ROUND asset or a group
+     * (inv. 106) — not even for a schedule following its own Home Assistant season, whose own season offers S67 (#125):
+     * the Season Start role it counts from needs the asset's seasons (the fold ruling); and it is offered only with a
+     * time rule, because a meter-only schedule stays phase-only (N1 review M-2). Empty while S67 is not one of the options.
+     */
+    val startCountingOptions: List<StartCountingFrom>
+        get() = if (PolicyOption.WHEN_SEASON_STARTS !in policyOptions) {
+            emptyList()
+        } else {
+            listOfNotNull(
+                StartCountingFrom.SEASON_START,
+                StartCountingFrom.OWN_DATE,
+                StartCountingFrom.OPENING_SERVICE.takeIf { hasTimeRule && assetHasSeasons },
+            )
+        }
+
+    /** Whether the target asset itself has seasons, as the Season Start role needs (C10, NEEDS_SEASONS). */
+    private val assetHasSeasons: Boolean
+        get() = when (assetSeasonMode) {
+            SeasonMode.CALENDAR, SeasonMode.MANUAL -> true
+            SeasonMode.YEAR_ROUND, null -> false
+        }
+
     /** The policy the chosen answer means; null while the question is drawn and unanswered. */
     val servicePolicy: ServicePolicy?
         get() = if (!questionDrawn) {
@@ -339,6 +392,7 @@ data class ScheduleEditState(
                 PolicyOption.WHEN_SEASON_STARTS -> when (startCountingFrom) {
                     StartCountingFrom.SEASON_START -> ServicePolicy.IN_SERVICE_AT_START
                     StartCountingFrom.OWN_DATE -> ServicePolicy.IN_SERVICE_RESUME_CLAMPED
+                    StartCountingFrom.OPENING_SERVICE -> ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE
                 }
                 PolicyOption.AFTER_BREAK -> ServicePolicy.IN_SERVICE_AT_START
                 PolicyOption.WHENEVER_DUE -> ServicePolicy.CONTINUOUS
@@ -358,7 +412,8 @@ data class ScheduleEditState(
             when (policyOption) {
                 PolicyOption.BEFORE_SEASON, PolicyOption.BEFORE_BREAK -> daysBefore.toIntOrNull()?.let { -it }
                 PolicyOption.WHEN_SEASON_STARTS -> when (startCountingFrom) {
-                    StartCountingFrom.SEASON_START -> if (hasTimeRule) daysAfter.toIntOrNull() ?: 0 else 0
+                    StartCountingFrom.SEASON_START, StartCountingFrom.OPENING_SERVICE ->
+                        if (hasTimeRule) daysAfter.toIntOrNull() ?: 0 else 0
                     StartCountingFrom.OWN_DATE -> null
                 }
                 PolicyOption.AFTER_BREAK -> 0
@@ -414,16 +469,34 @@ data class ScheduleEditState(
             return start.plusDays(offset.toLong()) > end
         }
 
-    /** The same form with the question's answer cleared when it is no longer one of the options. */
-    internal fun withOfferedOption(): ScheduleEditState =
-        if (questionDrawn && policyOption != null && policyOption !in policyOptions) copy(policyOption = null) else this
+    /**
+     * The same form with the question's answer cleared when it is no longer one of the options — S67 included when its
+     * S73 answer is the one withdrawn (#124's P124-1 without a time rule), which also goes back to S74, S67's own first
+     * answer, so picking S67 again never brings back an answer that is not offered.
+     */
+    internal fun withOfferedOption(): ScheduleEditState = when {
+        questionDrawn && policyOption != null && policyOption !in policyOptions -> copy(policyOption = null)
+        policyOption == PolicyOption.WHEN_SEASON_STARTS && startCountingFrom !in startCountingOptions ->
+            copy(policyOption = null, startCountingFrom = StartCountingFrom.SEASON_START)
+        else -> this
+    }.let { form ->
+        // N3 review I1: P124-1 never rides, hidden, behind another answer — without a time rule S73 goes back to S74, so
+        // picking S67 again on a meter-only schedule never brings back an answer that is not offered.
+        if (form.startCountingFrom == StartCountingFrom.OPENING_SERVICE && !form.hasTimeRule) {
+            form.copy(startCountingFrom = StartCountingFrom.SEASON_START)
+        } else {
+            form
+        }
+    }
 
     /**
      * A stored row's policy, loaded into its option. A policy the options cannot show is never guessed
      * at: the question stands unanswered, and when the asset has no boundary at all it is the S77 state.
      */
     internal fun withStoredPolicy(row: MaintenanceSchedule): ScheduleEditState {
+        // #124: an S73 answer the form does not offer — P124-1 on a meter-only row an API wrote — is not shown either.
         val choice = storedChoice(row.servicePolicy, row.policyOffsetDays, policyOptions)
+            ?.takeIf { it.option != PolicyOption.WHEN_SEASON_STARTS || it.startCountingFrom in startCountingOptions }
         if (choice != null) {
             return copy(
                 policyOption = choice.option,
@@ -466,6 +539,12 @@ class ScheduleEditViewModel(
     private val scheduleId: ScheduleId?,
     private val targetAssetId: AssetId?,
     private val targetGroupId: GroupId?,
+    /**
+     * #125 (H1b, M4) — the one answer for a stored schedule's season (`RecomputeSchedules.seasonFor`), asked only for
+     * a schedule following its own Home Assistant season, whose options and boundary are its own season's and never
+     * its asset's. Defaulted so every shipped construction compiles unchanged; the app passes the graph's.
+     */
+    private val recompute: RecomputeSchedules? = null,
 ) : ViewModel() {
 
     constructor(
@@ -482,6 +561,7 @@ class ScheduleEditViewModel(
         // The asset wins and the group is dropped rather than both being carried into a command the
         // engine would refuse: one target is the only representable state (invariant 1).
         targetGroupId?.takeIf { targetAssetId == null }?.let(::GroupId),
+        graph.recomputeSchedules,
     )
 
     private val _state = MutableStateFlow(ScheduleEditState(editing = scheduleId != null))
@@ -498,15 +578,16 @@ class ScheduleEditViewModel(
             val target = existing?.target ?: targetAssetId?.let(ScheduleTarget::AssetTarget)
                 ?: targetGroupId?.let(ScheduleTarget::GroupTarget)
             val assetId = (target as? ScheduleTarget.AssetTarget)?.assetId
-            // The asset's season and break decide which answers S65 offers. Activations are not read:
-            // no option depends on a MANUAL asset's phase, and CALENDAR's warnings read the window.
-            val season = assetId?.let { assets.get(it) }?.seasonInputs(emptyList())
+            // The season the schedule's due rules read decides which answers S65 offers (#125: its own, for one
+            // following its own Home Assistant season).
+            val season = seasonOf(existing, assetId)
             val todayOn = today.localDate()
             _state.update { form ->
                 val filled = (existing?.let { form.filledFrom(it) } ?: form.blank()).copy(
                     target = target,
                     targetName = nameOf(target),
                     season = season,
+                    assetSeasonMode = assetId?.let { assets.get(it) }?.seasonMode,
                     todayOn = todayOn,
                     // A group target is offered neither, so nothing is read for one (D-12).
                     meters = assetId?.let { definitions.forAsset(it).filter { d -> d.isMeter && d.archivedAt == null } }
@@ -520,6 +601,25 @@ class ScheduleEditViewModel(
             }
             refreshDuplicateWarning()
         }
+    }
+
+    /**
+     * The season whose options and boundary the form offers: for a stored schedule following its own Home Assistant
+     * season, its own, through the one answer its due rules read (#125, H1b, M4: `RecomputeSchedules.seasonFor` —
+     * MANUAL, no window, the asset's break); otherwise its asset's, as before — a create is always `ASSET`.
+     * Activations are not read for the asset's: no option depends on a MANUAL asset's phase, and CALENDAR's warnings
+     * read the window.
+     */
+    private suspend fun seasonOf(existing: MaintenanceSchedule?, assetId: AssetId?): SeasonInputs? {
+        if (existing != null) {
+            when (existing.seasonSource) {
+                ScheduleSeasonSource.ASSET -> Unit
+                ScheduleSeasonSource.OWN -> return checkNotNull(recompute) {
+                    "schedule ${existing.id.value}: an OWN schedule's editor needs the recompute" // l10n-ok: exception message
+                }.seasonFor(existing)
+            }
+        }
+        return assetId?.let { assets.get(it) }?.seasonInputs(emptyList())
     }
 
     private suspend fun nameOf(target: ScheduleTarget?): String = when (target) {
@@ -616,10 +716,14 @@ class ScheduleEditViewModel(
         if (value in form.policyOptions) form.copy(policyOption = value) else form
     }
 
-    /** S73's answer, under S67 only. */
+    /** S73's answer, under S67 only, and only one it offers ([ScheduleEditState.startCountingOptions]). */
     fun onStartCountingFrom(value: StartCountingFrom) =
         clearing(ScheduleField.POLICY, ScheduleField.POLICY_OFFSET) { form ->
-            if (form.policyOption == PolicyOption.WHEN_SEASON_STARTS) form.copy(startCountingFrom = value) else form
+            if (form.policyOption == PolicyOption.WHEN_SEASON_STARTS && value in form.startCountingOptions) {
+                form.copy(startCountingFrom = value)
+            } else {
+                form
+            }
         }
 
     /** S71, through its filter: a keystroke the filter refuses leaves the field as it was. */
@@ -639,11 +743,14 @@ class ScheduleEditViewModel(
      * `QUICK` must not silently clear a chosen one — only `onProfile(null)`, the picker's `None`
      * row, does that.
      */
-    fun onCompletionMode(value: CompletionMode) = clearing(
-        ScheduleField.COMPLETION_MODE,
-        ScheduleField.PROFILE,
-    ) { form ->
-        if (form.isGroup && value == CompletionMode.FORM) form else form.copy(completionMode = value)
+    fun onCompletionMode(value: CompletionMode) {
+        // #114 (O-2): every FORM → QUICK is the election again, so going back to FORM takes an earlier one back.
+        if (value == CompletionMode.FORM) quickElected = false
+        clearing(ScheduleField.COMPLETION_MODE, ScheduleField.PROFILE) { form ->
+            // #114: the last Season Start sentence (P114-43) is about the mode the owner has just changed.
+            (if (form.isGroup && value == CompletionMode.FORM) form else form.copy(completionMode = value))
+                .copy(seasonStartRefusal = null)
+        }
     }
 
     fun onProfile(value: ProfileId?) = clearing(ScheduleField.PROFILE) { form ->
@@ -704,6 +811,36 @@ class ScheduleEditViewModel(
     }
 
     /**
+     * #114 (O-2, F-22): P114-42, "Count one-tap completions" — the owner's explicit election. The refused command is
+     * repeated with `seasonStartQuickElected`, and every later save from this editor carries it.
+     */
+    fun electQuick() {
+        val refused = pendingElection
+        if (_state.value.saving || !_state.value.quickElection || refused == null) return
+        quickElected = true
+        submit(refused, unlinkHealthSubject = false)
+    }
+
+    /** #114: the election declined — nothing is written, the form stays as typed, and P114-43 says why. */
+    fun cancelElection() {
+        val refused = electionRefusal
+        if (!_state.value.quickElection || refused == null) return
+        pendingElection = null
+        electionRefusal = null
+        _state.update { it.copy(quickElection = false, seasonStartRefusal = SeasonStartStrings.strand(refused, null)) }
+    }
+
+    /** The command the election was asked about, held for [electQuick] to repeat, and its refusal. */
+    private var pendingElection: ScheduleCommand? = null
+    private var electionRefusal: SeasonStartStrands? = null
+
+    /**
+     * #114: the owner confirmed P114-42 in this editor. Never set but by [electQuick], and taken back by a switch to
+     * FORM ([onCompletionMode]), so every FORM → QUICK asks again: the election is never defaulted.
+     */
+    private var quickElected = false
+
+    /**
      * S141 "Archive both": **the same command** that was refused, with the unlink flag and nothing
      * else changed (spec §6.1, D-30) — not a rebuild from the form.
      */
@@ -724,17 +861,22 @@ class ScheduleEditViewModel(
     private var pendingCommand: ScheduleCommand? = null
 
     private fun submit(cmd: ScheduleCommand, unlinkHealthSubject: Boolean) {
-        _state.update { it.copy(saving = true, problems = emptyList(), linkGuard = null) }
+        _state.update {
+            it.copy(saving = true, problems = emptyList(), linkGuard = null, quickElection = false, seasonStartRefusal = null)
+        }
         viewModelScope.launch {
             // Asked before the write, because after it the store is never empty again.
             val firstEver = scheduleId == null && schedules.all().isEmpty()
-            val outcome = runCatching { saveSchedule.run(scheduleId, cmd, unlinkHealthSubject) }
+            val outcome = runCatching {
+                saveSchedule.run(scheduleId, cmd, unlinkHealthSubject, seasonStartQuickElected = quickElected)
+            }
             val failure = outcome.exceptionOrNull()
             if (failure != null) {
                 refused(failure, cmd)
                 return@launch
             }
             pendingCommand = null
+            pendingElection = null
             val saved = outcome.getOrThrow()
             if (firstEver && !notifications.granted()) {
                 // The rationale first, then the system dialog: spec §5.1 asks for the permission
@@ -768,8 +910,24 @@ class ScheduleEditViewModel(
                 pendingCommand = null
                 _state.update { it.copy(saving = false, linkGuard = LinkGuardPrompt.Primary) }
             }
+            is SeasonStartStrands -> if (failure.strandCause == SeasonStartStrandCause.QUICK_NEEDS_ELECTION) {
+                // O-2 (F-22): the owner is asked first — P114-5, then P114-42; P114-43 only if they decline.
+                pendingElection = cmd
+                electionRefusal = failure
+                _state.update { it.copy(saving = false, quickElection = true) }
+            } else {
+                val name = failure.assetId?.let { assets.get(it) }?.name
+                _state.update { it.copy(saving = false, seasonStartRefusal = SeasonStartStrings.strand(failure, name)) }
+            }
+            // #124 (C42): the answer refused — P124-5, P124-6 or P114-17 — under the policy, nothing written.
+            is SeasonStartRefused -> {
+                val name = SeasonStartStrings.assetOf(failure.reason)?.let { assets.get(it) }?.name
+                _state.update {
+                    it.copy(saving = false, seasonStartRefusal = SeasonStartStrings.saveRefused(failure.reason, name))
+                }
+            }
             is PreServiceNeedsDates -> {
-                val fresh = assets.get(failure.assetId)?.seasonInputs(emptyList())
+                val fresh = seasonOf(scheduleId?.let { schedules.get(it) }, failure.assetId)
                 _state.update {
                     it.copy(saving = false, season = fresh ?: it.season, noBoundary = true, policyOption = null)
                 }

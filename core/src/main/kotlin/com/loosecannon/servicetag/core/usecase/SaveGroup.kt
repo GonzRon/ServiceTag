@@ -4,10 +4,14 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -32,6 +36,10 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * Validation is collected rather than fail-fast, so an editor can mark every bad row at once, and it
  * runs entirely before the single `uow.write`. Two groups may share a `name`: a name is descriptive,
  * never identity (invariant 7), and nothing here or anywhere else looks a group up by one.
+ *
+ * #114 (C11): inside the write, 409 [SeasonStartStrands] for a member added to a group a role schedule targets
+ * ([seasonStartStrandOf]) and, #124 (C42), for a member taken out of one while a live schedule of it counts from its
+ * opening service (`HAS_DEPENDENT_SCHEDULES`); [saveInTransaction] (Replace asset) is not hooked.
  */
 class SaveGroup(
     private val groups: GroupRepository,
@@ -39,11 +47,67 @@ class SaveGroup(
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
+    private val schedules: ScheduleRepository,
+    private val transfers: TransferRecordRepository,
 ) {
     suspend fun run(id: GroupId?, cmd: GroupCommand): MaintenanceGroup {
         val saved = prepare(id, cmd)
-        uow.write { groups.upsert(saved) }
+        uow.write {
+            seasonStartStrandOf(saved)?.let { throw it }
+            groups.upsert(saved)
+        }
         return saved
+    }
+
+    /**
+     * #114 (C11) — a member this save adds to a group a live (not ARCHIVED) Season Start role schedule targets must
+     * pass C10's asset rule (`MEMBER_NOT_ELIGIBLE`) and have no other role covering it (`MEMBER_ALREADY_COVERED`); the
+     * first failing one by name then id is named. A kept member is never checked, and a removed one only for #124's
+     * dependents ([removalStrandOf]); every other indirect break is read by readiness (C9). `ReplaceAsset`'s
+     * in-transaction add is not hooked.
+     */
+    private suspend fun seasonStartStrandOf(saved: MaintenanceGroup): SeasonStartStrands? {
+        val roles = schedules.forGroup(saved.id)
+            .filter { it.role == ScheduleRole.SEASON_START && it.status != ScheduleStatus.ARCHIVED }
+        if (roles.isEmpty()) return null
+        val stored = groups.get(saved.id)
+        val known = stored?.members.orEmpty().map { it.id }.toSet()
+        val added = saved.members.filter { it.id !in known && it.removedAt == null }.map { it.assetId }.toSet()
+        if (added.isEmpty()) return removalStrandOf(stored, saved)
+        val all = assets.all()
+        val held = transfers.heldIds()
+        val everySchedule = schedules.all()
+        val everyGroup = groups.all()
+        return all.filter { it.id in added }
+            .sortedWith(compareBy({ it.name }, { it.id.value }))
+            .firstNotNullOfOrNull { asset ->
+                val covering = seasonStartRolesCovering(asset.id, everySchedule, everyGroup)
+                val cause = if (seasonStartAssetRefusal(asset, all, held) != null) {
+                    SeasonStartStrandCause.MEMBER_NOT_ELIGIBLE
+                } else if (covering.isNotEmpty()) {
+                    SeasonStartStrandCause.MEMBER_ALREADY_COVERED
+                } else {
+                    return@firstNotNullOfOrNull null
+                }
+                val named = (roles + covering).distinctBy { it.id }.sortedWith(compareBy({ it.title }, { it.id.value }))
+                SeasonStartStrands(asset.id, cause, named.map { StrandedSchedule(it.id, it.title) })
+            }
+            ?: removalStrandOf(stored, saved)
+    }
+
+    /**
+     * #124 (C42) — after C11's own causes: an open member this save takes out of a role group is 409
+     * [SeasonStartStrands] (`HAS_DEPENDENT_SCHEDULES`) while a live schedule of it counts from its opening service and no
+     * other live role would cover it ([openingServiceStrandOf], over the groups as the save leaves them).
+     */
+    private suspend fun removalStrandOf(stored: MaintenanceGroup?, saved: MaintenanceGroup): SeasonStartStrands? {
+        val stillOpen = saved.openMembers().map { it.assetId }.toSet()
+        val removed = stored?.openMembers().orEmpty().map { it.assetId }.filter { it !in stillOpen }
+        if (removed.isEmpty()) return null
+        val before = groups.all()
+        val after = before.map { if (it.id == saved.id) saved else it }
+        val every = schedules.all()
+        return openingServiceStrandOf(removed, assets.all(), every, before, every, after)
     }
 
     /**

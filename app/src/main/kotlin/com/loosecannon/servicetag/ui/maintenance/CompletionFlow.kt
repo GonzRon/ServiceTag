@@ -33,17 +33,22 @@ import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.usecase.CompleteGroupMembers
 import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.CompletionDateInFuture
 import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.asset.DateField
+import com.loosecannon.servicetag.ui.asset.ReadinessStrings
+import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.EventOffer
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.OfferBatch
 import com.loosecannon.servicetag.ui.condition.tapped
 import com.loosecannon.servicetag.ui.journal.neutralNumber
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeParseException
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,17 +99,43 @@ sealed interface CompletionOutcome {
  * [meterDefinitionId] non-null is the whole meter rule: the schedule counts something, so the
  * completion **cannot** be recorded until the reading is entered (#11, D5 §3). The label and unit
  * are the definition's own stored data and not a drafted string.
+ *
+ * [today] is the day the prompt was opened on: a date after it is refused (O-16, C39), so Done is held and #82's S25
+ * is drawn under the date field ([dateRefusal]). [occurredTime] and [meterValue] are blank on a first prompt and the
+ * owner's own answer on a prompt asked again after the write refused its date.
+ *
+ * [seasonStartLine] is #114's completion line (C33), drawn before the write: P114-14 when the schedule is an asset's
+ * Season Start service, P114-15 when it is a group's, and null for every other schedule.
  */
 data class CompletionPrompt(
     val scheduleId: ScheduleId,
     val scheduleTitle: String,
     val occurredOn: String,
+    val today: LocalDate,
     val meterDefinitionId: DefinitionId? = null,
     val meterLabel: String? = null,
     val meterUnit: String? = null,
+    val occurredTime: String = "",
+    val meterValue: String = "",
+    val seasonStartLine: String? = null,
 ) {
     val needsMeterReading: Boolean get() = meterDefinitionId != null
+
+    /** S25 when [occurredOn] is a date after [today], and null otherwise: a text that is no date is not this line's. */
+    fun dateRefusal(occurredOn: String): String? = if (isAfterToday(occurredOn)) DATE_NOT_LATER_THAN_TODAY else null
+
+    internal fun isAfterToday(occurredOn: String): Boolean {
+        val text = occurredOn.trim().takeIf { ISO_DAY.matches(it) } ?: return false
+        val on = try {
+            LocalDate.parse(text)
+        } catch (notADate: DateTimeParseException) {
+            return false
+        }
+        return on.isAfter(today)
+    }
 }
+
+private val ISO_DAY = Regex("""\d{4}-\d{2}-\d{2}""")
 
 /** What the owner answered: the service date, an optional time, and the reading where one is owed. */
 data class CompletionAnswer(
@@ -158,6 +189,11 @@ class CompletionFlow(
     private val completeGroupMembers: CompleteGroupMembers,
     private val today: Today,
     private val offers: EventOffers,
+    /**
+     * #114 (C33): an asset's name, for P114-14 on a Season Start service's prompt. Null-answering by default, so the
+     * asset's line is not drawn until the graph passes the asset store's read; a group's line needs no name.
+     */
+    private val assetNames: suspend (AssetId) -> String? = { null },
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
 
@@ -202,8 +238,9 @@ class CompletionFlow(
                 if (schedule.completionMode == CompletionMode.FORM) {
                     CompletionOutcome.NeedsForm(scheduleId, target.assetId, schedule.profileId)
                 } else {
-                    val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-                    attempt(afterWrite) { listOf(completeSchedule.run(scheduleId, answer.command(schedule))) }
+                    askAndAttempt(schedule, afterWrite) { answer ->
+                        listOf(completeSchedule.run(scheduleId, answer.command(schedule)))
+                    }
                 }
             is ScheduleTarget.GroupTarget -> {
                 if (assetId == null) {
@@ -226,27 +263,29 @@ class CompletionFlow(
     ): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
-        val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt(afterWrite) { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
+        return askAndAttempt(schedule, afterWrite) { answer ->
+            completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule))
+        }
     }
 
     /** "Complete all": every required member of a group round that is not yet done. [afterWrite] as for [complete]. */
     suspend fun completeAll(scheduleId: ScheduleId, afterWrite: suspend () -> Unit = {}): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
-        val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt(afterWrite) { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
+        return askAndAttempt(schedule, afterWrite) { answer -> completeGroupMembers.all(scheduleId, answer.command(schedule)) }
     }
 
     /**
      * Answers the open prompt. **False means the answer was incomplete and the prompt stays open**
-     * — the one case being a schedule whose meter rule owes a reading, which cannot be completed
+     * — a schedule whose meter rule owes a reading not yet entered, or a date after the day the prompt was opened on (O-16, C39), which cannot be completed
      * until the reading is entered. Returning false rather than writing is what keeps the next
      * threshold right instead of derived from a baseline nobody measured.
      */
     fun submit(answer: CompletionAnswer): Boolean {
         val open = _prompt.value ?: return false
         if (open.needsMeterReading && answer.meterValue?.trim().isNullOrEmpty()) return false
+        // O-16 (C39): a date after the day the prompt was opened on is held, as the dialog's Done is.
+        if (open.isAfterToday(answer.occurredOn)) return false
         return pending?.complete(answer) ?: false
     }
 
@@ -291,26 +330,55 @@ class CompletionFlow(
      * A group target carries no meter rule (invariant 2), so its prompt is the date and the optional
      * time and nothing else; the demand below is reached by an asset target alone.
      */
-    private suspend fun ask(schedule: MaintenanceSchedule): CompletionAnswer? {
+    private suspend fun ask(schedule: MaintenanceSchedule, kept: CompletionAnswer? = null): CompletionAnswer? {
         if (pending != null) return null
         val meter = schedule.meterDefinitionId?.let { definitions.get(it) }
+        val assetName = when (val target = schedule.target) {
+            is ScheduleTarget.AssetTarget -> assetNames(target.assetId)
+            is ScheduleTarget.GroupTarget -> null
+        }
         val answer = CompletableDeferred<CompletionAnswer?>()
         pending = answer
+        val day = today.localDate()
         _prompt.value = CompletionPrompt(
             scheduleId = schedule.id,
             scheduleTitle = schedule.title,
-            occurredOn = today.localDate().toString(),
+            occurredOn = kept?.occurredOn ?: day.toString(),
+            today = day,
+            occurredTime = kept?.occurredTime.orEmpty(),
+            meterValue = kept?.meterValue.orEmpty(),
             // A meter rule whose definition has gone leaves nothing to demand a reading of, and
             // demanding one anyway would make the schedule permanently uncompletable.
             meterDefinitionId = meter?.id,
             meterLabel = meter?.label,
             meterUnit = meter?.unit,
+            seasonStartLine = ReadinessStrings.completionLine(schedule, assetName),
         )
         return try {
             answer.await()
         } finally {
             pending = null
             _prompt.value = null
+        }
+    }
+
+    /**
+     * Asks, then writes the answer with [write]. A write refused [CompletionDateInFuture] — the day it read is earlier
+     * than the one the prompt was opened on (midnight, or a zone change, in between) — wrote nothing and ran no
+     * [afterWrite]; the prompt is asked again with the owner's answer kept and today read afresh, so S25 is drawn under
+     * that date and Done is held until the date is one the write accepts (O-16, C39). Every other outcome is returned.
+     */
+    private suspend fun askAndAttempt(
+        schedule: MaintenanceSchedule,
+        afterWrite: suspend () -> Unit,
+        write: suspend (CompletionAnswer) -> List<AssetEvent>,
+    ): CompletionOutcome {
+        var kept: CompletionAnswer? = null
+        while (true) {
+            val answer = ask(schedule, kept) ?: return CompletionOutcome.Cancelled
+            val outcome = attempt(afterWrite) { write(answer) }
+            if ((outcome as? CompletionOutcome.Refused)?.cause !is CompletionDateInFuture) return outcome
+            kept = answer
         }
     }
 
@@ -385,7 +453,7 @@ class CompletionFlow(
  *
  * Drawn wherever a [CompletionFlow] is driven, which is why it is a composable over the flow rather
  * than part of any one screen — the scan sheet and the quick action get the same dialog, by
- * construction. The confirm button stays disabled while a required reading is missing, so the meter
+ * construction. The confirm button stays disabled while a required reading is missing or while the date is after today, with S25 under the date field, so the meter
  * rule is unreachable through the UI as well as refused by [CompletionFlow.submit].
  */
 @Composable
@@ -396,12 +464,15 @@ fun CompletionFlowHost(flow: CompletionFlow) {
     offer?.let { EventOfferDialog(it, onAccept = { flow.acceptOffer() }, onDecline = flow::declineOffer) }
     val open = prompt ?: return
 
-    // Keyed on the schedule so a second prompt starts from today again rather than the last answer.
+    // Keyed on the schedule, so a new prompt starts from the prompt's own fields: today and blanks,
+    // or the owner's kept answer when a write refused its date.
     var occurredOn by remember(open.scheduleId.value) { mutableStateOf(open.occurredOn) }
-    var occurredTime by remember(open.scheduleId.value) { mutableStateOf("") }
-    var reading by remember(open.scheduleId.value) { mutableStateOf("") }
+    var occurredTime by remember(open.scheduleId.value) { mutableStateOf(open.occurredTime) }
+    var reading by remember(open.scheduleId.value) { mutableStateOf(open.meterValue) }
 
-    val answered = !open.needsMeterReading || reading.trim().isNotEmpty()
+    // O-16 (C39): a date after today holds Done and says S25 under the date field.
+    val dateRefusal = open.dateRefusal(occurredOn)
+    val answered = (!open.needsMeterReading || reading.trim().isNotEmpty()) && dateRefusal == null
 
     AlertDialog(
         onDismissRequest = flow::cancel,
@@ -409,10 +480,13 @@ fun CompletionFlowHost(flow: CompletionFlow) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(open.scheduleTitle, style = MaterialTheme.typography.bodyMedium)
+                // #114 (C33): what completing a Season Start service means, before the write.
+                open.seasonStartLine?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 DateField(
                     value = occurredOn,
                     onValueChange = { occurredOn = it },
                     label = stringResource(R.string.maintenance_date),
+                    problem = dateRefusal,
                 )
                 MaintenanceField(
                     value = occurredTime,

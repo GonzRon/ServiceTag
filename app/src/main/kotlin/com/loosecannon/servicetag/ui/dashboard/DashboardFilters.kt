@@ -103,6 +103,11 @@ internal val FILTERABLE_STATUSES: List<DueStatus> = listOf(
  * is selected — its target Asset's condition matches one of them. The condition is the one the
  * projection handed over on the row, a component's own; this computes none. A **group** row has no
  * condition, so it passes only while no chip is selected, "Not recorded" included.
+ *
+ * **#124's waiting row stays under OUT OF SEASON** (C43; the controller's ruling on N3 review M1): a row held for this
+ * season's opening service is `INACTIVE_SEASON` with `AWAITING_OPENING_SERVICE`, drawn "Waiting" under CURRENT, and the
+ * OUT OF SEASON option selects that status, so it lists the row too. That is deliberate: dropping it there would leave
+ * no status filter that finds a waiting row at all. The status picker matches the status, never the word drawn.
  */
 internal fun DashboardFilters.admits(item: DueItem): Boolean =
     (category == null || item.category == category) &&

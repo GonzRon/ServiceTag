@@ -26,4 +26,11 @@
         <item quantity="one">Within the %1$d-day grace period</item>
         <item quantity="other">Within the %1$d-day grace period</item>
     </plurals>
+    <!-- P113-41 (#113/#114, O-11, F-15): the Home Assistant screen's Forget warning, above the Disconnect confirm.
+         %1$d: how many date helpers in Home Assistant still hold a Season Start date; every form shows the number.
+         %2$s: the invalid date ServiceTag publishes, always 1970-01-01 (one constant, INVALID_SERVICE_DATE). -->
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="one">%1$d date helper in Home Assistant still holds a Season Start date. Disconnecting first sets it to %2$s if it can; if it cannot, it keeps its date until you clear it in Home Assistant.</item>
+        <item quantity="other">%1$d date helpers in Home Assistant still hold a Season Start date. Disconnecting first sets them to %2$s where it can; any it cannot reach keep their date until you clear them in Home Assistant.</item>
+    </plurals>
 </resources>

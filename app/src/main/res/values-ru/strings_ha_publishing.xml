@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">Публиковать состояние объекта в Home Assistant</string>
+    <string name="ha_publish_helper_field">Вспомогательный объект Home Assistant</string>
+    <string name="ha_publish_choose_helper">Выбрать вспомогательный объект</string>
+    <string name="ha_publish_scope_selects">Раскрывающиеся списки (input_select)</string>
+    <string name="ha_publish_status_confirm">Публиковать состояние объекта %1$s в %2$s? ServiceTag задаёт этот вспомогательный объект при каждом изменении записанного состояния: Работает → UP, Ухудшено → DEGRADED, Не работает → DOWN. Автоматизации Home Assistant должны читать его и никогда не задавать.</string>
+    <string name="ha_publish_confirm_button">Публиковать</string>
+    <string name="ha_publish_waiting_for_status">Ожидание: состояние объекта не записано, поэтому ничего не отправляется.</string>
+    <string name="ha_publish_not_published_yet">Ещё не опубликовано.</string>
+    <string name="ha_publish_sending">Отправка %s…</string>
+    <string name="ha_publish_published">Опубликовано %1$s · %2$s</string>
+    <string name="ha_publish_matches">Home Assistant показывает %1$s, это совпадает с ServiceTag · проверено %2$s</string>
+    <string name="ha_publish_now">Опубликовать сейчас</string>
+    <string name="ha_publish_stop">Прекратить публикацию</string>
+    <string name="ha_publish_stop_status_confirm">Прекратить публикацию в %s? Home Assistant сохранит текущее значение.</string>
+    <string name="ha_publish_options_mismatch">%s должен быть раскрывающимся списком ровно с вариантами UP, DOWN и DEGRADED.</string>
+    <string name="ha_publish_not_a_dropdown">%s — не раскрывающийся список (input_select).</string>
+    <string name="ha_publish_service_refused">Home Assistant отклонил значение %1$s для %2$s.</string>
+    <string name="ha_publish_write_forbidden">Home Assistant отклонил это изменение для пользователя токена доступа. Этому пользователю нужно разрешение на изменение вспомогательных объектов.</string>
+    <string name="ha_publish_outcome_unknown">Home Assistant не подтвердил изменение. ServiceTag проверит вспомогательный объект перед повторной отправкой.</string>
+    <string name="ha_publish_remote_differs">После изменения Home Assistant показывает %1$s; возможно, %2$s задаёт что-то ещё.</string>
+    <string name="ha_publish_copied_installation">Эта настройка пришла из резервной копии другого телефона, поэтому этот телефон не публикует. Проверьте вспомогательный объект и снова включите публикацию здесь.</string>
+    <string name="ha_publish_target_in_use">%s уже задаёт другой объект на этом телефоне.</string>
+    <string name="ha_publish_inbound_source">%s — вспомогательный объект, за которым следует сезон этого объекта. Выберите другой: ServiceTag никогда не задаёт вспомогательный объект, который читает.</string>
+    <string name="ha_publish_status_not_maintained">Не отправляется: объект в архиве, списан или передан. Home Assistant сохраняет последнее значение.</string>
+    <string name="ha_publish_check_helper">Проверить вспомогательный объект</string>
+    <string name="ha_publish_delivery_limit">Отправляется, когда телефон может: при открытии, по «Опубликовать сейчас» или в фоне, где это разрешено. Это происходит не мгновенно.</string>
+    <string name="ha_publish_http_error">Home Assistant ответил %s.</string>
+    <string name="ha_publish_checking">Проверка вспомогательного объекта…</string>
+    <string name="ha_publish_choose_helper_first">Сначала выберите вспомогательный объект.</string>
+    <string name="ha_publish_needs_validation">Проверьте вспомогательный объект ещё раз, прежде чем ServiceTag начнёт в него публиковать.</string>
+    <string name="ha_publish_stale_read">Вспомогательный объект изменился во время проверки. Проверьте его ещё раз.</string>
+    <string name="ha_publish_asset_not_maintained">%s в архиве, списан или передан, поэтому не может публиковать в Home Assistant.</string>
+    <string name="ha_publish_stale_plan">После проверки этого вспомогательного объекта что-то изменилось. Проверьте его ещё раз.</string>
+    <string name="ha_publish_write_disclosure">Когда объект публикует в Home Assistant, этот телефон также задаёт этот вспомогательный объект с этим токеном. Дайте пользователю токена только необходимые права.</string>
+</resources>

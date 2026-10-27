@@ -122,7 +122,7 @@ class BackupFormat20Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(20, decoded.manifest.formatVersion)
+        assertEquals(21, decoded.manifest.formatVersion)
         assertEquals(listOf(manual, photo), decoded.data.attachments)
         assertEquals(listOf(link), decoded.data.assetReferences)
         assertEquals(
@@ -283,15 +283,15 @@ class BackupFormat20Test {
 
     /** One format past this build's, over a tree no format could read: refused as newer before a row is parsed. */
     @Test
-    fun aFormat21ArchiveIsRefusedAsNewer() {
+    fun aFormat22ArchiveIsRefusedAsNewer() {
         val unreadable = dataTreeOf(archiveOf(data()))
             .editRow("attachments", "att-1") { it.with("installedComponentId", JsonObject(mapOf("id" to JsonPrimitive("c1")))) }
 
-        val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(sealed(unreadable, formatVersion = 21)) }
+        val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(sealed(unreadable, formatVersion = 22)) }
 
-        assertEquals(21, refusal.found)
-        assertEquals(20, refusal.supported)
-        // The same tree at this build's format is parsed — and refused as corrupt.
+        assertEquals(22, refusal.found)
+        assertEquals(21, refusal.supported)
+        // The same tree at a format this build reads is parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 20)) }
     }
 

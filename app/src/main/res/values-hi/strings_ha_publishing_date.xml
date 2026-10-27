@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Hindi translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">मौसम-आरंभ की तारीख Home Assistant में प्रकाशित करें</string>
+    <string name="ha_publish_scope_datetimes">तारीख हेल्पर (input_datetime)</string>
+    <string name="ha_publish_date_not_date_only">%s तारीख वाला और बिना समय वाला तारीख हेल्पर होना चाहिए।</string>
+    <string name="ha_publish_date_confirm">%1$s की मौसम-आरंभ की तारीख %2$s में प्रकाशित करें? जब तक %1$s मौसम के लिए तैयार है, ServiceTag रखरखाव की तारीख सेट करता है; अन्यथा वह %3$s सेट करता है, जिसका अर्थ है तैयार नहीं। Home Assistant ऑटोमेशन को इसे पढ़ना चाहिए और कभी सेट नहीं करना चाहिए।</string>
+    <string name="ha_publish_date_not_a_date_helper">%s तारीख हेल्पर (input_datetime) नहीं है।</string>
+    <string name="ha_publish_stop_date_confirm">%1$s में प्रकाशित करना बंद करें? ServiceTag पहले इसे %2$s पर सेट करता है, ताकि Home Assistant पुरानी तारीख को रखरखाव मानना बंद कर दे।</string>
+    <string name="ha_publish_date_not_yet_cleared">Home Assistant में अभी साफ़ नहीं हुआ: %1$s अब भी चालू होने दे सकता है। ServiceTag कोशिश करता रहता है; अगर यह फ़ोन Home Assistant तक नहीं पहुँच पाता, तो वहाँ इसे %2$s पर सेट करें।</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTag अब %1$s तक नहीं पहुँच सकता। यह अब भी चालू होने दे सकता है: Home Assistant में इसे %2$s पर सेट करें।</string>
+    <string name="ha_publish_date_cleared_by_hand">मैंने इसे Home Assistant में साफ़ कर दिया</string>
+    <string name="ha_publish_date_cleared">Home Assistant में साफ़ किया गया: %1$s %2$s है। जब तक उपकरण संग्रहित, सेवा से हटाया गया या ट्रांसफ़र किया गया है, आगे कुछ नहीं भेजा जाता।</string>
+    <string name="ha_publish_boundary_field">मौसम-समाप्ति हेल्पर (वह तारीख जो Home Assistant मौसम खत्म होने पर दर्ज करता है)</string>
+    <string name="ha_publish_boundary_is_target">%s वह हेल्पर है जिसे ServiceTag सेट करता है। वह तारीख हेल्पर चुनें जिसमें Home Assistant मौसम खत्म होने की तारीख दर्ज करता है।</string>
+</resources>

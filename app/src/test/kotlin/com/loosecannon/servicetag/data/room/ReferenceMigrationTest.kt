@@ -79,9 +79,9 @@ class ReferenceMigrationTest {
                 after.mapValues { (key, row) ->
                     when (key.first) {
                         "asset" -> row.without(V8_NEW_ASSET_COLUMNS + V11_ASSET_COLUMNS)
-                        "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS)
+                        "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS + v22ColumnsOf(key.first))
                         "attachment" -> row.without(V10_ATTACHMENT_COLUMNS + V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS)
-                        else -> row
+                        else -> row.without(v22ColumnsOf(key.first))
                     }
                 },
             )
@@ -107,7 +107,7 @@ class ReferenceMigrationTest {
                     assertEquals(
                         "UNTOUCHED must name every table the migration found",
                         m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES - V9_TABLES - V11_TABLES - V12_TABLES - V13_TABLES -
-                            V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES - V21_TABLES,
+                            V14_TABLES - V15_TABLES - V18_TABLES - V19_TABLES - V21_TABLES - V22_TABLES,
                         UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))

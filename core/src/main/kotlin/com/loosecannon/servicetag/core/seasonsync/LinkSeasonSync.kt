@@ -35,6 +35,12 @@ enum class SeasonSyncLinkRefusal {
 
     /** The asset already has its one binding (R16-10). The phone never draws the action for it, so no sentence. */
     ALREADY_LINKED,
+
+    /**
+     * #113/#114 (C26) — the entity is a helper this phone writes: a publish binding names it, enabled or not, or a
+     * PENDING tombstone does (P113-43). ServiceTag never reads a helper it sets.
+     */
+    OUTBOUND_TARGET,
 }
 
 /** #16 (C16) — a link or a resume refused for [reason]; nothing was written. The message is the code only. */
@@ -55,7 +61,8 @@ data class SeasonSyncLinked(val binding: SeasonSyncBinding, val switchedFrom: Se
 /**
  * #16 (C16; R16-1, R16-8, R16-10, R16-Q-G) — links an asset to one Home Assistant on/off entity, in one write,
  * refusals first: [SeasonSyncLinkRefusal.NOT_MAINTAINED_HERE], [SeasonSyncLinkRefusal.NO_CONNECTION],
- * [SeasonSyncLinkRefusal.NEEDS_TOKEN], [SeasonSyncLinkRefusal.BAD_ENTITY_ID], [SeasonSyncLinkRefusal.ALREADY_LINKED].
+ * [SeasonSyncLinkRefusal.NEEDS_TOKEN], [SeasonSyncLinkRefusal.BAD_ENTITY_ID], #113/#114's
+ * [SeasonSyncLinkRefusal.OUTBOUND_TARGET] (C26), [SeasonSyncLinkRefusal.ALREADY_LINKED].
  *
  * Then **the setup reconciliation.** A MANUAL asset keeps its season and history: no season row. A CALENDAR or
  * YEAR_ROUND asset is switched into MANUAL through [SetSeasonMode]'s own rules and write, at the phase it has today,
@@ -79,11 +86,14 @@ class LinkSeasonSync(
     private val uow: UnitOfWork,
     private val clock: Clock,
     private val today: Today,
+    /** #113/#114 (C26, F-6): the outbound side, defaulted so every shipped construction compiles unchanged. */
+    private val outbound: OutboundTargets = OutboundTargets.NONE,
 ) {
     suspend fun run(assetId: AssetId, entityId: String): SeasonSyncLinked {
         val linked = uow.write {
             val (asset, connection) = readyInTransaction(assetId)
             if (!isValidEntityId(entityId)) throw SeasonSyncLinkRefused(SeasonSyncLinkRefusal.BAD_ENTITY_ID)
+            if (outbound.writes(connection.id, entityId)) throw SeasonSyncLinkRefused(SeasonSyncLinkRefusal.OUTBOUND_TARGET)
             if (bindings.get(assetId) != null) throw SeasonSyncLinkRefused(SeasonSyncLinkRefusal.ALREADY_LINKED)
             val switchedFrom = intoManualInTransaction(asset, guarded = false)
             val now = clock.nowMillis()

@@ -243,6 +243,8 @@ fun EventEntryScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
             )
+            // #114 (C33): P114-14 above Record entry when this entry completes a Season Start service.
+            state.seasonStartLine?.let { QuietLine(it, Modifier.padding(top = 14.dp)) }
             Button(
                 onClick = model::save,
                 enabled = state.loaded && !state.saving,

@@ -155,4 +155,13 @@
     <string name="maintenance_repair_turn_reminders_on">Attiva i promemoria</string>
     <string name="maintenance_repair_open_schedule">Apri il piano</string>
     <string name="maintenance_repair_fix_delivery">Correggi l\'invio dei promemoria</string>
+    <!-- #125: P125-1…8, in order. -->
+    <string name="schedule_season_asset">Stagione: stagione di %1$s</string>
+    <string name="schedule_season_follows">Stagione: segue %1$s in Home Assistant</string>
+    <string name="schedule_season_use_asset">Usa la stagione dell\'attrezzatura</string>
+    <string name="schedule_season_use_asset_confirm">Smettere di seguire Home Assistant? Questo piano userà di nuovo la stagione di %1$s e la cronologia della sua stagione propria viene conservata.</string>
+    <string name="schedule_season_stranded">Non più collegato a Home Assistant: questo piano mantiene la propria stagione com\'era. Segui di nuovo Home Assistant oppure usa la stagione dell\'attrezzatura.</string>
+    <string name="schedule_season_refused_group">Il piano di un gruppo non segue una stagione propria.</string>
+    <string name="schedule_season_refused_strands_pre_service">Questo piano va fatto prima dell\'inizio della stagione, e una stagione di Home Assistant non ha una data di inizio per cui essere pronti. Cambia prima quando va fatto.</string>
+    <string name="schedule_season_entity_id_help">Un helper on/off che è acceso mentre questo piano è in stagione, ad esempio input_boolean.example_heater_service_season. Non l\'interruttore di alimentazione dell\'apparecchio stesso.</string>
 </resources>

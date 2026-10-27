@@ -119,6 +119,10 @@
     <string name="assets_both_hidden">Les équipements correspondants sont masqués. Activez « Rattachés » et « Archivé » pour les voir.</string>
     <string name="assets_only_child_assets">Il n\'y a ici que des équipements rattachés. Activez « Rattachés » pour les voir.</string>
     <string name="assets_type_hidden">Les équipements correspondants sont d\'un autre type. Réglez « Type » sur « Tous ».</string>
+    <string name="assets_ha_linked">Lié à Home Assistant</string>
+    <string name="assets_condition_hidden">Les équipements correspondants sont dans un autre état. Réglez « État » sur « Tous ».</string>
+    <string name="assets_in_season">En saison</string>
+    <string name="assets_filter_condition">État</string>
 
     <string name="assets_search_hint">Rechercher des équipements</string>
     <string name="assets_clear_search">Effacer la recherche</string>

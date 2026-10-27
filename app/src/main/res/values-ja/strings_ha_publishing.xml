@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">機器の状態をHome Assistantに公開</string>
+    <string name="ha_publish_helper_field">Home Assistantヘルパー</string>
+    <string name="ha_publish_choose_helper">ヘルパーを選択</string>
+    <string name="ha_publish_scope_selects">ドロップダウンヘルパー（input_select）</string>
+    <string name="ha_publish_status_confirm">%1$sの機器の状態を%2$sに公開しますか？記録された状態が変わるたびに、ServiceTagがこのヘルパーを設定します：稼働中 → UP、性能低下 → DEGRADED、停止 → DOWN。Home Assistantのオートメーションはこれを読み取るだけにして、設定しないでください。</string>
+    <string name="ha_publish_confirm_button">公開</string>
+    <string name="ha_publish_waiting_for_status">待機中：機器の状態が記録されていないため、何も送信されません。</string>
+    <string name="ha_publish_not_published_yet">まだ公開されていません。</string>
+    <string name="ha_publish_sending">%sを送信中…</string>
+    <string name="ha_publish_published">公開済み %1$s · %2$s</string>
+    <string name="ha_publish_matches">Home Assistantは%1$sを表示しており、ServiceTagと一致しています · 確認 %2$s</string>
+    <string name="ha_publish_now">今すぐ公開</string>
+    <string name="ha_publish_stop">公開を停止</string>
+    <string name="ha_publish_stop_status_confirm">%sへの公開を停止しますか？Home Assistantは現在の値を保持します。</string>
+    <string name="ha_publish_options_mismatch">%sは、選択肢がUP、DOWN、DEGRADEDだけのドロップダウンヘルパーである必要があります。</string>
+    <string name="ha_publish_not_a_dropdown">%sはドロップダウンヘルパー（input_select）ではありません。</string>
+    <string name="ha_publish_service_refused">Home Assistantは%2$sに対する値%1$sを拒否しました。</string>
+    <string name="ha_publish_write_forbidden">Home Assistantは、アクセストークンのユーザーによるこの変更を拒否しました。このユーザーにはヘルパーを変更する権限が必要です。</string>
+    <string name="ha_publish_outcome_unknown">Home Assistantは変更を確認しませんでした。ServiceTagは再送信する前にヘルパーを確認します。</string>
+    <string name="ha_publish_remote_differs">変更後、Home Assistantは%1$sを表示しています。ほかの何かが%2$sを設定している可能性があります。</string>
+    <string name="ha_publish_copied_installation">この設定は別のスマートフォンのバックアップから来たものなので、このスマートフォンは公開しません。ヘルパーを確認し、ここで公開をもう一度オンにしてください。</string>
+    <string name="ha_publish_target_in_use">%sは、このスマートフォンの別の機器がすでに設定しています。</string>
+    <string name="ha_publish_inbound_source">%sは、この機器のシーズンが従うヘルパーです。別のヘルパーを選んでください：ServiceTagは読み取るヘルパーを設定しません。</string>
+    <string name="ha_publish_status_not_maintained">送信しません：機器はアーカイブ済み、使用終了、または移管済みです。Home Assistantは最後の値を保持します。</string>
+    <string name="ha_publish_check_helper">ヘルパーを確認</string>
+    <string name="ha_publish_delivery_limit">スマートフォンが送信できるときに送信されます：起動時、「今すぐ公開」のとき、または許可されている場合はバックグラウンドで。即時ではありません。</string>
+    <string name="ha_publish_http_error">Home Assistantは%sと応答しました。</string>
+    <string name="ha_publish_checking">ヘルパーを確認しています…</string>
+    <string name="ha_publish_choose_helper_first">まずヘルパーを選んでください。</string>
+    <string name="ha_publish_needs_validation">ServiceTagが公開する前に、もう一度ヘルパーを確認してください。</string>
+    <string name="ha_publish_stale_read">確認中にヘルパーが変わりました。もう一度確認してください。</string>
+    <string name="ha_publish_asset_not_maintained">%sはアーカイブ済み、使用終了、または移管済みのため、Home Assistantに公開できません。</string>
+    <string name="ha_publish_stale_plan">このヘルパーを確認した後に何かが変わりました。もう一度確認してください。</string>
+    <string name="ha_publish_write_disclosure">機器がHome Assistantに公開すると、このスマートフォンはこのトークンでそのヘルパーも設定します。トークンのユーザーには必要な権限だけを与えてください。</string>
+</resources>

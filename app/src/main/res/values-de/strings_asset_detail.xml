@@ -119,6 +119,10 @@
     <string name="assets_both_hidden">Passende Geräte sind ausgeblendet. Aktiviere „Untergeräte“ und „Archiviert“, um sie zu sehen.</string>
     <string name="assets_only_child_assets">Hier gibt es nur Untergeräte. Aktiviere „Untergeräte“, um sie zu sehen.</string>
     <string name="assets_type_hidden">Passende Geräte haben einen anderen Typ. Setze „Typ“ auf „Alle“.</string>
+    <string name="assets_ha_linked">Mit Home Assistant verknüpft</string>
+    <string name="assets_condition_hidden">Passende Geräte haben einen anderen Zustand. Setze „Zustand“ auf „Alle“.</string>
+    <string name="assets_in_season">In der Saison</string>
+    <string name="assets_filter_condition">Zustand</string>
 
     <string name="assets_search_hint">Geräte suchen</string>
     <string name="assets_clear_search">Suche löschen</string>

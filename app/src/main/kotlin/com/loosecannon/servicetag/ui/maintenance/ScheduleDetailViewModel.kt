@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -26,6 +27,8 @@ import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.l10n.localized
@@ -152,6 +155,8 @@ data class ScheduleDetailState(
     val isGroup: Boolean = false,
     val hasTimeRule: Boolean = false,
     val status: DueStatus? = null,
+    /** #124 (C43, N3 review I2): why the policy put [status] where it is; a waiting schedule says P124-9 by it. */
+    val policyReason: PolicyReason = PolicyReason.NONE,
     val requiredSetEmpty: Boolean = false,
     val effectiveDueOn: String? = null,
     /** The schedule's own lead, in days. 1.2.1: `canClose`'s fifth question reads it too. */
@@ -187,7 +192,7 @@ data class ScheduleDetailState(
      * The RATIFIED status word, withheld for a round that obliges nobody — "NO BASELINE" belongs to
      * the repairable missing-meter form alone and nothing here may lend it to the other one.
      */
-    val statusWord: String? get() = status?.takeIf { !requiredSetEmpty }?.let(::statusLabel)
+    val statusWord: String? get() = status?.takeIf { !requiredSetEmpty }?.let { statusWordOf(it, policyReason) }
 
     /**
      * **Complete** is offered while the schedule can still be acted on: not archived, and a group
@@ -402,6 +407,7 @@ class ScheduleDetailViewModel(
             isGroup = isGroup,
             hasTimeRule = schedule.timeInterval != null,
             status = statusOf(schedule, derived, t),
+            policyReason = derived.policyReason,
             requiredSetEmpty = requiredSetEmpty,
             effectiveDueOn = derived.effectiveDueOn,
             leadDays = schedule.leadDays,
@@ -523,7 +529,9 @@ class ScheduleDetailViewModel(
     /**
      * Archive or restore. **Archiving a schedule a health subject depends on asks first** (spec §6.1,
      * D-30; inv. 130): the refusal naming the subject opens S140, and nothing is archived until the
-     * owner answers "Archive both". A restore is never guarded.
+     * owner answers "Archive both". A restore is never guarded by the link; #114/#124's Season Start rules (a restored
+     * role, a schedule counting from the opening service) and an archived role a schedule counts from are said as
+     * messages.
      */
     fun archive(archived: Boolean) = operateGuarded {
         try {
@@ -531,7 +539,27 @@ class ScheduleDetailViewModel(
             null
         } catch (refused: ScheduleDrivesHealthSubject) {
             LinkGuardPrompt.Asks(refused.name)
+        } catch (refused: SeasonStartStrands) {
+            // #114 (C11 erratum): a restore that would strand a Season Start role is refused and said, not folded; so is
+            // #124's archive of one a schedule counts from (P124-8).
+            restoreRefusal(refused)?.let { _messages.trySend(it) }
+            null
+        } catch (refused: SeasonStartRefused) {
+            // #124 (C42): a schedule counting from the opening service comes back only under a live Season Start service.
+            val name = SeasonStartStrings.assetOf(refused.reason)?.let { assets.get(it) }?.name
+            SeasonStartStrings.saveRefused(refused.reason, name)?.let { _messages.trySend(it) }
+            null
         }
+    }
+
+    /**
+     * The sentence for a refused archive or restore of this schedule ([SeasonStartStrings.strand]); a group target's
+     * member sentence sits inside P114-21.
+     */
+    private suspend fun restoreRefusal(refused: SeasonStartStrands): String? {
+        val name = refused.assetId?.let { assets.get(it) }?.name ?: return null
+        val throughAGroup = schedules.get(scheduleId)?.target is ScheduleTarget.GroupTarget
+        return SeasonStartStrings.strand(refused, name, setOf(scheduleId), throughAGroup)
     }
 
     /**
@@ -547,6 +575,10 @@ class ScheduleDetailViewModel(
                 null
             } catch (refused: HealthSubjectIsPrimary) {
                 LinkGuardPrompt.Primary
+            } catch (refused: SeasonStartStrands) {
+                // #124 (C42): the role a schedule counts from is never archived in silence (P124-8).
+                restoreRefusal(refused)?.let { _messages.trySend(it) }
+                null
             }
         }
     }

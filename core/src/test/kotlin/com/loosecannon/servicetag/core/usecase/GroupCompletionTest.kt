@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
@@ -84,7 +85,7 @@ class GroupCompletionTest {
         RecomputeSchedules(
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
-    private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    private val saveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, InMemoryTransferRecordRepository())
     private val saveSchedule =
         SaveSchedule(
             countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute,
@@ -93,6 +94,7 @@ class GroupCompletionTest {
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val completeMembers = CompleteGroupMembers(
         countedSchedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
+        todayPort,
     )
     private val closeRound =
         CloseRound(countedSchedules, closures, uow, ids, clock, todayPort, recompute)
@@ -378,6 +380,7 @@ class GroupCompletionTest {
         assertEquals("2026-05-01", assertNotNull(schedules.get(schedule.id)).postponedDueOn)
         assertEquals(writesBefore, scheduleWrites, "a partial completion writes no schedule column")
 
+        today = LocalDate.parse("2026-04-16")
         val second = completeMembers.run(schedule.id, listOf(a2), completion("2026-04-16")).single()
         assertEquals("2026-01-01", second.occurrenceOn)
         val after = assertNotNull(schedules.get(schedule.id))
@@ -484,7 +487,8 @@ class GroupCompletionTest {
         val a1 = seedAsset("a1")
         val schedule = seedSchedule(seedGroup(listOf(a1)))
         val archive = ArchiveSchedule(
-            countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock,
+            countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock, groups,
+        InMemoryTransferRecordRepository(),
         )
         archive.run(schedule.id, archived = true)
 

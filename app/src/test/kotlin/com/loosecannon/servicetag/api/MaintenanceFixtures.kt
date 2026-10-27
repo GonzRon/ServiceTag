@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.di.AppGraph
@@ -43,6 +44,7 @@ internal fun maintenanceHandlersFor(graph: FakeGraph): MaintenanceHandlers = Mai
     recompute = graph.recomputeSchedules,
     today = graph.todayPort,
     repairScheduleProviders = graph.repairScheduleProviders,
+    setScheduleRole = graph.setScheduleRole,
 )
 
 /**
@@ -95,6 +97,30 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
     secrets = graph.secretStore,
     transfers = graph.transferRecords,
     backgroundAllowed = graph.seasonSyncBackgroundAllowed,
+    schedules = graph.schedules,
+    uow = graph.uow,
+    readiness = graph.openingServiceReader,
+    scheduleActivations = graph.scheduleSeasonActivations,
+)
+
+/**
+ * #125 (U-C7): a schedule's own season over a [FakeGraph], wired as `ScheduleSeasonHandlers(graph)` wires it — the
+ * post-link check launched on the graph's season sync scope, which `awaitSeasonSyncReads` joins.
+ */
+internal fun scheduleSeasonHandlersFor(graph: FakeGraph): ScheduleSeasonHandlers = ScheduleSeasonHandlers(
+    graph.schedules, graph.assets, graph.transferRecords, graph.scheduleSeasonBindings, graph.scheduleSeasonActivations,
+    graph.haConnections, graph.secretStore, graph.seasonSyncBackgroundAllowed, graph.recomputeSchedules, graph.todayPort,
+    graph.linkScheduleSeason, graph.unlinkScheduleSeason, graph.seasonSyncRunner::requestScheduleRead,
+)
+
+/** #113/#114 (C35): the publishing read over a [FakeGraph], wired as `HaPublishingHandlers(graph)` wires it. */
+internal fun haPublishingHandlersFor(
+    graph: FakeGraph,
+    plans: HaPublishingPlans = HaPublishingPlans(graph.clock),
+): HaPublishingHandlers = HaPublishingHandlers(
+    graph.assets, graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.haConnections,
+    graph.secretStore, graph.transferRecords, graph.installationIdentity::id, graph.uow, graph.seasonSyncBindings,
+    graph.publishRunner::validate, graph.publishControls, plans,
 )
 
 /**
@@ -182,7 +208,20 @@ internal fun installedComponentHandlersFor(graph: FakeGraph): InstalledComponent
  * production handlers (every collaborator above) and the production serializers, exactly as
  * `ApiRouterTest` builds them, written once rather than six times.
  */
-internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2345") {
+internal class V1Client(
+    val graph: FakeGraph,
+    private val token: String = "ABCD2345",
+    /**
+     * #113/#114 (C29b): helper discovery's list read, scripted — `AppGraph.listHaEntities` in production. No suite here
+     * reaches a Home Assistant; the default answers "no connection is saved".
+     */
+    private val haEntities: suspend () -> HaListOutcome? = { null },
+) {
+    /**
+     * #113/#114 (C35b): the publishing plans, held on the handler set as the Developer API screen holds them — one
+     * store per client, so a second client is the screen reopened.
+     */
+    val haPublishingPlans: HaPublishingPlans = HaPublishingPlans(graph.clock)
 
     fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
@@ -203,6 +242,9 @@ internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2
             installedComponentHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
+            haEntities = HaEntityHandlers(haEntities),
+            haPublishing = haPublishingHandlersFor(graph, haPublishingPlans),
+            scheduleSeason = scheduleSeasonHandlersFor(graph),
         ),
         token,
     )

@@ -33,6 +33,7 @@ import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
 
 /**
  * What a row points at to find the assets that own it (#77, C10 M2 and C12). Direct owners are
@@ -111,6 +112,8 @@ object TransferOwnership {
     }
 
     fun of(closure: OccurrenceClosure): List<OwnerRef> = listOf(OwnerRef.OfSchedule(closure.scheduleId))
+    /** #125 (U-C6): a schedule's own season row is its schedule's, as a closure is. */
+    fun of(row: ScheduleSeasonActivation): List<OwnerRef> = listOf(OwnerRef.OfSchedule(row.scheduleId))
     /** #69 (C13, as C5): a SupplyItem's link is no asset's; a component's resolves to its asset. */
     fun of(reference: AssetReference): List<OwnerRef> = when (val owner = reference.owner) {
         is ReferenceOwner.OfAsset -> listOf(OwnerRef.OfAsset(owner.assetId))

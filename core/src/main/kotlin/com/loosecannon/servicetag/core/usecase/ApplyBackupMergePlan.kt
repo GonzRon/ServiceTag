@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.transfer.DroppedRows
 import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.merge.MergePlan
 import com.loosecannon.servicetag.core.merge.MergeReport
+import com.loosecannon.servicetag.core.merge.ReturnCarry
 import com.loosecannon.servicetag.core.merge.mergePlanOf
 import com.loosecannon.servicetag.core.merge.mergeSnapshotOf
 import com.loosecannon.servicetag.core.merge.storedBytesOf
@@ -48,6 +49,7 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 
 /**
  * Applies an accepted, conflict-free plan — and refuses everything else (1.1.0, #46; #44's
@@ -147,6 +149,12 @@ class ApplyBackupMergePlan(
      * is a seam rather than a direct call.
      */
     private val rebuildAll: suspend () -> Unit,
+    /**
+     * #125 — a schedule's own season rows (format 21): read into the snapshot, written after the closures. Defaulted
+     * (F-6) so every shipped construction compiles unchanged; production passes the table, whose insert the default
+     * refuses loudly.
+     */
+    private val scheduleSeasonActivations: ScheduleSeasonActivationRepository = ScheduleSeasonActivationRepository.NONE,
 ) {
     suspend fun run(plan: MergePlan): MergeReport = runReturning(plan, emptySet()).report
 
@@ -174,11 +182,12 @@ class ApplyBackupMergePlan(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
                     categories, serviceCases, caseEntries, loans, transfers, successions, supplyItems, assetSupplies,
-                    installedComponents, stored, configured,
+                    installedComponents, stored, configured, scheduleSeasonActivations,
                 ),
                 returning,
             )
-            val fresh = mergePlanOf(plan.backup, scope.snapshot, returning)
+            // #114 (C20, A01, A): the preview's context and this snapshot's return carry, never re-derived.
+            val fresh = mergePlanOf(plan.backup, scope.snapshot, returning, plan.context, scope.carry)
             // Order matters — see the class KDoc.
             if (!fresh.applicable) throw MergeRefused(fresh.report())
             if (fresh.fingerprint != plan.fingerprint) throw MergePlanStale(fresh.report())
@@ -214,6 +223,8 @@ class ApplyBackupMergePlan(
             fresh.writes.profiles.forEach { profiles.upsert(it) }
             fresh.writes.schedules.forEach { schedules.upsert(it) }
             fresh.writes.closures.forEach { closures.insert(it) }
+            // #125: a schedule's own season rows, after their schedule.
+            fresh.writes.scheduleSeasonActivations.forEach { scheduleSeasonActivations.insert(it) }
             fresh.writes.links.forEach { links.upsert(it) }
             fresh.writes.tags.forEach { tags.upsert(it) }
             fresh.writes.events.forEach { events.upsert(it) }
@@ -264,6 +275,12 @@ class AppliedMerge(val report: MergeReport, val removedLocators: List<String>)
  * A staying row that names a removed one would be changed by those cascades, and a removed group that also names a
  * staying asset would take its rows with it (mn-1), so either refuses the return ([IllegalStateException]) — at the
  * preview, before anything is staged or written (P77-52).
+ *
+ * #114 (C20, A): [carry] is the returning asset's own provenance, read from exactly the schedules and events this scope
+ * removes — each schedule's local role and boundary, each event's local `imported` marker — so the planner writes
+ * them back on the pack's inserted rows instead of re-dating the role or marking the owner's own service imported.
+ * #125 (U-C6): and each removed schedule's season source, which its inserted row keeps; its own season rows leave
+ * with it and come back with the pack.
  */
 internal class ReturnScope private constructor(
     val snapshot: MergeSnapshot,
@@ -275,12 +292,14 @@ internal class ReturnScope private constructor(
     val keptLoans: List<AssetLoan>,
     val keptSuccessions: List<AssetSuccession>,
     val locators: List<String>,
+    val carry: ReturnCarry,
 ) {
     companion object {
         fun of(full: MergeSnapshot, returning: Set<AssetId>): ReturnScope {
             if (returning.isEmpty()) {
                 return ReturnScope(
                     full, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+                    ReturnCarry.NONE,
                 )
             }
             val groups = full.groups.filter { g -> g.members.any { it.assetId in returning } }
@@ -340,6 +359,9 @@ internal class ReturnScope private constructor(
                 // takes them and their entries, and the pack's rows plan as inserts, so a row closed, replaced or
                 // recomposed on the borrowing phone lands instead of refusing the return.
                 installedComponents = full.installedComponents.filterNot { it.assetId in returning },
+                // #125 (U-C6): a removed schedule's own season rows go with it by its CASCADE, and the pack's plan as
+                // inserts.
+                scheduleSeasonActivations = full.scheduleSeasonActivations.filterNot { it.scheduleId in schedules },
             )
             val dropped = DroppedRows(
                 assets = returning.mapTo(HashSet()) { it.value },
@@ -378,6 +400,12 @@ internal class ReturnScope private constructor(
                 keptLoans = full.loans.filter { it.assetId in returning },
                 keptSuccessions = full.successions.filter { it.predecessorAssetId in returning || it.successorAssetId in returning },
                 locators = attachments.map { it.storageLocator },
+                carry = ReturnCarry(
+                    roles = full.schedules.filter { it.id in schedules }.associate { it.id to (it.role to it.roleSinceOn) },
+                    eventImported = full.events.filter { it.id in events }.associate { it.id to it.imported },
+                    // #125 (U-C6): each removed schedule's own season source, as its role.
+                    seasonSources = full.schedules.filter { it.id in schedules }.associate { it.id to it.seasonSource },
+                ),
             )
         }
     }

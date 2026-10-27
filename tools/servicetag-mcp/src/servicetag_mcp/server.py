@@ -24,13 +24,13 @@ import re
 import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Annotated, Any, NamedTuple
 from urllib.parse import quote, urlsplit
 
 import httpx
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import ValidationError
+from pydantic import Strict, ValidationError
 
 from . import command_shapes
 from .client import MAX_ATTACHMENT_BYTES, ApiError, Device, MAX_IMPORT_BYTES, NotAnswering, NotPaired
@@ -180,6 +180,29 @@ TOOL_NAMES: tuple[str, ...] = (
     "replace_installed_component",
     # #16 — Home Assistant season sync, read only, at a schema-21 minimum. One, taking the total to 90.
     "get_season_sync",
+    # #113/#114 — season readiness and Home Assistant publishing, each at a schema-22 minimum, appended last in C1's
+    # order. A4's readiness read opens it: one, taking the total to 91.
+    "get_season_readiness",
+    # A4w (C29b): the Season Start role write and helper discovery, taking the total to 93.
+    "set_schedule_role",
+    "list_ha_entities",
+    # B5 (C35): the asset's publishing read, taking the total to 94.
+    "get_ha_publishing",
+    # B5r (C35a): the publishing collection, taking the total to 95.
+    "list_ha_publishing",
+    # B5w1 (C35b): Enable and Change target, each a plan and then the confirmed action, taking the total to 97.
+    "enable_ha_publishing",
+    "change_ha_publishing_target",
+    # B5w2 (C35b): Disable, Check helper, Publish now and the tombstone acknowledgement, taking the total to 101.
+    "disable_ha_publishing",
+    "check_ha_publishing_helper",
+    "publish_ha_now",
+    "acknowledge_ha_decommission",
+    # #125 (U-C7) — a schedule's own Home Assistant season, each at the schema-22 minimum, after the "#113/#114" block:
+    # the read, the link and the unlink, taking the total to 104.
+    "get_schedule_season",
+    "link_schedule_season",
+    "unlink_schedule_season",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -188,6 +211,11 @@ _IMPORT_TIMEOUT = httpx.Timeout(30.0, read=120.0)
 """A full-phone merge plans and applies inside one Room transaction on the phone; 30s is a
 plausible ceiling to hit on a very full archive, so the two import calls get a longer read budget
 than everything else (finding 12)."""
+
+_HA_READ_TIMEOUT = httpx.Timeout(30.0, read=120.0)
+"""#113/#114 (C35b): a call the phone answers only after reading Home Assistant itself — helper discovery, the
+publishing plan and Check helper — gets `_IMPORT_TIMEOUT`'s shape: one or two Home Assistant reads at #16's 30 s each, inside the
+request. Every other "#113/#114" call keeps the default, since no Home Assistant call happens inside it."""
 
 
 _MIN_SCHEMA_VERSION = 8
@@ -266,11 +294,37 @@ it, with nothing sent: a per-tool minimum on the succession tool's pattern. The 
 _SEASON_SYNC_FEATURE = "Home Assistant season sync"
 """The feature `get_season_sync` names when it refuses a phone below schema 21 (G2)."""
 
+_MIN_HA_PUBLISHING_SCHEMA_VERSION = 22
+"""The Room schema that carries #113/#114 (C1): the Season Start role on a schedule, the event's `imported` marker
+and the Home Assistant publishing tables. Every tool of the "#113/#114" block speaks a route an older app does not
+have, so each refuses — the reads too — a phone below it, with nothing sent: a per-tool minimum on the season sync
+tool's pattern. The global write minimum stays 8."""
+
+_HA_PUBLISHING_FEATURE = "season readiness and Home Assistant publishing"
+"""The feature a "#113/#114" tool names when it refuses a phone below schema 22."""
+
+_SCHEDULE_SEASON_FEATURE = "a schedule's own Home Assistant season"
+"""The feature a "#125" tool names when it refuses a phone below schema 22, the schema that carries it (U-C1)."""
+
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
-    {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
+    {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan", "/v1/assets/{id}/ha-publishing-plan"}
 )
-"""The non-`GET` routes that write nothing, ever — the merge plan and (1.4.1) the provider repair's
-plan: an old app may still be asked for either."""
+"""The non-`GET` routes that write nothing, ever, as path **shapes** — the merge plan and (1.4.1) the provider
+repair's plan, which an old app may still be asked for, and (#113/#114, C35b) the publishing plan, `{id}` one
+non-empty path segment. `_writes_nothing` is the membership test."""
+
+
+def _writes_nothing(path: str) -> bool:
+    """Whether [path] is one of `_POSTS_THAT_WRITE_NOTHING`'s shapes: each segment equal, but `{id}`, which matches
+    exactly one non-empty segment. A literal shape matches only itself, exactly as before."""
+    segments = path.split("/")
+    for shape in _POSTS_THAT_WRITE_NOTHING:
+        wanted = shape.split("/")
+        if len(wanted) == len(segments) and all(
+            want == got or (want == "{id}" and got != "") for want, got in zip(wanted, segments)
+        ):
+            return True
+    return False
 
 
 def _schema_version(*, unconfirmed: str) -> int:
@@ -384,6 +438,16 @@ def _require_season_sync_schema(tool: str) -> None:
     _require_tool_schema(tool, _MIN_SEASON_SYNC_SCHEMA_VERSION, _SEASON_SYNC_FEATURE)
 
 
+def _require_ha_publishing_schema(tool: str) -> None:
+    """A tool of the "#113/#114" block, the reads included, on a phone below schema 22."""
+    _require_tool_schema(tool, _MIN_HA_PUBLISHING_SCHEMA_VERSION, _HA_PUBLISHING_FEATURE)
+
+
+def _require_schedule_season_schema(tool: str) -> None:
+    """A tool of the "#125" block, the read included, on a phone below schema 22."""
+    _require_tool_schema(tool, _MIN_HA_PUBLISHING_SCHEMA_VERSION, _SCHEDULE_SEASON_FEATURE)
+
+
 def _carries_supply_id(lines: Any) -> bool:
     """Whether a material line about to be sent carries the `supplyId` key at all — presence, not a value (N-7)."""
     return isinstance(lines, list) and any(isinstance(line, dict) and "supplyId" in line for line in lines)
@@ -402,10 +466,10 @@ def _call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
     actually deliver (see the module docstring). `client.py` stays free of any SDK import; this is
     the one seam where that conversion happens.
 
-    It is also the seam every write passes: **any** non-`GET` call but the read-only merge plan runs
-    `_require_schema_8` first, whichever tool makes it.
+    It is also the seam every write passes: **any** non-`GET` call but the plans that write nothing
+    (`_writes_nothing`) runs `_require_schema_8` first, whichever tool makes it.
     """
-    if method != "GET" and path not in _POSTS_THAT_WRITE_NOTHING:
+    if method != "GET" and not _writes_nothing(path):
         _require_schema_8()
     try:
         return device.request(method, path, **kwargs)
@@ -781,6 +845,12 @@ def update_asset(
     `SEASON_MODE_STRANDS_POLICY` — change the mode with `set_season_mode`. Condition, the break and
     the health policy are in no asset command; each has its own tool.
 
+    #114: while a Season Start role covers an asset, the app refuses an edit that would leave it where it may not
+    stand as `SEASON_START_STRANDED` (409) and writes nothing — a cleared season pair that makes a `CALENDAR` asset
+    year-round (cause `NEEDS_SEASONS`), or a new `parent_asset_id` that leaves a covered asset, this one or its old
+    parent, a child with no child of its own (cause `WOULD_BE_LEAF_CHILD`). Its `problems` name the cause first, then
+    each role schedule by id and title; clear the role first.
+
     #79: the warranty reminder lead is in no asset command either, so this tool never sends it — an
     edit keeps it while the warranty date stays, and clearing `warranty_expires_on` clears the lead
     with it (the app's rule). Set it with `set_warranty_reminder`.
@@ -861,6 +931,9 @@ def retire_asset(asset_id: str, retired_on: str) -> dict[str, Any]:
     This tool is **monotonic**: it can only retire, never un-retire. The app's own API row is
     unchanged (it still answers `retired_on: null` to un-retire), but that half is not exposed here
     in 1.1.0 — un-retire an asset in the app itself.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     if not retired_on:
         raise ToolError("retired_on is required (YYYY-MM-DD); this tool cannot un-retire an asset")
@@ -874,7 +947,11 @@ def retire_asset(asset_id: str, retired_on: str) -> dict[str, Any]:
 
 @mcp.tool()
 def archive_asset(asset_id: str, archived: bool = True) -> dict[str, Any]:
-    """Archive or unarchive an asset. Archive is not delete: tags bound to it still resolve."""
+    """Archive or unarchive an asset. Archive is not delete: tags bound to it still resolve.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
+    """
     return _call(
         "POST",
         f"/v1/assets/{_path_id(asset_id, field='asset_id')}/archive",
@@ -1173,7 +1250,11 @@ def archive_profile(profile_id: str, archived: bool = True) -> dict[str, Any]:
 
 @mcp.tool()
 def list_events(asset_id: str) -> dict[str, Any]:
-    """One asset's service record, newest first."""
+    """One asset's service record, newest first.
+
+    #114: each event carries `imported`, **read only** — `true` only on an event a Transfer Pack import brought to
+    the phone, set there by that import alone. No tool sets or clears it, an edit keeps it, and such an event never
+    counts toward the asset's season readiness (`get_season_readiness`)."""
     return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/events")
 
 
@@ -1249,7 +1330,8 @@ def update_event(
     `notes=""` for none, `profile_id=None` to unlink the event from its quick action, and
     `values={}` / `consumables=[]` to clear the event's readings or consumables on purpose rather
     than by accident. `asset_id` must be the asset the event already belongs to — an edit never
-    re-parents.
+    re-parents. An edit of a schedule's completion dated after the phone's own today is refused with 422
+    `COMPLETION_DATE_IN_FUTURE` and nothing is written; an ordinary event keeps any date.
 
     Each `consumables` line is `{"name", "quantity", "unit"}`, and since #15 may carry `"supplyId"` on
     `log_event`'s terms. Lines are matched by position and the whole list is replaced, so a line sent without
@@ -1257,6 +1339,9 @@ def update_event(
     `sortOrder` and a numeric `quantity`, which this body does not take. A line carrying `supplyId` at all,
     `null` included, needs a phone at schema 18 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and
     nothing is written.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     if _carries_supply_id(consumables):
         _require_supply_schema("update_event", _SUPPLY_LINK_FEATURE)
@@ -1281,7 +1366,11 @@ def update_event(
 
 @mcp.tool()
 def delete_event(event_id: str) -> dict[str, Any]:
-    """Delete a logged event and its readings. This one is destructive and has no undo."""
+    """Delete a logged event and its readings. This one is destructive and has no undo.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
+    """
     return _call("DELETE", f"/v1/events/{_path_id(event_id, field='event_id')}")
 
 
@@ -1295,7 +1384,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–20 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–21 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1337,7 +1426,14 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `INSTALLED_COMPONENT_REPLACEMENT_TAKEN`; format 20 adds each attachment's and reference's `supplyItemId` and
     `installedComponentId` (#69), so a file or a link may belong to a supply item or an installed component
     instead of an asset — exactly one owner each, and no new table — and an older archive naming either owner is
-    corrupt).
+    corrupt; format 21 adds each schedule's Season Start `role` and `roleSinceOn` and each event's `imported`
+    marker (#114), still no new table: both are written as the archive has them and a matched row keeps its own
+    marker, and an incoming `SEASON_START` schedule that would give an asset a second live role conflicts — as
+    `SEASON_START_HELD_BY_A_LOCAL_ROW` when a role on the phone already covers it, as
+    `SEASON_START_DUPLICATED_IN_ARCHIVE` when two of the archive's would — and, since #124, an incoming live schedule
+    counting from the opening service (`IN_SERVICE_AFTER_OPENING_SERVICE`) whose asset no live Season Start service
+    would cover once the plan's accepted rows are in conflicts as `SEASON_START_SERVICE_MISSING`; an older archive
+    carries no role and no marker, and one carrying that policy is refused as hand-built).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1347,8 +1443,8 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of twenty-three tables, `transfers`, `successions`, `supplyItems` and `assetSupplies`, then
-    `installedComponents` last.
+    skipped}` for each of twenty-four tables, `transfers`, `successions`, `supplyItems` and `assetSupplies`, then
+    `installedComponents` and (#125, format 21) `scheduleSeasonActivations` last.
 
     A Transfer Pack is not a data archive, and the phone refuses one here: packs are made, imported,
     marked and withdrawn on the phone only, and no tool does any of it. The `data.zip` inside a pack is
@@ -1368,6 +1464,9 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     a 120-second read budget rather than the usual 30, because a full-phone merge plans and applies
     inside one Room transaction on the phone; a timeout here does not mean the merge failed, and
     re-running is safe, because the merge only ever inserts and an identical row is a no-op.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     try:
         size = Path(archive_path).stat().st_size
@@ -1540,6 +1639,16 @@ def update_group(
 
     Removed members come back as **new** rows with new ids if you add them again later — a window
     that closed stays closed, always.
+
+    #114: when a group schedule carries the Season Start role, the app refuses an edit that adds a member it may not
+    cover as `SEASON_START_STRANDED` (409) and writes nothing: a member that cannot have a Season Start service (cause
+    `MEMBER_NOT_ELIGIBLE`: archived, retired or transferred out, year-round, or a child with no child of its own) or
+    one another role already covers (cause `MEMBER_ALREADY_COVERED`). Its `problems` name the cause and the asset
+    first, then each role schedule by id and title.
+
+    #124: taking an asset out of a group a live Season Start schedule targets is refused the same way (cause
+    `HAS_DEPENDENT_SCHEDULES`, naming those schedules) while a live schedule of that asset counts from its opening
+    service and no other live role would cover it: change when they start counting first.
     """
     supplied = {"description": description, "members": members}
     to_clear = _validate_clear_fields(clear_fields, _GROUP_CLEARABLE_FIELDS, supplied)
@@ -1578,7 +1687,17 @@ def update_group(
 @mcp.tool()
 def archive_group(group_id: str, archived: bool = True) -> dict[str, Any]:
     """Archive or unarchive a group. Archive is not delete: the group and its schedules are hidden
-    and every membership window and past round is kept."""
+    and every membership window and past round is kept.
+
+    #114: restoring (`archived=False`) a group a Season Start schedule targets is refused as
+    `SEASON_START_STRANDED` (409), writing nothing, when the restored role would cover a member that may not have one
+    (cause `RESTORE_NOT_ELIGIBLE`) or one another live role already covers (cause `RESTORE_ALREADY_COVERED`); clear a
+    role first.
+
+    #124: archiving a group a live Season Start schedule targets is refused as `SEASON_START_STRANDED` (409, cause
+    `HAS_DEPENDENT_SCHEDULES`, naming those schedules), writing nothing, while a live schedule of an open member
+    counts from that member's opening service and no other live role would cover it: change when they start
+    counting first."""
     return _call(
         "POST",
         f"/v1/groups/{_path_id(group_id, field='group_id')}/archive",
@@ -1595,6 +1714,11 @@ def list_schedules(asset_id: str | None = None, group_id: str | None = None) -> 
     asset** — never a group's, even a group that asset belongs to; ask `list_asset_groups` and then
     this tool with `group_id` for those. With `group_id`, that group's. Pass one scope or neither,
     never both.
+
+    #114: each row carries `role` (`NONE` or `SEASON_START`, the passive Season Start role) and `roleSinceOn` (its
+    commissioning boundary, `null` without a role) — response only: no schedule command takes either, and
+    `update_schedule` never sends them. #125: each row also carries `seasonSource` (`ASSET`, or `OWN` for a schedule
+    following its own Home Assistant switch — `get_schedule_season`), response only as well.
     """
     if asset_id and group_id:
         raise ToolError("pass asset_id or group_id, not both — they are two different questions")
@@ -1620,6 +1744,12 @@ def get_schedule(schedule_id: str) -> dict[str, Any]:
     `null` for `PRE_SERVICE`). `state` adds `actionableDueOn` — the day the work is actionable under
     the policy, the season and the break, beside `effectiveDueOn`, whose meaning is unchanged —
     `policyReason`, `policyPhase` and `quiet`; `seasonActive` is `policyPhase == ACTIVE`.
+
+    #114: `schedule` carries `role` (`NONE` or `SEASON_START`, the passive Season Start role) and `roleSinceOn` (its
+    commissioning boundary, `null` without a role) — response only: no schedule command takes either, and
+    `update_schedule` never sends them. Whether the role's asset is ready is `get_season_readiness`. #125: it also
+    carries `seasonSource` (`ASSET`, or `OWN` for a schedule following its own Home Assistant switch —
+    `get_schedule_season`), response only as well.
     """
     return _call("GET", f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}")
 
@@ -1709,6 +1839,20 @@ def create_schedule(
     calendar season or a maintenance break to count back from (409 `PRE_SERVICE_NEEDS_DATES` — the
     remedy is the asset).
 
+    **Counting from the Season Start service (#124).** `IN_SERVICE_AFTER_OPENING_SERVICE` (`policy_offset_days`
+    0–365 after the asset's opening service; omitted is 0) counts from the qualifying service date of the asset's
+    Season Start service, the date `get_season_readiness` answers: in season with none yet, the schedule waits with no
+    date (`policyReason` `AWAITING_OPENING_SERVICE`; never due, never notified); once there is one, a date earlier than
+    the later of that day and the season's start, plus the offset, moves to that day (`policyReason` `OPENING_SERVICE`
+    when the service was late); out of season it is exactly `IN_SERVICE_AT_START`. Only an asset target takes it, and
+    a meter-only schedule only at offset 0. The app refuses it with 409 `SEASON_START_REFUSED` and writes nothing,
+    `reason` `COUNTS_FROM_ITSELF` on the Season Start service itself, `YEAR_ROUND` on an asset in use all year, or
+    `NO_SEASON_START_SERVICE` when no live Season Start service — the asset's own or its group's — covers the asset.
+    Once a live schedule counts from it, clearing the role, archiving the role schedule or its group, or taking the
+    asset out of the role's group is 409 `SEASON_START_STRANDED` (cause `HAS_DEPENDENT_SCHEDULES`, naming those
+    schedules). Its deprecated triple reads all `null`. This server keeps no list of policies: the app validates
+    every name.
+
     **Deprecated arguments.** `season_behavior` (`IGNORE`｜`FOLLOW_ASSET`), `season_reentry` and
     `season_reentry_offset_days` are 1.3's season fields, still accepted. Any one of them makes this
     call send 1.3's **legacy form** — those keys only, exactly as given — and **the app translates
@@ -1780,13 +1924,18 @@ mean. `postponed_due_on` and `status` are not in this command: they have their o
 from an asset to a group means supplying the new one *and* clearing the old — an overlay would
 otherwise keep both and the app would refuse the pair.
 
-`policy_offset_days` cleared is `null`, which the app reads as 0 on `IN_SERVICE_AT_START` and as no
-offset on the other policies. `season_reentry` and `season_reentry_offset_days` are the two
+`policy_offset_days` cleared is `null`, which the app reads as 0 on `IN_SERVICE_AT_START` and
+`IN_SERVICE_AFTER_OPENING_SERVICE` (#124) and as no offset on the other policies. `season_reentry` and `season_reentry_offset_days` are the two
 deprecated members: clearing one is a deprecated argument, so it sends the legacy form."""
 
 _UNLINK_HEALTH_SUBJECT = "unlinkHealthSubject"
-"""The schedule command's one action flag (`command_shapes.SCHEDULE_ACTION_FLAGS`): an action, not a
+"""The schedule command's first action flag (`command_shapes.SCHEDULE_ACTION_FLAGS`): an action, not a
 field, sent only when asked for."""
+
+_SEASON_START_QUICK_ELECTED = "seasonStartQuickElected"
+"""#114 (C11, C29b): the schedule PATCH's second action flag and the role command's election
+(`command_shapes.SCHEDULE_ACTION_FLAGS`, `SCHEDULE_ROLE_KEYS`): the owner's explicit election that a Season Start
+schedule's one-tap completions count, sent only when the caller passes `True` — never by default (O-2, O-7)."""
 
 
 def _schedule_command_keys(legacy: bool) -> tuple[str, ...]:
@@ -1828,6 +1977,7 @@ def update_schedule(
     providers: list[dict[str, Any]] | None = None,
     clear_fields: list[str] | None = None,
     unlink_health_subject: bool | None = None,
+    season_start_quick_elected: bool | None = None,
 ) -> dict[str, Any]:
     """Edit a schedule's rule.
 
@@ -1869,8 +2019,8 @@ def update_schedule(
     `clear_fields` the old one in the same call.
 
     **Changing the policy may take two arguments too.** The overlay keeps the row's
-    `policyOffsetDays`, and each policy takes only its own range (`IN_SERVICE_AT_START` 0–365,
-    `PRE_SERVICE` −365 to −1, the other two none). So moving a schedule that has an offset to a
+    `policyOffsetDays`, and each policy takes only its own range (`IN_SERVICE_AT_START` and
+    `IN_SERVICE_AFTER_OPENING_SERVICE` 0–365, `PRE_SERVICE` −365 to −1, the other two none). So moving a schedule that has an offset to a
     policy that does not take it — `IN_SERVICE_AT_START` 5 to `CONTINUOUS`, `PRE_SERVICE` −14 to
     anything else — needs the new `policy_offset_days`, or `clear_fields=["policy_offset_days"]`, in
     the same call; `service_policy` alone is refused as `POLICY_OFFSET_INVALID`. `PRE_SERVICE` needs
@@ -1884,12 +2034,39 @@ def update_schedule(
     immediately overdue. **A policy change is not a rule change**: changing only `service_policy` or
     `policy_offset_days` does none of that. Pausing, archiving and postponing are **not** here: each
     is its own tool, so an edit can never quietly do one of them.
+
+    **The Season Start role (#114).** This tool never sends `role` or `roleSinceOn` — they are not in the schedule
+    command — so an edit of a role schedule leaves it a role schedule with its boundary. While the role stands, the
+    app refuses two edits as `SEASON_START_STRANDED` (409) and writes nothing: moving the schedule to another asset
+    or group (cause `ROLE_SCHEDULE_RETARGET`; clear the role first), and changing it from `FORM` to `QUICK`
+    (cause `QUICK_NEEDS_ELECTION`). The refusal's `problems` name the cause first, then the role schedule by id and
+    title. **`season_start_quick_elected=True`** is the owner's explicit election for that `FORM` to `QUICK` edit
+    (O-2): it sends the action flag `seasonStartQuickElected: true`, and the edit is saved with the role kept. Pass it
+    only when the owner has said that one-tap completions of this schedule count as the season's service; `None` and
+    `False` send no flag, so the election is never made by default. `True` needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is read or sent. Without it the tool reaches any phone
+    it always did.
+
+    **Counting from the Season Start service (#124).** `service_policy="IN_SERVICE_AFTER_OPENING_SERVICE"` (offset
+    0–365 after the asset's opening service) is sent unchanged, and an edit of a schedule that has it sends it back as
+    the row has it; `create_schedule` says what it means. On a read the schedule's `policyReason` is
+    `AWAITING_OPENING_SERVICE` while it waits in season for the service, with no date, and `OPENING_SERVICE` when a
+    late service moved its date. The app refuses it as 409 `SEASON_START_REFUSED`, writing nothing: `reason`
+    `COUNTS_FROM_ITSELF` on the Season Start service itself, `YEAR_ROUND` on an asset in use all year, or
+    `NO_SEASON_START_SERVICE` when no live Season Start service covers the asset. While a live schedule counts from
+    the service, clearing the role, archiving the role schedule or its group, or taking the asset out of the role's
+    group is 409 `SEASON_START_STRANDED` (cause `HAS_DEPENDENT_SCHEDULES`, naming those schedules): change when they
+    start counting first. This server keeps no list of policies: the app validates every name.
     """
-    arguments = _arguments(locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject"))
+    arguments = _arguments(
+        locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject", "season_start_quick_elected"),
+    )
     to_clear = _validate_clear_fields(clear_fields, _SCHEDULE_CLEARABLE_FIELDS, arguments)
     legacy = _refuse_mixed_forms(arguments, to_clear)
 
     path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}"
+    if season_start_quick_elected is True:
+        _require_ha_publishing_schema("update_schedule")
     current = _field(_read_for_write(path), "schedule", of="the schedule lookup")
     body = _overlay_command(
         current, _schedule_command_keys(legacy), arguments, to_clear,
@@ -1905,13 +2082,18 @@ def update_schedule(
         ]
     if unlink_health_subject:
         body[_UNLINK_HEALTH_SUBJECT] = True
+    if season_start_quick_elected is True:
+        body[_SEASON_START_QUICK_ELECTED] = True
     return _call("PATCH", path, json_body=body, content_type="application/json")
 
 
 @mcp.tool()
 def pause_schedule(schedule_id: str, paused: bool = True) -> dict[str, Any]:
     """Pause or resume a schedule. A paused one never notifies and never counts as due; it keeps its
-    history and its rule, and resuming picks the rule back up where it stands."""
+    history and its rule, and resuming picks the rule back up where it stands.
+
+    An archived schedule is refused as `SCHEDULE_ARCHIVED` (409), writing nothing: restore it with
+    `archive_schedule(archived=False)` first."""
     return _call(
         "POST",
         f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/pause",
@@ -1930,7 +2112,20 @@ def archive_schedule(
     1.4: archiving a schedule that drives a live health subject is refused as
     `SCHEDULE_DRIVES_HEALTH_SUBJECT` unless `unlink_health_subject=True`, which archives that subject
     in the same write (or is refused as `HEALTH_SUBJECT_IS_PRIMARY` when its asset's `TRACK_ONE`
-    health follows it). `None` and `False` send no flag."""
+    health follows it). `None` and `False` send no flag.
+
+    #114: restoring (`archived=False`) a Season Start schedule is refused as `SEASON_START_STRANDED` (409), writing
+    nothing, when its role would cover an asset that may not have one (cause `RESTORE_NOT_ELIGIBLE`) or one another
+    live role already covers (cause `RESTORE_ALREADY_COVERED`, both schedules named); clear a role first.
+
+    #124: archiving a live Season Start schedule while a live schedule of an asset it covers counts from its opening
+    service is refused as `SEASON_START_STRANDED` (409, cause `HAS_DEPENDENT_SCHEDULES`, naming those schedules),
+    writing nothing: change when they start counting first. Restoring such a dependent is `SEASON_START_REFUSED`
+    (409, `NO_SEASON_START_SERVICE` or `YEAR_ROUND`) unless a live Season Start service covers its asset.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
+    """
     body: dict[str, Any] = {"archived": archived}
     if unlink_health_subject:
         body[_UNLINK_HEALTH_SUBJECT] = True
@@ -2008,7 +2203,8 @@ def complete_schedule(
     that schedule's own asset.
 
     `occurred_on` is ISO `YYYY-MM-DD` and may be any past date — the date you send is the date
-    stored, so a job done last Tuesday is logged as last Tuesday. `occurred_time` is `HH:MM`.
+    stored, so a job done last Tuesday is logged as last Tuesday. A date after the phone's own today is
+    refused with 422 `COMPLETION_DATE_IN_FUTURE` and nothing is written. `occurred_time` is `HH:MM`.
     `values` is keyed by definition id, the text a person would type; `consumables` is
     `{"name", "quantity", "unit"}`. You never send the occurrence key: the app stamps it from the
     schedule's own computed due date, which is what makes a repeat harmless rather than a duplicate.
@@ -2026,6 +2222,9 @@ def complete_schedule(
     `SCHEDULE_OCCURRENCE_TAKEN`, and a round that was **closed** answers `OCCURRENCE_CLOSED` — work
     done after a round is closed is logged with `log_event`, with no schedule link, and that still
     succeeds.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/complete"
     if _carries_supply_id(consumables):
@@ -2425,6 +2624,9 @@ def end_season(asset_id: str, occurred_on: str | None, event_id: str | None) -> 
     `SEASON_ALREADY_ENDED`. On an asset whose season follows Home Assistant (#16: a season sync enabled on the
     phone, which `get_season_sync` shows) the app answers `SEASON_SYNC_ENABLED` (409) and writes nothing.
     Answers `{activation, season}`.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     return _activation(asset_id, "END", occurred_on, event_id)
 
@@ -2448,7 +2650,12 @@ def set_season_mode(
     schedule counts back from is `SEASON_MODE_STRANDS_POLICY`, naming those schedules. The same mode
     and window as stored writes nothing. A change on an asset whose season follows Home Assistant (#16: a season
     sync enabled on the phone, which `get_season_sync` shows) is `SEASON_SYNC_ENABLED` (409) and writes nothing.
+    A change to `YEAR_ROUND` of an asset a Season Start role covers (#114) is `SEASON_START_STRANDED` (409) with
+    cause `NEEDS_SEASONS` and writes nothing; its `problems` name the role schedules — clear the role first.
     Answers `{asset, season}`.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     return _call(
         "POST",
@@ -2520,6 +2727,9 @@ def record_condition(
 
     To link a `DOWN` or `DEGRADED` row to the Incident that explains it, log the Incident with
     `log_event(kind="INCIDENT", …)` first and pass its `id` here as `event_id`.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     return _call(
         "POST",
@@ -3806,6 +4016,9 @@ def replace_asset(
     `{decision: "UNKNOWN", next}`: read `get_asset_succession` for the asset — the apply is idempotent by its
     digest, so the same call is safe to run again (it answers IDENTICAL, or plans afresh). Needs a phone at schema
     16 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+
+    When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
+    Developer API screen is open.
     """
     given = {_wire(key): value for key, value in _arguments(locals(), besides=("asset_id", "plan_only")).items()}
     asset_path = _path_id(asset_id, field="asset_id")
@@ -4330,6 +4543,508 @@ def get_season_sync(asset_id: str) -> dict[str, Any]:
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-sync"
     _require_season_sync_schema("get_season_sync")
     return _call("GET", path)
+
+
+@mcp.tool()
+def get_season_readiness(asset_id: str) -> dict[str, Any]:
+    """Whether one asset is ready for its season, read only: `GET /v1/assets/{id}/season-readiness` →
+    `{assetId, readyForSeason, seasonServiceDoneOn, reason, roleScheduleId, roleTarget, roleSinceOn, cutoffOn,
+    boundarySource, boundaryCheckedAt, boundaryUnverifiedSince}`, answered as the phone sends it. Derived on the
+    phone when it is read and stored nowhere: no tool sets it, and no tool takes a value, a date to publish or a
+    ready flag.
+
+    A schedule may carry the passive Season Start role (`role` on a schedule row; at most one live role covers an
+    asset, its own schedule or a group schedule it is an open member of). The asset is ready exactly when that
+    schedule has a qualifying completion **of this asset** dated on or after `cutoffOn`, the later of the role's
+    commissioning boundary and the day the asset's season last ended. Qualifying: not `detailsPending`, not
+    `imported` (a Transfer Pack brought it), dated from `cutoffOn` to today and written on or after the day it names.
+    It reports whether the service was recorded, nothing more; when equipment starts is never decided here.
+
+    `assetId` is the path's id; `readyForSeason` and `seasonServiceDoneOn` (`YYYY-MM-DD`, the latest qualifying day,
+    `null` unless ready);
+    `reason`, `null` when ready, else the first that holds of `SCHEDULE_ARCHIVED`, `NO_ROLE`, `TWO_ROLES`,
+    `ROLE_NOT_ALLOWED`, `FUTURE_DATED`, `RECORDED_IN_ADVANCE`, `DETAILS_PENDING`, `INHERITED_SERVICE_ONLY`,
+    `NOT_DONE_SINCE_COMMISSIONING` and `NOT_DONE_SINCE_SEASON_END`; `roleScheduleId`, `roleTarget` (`ASSET` or
+    `GROUP`) and `roleSinceOn`, the role schedule the answer is about (for `SCHEDULE_ARCHIVED` the archived one),
+    `null` when no single role decides it; `cutoffOn` and `boundarySource`, two fields — who set the cutoff:
+    `CALENDAR_WINDOW`, `PHONE_SEASON_END`, `HA_SEASON_ENDED`, `HA_UNVERIFIED` or `COMMISSIONING` — both `null` when
+    the answer stops before a boundary; `boundaryCheckedAt`, the epoch milliseconds of the Home Assistant read, for
+    `HA_SEASON_ENDED` only; and `boundaryUnverifiedSince`, set whenever the asset's Home Assistant boundary is
+    unverified, whatever won the cutoff.
+
+    An unknown asset is `no_such_asset`. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-readiness"
+    _require_ha_publishing_schema("get_season_readiness")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def set_schedule_role(
+    schedule_id: str,
+    role: str,
+    since_on: str | None = None,
+    season_start_quick_elected: bool | None = None,
+) -> dict[str, Any]:
+    """Set or clear a schedule's passive Season Start role: `POST /v1/schedules/{id}/role` → `{schedule}`, the row
+    with `role` and `roleSinceOn`. `role` is `SEASON_START` or `NONE`. The role marks the schedule whose completion
+    is the season's service, which `get_season_readiness` reads; it changes no rule and no history; a schedule counting
+    from the opening service moves with it, and no tool takes a value, a date to publish or a ready flag.
+
+    `SEASON_START` takes `since_on` (`YYYY-MM-DD`, not after today) as the role's commissioning boundary, today when
+    omitted: only completions dated on or after it can count. Setting the role a schedule already has with the same
+    day writes nothing; another day moves only the boundary. `NONE` clears the role and its boundary; clearing a
+    schedule that has none writes nothing. #124: clearing a live role while a live schedule of an asset it covers
+    counts from its opening service is 409 `SEASON_START_STRANDED` (cause `HAS_DEPENDENT_SCHEDULES`, naming those
+    schedules), writing nothing: change when they start counting first.
+
+    **The QUICK election.** A `QUICK` (one-tap) schedule takes the role only with
+    `season_start_quick_elected=True`, the owner's explicit election that its one-tap completions count as the
+    season's service; it is asked again on every set, a boundary move included. Pass it only when the owner has said
+    so: `None` and `False` send no flag, and this tool never makes the election by default. A `FORM` schedule and
+    `NONE` ignore it.
+
+    Refusals, each writing nothing: an unknown schedule is `NO_SUCH_SCHEDULE` (404); `SEASON_START_REFUSED` (409)
+    names its reason in `problems` as `SeasonStartRefused(reason=…)` — `SCHEDULE_ARCHIVED`, `COUNTS_FROM_ITSELF`
+    (the schedule counts from the opening service, #124), `QUICK_NOT_ELECTED`,
+    `NOT_MAINTAINED_HERE`, `YEAR_ROUND` or `LEAF_CHILD` (with the `assetId`), `ALREADY_COVERED` (with the `assetId`
+    and the covering schedule's `scheduleId` and `title`; clear that role first), `GROUP_ARCHIVED`,
+    `GROUP_HAS_NO_MEMBERS` or `DATE_IN_FUTURE`; a `since_on` that is not a `YYYY-MM-DD` date is
+    `SEASON_START_DATE_INVALID` (422, `field` `sinceOn`); a `role` outside the two is the 400. A timeout or a closed
+    connection is not re-sent: read the schedule before running this again. Needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/role"
+    _require_ha_publishing_schema("set_schedule_role")
+    body: dict[str, Any] = {"role": role}
+    if since_on is not None:
+        body["sinceOn"] = since_on
+    if season_start_quick_elected is True:
+        body[_SEASON_START_QUICK_ELECTED] = True
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+
+_HA_ENTITY_SCOPES: tuple[str, ...] = ("input_boolean", "input_select", "input_datetime")
+"""#113/#114 (C29b): helper discovery's three scopes, each a Home Assistant domain spelled exactly."""
+
+
+@mcp.tool()
+def list_ha_entities(scope: str) -> dict[str, Any]:
+    """List the Home Assistant helpers of one kind, read only: `GET /v1/ha-connection/entities/{scope}` →
+    `{scope, entities: [{entityId, friendlyName, options, hasDate, hasTime}], truncated}`, answered as the phone
+    sends it. `scope` is `input_boolean` (on/off helpers), `input_select` (dropdowns) or `input_datetime` (date
+    helpers); any other is refused here with nothing sent.
+
+    The phone makes one fresh read of its saved Home Assistant connection, under the same network and token rules as
+    its own Test connection, so this call can take up to two minutes. Nothing is kept: every call reads again, never
+    cached. Rows are sorted by friendly name, at most 2,000, `truncated` when more matched. `options` (at most 64
+    strings) is set only on an `input_select` row and `hasDate` / `hasTime` only on an `input_datetime` row, `null`
+    elsewhere or when Home Assistant reported none. No row carries a state, and no answer the address, the Wi-Fi name
+    or the token. Use an `entityId` from here to name a helper exactly; this tool writes nothing.
+
+    No saved connection is `HA_PUBLISH_REFUSED` (409, reason `NO_CONNECTION`); a read that answered
+    no list is `HA_HELPER_READ_FAILED` (409, `HelperReadFailed(errorKind=…, detail=…)` — `NEEDS_TOKEN`,
+    `NOT_ON_LOCAL_NETWORK` with its cause, `AUTH_REFUSED`, `UNREACHABLE`, `TIMED_OUT` and the rest of the publishing
+    error kinds). Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing
+    is sent.
+    """
+    if scope not in _HA_ENTITY_SCOPES:
+        raise ToolError("scope must be input_boolean, input_select or input_datetime; nothing was sent")
+    _require_ha_publishing_schema("list_ha_entities")
+    return _call("GET", f"/v1/ha-connection/entities/{scope}", timeout=_HA_READ_TIMEOUT)
+
+
+@mcp.tool()
+def get_ha_publishing(asset_id: str) -> dict[str, Any]:
+    """How one asset's Home Assistant publishing stands, read only: `GET /v1/assets/{id}/ha-publishing` →
+    `{assetId, bindings: [ … ], pendingDecommissions: [ … ]}`, answered as the phone sends it. Derived on the phone from
+    its own records when it is read: nothing is read from Home Assistant, nothing is written, and no tool takes a
+    value, a date to publish or a ready flag. An asset may publish its recorded condition (`UP`, `DEGRADED`, `DOWN`)
+    to a dropdown helper and its season service date (`1970-01-01` whenever it has none) to a date helper; Home
+    Assistant decides what to do with them.
+
+    `bindings` holds at most one per kind, each with `kind` (`EQUIPMENT_STATUS` or `SEASON_SERVICE_DATE`),
+    `entityId`, `boundaryEntityId` (the date kind's season-ended helper, read and never written; else `null`),
+    `enabled`, `state`, `desiredValue`, `lastPublished` and `lastVerified` (`null` or `{value, at, current}`),
+    `lastError` (`null` or `{kind, detail, at, current}`), `revision` (the binding's generation), `validated`,
+    `validatedAt`, `remote` (`null` or `{value, readAt}`, the last value read), `needsDelivery`, `reconcilePending`,
+    `outcomeUnknownSince`, `lastAttemptAt`, `boundary` (`null` or `{value, readAt, atCurrentRevision}`, the cached
+    season-ended read — whether it is fresh is `get_season_readiness`'s answer) and `request` (`null` or
+    `{id, at, progress}`, the last API Publish now that covered it, `progress` one of `ACCEPTED`, `PUBLISHED`,
+    `VERIFIED` and `FAILED`). `current` means the line holds for the binding's current generation and desired value.
+    `state` is one of `NOT_ENABLED`, `COPIED_INSTALLATION`, `NEEDS_VALIDATION`, `NEEDS_TOKEN`, `WAITING_FOR_SOURCE`,
+    `NOT_MAINTAINED_HERE`, `PENDING`, `OUTCOME_UNKNOWN`, `ERROR`, `PUBLISHED` (this phone's write, read back),
+    `MATCHES` (Home Assistant already held it) and `INVALIDATED_INELIGIBLE` (`1970-01-01` read back while the asset
+    is not maintained here). Times are epoch milliseconds.
+
+    `pendingDecommissions` lists the helpers the asset let go of that are still owed `1970-01-01`, each
+    `{id, entityId, state, requestedAt, lastError}`: `PENDING` while the phone is still delivering it,
+    `UNDELIVERABLE` once it cannot, until the owner says it was cleared in Home Assistant. The answer carries never
+    the address, the Wi-Fi name, the token or an installation id.
+
+    An unknown asset is `no_such_asset`. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/ha-publishing"
+    _require_ha_publishing_schema("get_ha_publishing")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def list_ha_publishing() -> dict[str, Any]:
+    """Every asset's Home Assistant publishing at once, read only: `GET /v1/ha-publishing` →
+    `{writesEnabled, bindings: [ … ], decommissions: [ … ]}`, answered as the phone sends it. It takes no argument. Derived
+    on the phone from its own records when it is read: nothing is read from Home Assistant, nothing is written, and no
+    tool takes a value, a date to publish or a ready flag.
+
+    `writesEnabled` is true while any binding is enabled — a copied or not yet validated one included; each binding's
+    `state` says whether this phone sends to it. `bindings` holds
+    one entry per binding, ordered by asset and then kind, each exactly what `get_ha_publishing` answers for a binding
+    (`kind`, `entityId`, `boundaryEntityId`, `enabled`, `state`, `desiredValue`, `lastPublished`, `lastVerified`,
+    `lastError`, `revision`, `validated`, `validatedAt`, `remote`, `needsDelivery`, `reconcilePending`,
+    `outcomeUnknownSince`, `lastAttemptAt`, `boundary` and `request`; `state` is one of `NOT_ENABLED`,
+    `COPIED_INSTALLATION`, `NEEDS_VALIDATION`, `NEEDS_TOKEN`, `WAITING_FOR_SOURCE`, `NOT_MAINTAINED_HERE`, `PENDING`,
+    `OUTCOME_UNKNOWN`, `ERROR`, `PUBLISHED`, `MATCHES` and `INVALIDATED_INELIGIBLE`) led by the `assetId` it belongs to.
+
+    `decommissions` lists every helper the phone still owes `1970-01-01`, each `{id, assetId, entityId, state,
+    requestedAt, lastError}`, ordered by `requestedAt` and then `id`: `PENDING` while the phone is still delivering it,
+    `UNDELIVERABLE` once it cannot, until the owner says it was cleared in Home Assistant. This is the only read of an
+    orphan obligation: one whose asset was deleted or replaced, or that Forget left behind (`assetId` is then the
+    asset's former id, or `null` when none was named), which `get_ha_publishing` cannot reach because that asset is
+    `no_such_asset`. An obligation like that may still allow starts in Home Assistant until it is cleared. The answer
+    carries never the address, the Wi-Fi name, the token or an installation id.
+
+    Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    _require_ha_publishing_schema("list_ha_publishing")
+    return _call("GET", "/v1/ha-publishing")
+
+
+def _ha_publishing_control(
+    tool: str,
+    action: str,
+    asset_id: str,
+    kind: str,
+    entity_id: str,
+    boundary_entity_id: str | None,
+    plan_id: str | None,
+    confirm_destination: str | None,
+) -> dict[str, Any]:
+    """B5w1 (C35b): the two steps both tools share. Without `plan_id` and `confirm_destination`, only the plan, which
+    writes nothing; with both, exactly the action's four keys; with one of them, or a destination that is not
+    `entity_id`, nothing at all. The confirmation is the caller's: nothing here fills either key."""
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}"
+    if plan_id is None and confirm_destination is None:
+        _require_ha_publishing_schema(tool)
+        values = {"kind": kind, "action": action, "entityId": entity_id, "boundaryEntityId": boundary_entity_id}
+        body = {key: values[key] for key in command_shapes.HA_PUBLISHING_PLAN_KEYS}
+        return _call(
+            "POST", f"{path}/ha-publishing-plan", json_body=body, content_type="application/json",
+            timeout=_HA_READ_TIMEOUT,
+        )
+    if plan_id is None or confirm_destination is None:
+        raise ToolError(
+            "plan_id and confirm_destination go together: pass both to commit a plan, or neither to make one; "
+            "nothing was sent"
+        )
+    if confirm_destination != entity_id:
+        raise ToolError(
+            "confirm_destination must be exactly entity_id, the helper the plan named and the owner confirmed; "
+            "nothing was sent"
+        )
+    _require_ha_publishing_schema(tool)
+    values = {"kind": kind, "action": action, "planId": plan_id, "confirmDestination": confirm_destination}
+    body = {key: values[key] for key in command_shapes.HA_PUBLISHING_ACTION_KEYS}
+    return _call(
+        "POST", f"{path}/ha-publishing", json_body=body, content_type="application/json", retry_on_connect=False,
+    )
+
+
+_HA_PUBLISHING_CONTROL_DOC = """
+
+    **Two steps.** Without `plan_id` and `confirm_destination` this POSTs only the plan, `POST
+    /v1/assets/{id}/ha-publishing-plan` `{kind, action, entityId, boundaryEntityId}`, and returns it: the phone reads
+    the named helpers once from Home Assistant (so the call can take up to two minutes) and writes nothing. The plan
+    answers `planId`, `boundaryRequired`, the helper's shape as `remote` (never its state), the season-ended helper as
+    `boundary`, `mapping` (the status kind: the option each recorded condition publishes) or `invalidDate`
+    (`1970-01-01`, the date kind), `refusal` (`null`, or `{reason, field}`: `NO_CONNECTION`, a read's failure such as
+    `NEEDS_TOKEN` or `ENTITY_NOT_FOUND`, or `WRONG_DOMAIN`, `OPTIONS_MISMATCH`, `NOT_DATE_ONLY`; `planId` is then
+    `null`), `readAt` and `expiresAt` (ten minutes after the read). Show the owner the plan's helper; once the owner
+    has confirmed it, call again with `plan_id` and `confirm_destination` — the plan's `entityId`, exactly — and this
+    sends exactly `{kind, action, planId, confirmDestination}` to `POST /v1/assets/{id}/ha-publishing`. With only one
+    of them, or a `confirm_destination` other than `entity_id`, nothing is sent. This tool never fills
+    `confirm_destination` itself: it is the owner's confirmation of the destination, and the caller's alone.
+
+    `kind` is `EQUIPMENT_STATUS` (the recorded condition to an `input_select` whose options are exactly `UP`,
+    `DEGRADED` and `DOWN`) or `SEASON_SERVICE_DATE` (the season service date, or `1970-01-01`, to a date-only
+    `input_datetime`). `boundary_entity_id` names the season-ended helper a date publication reads, and never writes;
+    the commit needs it exactly when the plan says `boundaryRequired`. No argument takes a value, a date to publish or
+    a ready flag: what is published stays derived from the phone's own records.
+
+    The commit answers `{binding}`, as `get_ha_publishing` answers it, and activates the publication on this phone;
+    while publishing is enabled, the phone may set the helper within seconds, while the Developer API screen is open.
+    Refusals, each writing nothing: an unknown asset is `no_such_asset` (404); a missing confirmation, or a
+    `confirmDestination` other than the plan's `entityId`, is `HA_PUBLISH_CONFIRMATION_REQUIRED` (422, `field` the
+    key); a plan the phone no longer holds — unknown, expired, already committed, made before the Developer API screen
+    was reopened, or whose connection, connection generation or binding moved since — is `STALE_PLAN` (409): plan
+    again; and `HA_PUBLISH_REFUSED` (409) names its reason in `problems` as `PublishRefused(reason=…)` —
+    `TARGET_IN_USE` (with the `holderAssetId`), `INBOUND_SOURCE`, `NOT_MAINTAINED_HERE`, `BAD_ENTITY_ID` (at
+    `boundaryEntityId`, or at `kind` for a target change on an asset with no publication of that kind) and
+    `BOUNDARY_IS_TARGET`. The commit is never re-sent on a dropped connection: read `get_ha_publishing` before running
+    it again. Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is
+    sent.
+    """
+
+
+def enable_ha_publishing(
+    asset_id: str,
+    kind: str,
+    entity_id: str,
+    boundary_entity_id: str | None = None,
+    plan_id: str | None = None,
+    confirm_destination: str | None = None,
+) -> dict[str, Any]:
+    return _ha_publishing_control(
+        "enable_ha_publishing", "ENABLE", asset_id, kind, entity_id, boundary_entity_id, plan_id, confirm_destination,
+    )
+
+
+enable_ha_publishing.__doc__ = (
+    """Enable one of an asset's two Home Assistant publications on a helper its Home Assistant administrator created:
+    the plan, then the action `ENABLE`. Enabling over an enabled date publication on another helper also owes the old
+    helper `1970-01-01`, which `get_ha_publishing` lists until it is delivered."""
+    + _HA_PUBLISHING_CONTROL_DOC
+)
+enable_ha_publishing = mcp.tool()(enable_ha_publishing)  # registered once its description is whole
+
+
+def change_ha_publishing_target(
+    asset_id: str,
+    kind: str,
+    entity_id: str,
+    boundary_entity_id: str | None = None,
+    plan_id: str | None = None,
+    confirm_destination: str | None = None,
+) -> dict[str, Any]:
+    return _ha_publishing_control(
+        "change_ha_publishing_target", "CHANGE_TARGET", asset_id, kind, entity_id, boundary_entity_id, plan_id,
+        confirm_destination,
+    )
+
+
+change_ha_publishing_target.__doc__ = (
+    """Move one of an asset's Home Assistant publications to another helper: the plan, then the action
+    `CHANGE_TARGET`, with `entity_id` the new helper. A date publication's old helper is owed `1970-01-01`, which
+    `get_ha_publishing` lists until it is delivered; the new helper starts with no published line."""
+    + _HA_PUBLISHING_CONTROL_DOC
+)
+change_ha_publishing_target = mcp.tool()(change_ha_publishing_target)  # registered once its description is whole
+
+
+def _ha_publishing_stored_control(tool: str, action: str, asset_id: str, kind: str, **kwargs: Any) -> dict[str, Any]:
+    """B5w2 (C35b): a control on the stored binding, `{kind, action}` and nothing else — no plan and no confirmation,
+    which the phone refuses on these two actions — never re-sent on a dropped connection."""
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/ha-publishing"
+    _require_ha_publishing_schema(tool)
+    return _call(
+        "POST", path, json_body={"kind": kind, "action": action}, content_type="application/json",
+        retry_on_connect=False, **kwargs,
+    )
+
+
+@mcp.tool()
+def disable_ha_publishing(asset_id: str, kind: str) -> dict[str, Any]:
+    """Switch off one of an asset's Home Assistant publications: `POST /v1/assets/{id}/ha-publishing` with exactly
+    `{kind, action: "DISABLE"}` → `{binding}`, as `get_ha_publishing` answers it. `kind` is `EQUIPMENT_STATUS` or
+    `SEASON_SERVICE_DATE`. It needs no plan and no confirmation, and reads nothing from Home Assistant: it is committed
+    on the phone even while Home Assistant cannot be reached.
+
+    Disabling a date publication owes its helper `1970-01-01`: the obligation appears in `get_ha_publishing`'s
+    `pendingDecommissions` (and `list_ha_publishing`'s `decommissions`) until the phone has written and read it back,
+    and it may still allow starts in Home Assistant until then. A status publication leaves the helper's value as it
+    is. Disabling a publication already off, or one the asset never had, changes nothing: the binding as stored, or
+    `{"binding": null}`.
+
+    Refusals, each writing nothing: an unknown asset is `no_such_asset` (404); a plan id or a destination
+    confirmation is `HA_PUBLISH_CONFIRMATION_REQUIRED` (422) — this tool sends neither. It is never re-sent on a
+    dropped connection: read `get_ha_publishing` before running it again. Needs a phone at schema 22 or later: an older
+    one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    return _ha_publishing_stored_control("disable_ha_publishing", "DISABLE", asset_id, kind)
+
+
+@mcp.tool()
+def check_ha_publishing_helper(asset_id: str, kind: str) -> dict[str, Any]:
+    """Check the helper one of an asset's Home Assistant publications already names: `POST
+    /v1/assets/{id}/ha-publishing` with exactly `{kind, action: "CHECK_HELPER"}` → `{binding}`, as `get_ha_publishing`
+    answers it. The phone reads the **stored** helper, and the stored season-ended helper when the date publication
+    names one, fresh from Home Assistant — so the call can take up to two minutes — and records what it found: a
+    helper that still fits leaves the publication `validated`; one that no longer does keeps the reason in `lastError`.
+    It takes no helper, no plan and no confirmation, and it never switches a publication on or makes one copied from
+    another phone publish from this one; while publishing is enabled, the phone may set the helper within seconds,
+    while the Developer API screen is open.
+
+    Refusals, each writing nothing: an unknown asset is `no_such_asset` (404); no publication of that `kind` on the
+    asset is `HA_PUBLISH_REFUSED` (409, `PublishRefused(reason=BAD_ENTITY_ID)`, `field` `kind`) — `BAD_ENTITY_ID`
+    names the kind here, not a helper id; no saved connection
+    is `HA_PUBLISH_REFUSED` (`NO_CONNECTION`); a read that answered nothing is `HA_HELPER_READ_FAILED` (409,
+    `HelperReadFailed(errorKind=…)`); a connection saved between the read and the record is `HA_PUBLISH_REFUSED`
+    (`STALE_READ`): check again. It is never re-sent on a dropped connection. Needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    return _ha_publishing_stored_control(
+        "check_ha_publishing_helper", "CHECK_HELPER", asset_id, kind, timeout=_HA_READ_TIMEOUT,
+    )
+
+
+@mcp.tool()
+def publish_ha_now(asset_id: str) -> dict[str, Any]:
+    """Ask the phone to publish an asset's Home Assistant values now: `POST
+    /v1/assets/{id}/ha-publishing/publish-now` with `{}` → **202** `{requestId, acceptedAt, bindings: [{kind,
+    state}]}`, the accepted request, returned as the phone sends it. It takes no value: what is published stays derived
+    from the phone's own records. The phone answers before it calls Home Assistant and then, in the background, reads
+    each covered publication back and writes it where Home Assistant differs. The phone first brings each value up to
+    date from its own records, so a condition recorded a moment ago is covered. `bindings` lists the publications the
+    request covers — enabled on this phone, with a token and a standing helper check, and a value to publish (for a
+    date publication whose asset left, `1970-01-01` until it is read back); an empty list means this request covers
+    nothing and sends nothing.
+
+    **Poll `get_ha_publishing`** for the result: each covered binding's `request` carries this `requestId` and its
+    `progress` — `ACCEPTED` while nothing has happened yet, then `PUBLISHED` (the phone's write, read back), `VERIFIED`
+    (Home Assistant already held it) or `FAILED` (see `lastError`). Poll until each is `PUBLISHED`, `VERIFIED` or
+    `FAILED`, at most ten minutes: a request still `ACCEPTED` after that was overtaken (the app stopped, or the phone
+    left its network), and the next start or resume of the app reads back anyway. Asking again is harmless — a new
+    `requestId` replaces the old one, and the phone runs one pass at a time — but this tool never asks again by
+    itself, and never on a dropped connection.
+
+    An unknown asset is `no_such_asset` (404). Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/ha-publishing/publish-now"
+    _require_ha_publishing_schema("publish_ha_now")
+    return _call("POST", path, json_body={}, content_type="application/json", retry_on_connect=False)
+
+
+@mcp.tool()
+def acknowledge_ha_decommission(
+    decommission_id: str, acknowledged_cleared_in_ha: Annotated[bool, Strict()],
+) -> dict[str, Any]:
+    """Record the owner's word that a helper the phone could not reset was cleared in Home Assistant by hand: `POST
+    /v1/ha-publishing/decommissions/{id}/acknowledge` with exactly `{decommissionId, acknowledgedClearedInHa: true}`;
+    the phone deletes that obligation and answers 204 (`{}` here). `decommission_id` is the obligation's `id` from
+    `get_ha_publishing`'s `pendingDecommissions` or `list_ha_publishing`'s `decommissions`.
+
+    **`acknowledged_cleared_in_ha` must be the caller's own `true`, given only once the owner has said the helper was
+    cleared in Home Assistant.** Anything else is refused here and nothing is sent. Never infer it from an error, a
+    state or a read, never default it, and never set it on a retry: an orphaned date helper may still permit a start
+    in Home Assistant, so only the owner's word acknowledges one. This tool never fills it.
+
+    Only an `UNDELIVERABLE` obligation is acknowledged. Refusals, each deleting nothing: an id the phone does not
+    hold is `NO_SUCH_DECOMMISSION` (404); a `PENDING` one, which the phone is still delivering, is
+    `DECOMMISSION_STILL_PENDING` (409); a body without the attestation is `HA_PUBLISH_CONFIRMATION_REQUIRED` (422). It
+    is never re-sent on a dropped connection: read `list_ha_publishing` before running it again. Needs a phone at
+    schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    if acknowledged_cleared_in_ha is not True:
+        raise ToolError(
+            "acknowledged_cleared_in_ha must be true, the owner's own word that the helper was cleared in Home "
+            "Assistant; nothing was sent"
+        )
+    path = f"/v1/ha-publishing/decommissions/{_path_id(decommission_id, field='decommission_id')}/acknowledge"
+    _require_ha_publishing_schema("acknowledge_ha_decommission")
+    values = {"decommissionId": decommission_id, "acknowledgedClearedInHa": acknowledged_cleared_in_ha}
+    body = {key: values[key] for key in command_shapes.HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS}
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+# --- #125, a schedule's own Home Assistant season (docs/api/v1.md, **A schedule's own Home Assistant season (#125)**) --
+#
+# One path shape a phone below schema 22 does not have, read and written. On the phone a schedule may follow its own
+# Home Assistant switch while its asset keeps its season: only that schedule's due date moves. These three tools read
+# it, link it (Follow only) and unlink it, each with the caller's own confirmation; the asset's link, Force, the token,
+# the connection and Forget stay the phone's alone, and no answer carries the address, the Wi-Fi name or the token.
+
+
+def _schedule_season_path(schedule_id: str) -> str:
+    return f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/season-sync"
+
+
+@mcp.tool()
+def get_schedule_season(schedule_id: str) -> dict[str, Any]:
+    """One schedule's own Home Assistant season, read only: `GET /v1/schedules/{id}/season-sync` →
+    `{scheduleId, seasonSource, seasonPhase, connection, binding, activations}`, answered as the phone sends it.
+
+    On the phone an asset's season can be its calendar while one of its schedules follows its own Home Assistant
+    switch — a Season Start service due the day a season switch turns on with the first frost. `seasonSource` is `OWN` for such
+    a schedule and `ASSET` otherwise; only that schedule's due date moves, and readiness, publishing and the asset's
+    season never read it. `seasonPhase` is `IN_SEASON` or `OUT_OF_SEASON`, the phase the schedule's due rules read
+    today (its own season's, or its asset's), `null` for a group's schedule. `connection` is `get_season_sync`'s,
+    key for key. `binding` is `null` (no link, or an `OWN` schedule whose link Forget took: it keeps its own season,
+    frozen, until linked again or unlinked) or `get_season_sync`'s binding shape — `mode` always `FOLLOW`, `state`
+    `ACTIVE`, `STOPPED`, `NEEDS_TOKEN` or `NOT_MAINTAINED_HERE`, `observation`, `lastSuccessAt`, `lastAttemptAt`,
+    `lastError` and `lastApplied`. `activations` is the schedule's own season, `[{id, action: START|END, occurredOn,
+    createdAt}]`, oldest first, kept as history after an unlink. Never the address, the Wi-Fi name or the token.
+
+    An unknown schedule is `NO_SUCH_SCHEDULE` (404). Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _schedule_season_path(schedule_id)
+    _require_schedule_season_schema("get_schedule_season")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def link_schedule_season(schedule_id: str, entity_id: str, confirm_entity_id: str | None = None) -> dict[str, Any]:
+    """Make one asset-targeted schedule follow its own Home Assistant switch: `POST /v1/schedules/{id}/season-sync`
+    with exactly `{action: "LINK", entityId, confirmEntityId}` → `get_schedule_season`'s shape. Follow only: Home
+    Assistant's `on` starts the schedule's own season and `off` ends it, each dated the day the phone applies it; only
+    that schedule's due date moves.
+
+    **`confirm_entity_id` must be the caller's own, exactly `entity_id`, given once the owner has confirmed that
+    switch.** Without it, or with another id, this tool sends nothing; it never fills it, and the phone refuses a link
+    without it (`SCHEDULE_SEASON_CONFIRMATION_REQUIRED`, 422). `entity_id` is an `input_boolean` id.
+
+    The link records no season row: the phone launches the schedule's first check at once and answers without waiting
+    for it, so the schedule is out of its own season until then — read `get_schedule_season` for the check's outcome.
+    Refusals, each writing nothing, are `SCHEDULE_SEASON_REFUSED` (409) with `ScheduleSeasonRefused(reason=…)` in
+    `problems`: `GROUP_TARGET` (a group's schedule), `SCHEDULE_ARCHIVED`, `NOT_MAINTAINED_HERE`, `NO_CONNECTION`,
+    `NEEDS_TOKEN` (enter the token on the phone), `BAD_ENTITY_ID`, `OUTBOUND_TARGET` (a helper the phone writes),
+    `ALREADY_LINKED` or `STRANDS_PRE_SERVICE` (a `PRE_SERVICE` schedule whose asset has no maintenance break). An
+    unknown schedule is `NO_SUCH_SCHEDULE` (404). It is never re-sent on a dropped connection: read
+    `get_schedule_season` before running it again. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _schedule_season_path(schedule_id)
+    if confirm_entity_id is None or confirm_entity_id != entity_id:
+        raise ToolError(
+            "confirm_entity_id must be exactly entity_id, the switch the owner confirmed; nothing was sent"
+        )
+    _require_schedule_season_schema("link_schedule_season")
+    values = {"action": "LINK", "entityId": entity_id, "confirmEntityId": confirm_entity_id}
+    body = {key: values[key] for key in command_shapes.SCHEDULE_SEASON_KEYS if key in values}
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+
+@mcp.tool()
+def unlink_schedule_season(schedule_id: str, confirm_unlink: Annotated[bool, Strict()]) -> dict[str, Any]:
+    """Return one schedule to its asset's season: `POST /v1/schedules/{id}/season-sync` with exactly
+    `{action: "UNLINK", confirmUnlink: true}` → `get_schedule_season`'s shape, `seasonSource` `ASSET` and `binding`
+    `null`. The schedule's own season rows are kept as history and no longer read; unlinking an `ASSET` schedule
+    writes nothing. This is the only way, with archiving the schedule, that it returns to its asset's season.
+
+    **`confirm_unlink` must be the caller's own `true`, given once the owner has said so.** Anything else is refused
+    here and nothing is sent; this tool never fills it, and the phone refuses an unlink without it
+    (`SCHEDULE_SEASON_CONFIRMATION_REQUIRED`, 422). An unknown schedule is `NO_SUCH_SCHEDULE` (404). It is never
+    re-sent on a dropped connection. Needs a phone at schema 22 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _schedule_season_path(schedule_id)
+    if confirm_unlink is not True:
+        raise ToolError("confirm_unlink must be true, the owner's own word; nothing was sent")
+    _require_schedule_season_schema("unlink_schedule_season")
+    values = {"action": "UNLINK", "confirmUnlink": confirm_unlink}
+    body = {key: values[key] for key in command_shapes.SCHEDULE_SEASON_KEYS if key in values}
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

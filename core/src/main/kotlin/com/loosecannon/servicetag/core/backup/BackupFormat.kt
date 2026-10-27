@@ -62,10 +62,13 @@ import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
@@ -87,6 +90,7 @@ import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.references.accepts
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 /**
  * What the backup says about itself. `dataSha256` is the hex SHA-256 of the exact
@@ -294,6 +298,11 @@ data class AssetEventDto(
     val occurrenceOn: String? = null,
     /** Format 6. A minimal completion against a FORM schedule still owes its details. */
     val detailsPending: Boolean = false,
+    /**
+     * Format 21 (#114, B). A Transfer Pack import inserted this event here: written as an explicit value, defaulting
+     * to false, so a format ≤20 archive decodes with none; a format ≤20 archive carrying `true` was built by hand.
+     */
+    val imported: Boolean = false,
 )
 
 /**
@@ -365,6 +374,20 @@ data class MaintenanceScheduleDto(
     /** The pin's floor: it moves only on a rule change (inv. 87), so it travels as it is. */
     val ruleChangedAt: Long,
     val providers: List<ScheduleProviderDto>,
+    /**
+     * Format 21 (#114, C18). The passive Season Start role, a [ScheduleRole] name, and its commissioning boundary
+     * (`YYYY-MM-DD`), non-null exactly when the role is `SEASON_START` (R1). Both written as explicit values and
+     * defaulting to `NONE` and null, so a format ≤20 archive decodes with no role; one carrying a role was built by hand.
+     */
+    val role: String = "NONE",
+    val roleSinceOn: String? = null,
+    /**
+     * Format 21 (#125, U-C6). The season the schedule's due rules read, a [ScheduleSeasonSource] name: `ASSET` (its
+     * asset's) or `OWN` (its own Home Assistant season, made of its [ScheduleSeasonActivationDto] rows). Written as an
+     * explicit value and defaulting to `ASSET`, so a format ≤20 archive decodes as following its asset; one carrying
+     * another value was built by hand. The schedule's binding never travels: an imported `OWN` schedule is stranded.
+     */
+    val seasonSource: String = "ASSET",
 )
 
 /**
@@ -466,6 +489,20 @@ data class SeasonActivationDto(
     val action: String,
     val occurredOn: String,
     val eventId: String?,
+    val createdAt: Long,
+)
+
+/**
+ * Format 21 (#125, U-C6). One row of a schedule's own season: [SeasonActivationDto]'s shape with [scheduleId] in the
+ * asset's place and no `eventId` (a schedule's season writes no journal entry). An immutable fact, so there is no
+ * `updatedAt`; its one owner is its schedule.
+ */
+@Serializable
+data class ScheduleSeasonActivationDto(
+    val id: String,
+    val scheduleId: String,
+    val action: String,
+    val occurredOn: String,
     val createdAt: Long,
 )
 
@@ -791,6 +828,12 @@ data class BackupData(
      * one that does (an empty list is accepted).
      */
     val installedComponents: List<InstalledComponentDto> = emptyList(),
+    /**
+     * Format 21 (#125, U-C6); a schedule's own season rows, ordered by id. Empty on every format ≤20 archive, which
+     * never carries a **row** — the codec refuses one that does (an empty list is accepted). The schedule bindings are
+     * device-local and are in no archive.
+     */
+    val scheduleSeasonActivations: List<ScheduleSeasonActivationDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1110,6 +1153,7 @@ fun AssetEvent.toDto(): AssetEventDto = AssetEventDto(
     scheduleId = scheduleId?.value,
     occurrenceOn = occurrenceOn,
     detailsPending = detailsPending,
+    imported = imported,
 )
 
 fun AssetEventDto.toDomain(): AssetEvent = AssetEvent(
@@ -1131,6 +1175,7 @@ fun AssetEventDto.toDomain(): AssetEvent = AssetEvent(
     scheduleId = scheduleId?.let(::ScheduleId),
     occurrenceOn = occurrenceOn,
     detailsPending = detailsPending,
+    imported = imported,
 )
 
 fun Attachment.toDto(): AttachmentDto = AttachmentDto(
@@ -1281,6 +1326,9 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto
         updatedAt = updatedAt,
         ruleChangedAt = ruleChangedAt,
         providers = providers.map { it.toDto() },
+        role = role.name,
+        roleSinceOn = roleSinceOn,
+        seasonSource = seasonSource.name,
     )
 
 /**
@@ -1292,11 +1340,33 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto
  * [MaintenanceScheduleDto.ruleChangedAt] is read as it is and never re-seeded from `updatedAt`: a
  * backup round trip must not move the pin's floor (inv. 87). Only a format ≤7 file, which cannot
  * carry the field, has it seeded — on its tree, by [LegacyArchive].
+ *
+ * #114 (C18): the role must be one of [ScheduleRole]'s names, and R1 must hold — `roleSinceOn` an ISO date exactly
+ * when the role is `SEASON_START`, null otherwise — or the row is refused before any import begins.
  */
 fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
     if ((assetId == null) == (groupId == null)) {
         throw BackupCorrupt("schedule $id must name exactly one target, an asset or a group")
     }
+    val scheduleRole = enumOrCorrupt<ScheduleRole>(role, "schedule role", "schedule $id")
+    val boundaryShaped = roleSinceOn != null && runCatching { LocalDate.parse(roleSinceOn) }.isSuccess
+    val holdsR1 = when (scheduleRole) {
+        ScheduleRole.NONE -> roleSinceOn == null
+        ScheduleRole.SEASON_START -> boundaryShaped
+    }
+    if (!holdsR1) {
+        throw BackupCorrupt(
+            "schedule $id carries role $role with roleSinceOn $roleSinceOn; a Season Start role carries an ISO date " +
+                "and no other role carries one",
+        )
+    }
+    // #125 (U-C6, inv. 106): a group's schedule follows no season of its own, so no writer puts `OWN` on one.
+    val source = enumOrCorrupt<ScheduleSeasonSource>(seasonSource, "schedule season source", "schedule $id")
+    val ownOnAGroup = when (source) {
+        ScheduleSeasonSource.ASSET -> false
+        ScheduleSeasonSource.OWN -> groupId != null
+    }
+    if (ownOnAGroup) throw BackupCorrupt("schedule $id is a group's schedule and carries its own season")
     return MaintenanceSchedule(
         id = ScheduleId(id),
         target = assetId?.let { ScheduleTarget.AssetTarget(AssetId(it)) }
@@ -1323,6 +1393,9 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
         updatedAt = updatedAt,
         ruleChangedAt = ruleChangedAt,
         providers = providers.map { it.toDomain() },
+        role = scheduleRole,
+        roleSinceOn = roleSinceOn,
+        seasonSource = source,
     )
 }
 
@@ -1409,6 +1482,24 @@ fun SeasonActivationDto.toDomain(): SeasonActivation = SeasonActivation(
     action = enumOrCorrupt<SeasonAction>(action, "season action", "activation $id"),
     occurredOn = occurredOn,
     eventId = eventId?.let(::EventId),
+    createdAt = createdAt,
+)
+
+// --- format 21: a schedule's own season (#125) ------------------------------------------------------
+
+fun ScheduleSeasonActivation.toDto(): ScheduleSeasonActivationDto = ScheduleSeasonActivationDto(
+    id = id,
+    scheduleId = scheduleId.value,
+    action = action.name,
+    occurredOn = occurredOn,
+    createdAt = createdAt,
+)
+
+fun ScheduleSeasonActivationDto.toDomain(): ScheduleSeasonActivation = ScheduleSeasonActivation(
+    id = id,
+    scheduleId = ScheduleId(scheduleId),
+    action = enumOrCorrupt<SeasonAction>(action, "season action", "schedule season row $id"),
+    occurredOn = occurredOn,
     createdAt = createdAt,
 )
 

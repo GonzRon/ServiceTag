@@ -1,20 +1,33 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.core.hapublish.PublishBinding
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
+import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.health.HealthBand
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
+import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
+import com.loosecannon.servicetag.core.seasonsync.SyncMode
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
@@ -80,8 +93,10 @@ import com.loosecannon.servicetag.ui.journal.formatValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -2728,7 +2743,7 @@ class AssetViewModelsTest {
     private fun saveSettingsOver(assets: AssetRepository) = SaveAssetSettings(
         assets, graph.schedules, graph.healthSubjects, graph.seasonActivations, graph.uow, graph.ids,
         graph.clock, graph.todayPort, graph.recomputeSchedules, graph.applyTemplate, graph.promoteCategory,
-        SeasonSyncGuard(graph.seasonSyncBindings),
+        SeasonSyncGuard(graph.seasonSyncBindings), graph.groups,
     )
 
     /** `SaveAssetSettings.run` reads every asset first, and nothing else here goes through this port. */
@@ -3359,6 +3374,403 @@ class AssetViewModelsTest {
             ),
             editor.model.state.value.attached,
         )
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // #116 (U1) — the row facts and the Condition control's state (plan U-C2, U-C3; rows u4, u5,
+    // u7). The three sources are passed explicitly, as the graph constructor passes them. Every
+    // name, address and entity id is fictional.
+    // ------------------------------------------------------------------------------------------
+
+    /** The list over [on]'s stores, with #116's three sources (counting ones where a case swaps them in). */
+    private fun factsModel(
+        on: FakeGraph = graph,
+        conditions: ConditionRepository = on.conditions,
+        inbound: SeasonSyncRepository = on.seasonSyncBindings,
+        publishing: PublishBindingRepository = on.publishBindings,
+        activeOnly: Boolean = false,
+    ) = AssetsViewModel(
+        on.assets, on.categories, on.seasonActivations, on.tags, on.assetHealthReadModel, on.todayPort,
+        loans = on.loans, transfers = on.transferRecords, activeOnly = activeOnly,
+        conditions = conditions, inbound = inbound, publishing = publishing,
+    )
+
+    private val exampleConnection = HaConnection(
+        id = "connection-1", baseUrl = "http://192.168.0.10:8123", cadence = SyncCadence.DAILY,
+        networkEligibility = NetworkEligibility.HOME_NETWORK_ONLY, homeNetworkSsid = "ExampleHomeWifi",
+        backgroundChecks = BackgroundChecks.OFF, createdAt = 1_000L, updatedAt = 1_000L,
+    )
+
+    private fun inboundBinding(assetId: String) = SeasonSyncBinding(
+        assetId = AssetId(assetId), connectionId = exampleConnection.id, entityId = "input_boolean.${assetId}_in_season",
+        mode = SyncMode.FOLLOW, enabled = true, revision = 1, observedState = null, observedChangedAt = null,
+        lastSuccessAt = null, lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null,
+        appliedAction = null, appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 1_000L,
+        updatedAt = 1_000L,
+    )
+
+    private fun publishBinding(assetId: String, kind: PublishKind) = PublishBinding(
+        id = "binding-$assetId-$kind", assetId = AssetId(assetId), connectionId = exampleConnection.id, kind = kind,
+        entityId = "input_select.${assetId}_$kind", enabled = true, revision = 1, activatedInstallationId = null,
+        validatedAt = null, validatedRevision = null, boundaryEntityId = null, createdAt = 1_000L, updatedAt = 1_000L,
+    )
+
+    /** The state once [until] accepts it — bounded in real time, and naming what it waited for. */
+    private suspend fun AssetsViewModel.stateOnce(what: String, until: (AssetsState) -> Boolean): AssetsState =
+        withContext(Dispatchers.Default) { withTimeoutOrNull(WAIT_MS) { state.first(until) } }
+            ?: throw AssertionError("$what: never; the state was ${state.value.filters}, ${state.value.items.map { it.facts() }}")
+
+    private fun AssetRow.facts() = "${asset.id.value}(linked=$haLinked, condition=${condition?.condition}, inSeason=$inSeason)"
+
+    private fun AssetsState.row(id: String): AssetRow? = items.firstOrNull { it.asset.id.value == id }
+
+    /** Counts how often the list collects every condition row, and every per-asset read it makes. */
+    private class CountingConditions(private val inner: ConditionRepository) : ConditionRepository by inner {
+        var collected = 0
+        var perAsset = 0
+        override fun observeAll(): Flow<List<AssetCondition>> = inner.observeAll().onStart { collected++ }
+        override fun observeForAsset(assetId: AssetId): Flow<List<AssetCondition>> {
+            perAsset++
+            return inner.observeForAsset(assetId)
+        }
+        override suspend fun forAsset(assetId: AssetId): List<AssetCondition> {
+            perAsset++
+            return inner.forAsset(assetId)
+        }
+    }
+
+    /** The same count over the #16 bindings. */
+    private class CountingInbound(private val inner: SeasonSyncRepository) : SeasonSyncRepository by inner {
+        var collected = 0
+        var perAsset = 0
+        override fun observeAll(): Flow<List<SeasonSyncBinding>> = inner.observeAll().onStart { collected++ }
+        override fun observeFor(assetId: AssetId): Flow<SeasonSyncBinding?> {
+            perAsset++
+            return inner.observeFor(assetId)
+        }
+        override suspend fun get(assetId: AssetId): SeasonSyncBinding? {
+            perAsset++
+            return inner.get(assetId)
+        }
+    }
+
+    /** The same count over the publish bindings. */
+    private class CountingPublishing(private val inner: PublishBindingRepository) : PublishBindingRepository by inner {
+        var collected = 0
+        var perAsset = 0
+        override fun observeAll(): Flow<List<PublishBinding>> = inner.observeAll().onStart { collected++ }
+        override suspend fun forAsset(assetId: AssetId): List<PublishBinding> {
+            perAsset++
+            return inner.forAsset(assetId)
+        }
+    }
+
+    /**
+     * u4 (constraint 5, AC116-8): on a fifty-asset list each of the three sources is collected once and joined by
+     * asset id — no per-row flow or read — and every row carries its own facts.
+     */
+    @Test fun fiftyAssetsCollectEachSourceOnce() = runTest {
+        graph.haConnections.upsert(exampleConnection)
+        val ids = (1..50).map { "asset-%02d".format(Locale.ROOT, it) }
+        val condition = mutableMapOf<String, OperationalCondition>()
+        val linked = mutableSetOf<String>()
+        ids.forEachIndexed { index, id ->
+            val n = index + 1
+            graph.assets.upsert(assetRow(id, name = "Example Asset %02d".format(Locale.ROOT, n)))
+            when (n % 3) {
+                0 -> OperationalCondition.DOWN
+                1 -> OperationalCondition.OPERATIONAL
+                else -> null
+            }?.let { value ->
+                graph.conditions.insert(conditionRow("c-$id", id, value, "2026-10-01"))
+                condition[id] = value
+            }
+            if (n % 5 == 0) graph.seasonSyncBindings.insert(inboundBinding(id)).also { linked += id }
+            if (n % 7 == 0) graph.publishBindings.insert(publishBinding(id, PublishKind.EQUIPMENT_STATUS)).also { linked += id }
+        }
+        val conditions = CountingConditions(graph.conditions)
+        val inbound = CountingInbound(graph.seasonSyncBindings)
+        val publishing = CountingPublishing(graph.publishBindings)
+        val vm = factsModel(conditions = conditions, inbound = inbound, publishing = publishing)
+        backgroundScope.launch { vm.state.collect() }
+
+        val rows = vm.stateOnce("fifty rows with their facts") { state ->
+            state.items.size == 50 && state.items.count { it.haLinked } == linked.size &&
+                state.items.count { it.condition != null } == condition.size
+        }.items
+        for (row in rows) {
+            val id = row.asset.id.value
+            assertEquals("$id linked", id in linked, row.haLinked)
+            assertEquals("$id condition", condition[id], row.condition?.condition)
+            assertFalse("$id is year-round", row.inSeason)
+        }
+        assertEquals("no per-asset condition read", 0, conditions.perAsset)
+        assertEquals("no per-asset #16 read", 0, inbound.perAsset)
+        assertEquals("no per-asset publish read", 0, publishing.perAsset)
+        assertEquals("conditions collected", 1, conditions.collected)
+        assertEquals("#16 bindings collected", 1, inbound.collected)
+        assertEquals("publish bindings collected", 1, publishing.collected)
+    }
+
+    /**
+     * The Condition fixture: two HVAC roots (DOWN, OPERATIONAL) and a DOWN HVAC component, two Pump roots (DEGRADED,
+     * DOWN), an untracked root, and an archived and a retired HVAC asset whose DOWN rows the list never shows.
+     */
+    private suspend fun conditionFleet() {
+        suspend fun asset(id: String, name: String, category: String, condition: OperationalCondition?, parent: String? = null,
+                          status: AssetStatus = AssetStatus.ACTIVE, retiredOn: String? = null) {
+            graph.assets.upsert(
+                assetRow(id, name = name, parent = parent, status = status, retiredOn = retiredOn).copy(category = category),
+            )
+            if (condition != null) graph.conditions.insert(conditionRow("c-$id", id, condition, "2026-10-01"))
+        }
+        asset("heater", "Example Heater", "HVAC", OperationalCondition.DOWN)
+        asset("boiler", "Example Boiler", "HVAC", OperationalCondition.OPERATIONAL)
+        asset("fan", "Example Heater Fan", "HVAC", OperationalCondition.DOWN, parent = "heater")
+        asset("pump", "Example Pool Pump", "Pump", OperationalCondition.DEGRADED)
+        asset("circulator", "Example Circulator", "Pump", OperationalCondition.DOWN)
+        asset("shed", "Example Shed Light", "Other", null)
+        asset("old", "Example Old Heater", "HVAC", OperationalCondition.DOWN, status = AssetStatus.ARCHIVED)
+        asset("spare", "Example Spare Boiler", "HVAC", OperationalCondition.DOWN, retiredOn = "2026-01-01")
+    }
+
+    /** The ids listed once the controls read [filters] and the query [query] — sorted, the list's order aside. */
+    private suspend fun AssetsViewModel.listedFor(filters: AssetFilters, query: String = "", expected: Int): List<String> =
+        stateOnce("$filters, \"$query\", $expected rows") {
+            it.filters == filters && it.query == query && it.items.size == expected
+        }.items.map { it.asset.id.value }.sorted()
+
+    /**
+     * u5 (U-C3, AC116-3): each Condition choice admits exactly the rows whose own current condition is that choice —
+     * never a retired or archived asset's — and All admits every row; a rebuilt view model starts at All.
+     */
+    @Test fun eachConditionChoiceAdmitsExactlyItsRows() = runTest {
+        conditionFleet()
+        val vm = factsModel()
+        backgroundScope.launch { vm.state.collect() }
+        val all = listOf("boiler", "circulator", "heater", "pump", "shed", "spare")
+        assertEquals("All", all, vm.listedFor(AssetFilters(), expected = 6))
+
+        vm.pickCondition(OperationalCondition.DOWN)
+        assertEquals(listOf("circulator", "heater"), vm.listedFor(AssetFilters(condition = OperationalCondition.DOWN), expected = 2))
+        vm.pickCondition(OperationalCondition.OPERATIONAL)
+        assertEquals(listOf("boiler"), vm.listedFor(AssetFilters(condition = OperationalCondition.OPERATIONAL), expected = 1))
+        vm.pickCondition(OperationalCondition.DEGRADED)
+        assertEquals(listOf("pump"), vm.listedFor(AssetFilters(condition = OperationalCondition.DEGRADED), expected = 1))
+        vm.pickCondition(null)
+        assertEquals("All again", all, vm.listedFor(AssetFilters(), expected = 6))
+
+        vm.pickCondition(OperationalCondition.DOWN)
+        vm.listedFor(AssetFilters(condition = OperationalCondition.DOWN), expected = 2)
+        // Session state (R73-2): a rebuilt view model — the screen's next visit — starts at All.
+        val rebuilt = factsModel()
+        backgroundScope.launch { rebuilt.state.collect() }
+        assertEquals(all, rebuilt.listedFor(AssetFilters(), expected = 6))
+        assertNull(rebuilt.state.value.filters.condition)
+    }
+
+    /**
+     * u5 (U-C3): the Condition control is ANDed with Type, Child assets, Archived and the query — a DEGRADED row of
+     * another type is not admitted — and changing it leaves the other three as they were, as they leave it.
+     */
+    @Test fun theConditionIsAndedWithTheOtherControlsAndChangesNoneOfThem() = runTest {
+        conditionFleet()
+        val vm = factsModel()
+        backgroundScope.launch { vm.state.collect() }
+        vm.listedFor(AssetFilters(), expected = 6)
+
+        vm.pickType("hvac")
+        vm.pickCondition(OperationalCondition.DEGRADED)
+        val hvacDegraded = AssetFilters(type = "hvac", condition = OperationalCondition.DEGRADED)
+        assertEquals("a DEGRADED Pump is not admitted under HVAC", emptyList<String>(), vm.listedFor(hvacDegraded, expected = 0))
+
+        vm.pickCondition(OperationalCondition.DOWN)
+        val hvacDown = AssetFilters(type = "hvac", condition = OperationalCondition.DOWN)
+        assertEquals("the type's DOWN roots", listOf("heater"), vm.listedFor(hvacDown, expected = 1))
+
+        vm.toggleComponents()
+        val withComponents = hvacDown.copy(showComponents = true)
+        assertEquals("and its DOWN component", listOf("fan", "heater"), vm.listedFor(withComponents, expected = 2))
+
+        vm.toggleArchived()
+        val everything = withComponents.copy(showArchived = true)
+        assertEquals("archived and retired DOWN rows never admitted", listOf("fan", "heater"), vm.listedFor(everything, expected = 2))
+
+        vm.onQueryChange("fan")
+        assertEquals("the query searches within", listOf("fan"), vm.listedFor(everything, query = "fan", expected = 1))
+        vm.clearQuery()
+
+        // Changing the condition leaves Type, Child assets and Archived; changing each of those leaves the condition.
+        vm.pickCondition(OperationalCondition.OPERATIONAL)
+        val operational = everything.copy(condition = OperationalCondition.OPERATIONAL)
+        assertEquals(listOf("boiler"), vm.listedFor(operational, expected = 1))
+        vm.pickType("pump")
+        vm.toggleComponents()
+        vm.toggleArchived()
+        assertEquals(
+            OperationalCondition.OPERATIONAL,
+            vm.stateOnce("the other three changed") { it.filters == AssetFilters(type = "pump", condition = OperationalCondition.OPERATIONAL) }
+                .filters.condition,
+        )
+    }
+
+    /**
+     * u5 (U-C3, #93): the share picker drops what is not maintained here first, then applies the Condition control the
+     * same way — the archived and retired DOWN assets never return, whatever Archived says.
+     */
+    @Test fun theSharePickerAppliesTheConditionAfterItsOwnDrop() = runTest {
+        conditionFleet()
+        val picker = factsModel(activeOnly = true)
+        backgroundScope.launch { picker.state.collect() }
+        assertEquals(
+            listOf("boiler", "circulator", "heater", "pump", "shed"),
+            picker.listedFor(AssetFilters(), expected = 5),
+        )
+        picker.pickCondition(OperationalCondition.DOWN)
+        assertEquals(listOf("circulator", "heater"), picker.listedFor(AssetFilters(condition = OperationalCondition.DOWN), expected = 2))
+        picker.toggleArchived()
+        picker.toggleComponents()
+        assertEquals(
+            listOf("circulator", "fan", "heater"),
+            picker.listedFor(
+                AssetFilters(showComponents = true, showArchived = true, condition = OperationalCondition.DOWN),
+                expected = 3,
+            ),
+        )
+    }
+
+    /**
+     * u7 (U-C2): the facts follow their sources live — a condition recorded, a publish binding enabled then disabled,
+     * a #16 link removed (Forget's CASCADE) and an END recorded each move the row, and nothing calls `refresh`. The
+     * heater shares a group with an out-of-season boiler and still reads its own season, as its twin outside any
+     * group does (constraint 2).
+     */
+    @Test fun theFactsFollowTheirSourcesLive() = runTest {
+        graph.today = LocalDate.parse("2026-06-15")
+        graph.haConnections.upsert(exampleConnection)
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("tub", name = "Example Hot Tub", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(
+            assetRow("boiler", name = "Example Boiler", seasonMode = SeasonMode.CALENDAR, seasonStart = "11-01", seasonEnd = "03-31"),
+        )
+        graph.seasonActivations.insert(activation("a1", "heater", SeasonAction.START, "2026-04-01"))
+        graph.seasonActivations.insert(activation("a2", "tub", SeasonAction.START, "2026-04-01"))
+        graph.groups.upsert(
+            groupOf(
+                "g1", name = "Example Heating Run",
+                members = listOf(Triple("heater", "2026-01-01", null), Triple("boiler", "2026-01-01", null)),
+            ),
+        )
+        val vm = factsModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val first = vm.stateOnce("three rows") { it.items.size == 3 }
+        val heater = first.row("heater")!!
+        assertTrue("in season by its own START", heater.inSeason)
+        assertFalse(heater.haLinked)
+        assertNull(heater.condition)
+        assertTrue("the group-mate is out of season", first.row("boiler")!!.outOfSeason)
+        assertFalse(first.row("boiler")!!.inSeason)
+        assertEquals("the twin outside any group reads alike", first.row("tub")!!.inSeason, heater.inSeason)
+
+        graph.conditions.insert(conditionRow("c1", "heater", OperationalCondition.DOWN, "2026-06-10"))
+        vm.stateOnce("a condition recorded") { it.row("heater")?.condition?.condition == OperationalCondition.DOWN }
+
+        val status = publishBinding("heater", PublishKind.EQUIPMENT_STATUS)
+        graph.publishBindings.insert(status)
+        vm.stateOnce("a publish binding enabled") { it.row("heater")?.haLinked == true }
+        assertTrue(graph.publishBindings.update(status.copy(enabled = false, revision = 2)))
+        vm.stateOnce("the publish binding disabled") { it.row("heater")?.haLinked == false }
+
+        graph.seasonSyncBindings.insert(inboundBinding("heater"))
+        vm.stateOnce("a #16 link") { it.row("heater")?.haLinked == true }
+        graph.haConnections.delete(exampleConnection.id)
+        vm.stateOnce("the #16 link removed") { it.row("heater")?.haLinked == false }
+
+        graph.seasonActivations.insert(activation("a3", "heater", SeasonAction.END, "2026-06-12"))
+        val ended = vm.stateOnce("an END recorded") { it.row("heater")?.inSeason == false }
+        assertTrue(ended.row("heater")!!.outOfSeason)
+        assertTrue("the twin is still in season", ended.row("tub")!!.inSeason)
+        assertEquals("the condition stands", OperationalCondition.DOWN, ended.row("heater")!!.condition?.condition)
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // #116 (U2) — the empty state (plan U-C4; row u6): CONDITION_HIDDEN is decided last, and only
+    // when the Condition choice alone empties a list the other controls and the query fill.
+    // ------------------------------------------------------------------------------------------
+
+    /** Sets Type, the query and the Condition control, and reads the reason of the first built state showing all three. */
+    private suspend fun AssetsViewModel.reasonFor(type: String?, query: String, condition: OperationalCondition?): EmptyReason {
+        pickType(type)
+        onQueryChange(query)
+        pickCondition(condition)
+        return stateOnce("Type $type, \"$query\", Condition $condition") {
+            it.typeChoices.isNotEmpty() && it.filters == AssetFilters(type = type, condition = condition) && it.query == query
+        }.emptyReason
+    }
+
+    /**
+     * u6 (U-C4, U1's ruling 1): the other controls, Type and the query admit rows and the Condition choice alone
+     * removes every one — the list says so; a choice that leaves a row, or All, says nothing. A retired asset's DOWN
+     * row is no condition here (limit 2), so a DOWN choice over it alone reads condition-hidden too. The share picker
+     * decides it the same way, after its own drop.
+     */
+    @Test fun aConditionThatAloneEmptiesTheListSaysSo() = runTest {
+        conditionFleet()
+        val vm = factsModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        assertEquals("no HVAC root is DEGRADED", EmptyReason.CONDITION_HIDDEN, vm.reasonFor("hvac", "", OperationalCondition.DEGRADED))
+        assertEquals("the HVAC DOWN root is listed", EmptyReason.NONE, vm.reasonFor("hvac", "", OperationalCondition.DOWN))
+        assertEquals("All lists the HVAC roots", EmptyReason.NONE, vm.reasonFor("hvac", "", null))
+        assertEquals(
+            "one boiler OPERATIONAL, one retired",
+            EmptyReason.CONDITION_HIDDEN,
+            vm.reasonFor(null, "boiler", OperationalCondition.DOWN),
+        )
+        assertEquals(EmptyReason.NONE, vm.reasonFor(null, "boiler", OperationalCondition.OPERATIONAL))
+        assertEquals("the retired spare", EmptyReason.CONDITION_HIDDEN, vm.reasonFor(null, "spare", OperationalCondition.DOWN))
+        assertEquals(EmptyReason.NONE, vm.reasonFor(null, "spare", null))
+
+        val picker = factsModel(activeOnly = true)
+        backgroundScope.launch { picker.state.collect() }
+        assertEquals(EmptyReason.CONDITION_HIDDEN, picker.reasonFor("hvac", "", OperationalCondition.DEGRADED))
+        assertEquals(EmptyReason.NONE, picker.reasonFor("pump", "", OperationalCondition.DEGRADED))
+    }
+
+    /**
+     * u6 (U-C4): every shipped empty reason is re-derived unchanged with the Condition control at All and at each
+     * choice — the condition takes no part in them — so an archived-only match still names Archived, never the
+     * Condition control. Each case reads a list built over the stores as they then stand.
+     */
+    @Test fun theShippedEmptyReasonsStandWhateverTheCondition() = runTest {
+        val choices = listOf(null) + OperationalCondition.entries
+        suspend fun assertReason(expected: EmptyReason, type: String?, query: String) {
+            val vm = factsModel()
+            backgroundScope.launch { vm.state.collect() }
+            for (choice in choices) {
+                assertEquals("Type $type, \"$query\", Condition $choice", expected, vm.reasonFor(type, query, choice))
+            }
+        }
+
+        assertReason(EmptyReason.NO_ASSETS, type = null, query = "")
+        graph.assets.upsert(assetRow("old-pump", name = "Example Old Pump", status = AssetStatus.ARCHIVED).copy(category = "Pump"))
+        graph.conditions.insert(conditionRow("c-old-pump", "old-pump", OperationalCondition.DOWN, "2026-10-01"))
+        assertReason(EmptyReason.NO_ACTIVE_ASSETS, type = null, query = "")
+        graph.assets.upsert(assetRow("seal", name = "Example Pump Seal", parent = "old-pump").copy(category = "Pump"))
+        graph.conditions.insert(conditionRow("c-seal", "seal", OperationalCondition.DEGRADED, "2026-10-01"))
+        assertReason(EmptyReason.ONLY_COMPONENTS, type = null, query = "")
+
+        conditionFleet()
+        graph.assets.upsert(
+            assetRow("vent", name = "Example Backup Vent", parent = "heater", status = AssetStatus.ARCHIVED).copy(category = "HVAC"),
+        )
+        graph.conditions.insert(conditionRow("c-vent", "vent", OperationalCondition.DOWN, "2026-10-01"))
+        assertReason(EmptyReason.NOTHING_MATCHES, type = null, query = "zzz")
+        assertReason(EmptyReason.TYPE_HIDDEN, type = "pump", query = "heater")
+        assertReason(EmptyReason.COMPONENTS_HIDDEN, type = "hvac", query = "fan")
+        assertReason(EmptyReason.ARCHIVED_HIDDEN, type = null, query = "old heater")
+        assertReason(EmptyReason.BOTH_HIDDEN, type = null, query = "vent")
     }
 
     private companion object {

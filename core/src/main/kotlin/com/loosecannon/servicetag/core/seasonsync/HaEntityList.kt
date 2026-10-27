@@ -3,13 +3,31 @@ package com.loosecannon.servicetag.core.seasonsync
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * #105 — one Home Assistant entity as the setup sheet's browser lists it: its exact id, and the `friendly_name` Home
  * Assistant reported for it, or null when it reported none. Presentation only: the binding stores [entityId] and
- * nothing is ever inferred from [friendlyName].
+ * nothing is ever inferred from [friendlyName]. #113/#114 (C29b): [attributes] is a helper's shape, kept only for an
+ * `input_select` or `input_datetime` id and null for every other domain.
  */
-data class HaEntityCandidate(val entityId: String, val friendlyName: String?)
+data class HaEntityCandidate(
+    val entityId: String,
+    val friendlyName: String?,
+    val attributes: HelperAttributes? = null,
+)
+
+/**
+ * #113/#114 (C29b) — what a listed helper reports about its own shape, and nothing else: an `input_select`'s
+ * [options] (at most [MAX_LISTED_OPTIONS] strings, each bounded like an id; null when Home Assistant reported none,
+ * more, or anything but strings) or an `input_datetime`'s [hasDate] / [hasTime] (null when absent or not a JSON
+ * boolean). The other domain's members are always null. Never a state: a helper is listed for what it is.
+ */
+data class HelperAttributes(val options: List<String>?, val hasDate: Boolean?, val hasTime: Boolean?)
+
+/** #113/#114 (C29b) — the most options a listed dropdown may report; past it the list is `null`, never cut. */
+const val MAX_LISTED_OPTIONS = 64
 
 /** #105 — the answer to one foreground `GET /api/states`: the candidates, or a failure in the poll's own kinds. */
 sealed interface HaListOutcome {
@@ -54,14 +72,39 @@ fun mapHaStatesAnswer(answer: HaHttpAnswer): HaListOutcome {
         val id = entity.stringOrNull("entity_id") ?: continue
         if (id.length > MAX_HA_TEXT_LENGTH || !isValidEntityId(id)) continue
         if (!seen.add(id)) continue
-        val name = (entity["attributes"] as? JsonObject)
+        val attributes = entity["attributes"] as? JsonObject
+        val name = attributes
             ?.stringOrNull("friendly_name")
             ?.let { bounded(it, MAX_HA_NAME_LENGTH) }
             ?.takeIf { it.isNotBlank() }
-        entities += HaEntityCandidate(id, name)
+        entities += HaEntityCandidate(id, name, helperAttributesOf(id, attributes))
     }
     return HaListOutcome.Listed(entities)
 }
+
+/**
+ * #113/#114 (C29b) — a helper's shape for the two domains a publication writes, and null for every other id: an
+ * `input_select` keeps its options (C16's bounds, but never cut: more than [MAX_LISTED_OPTIONS], none, or anything
+ * but strings is null), an `input_datetime` its `has_date` / `has_time` JSON booleans. Exhaustive over the resolved
+ * [EntityScope], so a scope added later must say what shape it keeps (A4w review N3).
+ */
+private fun helperAttributesOf(id: String, attributes: JsonObject?): HelperAttributes? =
+    when (EntityScope.entries.firstOrNull { it.domain == id.substringBefore('.') }) {
+        EntityScope.INPUT_SELECTS -> HelperAttributes(attributes?.let(::listedOptionsOf), null, null)
+        EntityScope.INPUT_DATETIMES ->
+            HelperAttributes(null, attributes?.flagOrNull("has_date"), attributes?.flagOrNull("has_time"))
+        EntityScope.INPUT_BOOLEANS, null -> null
+    }
+
+private fun listedOptionsOf(attributes: JsonObject): List<String>? {
+    val array = attributes["options"] as? JsonArray ?: return null
+    if (array.isEmpty() || array.size > MAX_LISTED_OPTIONS) return null
+    return array.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.let(::bounded) ?: return null }
+}
+
+/** A JSON boolean member; null when absent or anything else (a string `"true"` included). */
+private fun JsonObject.flagOrNull(key: String): Boolean? =
+    (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
 
 /** One JSON array, or null for anything else: an object, a scalar, or text that does not parse. */
 private fun parseArray(body: ByteArray): JsonArray? = try {

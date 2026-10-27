@@ -67,9 +67,18 @@ the one body key it is about, then the `problems` in parentheses.
   `asset_id`, each keeps exactly the minimum it had. The minima are therefore 8 for every write, 11 for the warranty
   tools, 12 for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the
   supply tools and a linked line, 19 for the installed component tools, 20 for a supply item or installed
-  component owner on the five resource tools, and 21 for the season sync tool.
+  component owner on the five resource tools, 21 for the season sync tool and 22 for the #113/#114 tools.
 - **The season sync tool needs schema 21.** `get_season_sync` — a read — refuses an app whose `schemaVersion` is
   below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
+- **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
+  tools — refuses an app whose `schemaVersion` is below 22 the same way, from the same read, naming the feature
+  "season readiness and Home Assistant publishing". So do `set_schedule_role`, `list_ha_entities`,
+  `get_ha_publishing`, `list_ha_publishing`, `enable_ha_publishing`, `change_ha_publishing_target`,
+  `disable_ha_publishing`, `check_ha_publishing_helper`, `publish_ha_now` and `acknowledge_ha_decommission`, the
+  block's next ten.
+- **The schedule season tools need schema 22.** `get_schedule_season`, `link_schedule_season` and
+  `unlink_schedule_season` (#125) refuse an app whose `schemaVersion` is below 22 the same way, from the same read,
+  naming the feature "a schedule's own Home Assistant season".
 
 ## Using it
 
@@ -112,7 +121,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Ninety: `pair` plus one per API operation.
+One hundred and four: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -336,11 +345,83 @@ Linking, the modes, Sync now, stopping and the connection are the phone's alone;
 `start_season`, `end_season` and a `set_season_mode` change on that asset answer `SEASON_SYNC_ENABLED` (409).
 `docs/api/v1.md`'s **Home Assistant season sync (#16)** section is the contract.
 
+**Season readiness (#114; needs schema 22)** — `get_season_readiness`: `GET /v1/assets/{id}/season-readiness`, read
+only. Whether an asset is ready for its season — its Season Start schedule has a qualifying completion of this
+asset dated on or after the later of the role's commissioning boundary and the day its season last ended — with the
+reason when it is not, the role schedule, and the cutoff and who set it as two fields. Derived on the phone and
+stored nowhere: no tool takes a value, a date to publish or a ready flag. Every schedule row carries `role` and
+`roleSinceOn`, response only, which `update_schedule` never sends; every event carries the read-only `imported`
+marker; and `set_season_mode`, `update_asset`, `update_schedule` and `update_group` can answer
+`SEASON_START_STRANDED` (409) while a Season Start role would be stranded. `docs/api/v1.md`'s **Season readiness and
+the Season Start role (#114)** section is the contract.
+
+**The Season Start role (#114; needs schema 22)** — `set_schedule_role`: `POST /v1/schedules/{id}/role`, `role`
+`SEASON_START` with its commissioning boundary `since_on` (today when omitted), or `NONE`. A `QUICK` schedule takes
+the role only with `season_start_quick_elected=True`, the owner's explicit election that its one-tap completions
+count, asked again on every set; `update_schedule` takes the same flag for a role schedule's `FORM` to `QUICK` edit,
+and with it `True` needs schema 22 too (`APP_SCHEMA_TOO_OLD` before any read).
+Neither tool ever sends the flag by default. Refusals are `SEASON_START_REFUSED` (409, by reason) and
+`SEASON_START_DATE_INVALID` (422); the write is never re-sent on a dropped connection.
+
+**Home Assistant helper discovery (#113/#114; needs schema 22)** — `list_ha_entities`:
+`GET /v1/ha-connection/entities/{scope}`, read only, `scope` one of `input_boolean`, `input_select` and
+`input_datetime` (any other is refused before a request). The phone reads its saved Home Assistant connection afresh
+on every call, under the same network and token rules as its own Test connection, and answers each helper's id,
+friendly name and shape — a dropdown's `options`, a date helper's `hasDate` and `hasTime` — never a state, the
+address, the Wi-Fi name or the token. A two-minute read budget; `HA_PUBLISH_REFUSED` (`NO_CONNECTION`) and
+`HA_HELPER_READ_FAILED` (409) name what stopped it. `docs/api/v1.md`'s **Home Assistant helper discovery (#113,
+#114)** section is the contract.
+
+**Home Assistant publishing (#113/#114; needs schema 22)** — `get_ha_publishing`: `GET /v1/assets/{id}/ha-publishing`,
+read only. How an asset's two publications stand — its condition to a dropdown helper, its season service date (or
+`1970-01-01`) to a date helper — each with its derived `state`, the values it should hold, was written, was read
+back and last read, its last error, and its delivery flags; and the helpers it let go of that are still owed
+`1970-01-01`, `PENDING` or `UNDELIVERABLE`. Derived on the phone from its own records: nothing is read from Home
+Assistant, and the answer never carries the address, the Wi-Fi name, the token or an installation id.
+`list_ha_publishing`: `GET /v1/ha-publishing`, read only, no argument — every asset's publishing at once, as
+`{writesEnabled, bindings, decommissions}`, and the only read of an orphan obligation, one whose asset is gone, which
+`get_ha_publishing` cannot reach. When an asset publishes to Home Assistant, the writes that can move a published value
+(`record_condition`, `complete_schedule`, `update_event`, `delete_event`, `archive_schedule`, `end_season`,
+`set_season_mode`, `retire_asset`, `archive_asset`, `import_merge` and `replace_asset`) say so in their descriptions: the
+phone may set its helper within seconds of the write, while the Developer API screen is open.
+`enable_ha_publishing` and `change_ha_publishing_target` are the phone's Enable and Change target, in two steps.
+Called without `plan_id` and `confirm_destination`, each POSTs only the plan, `POST /v1/assets/{id}/ha-publishing-plan`:
+the phone reads the named helpers from Home Assistant (a two-minute read budget), writes nothing, and answers a
+`planId`, the helper's shape and, when it cannot be used, a `refusal`. Called again with `plan_id` and
+`confirm_destination` — exactly the plan's `entityId`, the destination the owner confirmed — each sends exactly
+`{kind, action, planId, confirmDestination}` to `POST /v1/assets/{id}/ha-publishing` and returns `{binding}`; with
+only one of the two, or another destination, nothing is sent, and neither tool ever fills the confirmation itself.
+A plan that no longer holds is `STALE_PLAN` (409), a missing confirmation `HA_PUBLISH_CONFIRMATION_REQUIRED` (422),
+and the rest `HA_PUBLISH_REFUSED` (409, by reason); the commit is never re-sent on a dropped connection.
+`disable_ha_publishing` and `check_ha_publishing_helper` act on the stored publication and send exactly `{kind,
+action}`: Disable reads nothing from Home Assistant and owes a date helper `1970-01-01`; Check helper reads the stored
+helpers afresh (a two-minute read budget) and never switches a publication on. `publish_ha_now` sends `{}` to `POST
+/v1/assets/{id}/ha-publishing/publish-now` and returns the phone's **202** — `{requestId, acceptedAt, bindings}` — before
+any Home Assistant call; poll `get_ha_publishing` until each covered binding's `request.progress` is `PUBLISHED`,
+`VERIFIED` or `FAILED`, at most ten minutes. `acknowledge_ha_decommission` records the owner's word that an
+`UNDELIVERABLE` helper was cleared in Home Assistant by hand, `POST /v1/ha-publishing/decommissions/{id}/acknowledge`
+with exactly `{decommissionId, acknowledgedClearedInHa: true}`: it sends nothing unless its
+`acknowledged_cleared_in_ha` argument is the caller's own `true`, and no tool infers, defaults or retries that
+attestation — an orphaned date helper may still permit a start in Home Assistant. None of the four is re-sent on a
+dropped connection. No tool takes a value, a date to publish or a ready flag.
+`docs/api/v1.md`'s **Home Assistant publishing (#113, #114)** section is the contract.
+
+**A schedule's own Home Assistant season (#125; needs schema 22)** — `get_schedule_season`,
+`link_schedule_season`, `unlink_schedule_season`, over `GET` and `POST /v1/schedules/{id}/season-sync`. On the phone a
+schedule may follow its own Home Assistant switch while its asset keeps its season; only that schedule's due date
+moves, and readiness and publishing never read it. `get_schedule_season` reads its `seasonSource` (`ASSET` or `OWN`),
+its phase today, the connection's settings, its link and its own season rows. `link_schedule_season` sends
+`{action: "LINK", entityId, confirmEntityId}` only when `confirm_entity_id` is the caller's own, exactly `entity_id`;
+`unlink_schedule_season` sends `{action: "UNLINK", confirmUnlink: true}` only when `confirm_unlink` is the caller's own
+`true`. Neither fills its confirmation, and neither is re-sent on a dropped connection. Follow only: Force, the asset's
+own link, the token, the connection and Forget stay the phone's alone. `docs/api/v1.md`'s **A schedule's own Home
+Assistant season (#125)** section is the contract.
+
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
-`IN_SERVICE_RESUME_CLAMPED`, `PRE_SERVICE`) and `policy_offset_days` — on `create_schedule` and
-`update_schedule`. Both keep 1.3's `season_behavior`, `season_reentry` and
+`IN_SERVICE_RESUME_CLAMPED`, `PRE_SERVICE`, and since #124 `IN_SERVICE_AFTER_OPENING_SERVICE`) and
+`policy_offset_days` — on `create_schedule` and `update_schedule`. Both keep 1.3's `season_behavior`, `season_reentry` and
 `season_reentry_offset_days` as **deprecated arguments**:
 
 - **A deprecated argument** makes the call send the API's **legacy form**: those keys only, exactly
@@ -364,6 +445,15 @@ new `policy_offset_days` or `clear_fields=["policy_offset_days"]` in the same ca
 alone is refused as `POLICY_OFFSET_INVALID`. A policy change is **not a rule change**: it clears no
 postponement and abandons no round. `PRE_SERVICE` needs a time rule and an asset with a calendar
 season or a maintenance break to count back from (`PRE_SERVICE_NEEDS_DATES`).
+
+**Counting from the Season Start service (#124).** `IN_SERVICE_AFTER_OPENING_SERVICE` (`policy_offset_days` 0–365,
+omitted 0) counts from the qualifying service date of the asset's Season Start service, the date
+`get_season_readiness` answers: in season with none yet the schedule waits with no date (`policyReason`
+`AWAITING_OPENING_SERVICE`), and a late service moves its date (`OPENING_SERVICE`); out of season it is
+`IN_SERVICE_AT_START`. The app refuses it as `SEASON_START_REFUSED` — `COUNTS_FROM_ITSELF` on the Season Start
+service itself, `YEAR_ROUND` on an asset in use all year, `NO_SEASON_START_SERVICE` when no live Season Start service
+covers the asset — and refuses clearing, archiving or ungrouping the role it counts from as `SEASON_START_STRANDED`
+(`HAS_DEPENDENT_SCHEDULES`). The server keeps no list of policies; the app validates every name.
 
 `update_schedule` and `archive_schedule` also take `unlink_health_subject=True`, the API's action
 flag: while a live health subject is driven by the schedule, an edit that takes away its time rule or
@@ -456,12 +546,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–20** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–21** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition, format 20 each attachment's and reference's `supplyItemId` and `installedComponentId` (a file or a link on a supply item or an installed component; no new table); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link), format 19 the installed components, each with its composition, format 20 each attachment's and reference's `supplyItemId` and `installedComponentId` (a file or a link on a supply item or an installed component; no new table), format 21 each schedule's Season Start `role` and `roleSinceOn` and each event's `imported` marker (#114; no new table — an incoming `SEASON_START` schedule that would give an asset a second live role conflicts as `SEASON_START_HELD_BY_A_LOCAL_ROW` or `SEASON_START_DUPLICATED_IN_ARCHIVE`, and, since #124, an incoming live schedule counting from the opening service whose asset no live Season Start service would cover as `SEASON_START_SERVICE_MISSING`); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -475,12 +565,12 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty-three**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty-four**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
 `categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`, `successions`, `supplyItems`,
-`assetSupplies`, `installedComponents`. A season activation, a condition and a case's timeline
-entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
+`assetSupplies`, `installedComponents`, `scheduleSeasonActivations`. A season activation (an asset's or a
+schedule's own), a condition and a case's timeline entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
 either: one returned, re-dated or relinked on one phone after the other received it conflicts, and an
 open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`. A
 transfer record (`OUT`, `IN` or `WITHDRAWN`) is an immutable fact too, and a merge never undoes a

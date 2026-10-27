@@ -41,8 +41,24 @@ SCHEDULE_LEGACY_KEYS: tuple[str, ...] = ("seasonBehavior", "seasonReentry", "sea
 """1.3's three season fields, still accepted as deprecated inputs — never in a body beside
 `servicePolicy`/`policyOffsetDays`."""
 
-SCHEDULE_ACTION_FLAGS: tuple[str, ...] = ("unlinkHealthSubject",)
-"""Actions, not fields: no row carries one."""
+SCHEDULE_ACTION_FLAGS: tuple[str, ...] = ("unlinkHealthSubject", "seasonStartQuickElected")
+"""Actions, not fields: no row carries one. #114's QUICK election is the PATCH's only; the archive takes the first."""
+
+SCHEDULE_ROLE_KEYS: tuple[str, ...] = ("role", "sinceOn", "seasonStartQuickElected")
+"""#114 (C29b): the Season Start role's own command, `POST /v1/schedules/{id}/role`."""
+
+HA_PUBLISHING_PLAN_KEYS: tuple[str, ...] = ("kind", "action", "entityId", "boundaryEntityId")
+"""#113/#114 (C35b): the publishing plan, `POST /v1/assets/{id}/ha-publishing-plan`."""
+
+HA_PUBLISHING_ACTION_KEYS: tuple[str, ...] = ("kind", "action", "planId", "confirmDestination")
+"""#113/#114 (C35b): a publishing control, `POST /v1/assets/{id}/ha-publishing`."""
+
+HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS: tuple[str, ...] = ("decommissionId", "acknowledgedClearedInHa")
+"""#114 (C35b, O-21(b)): the tombstone acknowledgement, `POST /v1/ha-publishing/decommissions/{id}/acknowledge`."""
+
+SCHEDULE_SEASON_KEYS: tuple[str, ...] = ("action", "entityId", "confirmEntityId", "confirmUnlink")
+"""#125 (U-C7): a schedule's own season, `POST /v1/schedules/{id}/season-sync` — a `LINK` sends the first three, an
+`UNLINK` the first and the last."""
 
 SCHEDULE_ROW_TO_COMMAND: Mapping[str, str] = MappingProxyType(
     {"assetId": "targetAssetId", "groupId": "targetGroupId"}
@@ -99,7 +115,7 @@ season pair, which the replacement fills or ignores — each is a 400 there."""
 
 
 def vendored() -> dict[str, dict[str, Any]]:
-    """The ten entries in the golden file's own shape, for the equality test."""
+    """The fifteen entries in the golden file's own shape, for the equality test."""
     return {
         "asset": {"keys": list(ASSET_KEYS)},
         "schedule": {
@@ -116,4 +132,9 @@ def vendored() -> dict[str, dict[str, Any]]:
         "materialize": {"keys": list(MATERIALIZE_KEYS)},
         "replaceDraft": {"keys": list(REPLACE_DRAFT_KEYS)},
         "replaceSuccessor": {"keys": list(REPLACE_SUCCESSOR_KEYS)},
+        "scheduleRole": {"keys": list(SCHEDULE_ROLE_KEYS)},
+        "haPublishingPlan": {"keys": list(HA_PUBLISHING_PLAN_KEYS)},
+        "haPublishingAction": {"keys": list(HA_PUBLISHING_ACTION_KEYS)},
+        "haPublishingAcknowledgement": {"keys": list(HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS)},
+        "scheduleSeason": {"keys": list(SCHEDULE_SEASON_KEYS)},
     }

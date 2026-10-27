@@ -218,6 +218,14 @@
     <string name="assets_only_child_assets">Only child assets here. Turn on Child assets to see them.</string>
     <!-- P73-10: the search has matches, all of another type; names the Type chip and its All row. -->
     <string name="assets_type_hidden">Matching assets have another type. Set Type to All.</string>
+    <!-- P116-1: the Home Assistant mark's accessible name on an Assets row: an enabled Home Assistant binding of either direction names the asset. -->
+    <string name="assets_ha_linked">Linked to Home Assistant</string>
+    <!-- P116-2: every match is hidden by the Condition chip alone; names that chip (assets_filter_condition) and its All row. -->
+    <string name="assets_condition_hidden">Matching assets have another condition. Set Condition to All.</string>
+    <!-- P116-3: the in-season mark's accessible name on an Assets row: a seasonal asset in its operating season today. -->
+    <string name="assets_in_season">In season</string>
+    <!-- P116-4: the Condition filter chip's label while it is All, and its accessible name always. -->
+    <string name="assets_filter_condition">Condition</string>
 
     <!-- P73-11: the search box's placeholder and its accessible name. -->
     <string name="assets_search_hint">Search assets</string>

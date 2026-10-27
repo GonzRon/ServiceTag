@@ -108,10 +108,10 @@ class BackupFormat19Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(20, decoded.manifest.formatVersion)
+        assertEquals(21, decoded.manifest.formatVersion)
         assertEquals(rows, decoded.data.installedComponents.map { it.toDomain() })
         val tree = dataTreeOf(bytes)
-        assertEquals("installedComponents", tree.keys.last(), "the list closes data.json")
+        assertEquals("installedComponents", tree.keys.toList().dropLast(1).last(), "the list closes data.json but for format 21's")
         val bare = tree.getValue("installedComponents").jsonArray.map { it.jsonObject }.single { it.getValue("id").jsonPrimitive.content == "c7" }
         assertEquals(InstalledComponentDto.serializer().descriptor.names, bare.keys.toList(), "every key is written")
         for (key in listOf("parentId", "supplyId", "installedOn", "removedOn", "replacesId")) {
@@ -140,7 +140,7 @@ class BackupFormat19Test {
             assertTrue((0 until descriptor.elementsCount).none { descriptor.isElementOptional(it) }, "${descriptor.serialName} has no default")
         }
         val backup = BackupData.serializer().descriptor
-        assertEquals("installedComponents", backup.names.last())
+        assertEquals("installedComponents", backup.names.toList().dropLast(1).last())
         assertTrue(backup.isElementOptional(backup.elementsCount - 1), "an older archive decodes with none")
     }
 
@@ -365,7 +365,7 @@ class BackupFormat19Test {
 
         assertEquals(7, counts["installedComponents"])
         assertEquals(4, counts["compositionEntries"])
-        assertEquals(31, counts.size)
+        assertEquals(32, counts.size)
         val none = BackupCodec.decode(archiveOf(data(emptyList()))).manifest.counts
         assertEquals(listOf(0, 0), listOf("installedComponents", "compositionEntries").map { none[it] }, "present at zero")
     }
@@ -374,13 +374,13 @@ class BackupFormat19Test {
 
     /** One format past this build's, over a tree no format could read: refused as newer before a row is parsed. */
     @Test
-    fun aFormat21ArchiveIsRefusedAsNewer() {
+    fun aFormat22ArchiveIsRefusedAsNewer() {
         val unreadable = dataTreeOf(archiveOf(data())).editRows("installedComponents") { it.with("name", JsonNull) }
-        val bytes = sealed(unreadable, formatVersion = 21)
+        val bytes = sealed(unreadable, formatVersion = 22)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
 
-        assertEquals(21, refusal.found)
-        assertEquals(20, refusal.supported)
+        assertEquals(22, refusal.found)
+        assertEquals(21, refusal.supported)
     }
 }

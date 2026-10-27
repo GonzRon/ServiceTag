@@ -100,7 +100,7 @@ internal class ApiRouter(
     internal fun downloadInFlight(): Job? = download.current()
 
     /**
-     * The whole surface. Eighty-two path shapes over one hundred and two method-and-path rows; anything
+     * The whole surface. Eighty-three path shapes over one hundred and three method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -192,6 +192,38 @@ internal class ApiRouter(
      * Assistant season sync, read only (R16-9): the binding's non-secret state and status and the connection's
      * settings, never its address or token. **No route writes season sync**: linking, the mode, Sync now, stopping,
      * resuming and the connection itself are the phone's alone, so every other verb on the shape is a 404.
+     *
+     * #114 added one row over one shape: the twenty-ninth `/v1/assets/{id}/…` sub-resource, the asset's season
+     * readiness, read only (C29): C9's answer, derived when it is read and stored nowhere. **No route writes readiness**:
+     * nothing takes a value, a date to publish or READY (G17), so every other verb on the shape is a 404.
+     *
+     * #114 added a write and #113/#114 a read (C29b): `POST /v1/schedules/{id}/role`, the Season Start role through
+     * `SetScheduleRole` (another verb on it is a 404, as on every schedule sub-resource), and `GET
+     * /v1/ha-connection/entities/{scope}`, helper discovery over the shipped #105 read, one shape per scope —
+     * `input_boolean`, `input_select` or `input_datetime`; any other scope is a 404, another verb a 405. Neither takes
+     * a value, a date to publish or READY, and neither reaches the token, the address or the connection's save.
+     *
+     * #113/#114 (C35a) added `GET /v1/ha-publishing`, the publishing collection and the only read of an orphan
+     * tombstone: no asset sub-resource, so another verb on it is a 405. It writes nothing and returns no address,
+     * Wi-Fi name, token or installation id.
+     *
+     * #113/#114 (C35b, O-21) added two rows: the thirty-first `/v1/assets/{id}/…` sub-resource, `POST
+     * …/ha-publishing-plan`, which reads the named helpers from Home Assistant and writes nothing, and `POST
+     * …/ha-publishing`, the publishing controls, Enable and Change target committing that plan through
+     * `PublishControls` with the caller's `planId` and confirmed destination. Another verb on either is a 404, as on
+     * every asset sub-resource. Neither takes a value, a date to publish or READY, nor reaches the token, the address,
+     * the connection's save or Forget.
+     *
+     * #113/#114 (C35b, B5w2) widened the controls to Disable and Check helper and added two rows: the thirty-second
+     * `/v1/assets/{id}/…` sub-resource, `POST …/ha-publishing/publish-now`, which answers 202 before any Home Assistant
+     * call (another verb on it a 404, as on every asset sub-resource), and `POST
+     * /v1/ha-publishing/decommissions/{id}/acknowledge`, the owner's attestation that an undeliverable obligation was
+     * cleared in Home Assistant, a 405 for any other verb. Neither takes a value, a date to publish or READY.
+     *
+     * #125 (U-C7) added one shape, `/v1/schedules/{id}/season-sync`: `GET` reads a schedule's own Home Assistant season
+     * and `POST` links or unlinks it (Follow only, each with the caller's own confirmation); unlike the other schedule
+     * sub-resources, another verb on it is a 405. It never reaches the asset's link, Force, the token, the connection's
+     * save or Forget.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -270,8 +302,28 @@ internal class ApiRouter(
                 "installed-components" to "GET" -> handlers.installedComponents.listForAsset(rest[1])
                 // #16 — the twenty-eighth: the asset's Home Assistant season sync, its non-secret state, read only.
                 "season-sync" to "GET" -> handlers.seasonHealth.getSeasonSync(rest[1])
+                // #114 — the twenty-ninth: the asset's season readiness, derived for today, read only.
+                "season-readiness" to "GET" -> handlers.seasonHealth.getSeasonReadiness(rest[1])
+                // #113/#114 (C35) — the thirtieth: the asset's Home Assistant publishing and its obligations, read only.
+                "ha-publishing" to "GET" ->
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).get(rest[1])
+                // #113/#114 (C35b) — the thirty-first: the publishing plan, which reads Home Assistant and writes
+                // nothing; and the controls on the thirtieth's path, each committing a held plan.
+                "ha-publishing-plan" to "POST" ->
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).plan(rest[1], request)
+                "ha-publishing" to "POST" ->
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).act(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
+
+            // #113/#114 (C35b) — the thirty-second: Publish now, accepted at once (202) and never awaited; an asset
+            // sub-resource, so another verb is a 404.
+            rest.size == 4 && rest[0] == "assets" && rest[2] == "ha-publishing" && rest[3] == "publish-now" ->
+                if (method == "POST") {
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).publishNow(rest[1], request)
+                } else {
+                    throw ApiFailure.notFound(request.path)
+                }
 
             rest == listOf("groups") -> when (method) {
                 "GET" -> handlers.maintenance.listGroups()
@@ -381,6 +433,14 @@ internal class ApiRouter(
                 else -> notAllowed(request)
             }
 
+            // #125 (U-C7): a schedule's own Home Assistant season, read, linked and unlinked. Unlike the sub-resources
+            // below, another verb on it is a 405 (the asset season sync's precedent).
+            rest.size == 3 && rest[0] == "schedules" && rest[2] == "season-sync" -> when (method) {
+                "GET" -> (handlers.scheduleSeason ?: throw ApiFailure.notFound(request.path)).get(rest[1])
+                "POST" -> (handlers.scheduleSeason ?: throw ApiFailure.notFound(request.path)).act(rest[1], request)
+                else -> notAllowed(request)
+            }
+
             rest.size == 3 && rest[0] == "schedules" -> when (rest[2] to method) {
                 "pause" to "POST" -> handlers.maintenance.pauseSchedule(rest[1], request)
                 "archive" to "POST" -> handlers.maintenance.archiveSchedule(rest[1], request)
@@ -388,6 +448,8 @@ internal class ApiRouter(
                 "complete" to "POST" -> handlers.maintenance.completeSchedule(rest[1], request)
                 "close-round" to "POST" -> handlers.maintenance.closeRound(rest[1], request)
                 "closures" to "GET" -> handlers.maintenance.listClosures(rest[1])
+                // #114 (C29b): the Season Start role, set or cleared through `SetScheduleRole`.
+                "role" to "POST" -> handlers.maintenance.setScheduleRole(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -488,11 +550,36 @@ internal class ApiRouter(
             rest == listOf("attention") ->
                 if (method == "GET") handlers.seasonHealth.listAttention() else notAllowed(request)
 
+            // #113/#114 (C35a) — the publishing collection, the only read of an orphan tombstone: `GET` alone, a 405 for
+            // any other verb, and no asset sub-resource.
+            rest == listOf("ha-publishing") ->
+                if (method == "GET") {
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).list()
+                } else {
+                    notAllowed(request)
+                }
+
+            // #113/#114 (C35b, O-21(b)) — the acknowledgement of an undeliverable obligation, on the caller's own
+            // attestation: `POST` alone, a 405 for any other verb.
+            rest.size == 4 && rest[0] == "ha-publishing" && rest[1] == "decommissions" && rest[3] == "acknowledge" ->
+                if (method == "POST") {
+                    (handlers.haPublishing ?: throw ApiFailure.notFound(request.path)).acknowledge(rest[2], request)
+                } else {
+                    notAllowed(request)
+                }
+
             rest == listOf("import-merge", "plan") ->
                 if (method == "POST") handlers.importMergePlan(request) else notAllowed(request)
 
             rest == listOf("import-merge", "apply") ->
                 if (method == "POST") handlers.importMergeApply(request) else notAllowed(request)
+
+            // #113/#114 (C29b) — helper discovery, one shape per scope: an unknown scope is no shape at all (404), a
+            // known one a 405 for any verb but `GET`. The scope is a path segment, since the framing drops queries.
+            rest.size == 3 && rest[0] == "ha-connection" && rest[1] == "entities" -> {
+                val scope = HaEntityHandlers.scopeOf(rest[2]) ?: throw ApiFailure.notFound(request.path)
+                if (method == "GET") handlers.haEntities.listEntities(scope) else notAllowed(request)
+            }
 
             // 1.4.1 (#80) — the provider repair. Top-level, so no `/v1/schedules/{id}` segment can
             // ever read `repairs` as an id; the plan writes nothing, the apply re-plans inside its

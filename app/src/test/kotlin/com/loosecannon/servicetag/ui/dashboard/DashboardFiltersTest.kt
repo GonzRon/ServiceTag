@@ -63,6 +63,22 @@ class DashboardFiltersTest {
     }
 
     /**
+     * #124 (C43; the controller's ruling on N3 review M1): a waiting row — `INACTIVE_SEASON` for `AWAITING_OPENING_SERVICE`,
+     * drawn "Waiting" under CURRENT — stays under the OUT OF SEASON status filter, which selects its status, since no
+     * other status filter would find it; no other status admits it, and no filter at all does.
+     */
+    @Test fun aWaitingRowStaysUnderTheOutOfSeasonStatusFilter() {
+        val waiting = schedule("waiting", AttentionSection.CURRENT, DueStatus.INACTIVE_SEASON)
+            .copy(policyReason = PolicyReason.AWAITING_OPENING_SERVICE)
+
+        assertTrue(DashboardFilters(status = DueStatus.INACTIVE_SEASON).admits(waiting))
+        FILTERABLE_STATUSES.filter { it != DueStatus.INACTIVE_SEASON }.forEach { other ->
+            assertFalse(other.name, DashboardFilters(status = other).admits(waiting))
+        }
+        assertTrue(DashboardFilters().admits(waiting))
+    }
+
+    /**
      * The four chips are the ratified words S12, S10, S8 and S26 and nothing else, in spec §10.2's
      * order: worst first.
      */

@@ -13,4 +13,9 @@
         <item quantity="one">Entro il periodo di tolleranza di %1$d giorno</item>
         <item quantity="other">Entro il periodo di tolleranza di %1$d giorni</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="one">%1$d aiutante data in Home Assistant contiene ancora una data di inizio stagione. Scollegando, viene prima impostato su %2$s se possibile; altrimenti mantiene la sua data finché non lo cancelli in Home Assistant.</item>
+        <item quantity="many">%1$d aiutanti data in Home Assistant contengono ancora una data di inizio stagione. Scollegando, vengono prima impostati su %2$s dove possibile; quelli non raggiungibili mantengono la loro data finché non li cancelli in Home Assistant.</item>
+        <item quantity="other">%1$d aiutanti data in Home Assistant contengono ancora una data di inizio stagione. Scollegando, vengono prima impostati su %2$s dove possibile; quelli non raggiungibili mantengono la loro data finché non li cancelli in Home Assistant.</item>
+    </plurals>
 </resources>

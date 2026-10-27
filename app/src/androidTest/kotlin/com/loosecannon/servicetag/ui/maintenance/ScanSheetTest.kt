@@ -633,10 +633,11 @@ class ScanSheetTest {
     }
 
     /**
-     * The carry-forward from B06: a completion dated **after today** is never offered "Mark
-     * operational?" — accepting would be `CONDITION_DATE_IN_FUTURE` — so the sheet simply finishes.
+     * O-16 as amended (C39): a completion dated **after today** is refused, so the dialog holds it
+     * with S25 under the date field and "Save" disabled, and nothing is written. Cancelling leaves
+     * the sheet with no event and no condition change, and "Mark operational?" is never offered.
      */
-    @Test fun aCompletionDatedAfterTodayOffersNothing() {
+    @Test fun aCompletionDatedAfterTodayIsHeldWithS25() {
         val graph = app.graph
         val (assetId, tagId) = seedDueWork(graph)
         record(graph, AssetId(assetId), OperationalCondition.DOWN, LocalDate.now().minusDays(2))
@@ -644,14 +645,11 @@ class ScanSheetTest {
 
         completeTheDueRow(LocalDate.now().plusDays(1))
 
-        // Either the offer comes up, or the sheet finishes and the done row leaves it.
-        rule.waitUntil(TIMEOUT_MS) {
-            rule.onAllNodesWithText("Mark operational?").fetchSemanticsNodes().isNotEmpty() ||
-                rule.onAllNodesWithText("Blade sharpen").fetchSemanticsNodes().isEmpty()
-        }
+        rule.awaitText("The date cannot be later than today.")
+        rule.onNodeWithText("Save").assertIsNotEnabled()
+        rule.onNodeWithText("Cancel").performClick()
         rule.onAllNodesWithText("Mark operational?").assertCountEquals(0)
-        val event = runBlocking { graph.events.all().single() }
-        assertEquals(LocalDate.now().plusDays(1).toString(), event.occurredOn)
+        assertEquals(0, runBlocking { graph.events.all().size })
         assertEquals(1, conditionRows(graph))
     }
 

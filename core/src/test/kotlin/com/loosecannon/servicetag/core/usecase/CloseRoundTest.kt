@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
@@ -81,7 +82,7 @@ class CloseRoundTest {
         RecomputeSchedules(
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
-    private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    private val saveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, InMemoryTransferRecordRepository())
     private val saveSchedule =
         SaveSchedule(
             countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute,
@@ -90,6 +91,7 @@ class CloseRoundTest {
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val completeMembers = CompleteGroupMembers(
         countedSchedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
+        todayPort,
     )
     private val closeRound =
         CloseRound(countedSchedules, closures, uow, ids, clock, todayPort, recompute)

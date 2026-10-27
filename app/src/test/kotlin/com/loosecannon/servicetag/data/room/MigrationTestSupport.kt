@@ -66,7 +66,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
         MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-        MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
+        MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22,
     )
     .build()
 
@@ -236,6 +236,33 @@ internal val V19_TABLES = setOf("installed_component", "installed_component_comp
 
 /** The two tables schema v21 added (#16): device-local, never exported, merged or packed. */
 internal val V21_TABLES = setOf("ha_connection", "season_sync_binding")
+
+/**
+ * The four columns schema v22 appends, by table (#113/#114, C4.1), each with its default and never backfilled: the role pair on
+ * `maintenance_schedule`, `asset_event.imported` and `ha_connection.config_generation`. `Migration21To22Test` owns
+ * them; an older step's test, whose chain runs on to v22, sets them aside.
+ */
+internal val V22_COLUMNS_BY_TABLE = mapOf(
+    "maintenance_schedule" to setOf("role", "role_since_on", "season_source"),
+    "asset_event" to setOf("imported"),
+    "ha_connection" to setOf("config_generation"),
+)
+
+/**
+ * The v22 columns of one table, and no other table's: `asset_supply` has a `role` of its own, which an older step's
+ * row-survival check must keep comparing.
+ */
+internal fun v22ColumnsOf(table: String): Set<String> = V22_COLUMNS_BY_TABLE[table].orEmpty()
+
+/**
+ * The five tables schema v22 added: #113/#114's three publishing tables (device-local, never exported, merged or
+ * packed), and #125's two — a schedule's own season history, which travels, and its device-local binding, which does
+ * not.
+ */
+internal val V22_TABLES = setOf(
+    "ha_publish_binding", "ha_publish_delivery", "ha_publish_decommission",
+    "schedule_season_activation", "schedule_season_sync_binding",
+)
 
 /** The two material-line tables schema v18 appends a column to (#15). */
 internal val V18_LINE_TABLES = setOf("profile_consumable", "consumable_usage")

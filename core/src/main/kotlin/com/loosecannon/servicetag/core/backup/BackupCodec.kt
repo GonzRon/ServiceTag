@@ -13,6 +13,9 @@ import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.ReferenceOwner
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SuccessionProblem
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.isCode
@@ -181,6 +184,23 @@ import kotlinx.serialization.json.JsonObject
  * refuses a row naming none or more than one. A SupplyItem's file names a SupplyItem in the file, archived included,
  * and an installed component's file a component in the file, current or removed (#69, C5).
  *
+ * **Format 21 (#114, C18) adds three keys to two rows, and no list, table, count key or upgrade.** Every
+ * `maintenanceSchedules[]` row appends `role` (a `ScheduleRole` name) and `roleSinceOn` (its commissioning boundary,
+ * an ISO date exactly when the role is `SEASON_START`, R1), and every `assetEvents[]` row appends `imported` (a
+ * Transfer Pack import inserted it, B), all written as explicit values and defaulting to `NONE`, null and false, so a
+ * format ≤20 archive decodes through the same strict decode with no role and no marker; `LAST_LEGACY_FORMAT` stays 7.
+ * No shipped writer put a role or a marker into a format ≤20 archive, so a non-`NONE` role, a boundary or a `true`
+ * marker there is a hand-built file and is refused naming the list and the row ([FIRST_SCHEDULE_ROLE_FORMAT]). An
+ * unknown role name, and a row breaking R1, are refused at decode. The merge's rule for an older archive and for a
+ * Transfer Pack's rows is the planner's (C19, C20). The manifest gains no key: no installation identifier travels.
+ * #124 (C42): format 21 also carries `servicePolicy` `IN_SERVICE_AFTER_OPENING_SERVICE` by its name, a value no format
+ * ≤20 writer knew, so a format ≤20 archive carrying it is refused the same way.
+ * #125 (U-C6): format 21 also appends `seasonSource` to every `maintenanceSchedules[]` row (a `ScheduleSeasonSource`
+ * name, explicit, defaulting to `ASSET`) and adds one list, `scheduleSeasonActivations` — a schedule's own season rows,
+ * each naming a schedule in the file — with its manifest count key. An `OWN` source or a row in a format ≤20 archive
+ * was built by hand and is refused the same way; a group's schedule carrying `OWN` is refused at decode. The schedule's
+ * Home Assistant binding is device-local and in no archive, so an imported `OWN` schedule arrives stranded.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -188,7 +208,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 20
+    const val FORMAT_VERSION = 21
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -245,6 +265,12 @@ object BackupCodec {
      * an archive below it that carries one was built by hand.
      */
     internal const val FIRST_RESOURCE_OWNER_FORMAT = 20
+
+    /**
+     * The first format that can carry a schedule's Season Start role or an event's Transfer Pack marker (#114). Internal
+     * for the same reason as [FIRST_ROLE_FORMAT]: an older archive's schedules are compared without the role.
+     */
+    internal const val FIRST_SCHEDULE_ROLE_FORMAT = 21
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -327,6 +353,8 @@ object BackupCodec {
             installedComponents = data.installedComponents.sortedBy { it.id }.map { row ->
                 row.copy(composition = row.composition.sortedWith(compareBy({ it.sortOrder }, { it.id })))
             },
+            // Format 21 (#125): one immutable row per own-season change.
+            scheduleSeasonActivations = data.scheduleSeasonActivations.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -369,6 +397,7 @@ object BackupCodec {
                 "assetSupplies" to sorted.assetSupplies.size,
                 "installedComponents" to sorted.installedComponents.size,
                 "compositionEntries" to sorted.installedComponents.sumOf { it.composition.size },
+                "scheduleSeasonActivations" to sorted.scheduleSeasonActivations.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -486,6 +515,46 @@ object BackupCodec {
             }
         }
 
+        // #114 (C18), the same rule for a schedule's role and an event's Transfer Pack marker: the keys did not exist
+        // before format 21, so a role, a boundary or a `true` marker in an older archive was put there by hand. The
+        // explicit defaults are accepted.
+        if (manifest.formatVersion < FIRST_SCHEDULE_ROLE_FORMAT) {
+            data.maintenanceSchedules.firstOrNull { it.role != ScheduleRole.NONE.name || it.roleSinceOn != null }?.let { held ->
+                throw BackupCorrupt(
+                    "maintenanceSchedules: a format ${manifest.formatVersion} archive cannot carry a schedule role " +
+                        "(schedule ${held.id})",
+                )
+            }
+            // #124 (C42): so is a schedule counting from the opening service, which only a format-21 writer can know.
+            data.maintenanceSchedules
+                .firstOrNull { it.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE.name }
+                ?.let { counting ->
+                    throw BackupCorrupt(
+                        "maintenanceSchedules: a format ${manifest.formatVersion} archive cannot carry a schedule " +
+                            "counting from the opening service (schedule ${counting.id})",
+                    )
+                }
+            data.assetEvents.firstOrNull { it.imported }?.let { marked ->
+                throw BackupCorrupt(
+                    "assetEvents: a format ${manifest.formatVersion} archive cannot carry an imported marker " +
+                        "(event ${marked.id})",
+                )
+            }
+            // #125 (U-C6): so is a schedule's own season — its source and its rows — which only a format-21 writer knew.
+            data.maintenanceSchedules.firstOrNull { it.seasonSource != ScheduleSeasonSource.ASSET.name }?.let { own ->
+                throw BackupCorrupt(
+                    "maintenanceSchedules: a format ${manifest.formatVersion} archive cannot carry a schedule's own " +
+                        "season (schedule ${own.id})",
+                )
+            }
+            if (data.scheduleSeasonActivations.isNotEmpty()) {
+                throw BackupCorrupt(
+                    "scheduleSeasonActivations: a format ${manifest.formatVersion} archive cannot carry a schedule's " +
+                        "own season rows",
+                )
+            }
+        }
+
         // #79, the same rule for the warranty reminder's lead: the key did not exist before format 11,
         // so a non-null one in an older archive was put there by hand. An explicit null is accepted.
         if (manifest.formatVersion < FIRST_LEAD_FORMAT) {
@@ -583,6 +652,7 @@ object BackupCodec {
         data.supplyItems.forEach { it.toDomain() }
         data.assetSupplies.forEach { it.toDomain() }
         data.installedComponents.forEach { it.toDomain() }
+        data.scheduleSeasonActivations.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -598,7 +668,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 20 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 21 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -830,6 +900,17 @@ object BackupCodec {
                 throw BackupCorrupt(
                     "occurrenceClosures: closure ${closure.id} points at schedule " +
                         "${closure.scheduleId}, which is not in maintenanceSchedules",
+                )
+            }
+        }
+
+        // #125 (U-C6): a schedule's own season row is its schedule's, a real foreign key, as a closure is.
+        uniqueIds("scheduleSeasonActivations", data.scheduleSeasonActivations.map { it.id })
+        data.scheduleSeasonActivations.forEach { row ->
+            if (row.scheduleId !in scheduleIds) {
+                throw BackupCorrupt(
+                    "scheduleSeasonActivations: row ${row.id} points at schedule " +
+                        "${row.scheduleId}, which is not in maintenanceSchedules",
                 )
             }
         }

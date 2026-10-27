@@ -2,7 +2,7 @@
 
 ServiceTag is intentionally useful on one Android phone with no account and no backend. The phone remains the source of truth for the released local product.
 
-This document explains that boundary and the Android capabilities ServiceTag asks for. For the complete Home Assistant workflow, see [Home Assistant season sync](home-assistant-season-sync.md).
+This document explains that boundary and the Android capabilities ServiceTag asks for. For the complete Home Assistant workflow, see [Home Assistant: season sync and publishing](home-assistant-season-sync.md).
 
 ## Local-first design
 
@@ -28,10 +28,13 @@ See [NFC tag privacy and how passive tags work](nfc-privacy.md).
 
 ## Network use
 
-ServiceTag does not require routine cloud connectivity. The released app has two intentional outbound network workflows:
+ServiceTag does not require routine cloud connectivity. The app has three intentional outbound network workflows:
 
 1. **Save as document** — an explicit HTTPS download of a reference when the owner asks ServiceTag to materialize it as a managed attachment.
 2. **Home Assistant season sync** — authenticated reads from the Home Assistant address configured by the owner.
+3. **Home Assistant publishing** — only for an Asset whose publication the owner turned on: one of two allowlisted helper changes (`input_select.select_option` for the equipment status, `input_datetime.set_datetime` for the Season Start date) to the one helper the owner chose, at the same address with the same token and network rule, each read back. ServiceTag reports facts; Home Assistant's own automations decide what to do with them.
+
+With no publishing turned on, ServiceTag only reads from Home Assistant. Publishing writes current state, when the phone can: it is not instant, a phone that is off or away from its permitted network sends nothing, and a value Home Assistant accepted cannot be called back. See [Home Assistant: season sync and publishing](home-assistant-season-sync.md).
 
 The Developer API is loopback-only, but Android still gates socket creation behind the INTERNET permission.
 
@@ -39,7 +42,7 @@ ServiceTag does not send the Home Assistant token, selected home Wi-Fi name, or 
 
 ## Home Assistant credential and network boundary
 
-The Home Assistant access token is kept on the phone using a Keystore-backed secret store and is excluded from ServiceTag backup/export/merge/Transfer Pack data.
+The Home Assistant access token is kept on the phone using a Keystore-backed secret store and is excluded from ServiceTag backup/export/merge/Transfer Pack data. Home Assistant has no token that can only read, so the same token carries the publishing writes; the owner gives the token's user only the rights it needs. The connection, the links and the publications are device-local: a copy of the app restored from Android's backup publishes nothing until the owner turns publishing on again there.
 
 For network selection:
 
@@ -69,7 +72,8 @@ Install-time permission used for:
 
 - the loopback Developer API;
 - explicit **Save as document** HTTPS downloads;
-- Home Assistant Test connection and season-state reads.
+- Home Assistant Test connection and season-state reads;
+- Home Assistant publishing to the helpers the owner enabled, and reading them back.
 
 There is no ordinary Android runtime prompt for INTERNET. Hardened Android variants may expose additional user controls; affected ServiceTag screens explain when network access is unavailable.
 

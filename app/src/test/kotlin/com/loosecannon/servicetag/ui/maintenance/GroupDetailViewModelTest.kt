@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
@@ -23,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -393,6 +396,79 @@ class GroupDetailViewModelTest {
         assertEquals(eventsBefore, graph.events.all().size)
         assertEquals(assetsBefore, graph.assets.all().size)
         assertTrue("no asset here has a parent set by this screen", graph.assets.all().all { it.parentAssetId == null })
+    }
+
+    /**
+     * #114 (A2 re-review, HIGH): a restore the Season Start rule refuses is said, never thrown out of the screen's scope,
+     * which crashed the app. An ineligible member's sentence sits inside P114-21 (here P114-17); an asset another role
+     * already covers is P114-20, naming that other role. Nothing is restored.
+     */
+    @Test fun aRefusedRestoreSaysWhyAndTheGroupStaysArchived() = runTest {
+        val pump = asset("Example Pump")
+        val heater = graph.createAsset.run(
+            AssetCommand(name = "Example Heater", category = "Heating", seasonStartMmdd = "10-01", seasonEndMmdd = "04-30"),
+        )
+        val archivedAt = dayMillis("2026-04-01")
+        graph.groups.upsert(
+            groupOf("g-pump", "Pump run", archivedAt = archivedAt, members = listOf(Triple(pump.id.value, "2026-01-01", null))),
+        )
+        graph.groups.upsert(
+            groupOf("g-heater", "Heater run", archivedAt = archivedAt, members = listOf(Triple(heater.id.value, "2026-01-01", null))),
+        )
+        fun role(schedule: MaintenanceSchedule) = schedule.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01")
+        graph.schedules.upsert(role(scheduleOf("s-pump-run", assetId = null, groupId = "g-pump", title = "Pre-season check")))
+        graph.schedules.upsert(role(scheduleOf("s-heater-run", assetId = null, groupId = "g-heater", title = "Pre-season check")))
+        graph.schedules.upsert(role(scheduleOf("s-heater", assetId = heater.id.value, title = "Heater service")))
+
+        for ((groupId, sentence) in listOf(
+            "g-pump" to "Every asset in this group must be able to have a Season Start service. Example Pump is in use " +
+                "all year, so it has no season to start. Give it a calendar or manual season first.",
+            "g-heater" to "Example Heater already has a Season Start service: \"Heater service\". Stop using that one first.",
+        )) {
+            val vm = viewModel(groupId)
+            backgroundScope.launch { vm.state.collect() }
+            assertNotNull(vm.state.first { it != null })
+            val said = mutableListOf<String>()
+            backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.collect { said += it } }
+
+            vm.setArchived(false)
+            advanceUntilIdle()
+
+            assertEquals(groupId, listOf(sentence), said)
+            assertEquals(groupId, archivedAt, graph.groups.get(GroupId(groupId))!!.archivedAt)
+        }
+    }
+
+    /** #124 (N2b review M-2): archiving a role group a member's live schedule counts from is refused and said (P124-8). */
+    @Test fun archivingARoleGroupUnderAMembersCountingScheduleSaysP124_8() = runTest {
+        val heater = graph.createAsset.run(
+            AssetCommand(name = "Example Heater", category = "Heating", seasonStartMmdd = "10-01", seasonEndMmdd = "04-30"),
+        )
+        graph.groups.upsert(groupOf("g-heater", "Heater run", members = listOf(Triple(heater.id.value, "2026-01-01", null))))
+        graph.schedules.upsert(
+            scheduleOf("s-heater-run", assetId = null, groupId = "g-heater", title = "Pre-season check")
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        graph.schedules.upsert(
+            scheduleOf(
+                "s-check", assetId = heater.id.value, title = "Example filter check",
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0,
+            ),
+        )
+        val vm = viewModel("g-heater")
+        backgroundScope.launch { vm.state.collect() }
+        assertNotNull(vm.state.first { it != null })
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.collect { said += it } }
+
+        vm.setArchived(true)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("\"Example filter check\" counts from Example Heater's Season Start service. Change when it starts counting first."),
+            said,
+        )
+        assertNull("the group stays open", graph.groups.get(GroupId("g-heater"))!!.archivedAt)
     }
 
     /** A group that is no longer there sends the screen back rather than drawing an empty one. */

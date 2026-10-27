@@ -42,8 +42,11 @@ three are one question asked of three scopes. The registered total was 21 + 17 =
 **41** after 1.3's three reference tools, **55** after 1.4's fourteen, **56** after 1.4.1's
 `repair_schedule_providers`, **58** after #79's two warranty tools, **63** after #79's five
 service-case tools, is 68 after #72's five loan tools, **69** after #86's `get_asset_succession`, **76** after
-#92's seven, **84** after #15's eight supply tools, **89** after #47's five installed-component tools, and is **90**
-since #16's season sync read, which `test_argument_guard.py` pins."""
+#92's seven, **84** after #15's eight supply tools, **89** after #47's five installed-component tools, **90** after
+#16's season sync read, **91** after #114's season readiness read, **93** after #114's role write and
+helper discovery, **95** after #113/#114's publishing reads, **97** after its Enable and Change target,
+**101** after its Disable, Check helper, Publish now and acknowledgement, and is **104** since #125's three
+schedule season tools, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:

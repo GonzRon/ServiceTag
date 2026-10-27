@@ -151,6 +151,8 @@ class MergePlannerSeasonHealthTest {
                 MergeTable.SUCCESSIONS,
                 MergeTable.SUPPLY_ITEMS, MergeTable.ASSET_SUPPLIES,
                 MergeTable.INSTALLED_COMPONENTS,
+                // #125: a schedule's own season rows, appended (`ScheduleSeasonMergeTest`).
+                MergeTable.SCHEDULE_SEASON_ACTIVATIONS,
             ),
             MergeTable.entries.toList(),
         )

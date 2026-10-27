@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.backup.BackupCodec
+import com.loosecannon.servicetag.core.merge.ImportContext
 import com.loosecannon.servicetag.core.merge.MergePlan
 import com.loosecannon.servicetag.core.merge.mergePlanOf
 import com.loosecannon.servicetag.core.merge.mergeSnapshotOf
@@ -33,6 +34,7 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 
 /**
  * Decides what merging one archive into this install would do, and **writes nothing** (1.1.0, #46;
@@ -85,6 +87,11 @@ class BuildBackupMergePlan(
     private val installedComponents: InstalledComponentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
+    /**
+     * #125 — a schedule's own season rows (format 21), read like the rest. Defaulted (F-6) so every shipped
+     * construction compiles unchanged; production passes the table.
+     */
+    private val scheduleSeasonActivations: ScheduleSeasonActivationRepository = ScheduleSeasonActivationRepository.NONE,
 ) {
     suspend fun run(bytes: ByteArray): MergePlan = run(BackupCodec.decode(bytes), emptyMap(), emptySet())
 
@@ -93,8 +100,15 @@ class BuildBackupMergePlan(
      * overlaid **only on locators absent from the folder**, so bytes the folder already holds are never masked — a
      * locator holding other bytes stays `ATTACHMENT_BYTES_DIFFER`. [returning] are the assets the pack brings back:
      * the plan runs on the snapshot without their stale local graph ([ReturnScope]). Both empty is [run] above.
+     * #114 (C20, A01, A): [context] is the pack's import context, captured once by its preview, and the scope's return
+     * carry goes beside its snapshot; null and `ReturnCarry.NONE` for an ordinary merge.
      */
-    suspend fun run(backup: Backup, incoming: Map<String, StoredBytes>, returning: Set<AssetId>): MergePlan {
+    suspend fun run(
+        backup: Backup,
+        incoming: Map<String, StoredBytes>,
+        returning: Set<AssetId>,
+        context: ImportContext? = null,
+    ): MergePlan {
         // Both store questions before the transaction: `store()` resolves a preference and a grant,
         // and `open` is a document-provider round trip. Neither belongs inside a Room transaction.
         // And `store()` is asked exactly once, so "is there a folder?" and "what is in it?" cannot
@@ -108,9 +122,10 @@ class BuildBackupMergePlan(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
                 events, attachments, references, seasonActivations, conditions, healthSubjects,
                 categories, serviceCases, caseEntries, loans, transfers, successions, supplyItems, assetSupplies,
-                installedComponents, stored + overlay, configured,
+                installedComponents, stored + overlay, configured, scheduleSeasonActivations,
             )
         }
-        return mergePlanOf(backup, ReturnScope.of(snapshot, returning).snapshot, returning)
+        val scope = ReturnScope.of(snapshot, returning)
+        return mergePlanOf(backup, scope.snapshot, returning, context, scope.carry)
     }
 }

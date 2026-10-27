@@ -42,9 +42,10 @@ internal class LinkageInstall(prefix: String = "id", val raw: BackupInstall = Ba
     var now: Long = dayMillis("2026-03-01")
     val clock = Clock { now }
     private val states = InMemoryScheduleStateRepository()
+    val today = Today { LocalDate.parse("2026-03-01") }
     val recompute = RecomputeSchedules(
         raw.schedules, states, raw.events, raw.closures, raw.groups, raw.assets, raw.activations,
-        Today { LocalDate.parse("2026-03-01") }, clock,
+        today, clock,
     ) { ZoneOffset.UTC }
     val applyTemplate = ApplyTemplate(raw.definitions, raw.profiles, raw.assets, raw.uow, ids, clock)
     val createAsset = CreateAsset(raw.assets, raw.uow, ids, clock, applyTemplate, PromoteCategory(raw.categories))
@@ -56,7 +57,7 @@ internal class LinkageInstall(prefix: String = "id", val raw: BackupInstall = Ba
         raw.subjects,
     )
     val completeSchedule = CompleteSchedule(
-        raw.schedules, raw.events, raw.definitions, raw.profiles, raw.supplyItems, raw.uow, ids, clock, recompute,
+        raw.schedules, raw.events, raw.definitions, raw.profiles, raw.supplyItems, raw.uow, ids, clock, recompute, today,
     )
     val logEvent = LogEvent(
         raw.events, raw.definitions, raw.profiles, raw.assets, raw.supplyItems, raw.uow, ids, clock, recompute,

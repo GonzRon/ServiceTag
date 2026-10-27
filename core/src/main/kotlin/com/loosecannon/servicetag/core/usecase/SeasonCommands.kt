@@ -3,9 +3,13 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
@@ -16,6 +20,9 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.schedule.BoundaryKind
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.season.isLeafChild
+import com.loosecannon.servicetag.core.season.roleCoverageOf
+import com.loosecannon.servicetag.core.seasonsync.ownSeasonInputs
 import java.time.LocalDate
 import java.time.Year
 
@@ -98,6 +105,54 @@ class SeasonModeStrandsPolicy(val assetId: AssetId, val schedules: List<Stranded
 /** 409: the break change would remove or re-kind the boundary [schedules] count back from (spec §4.4). */
 class BreakStrandsPolicy(val assetId: AssetId, val schedules: List<StrandedSchedule>) :
     IllegalStateException("maintenance break of ${assetId.value} would strand ${schedules.map { it.id.value }}")
+
+/** #114 (C11): what a refused change would have broken under a live Season Start role (P114-24…27, P114-43). */
+enum class SeasonStartStrandCause {
+    /** A covered asset's season mode would become YEAR_ROUND. */
+    NEEDS_SEASONS,
+
+    /** A covered asset would be left a child with no child row: the moved asset, or its old parent. */
+    WOULD_BE_LEAF_CHILD,
+
+    /** A role schedule's target would change (O-6): clear the role first. */
+    ROLE_SCHEDULE_RETARGET,
+
+    /** A role schedule's FORM → QUICK edit without the owner's election (O-2, F-22). */
+    QUICK_NEEDS_ELECTION,
+
+    /** A member added to a role group fails C10's asset rule. */
+    MEMBER_NOT_ELIGIBLE,
+
+    /** A member added to a role group is already covered by another role. */
+    MEMBER_ALREADY_COVERED,
+
+    /** A restore from the archive (a role schedule, or a role group) would cover an asset that fails C10's asset rule. */
+    RESTORE_NOT_ELIGIBLE,
+
+    /** A restore from the archive would cover an asset another live role already covers (C9's `TWO_ROLES`). */
+    RESTORE_ALREADY_COVERED,
+
+    /**
+     * #124 (C42): a live schedule of the asset counts from its opening service, and the change would leave it no live
+     * role to count from — the role cleared or archived, its group archived or the asset taken out of it — or the asset
+     * would go YEAR_ROUND. The strand names those schedules (P124-8).
+     */
+    HAS_DEPENDENT_SCHEDULES,
+}
+
+/**
+ * #114 (C11) — 409: the change would leave a Season Start role where it may not stand ([strandCause]; the plan's
+ * `cause`, which `Throwable` already names). [assetId] is the asset it would strand — null when it is a group
+ * schedule's own edit — and [schedules] the role schedules involved, by title then id. [refusal] is C10's asset rule's
+ * answer for [SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE], so the phone can say which (P114-16/17/18); null for
+ * every other cause. Nothing was written.
+ */
+class SeasonStartStrands(
+    val assetId: AssetId?,
+    val strandCause: SeasonStartStrandCause,
+    val schedules: List<StrandedSchedule>,
+    val refusal: SeasonStartRefusal? = null,
+) : IllegalStateException("the change would strand a Season Start role: $strandCause")
 
 /** 409: an activation was aimed at an asset whose season is not MANUAL. */
 class SeasonNotManual(val assetId: AssetId) :
@@ -252,6 +307,15 @@ private fun coversSomeYear(start: String, end: String): Boolean = PROBE_YEARS.an
 internal fun Asset.boundaryKind(): BoundaryKind = SeasonContext.of(seasonInputs(emptyList())).boundaryKind
 
 /**
+ * #125 (U-C2) — the boundary PRE_SERVICE counts back from for a schedule of this asset reading [source]: the asset's
+ * own ([boundaryKind]), or for an `OWN` season only the asset's break, read as the engine reads that context.
+ */
+internal fun Asset.boundaryKindFor(source: ScheduleSeasonSource): BoundaryKind = when (source) {
+    ScheduleSeasonSource.ASSET -> boundaryKind()
+    ScheduleSeasonSource.OWN -> SeasonContext.of(ownSeasonInputs(emptyList())).boundaryKind
+}
+
+/**
  * **The strands rule** (spec §3.2, §4.4; master plan §7.2; RS-4, O-3, dec. 44): the PRE_SERVICE
  * schedules among [targeting] whose boundary the change from [before] to [after] would remove or
  * re-kind — the kind before is not NONE and the kind after differs. Empty when the change keeps the
@@ -261,15 +325,194 @@ internal fun Asset.boundaryKind(): BoundaryKind = SeasonContext.of(seasonInputs(
  * [targeting] is every schedule aimed at the asset **whatever its lifecycle**: a paused or archived
  * PRE_SERVICE schedule can be resumed or restored, and the boundary-less state is one commands never
  * reach (plan decision 7).
+ *
+ * #125 (U-C2): each schedule's kinds are read from its **effective** context ([boundaryKindFor]), so an `OWN`
+ * schedule is stranded only when the change removes the asset's break; the asset's mode and window are not its
+ * boundary.
  */
-internal fun strandedBy(before: Asset, after: Asset, targeting: List<MaintenanceSchedule>): List<StrandedSchedule> {
-    val kindBefore = before.boundaryKind()
-    if (kindBefore == BoundaryKind.NONE || kindBefore == after.boundaryKind()) return emptyList()
-    return targeting
+internal fun strandedBy(before: Asset, after: Asset, targeting: List<MaintenanceSchedule>): List<StrandedSchedule> =
+    targeting
         .filter { it.servicePolicy == ServicePolicy.PRE_SERVICE }
+        .filter { schedule ->
+            val kindBefore = before.boundaryKindFor(schedule.seasonSource)
+            kindBefore != BoundaryKind.NONE && kindBefore != after.boundaryKindFor(schedule.seasonSource)
+        }
         .sortedWith(compareBy({ it.title }, { it.id.value }))
         .map { StrandedSchedule(it.id, it.title) }
+
+/**
+ * #114 (C11) — **the Season Start strand rule**, for the season-mode and parent writers (`SetSeasonMode`,
+ * `UpdateAsset`, `SaveAssetSettings`), called **after** [strandedBy] so a PRE_SERVICE refusal keeps priority. Null
+ * when the change from [before] to [after] leaves every live role standing; otherwise the first strand found:
+ *
+ * - [SeasonStartStrandCause.NEEDS_SEASONS]: a change **into** YEAR_ROUND of an asset a live role covers;
+ * - [SeasonStartStrandCause.WOULD_BE_LEAF_CHILD]: a changed parent that leaves a covered asset with a parent and no
+ *   child row (O-5: any child row counts) — the moved asset itself, then its old parent losing its last child;
+ * - #124 (C42), last: [SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES], a change into YEAR_ROUND of an asset a live
+ *   schedule of which counts from its opening service — which no YEAR_ROUND asset has — naming those schedules. A
+ *   covered asset says `NEEDS_SEASONS` first.
+ *
+ * [assets] is the stored tree ([after] replaces its own row in it); [schedules] and [groups] are every row, read
+ * through C9's coverage ([seasonStartRolesCovering]). Pure: it reads no store and throws nothing.
+ */
+internal fun seasonStartStrandedBy(
+    before: Asset,
+    after: Asset,
+    assets: Collection<Asset>,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+): SeasonStartStrands? {
+    fun strands(asset: Asset, cause: SeasonStartStrandCause): SeasonStartStrands? =
+        seasonStartRolesCovering(asset.id, schedules, groups)
+            .takeIf { it.isNotEmpty() }
+            ?.let { roles -> SeasonStartStrands(asset.id, cause, roles.map { StrandedSchedule(it.id, it.title) }) }
+
+    val intoYearRound = before.seasonMode != SeasonMode.YEAR_ROUND && after.seasonMode == SeasonMode.YEAR_ROUND
+    if (intoYearRound) strands(after, SeasonStartStrandCause.NEEDS_SEASONS)?.let { return it }
+    if (before.parentAssetId != after.parentAssetId) {
+        val tree = assets.filter { it.id != after.id } + after
+        val oldParent = before.parentAssetId?.let { id -> tree.firstOrNull { it.id == id } }
+        listOfNotNull(after, oldParent)
+            .filter { isLeafChild(it, tree) }
+            .firstNotNullOfOrNull { strands(it, SeasonStartStrandCause.WOULD_BE_LEAF_CHILD) }
+            ?.let { return it }
+    }
+    if (!intoYearRound) return null
+    return openingServiceDependentsOf(after.id, schedules)
+        .takeIf { it.isNotEmpty() }
+        ?.let { dependents -> dependentsStrand(after.id, dependents) }
 }
+
+/**
+ * #124 (C42) — the live (ACTIVE or PAUSED) schedules of [assetId] that count from its opening service
+ * (`IN_SERVICE_AFTER_OPENING_SERVICE`), by title then id: the dependents a Season Start role must keep covering.
+ */
+internal fun openingServiceDependentsOf(
+    assetId: AssetId,
+    schedules: Collection<MaintenanceSchedule>,
+): List<MaintenanceSchedule> = schedules
+    .filter { schedule ->
+        schedule.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE &&
+            schedule.status != ScheduleStatus.ARCHIVED &&
+            (schedule.target as? ScheduleTarget.AssetTarget)?.assetId == assetId
+    }
+    .sortedWith(compareBy({ it.title }, { it.id.value }))
+
+private fun dependentsStrand(assetId: AssetId, dependents: List<MaintenanceSchedule>) = SeasonStartStrands(
+    assetId,
+    SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES,
+    dependents.map { StrandedSchedule(it.id, it.title) },
+)
+
+/**
+ * #124 (C42) — **the dependents' strand**, for a change that takes a live role away: clearing or archiving a role
+ * schedule (`SetScheduleRole`, `ArchiveSchedule`), archiving a role group (`ArchiveGroup`, N2a's erratum) or taking a
+ * member out of one (`SaveGroup`). Null unless one of [affected] — the first by name then id — is covered by a live role
+ * before the change (C9's coverage over [schedulesBefore] and [groupsBefore]), by none after it ([schedulesAfter],
+ * [groupsAfter]) and has a live schedule counting from its opening service: then
+ * [SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES], naming those schedules. An asset no live role covered before is never
+ * judged here (an already-broken row blocks no unrelated edit). Pure: it reads no store and throws nothing.
+ */
+internal fun openingServiceStrandOf(
+    affected: Collection<AssetId>,
+    assets: Collection<Asset>,
+    schedulesBefore: Collection<MaintenanceSchedule>,
+    groupsBefore: Collection<MaintenanceGroup>,
+    schedulesAfter: Collection<MaintenanceSchedule>,
+    groupsAfter: Collection<MaintenanceGroup>,
+): SeasonStartStrands? {
+    val names = assets.associate { it.id to it.name }
+    return affected.distinct()
+        .sortedWith(compareBy({ names[it].orEmpty() }, { it.value }))
+        .firstNotNullOfOrNull { assetId ->
+            val dependents = openingServiceDependentsOf(assetId, schedulesAfter)
+            val lost = dependents.isNotEmpty() &&
+                roleCoverageOf(assetId, schedulesBefore, groupsBefore).covering.isNotEmpty() &&
+                roleCoverageOf(assetId, schedulesAfter, groupsAfter).covering.isEmpty()
+            if (lost) dependentsStrand(assetId, dependents) else null
+        }
+}
+
+/**
+ * #124 (C42) — whether [schedule] may count from its asset's opening service: null when it may, or when it does not
+ * ask to; otherwise, in order, [SeasonStartRefusal.CountsFromItself] (it is a role schedule itself),
+ * [SeasonStartRefusal.YearRound] ([asset] is in use all year, P114-17) or [SeasonStartRefusal.NoSeasonStartService] (no
+ * live role covers [asset], by C9's coverage over [schedules] and [groups], a group's role included). A group target is
+ * not judged here: it never takes the answer (inv. 106, refused before). Pure.
+ */
+internal fun openingServiceRefusalOf(
+    schedule: MaintenanceSchedule,
+    asset: Asset?,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+): SeasonStartRefusal? {
+    if (schedule.servicePolicy != ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE || asset == null) return null
+    return if (schedule.role == ScheduleRole.SEASON_START) {
+        SeasonStartRefusal.CountsFromItself
+    } else if (asset.seasonMode == SeasonMode.YEAR_ROUND) {
+        SeasonStartRefusal.YearRound(asset.id)
+    } else if (roleCoverageOf(asset.id, schedules, groups).covering.isEmpty()) {
+        SeasonStartRefusal.NoSeasonStartService(asset.id)
+    } else {
+        null
+    }
+}
+
+/** #114 / #124 — the assets [schedule]'s target names: its asset, or its group's open members among [groups]. */
+internal fun assetsAimedAt(schedule: MaintenanceSchedule, groups: Collection<MaintenanceGroup>): List<AssetId> =
+    when (val target = schedule.target) {
+        is ScheduleTarget.AssetTarget -> listOf(target.assetId)
+        is ScheduleTarget.GroupTarget -> groups.firstOrNull { it.id == target.groupId }
+            ?.openMembers().orEmpty().map { it.assetId }
+    }
+
+/**
+ * #114 (C11 erratum, M-4) — **the restore rule**, for `ArchiveSchedule` and `ArchiveGroup` bringing a row back from the
+ * archive. Null unless a role schedule among [restored] would cover again an asset that fails C10's asset rule
+ * ([SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE]) or that another live role covers too
+ * ([SeasonStartStrandCause.RESTORE_ALREADY_COVERED], C9's `TWO_ROLES`): the first such asset by name then id, with
+ * every role that would cover it. [schedules] and [groups] are every row **as the restore leaves them**, [assets] the
+ * stored tree and [held] the transferred-out ids. Pure: it reads no store and throws nothing.
+ */
+internal fun seasonStartRestoreStrandOf(
+    restored: Set<ScheduleId>,
+    assets: Collection<Asset>,
+    held: Set<AssetId>,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+): SeasonStartStrands? {
+    val aimedAt = schedules.filter { it.id in restored }.flatMapTo(mutableSetOf()) { assetsAimedAt(it, groups) }
+    return assets.filter { it.id in aimedAt }
+        .sortedWith(compareBy({ it.name }, { it.id.value }))
+        .firstNotNullOfOrNull { asset ->
+            val covering = seasonStartRolesCovering(asset.id, schedules, groups)
+            val refusal = seasonStartAssetRefusal(asset, assets, held)
+            val cause = if (covering.none { it.id in restored }) {
+                return@firstNotNullOfOrNull null
+            } else if (refusal != null) {
+                SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE
+            } else if (covering.size > 1) {
+                SeasonStartStrandCause.RESTORE_ALREADY_COVERED
+            } else {
+                return@firstNotNullOfOrNull null
+            }
+            SeasonStartStrands(asset.id, cause, covering.map { StrandedSchedule(it.id, it.title) }, refusal)
+        }
+}
+
+/**
+ * #114 — C9's coverage ([roleCoverageOf]) for the commands: the live `SEASON_START` schedules covering [assetId],
+ * [excluding] left out, by title then id. One rule with `seasonReadiness`, so a command never admits a second role
+ * that readiness would read as `TWO_ROLES`.
+ */
+internal fun seasonStartRolesCovering(
+    assetId: AssetId,
+    schedules: Collection<MaintenanceSchedule>,
+    groups: Collection<MaintenanceGroup>,
+    excluding: ScheduleId? = null,
+): List<MaintenanceSchedule> = roleCoverageOf(assetId, schedules, groups).covering
+    .filter { it.id != excluding }
+    .sortedWith(compareBy({ it.title }, { it.id.value }))
 
 /** The order every activation list is read in: `(occurredOn, createdAt, id)` (spec §3.3). */
 internal val ACTIVATION_ORDER: Comparator<SeasonActivation> =

@@ -2,12 +2,19 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
+import com.loosecannon.servicetag.core.seasonsync.unlinkedInTransaction
 
 /**
  * Takes a schedule out of every due list without deleting it, or puts it back.
@@ -33,6 +40,19 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * decision 14). Restoring a schedule is never guarded and restores no subject; the flag with nothing
  * to unlink changes nothing.
  *
+ * **The Season Start role** (#114, C11 erratum): restoring an archived role schedule is 409 [SeasonStartStrands] when
+ * it would cover an asset that may not have a role, or one another live role covers ([seasonStartRestoreStrandOf]).
+ * The row is read inside the write, so the rule judges the role as it is stored then.
+ *
+ * **Counting from the opening service** (#124, C42): archiving a live role schedule while a live schedule of an asset it
+ * covers counts from its opening service is 409 [SeasonStartStrands] (`HAS_DEPENDENT_SCHEDULES`), after the health
+ * guard's 422 and before anything is written; restoring such a dependent is 409 [SeasonStartRefused] unless a live role
+ * covers its asset (`NO_SEASON_START_SERVICE`, or `YEAR_ROUND`) — a restore never brings back a schedule that would wait
+ * for a service nothing can record.
+ *
+ * **A schedule's own season** (#125, U-C3): archiving an `OWN` schedule unlinks it in the same write — its binding
+ * deleted, its source back to `ASSET`, its own rows kept — so a restore reads the asset's season.
+ *
  * One `uow.write`.
  */
 class ArchiveSchedule(
@@ -42,20 +62,51 @@ class ArchiveSchedule(
     private val healthSubjects: HealthSubjectRepository,
     private val assets: AssetRepository,
     private val clock: Clock,
+    private val groups: GroupRepository,
+    private val transfers: TransferRecordRepository,
+    /** #125 (U-C3): the schedule bindings an archive deletes; defaulted (F-6) so shipped constructions compile. */
+    private val scheduleSeasons: ScheduleSeasonBindingRepository = ScheduleSeasonBindingRepository.NONE,
 ) {
-    suspend fun run(id: ScheduleId, archived: Boolean, unlinkHealthSubject: Boolean = false): MaintenanceSchedule {
-        val existing = schedules.get(id) ?: throw NoSuchSchedule(id)
-        val saved = existing.copy(
-            status = if (archived) ScheduleStatus.ARCHIVED else ScheduleStatus.ACTIVE,
-        )
-        return uow.write {
+    suspend fun run(id: ScheduleId, archived: Boolean, unlinkHealthSubject: Boolean = false): MaintenanceSchedule =
+        uow.write {
+            val existing = schedules.get(id) ?: throw NoSuchSchedule(id)
+            var saved = existing.copy(
+                status = if (archived) ScheduleStatus.ARCHIVED else ScheduleStatus.ACTIVE,
+            )
             if (archived && existing.status != ScheduleStatus.ARCHIVED) {
                 val driven = guardDriven(id, unlinkHealthSubject, healthSubjects)
+                if (existing.role == ScheduleRole.SEASON_START) archiveStrandOf(existing, saved)?.let { throw it }
                 unlinkDriven(driven, assets, healthSubjects, clock.nowMillis())
+                // #125 (U-C3): an archived schedule follows no Home Assistant switch; restored, it reads its asset's.
+                when (saved.seasonSource) {
+                    ScheduleSeasonSource.ASSET -> Unit
+                    ScheduleSeasonSource.OWN -> saved = unlinkedInTransaction(saved, scheduleSeasons)
+                }
+            }
+            if (!archived && existing.status == ScheduleStatus.ARCHIVED) {
+                val after = schedules.all().map { if (it.id == id) saved else it }
+                if (existing.role == ScheduleRole.SEASON_START) {
+                    seasonStartRestoreStrandOf(setOf(id), assets.all(), transfers.heldIds(), after, groups.all())
+                        ?.let { throw it }
+                }
+                // #124 (C42): a dependent comes back only to a live role it can count from.
+                val asset = (saved.target as? ScheduleTarget.AssetTarget)?.let { assets.get(it.assetId) }
+                openingServiceRefusalOf(saved, asset, after, groups.all())?.let { throw SeasonStartRefused(it) }
             }
             schedules.upsert(saved)
             recompute.forSchedule(id)
+            // #124 (C41): a restored role moves readiness, so the schedules counting from it move with it (ArchiveGroup's rule).
+            if (!archived && existing.status == ScheduleStatus.ARCHIVED && existing.role == ScheduleRole.SEASON_START) {
+                assetsAimedAt(saved, groups.all()).forEach { recompute.forAsset(it) }
+            }
             saved
         }
+
+    /** #124 (C42): the strand of archiving the live role [before] while a live schedule of an asset it covers counts from it. */
+    private suspend fun archiveStrandOf(before: MaintenanceSchedule, saved: MaintenanceSchedule): SeasonStartStrands? {
+        val every = schedules.all()
+        val after = every.map { if (it.id == saved.id) saved else it }
+        val everyGroup = groups.all()
+        return openingServiceStrandOf(assetsAimedAt(before, everyGroup), assets.all(), every, everyGroup, after, everyGroup)
     }
 }

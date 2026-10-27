@@ -985,6 +985,121 @@ val MIGRATION_20_21: Migration = object : Migration(20, 21) {
 }
 
 /**
+ * Schema v21 -> v22 (#113/#114, C4; O-10: one step for both issues). Four columns on three existing tables and three
+ * new device-local tables; no row is written or derived, nothing is recreated, and the backup format does not move
+ * here (A3 owns format 21).
+ *
+ *  1. By `ADD COLUMN`, each with the default a fresh v22 declares, so every existing row reads it:
+ *     `maintenance_schedule.role` (`'NONE'`) and `role_since_on` (null) — the passive role and its boundary;
+ *     `asset_event.imported` (0) — the Transfer Pack marker (B); `ha_connection.config_generation` (0) — the
+ *     connection's save counter (F). No index.
+ *  2. `ha_publish_binding`: the asset a soft link with no foreign key (C34), the connection CASCADE;
+ *     `UNIQUE(asset_id, kind)`, `UNIQUE(connection_id, claim_entity_id)` (one enabled binding per helper, F-9) and
+ *     `connection_id` indexed.
+ *  3. `ha_publish_delivery`: keyed by its binding, CASCADE.
+ *  4. `ha_publish_decommission`: no foreign key (it outlives a Forget); `UNIQUE(connection_id, entity_id)`.
+ *  5. #125 (U-C1), in this same unreleased step: `maintenance_schedule.season_source` (`'ASSET'`, so every existing
+ *     schedule follows its asset's season); `schedule_season_activation`, a schedule's own season rows, owned by the
+ *     schedule (CASCADE) and indexed by it — it travels in backups and packs; and `schedule_season_sync_binding`,
+ *     #16's binding keyed by the schedule, owned by the schedule and by the connection (both CASCADE), the connection
+ *     indexed — device-local.
+ *
+ * Each statement is copied verbatim from the exported `22.json` (for an `ADD COLUMN`, the column's definition there),
+ * so Room validates the result on open; none of the three publishing tables, nor the schedule binding, is named by any
+ * export, merge or pack.
+ */
+val MIGRATION_21_22: Migration = object : Migration(21, 22) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `maintenance_schedule` ADD COLUMN `role` TEXT NOT NULL DEFAULT 'NONE'")
+        connection.execSQL("ALTER TABLE `maintenance_schedule` ADD COLUMN `role_since_on` TEXT")
+        connection.execSQL("ALTER TABLE `asset_event` ADD COLUMN `imported` INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("ALTER TABLE `ha_connection` ADD COLUMN `config_generation` INTEGER NOT NULL DEFAULT 0")
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `ha_publish_binding` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, " +
+                "`connection_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `entity_id` TEXT NOT NULL, " +
+                "`enabled` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `activated_installation_id` TEXT, " +
+                "`validated_at` INTEGER, `validated_revision` INTEGER, `claim_entity_id` TEXT, " +
+                "`boundary_entity_id` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`), FOREIGN KEY(`connection_id`) REFERENCES `ha_connection`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_ha_publish_binding_asset_id_kind` " +
+                "ON `ha_publish_binding` (`asset_id`, `kind`)",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_ha_publish_binding_connection_id_claim_entity_id` " +
+                "ON `ha_publish_binding` (`connection_id`, `claim_entity_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_ha_publish_binding_connection_id` " +
+                "ON `ha_publish_binding` (`connection_id`)",
+        )
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `ha_publish_delivery` (`binding_id` TEXT NOT NULL, `desired_value` TEXT, " +
+                "`desired_revision` INTEGER NOT NULL, `desired_at` INTEGER, `last_published_value` TEXT, " +
+                "`last_published_at` INTEGER, `published_desired_revision` INTEGER, " +
+                "`published_binding_revision` INTEGER, `last_verified_value` TEXT, `last_verified_at` INTEGER, " +
+                "`verified_binding_revision` INTEGER, `verified_desired_revision` INTEGER, `remote_value` TEXT, " +
+                "`remote_read_at` INTEGER, `error_kind` TEXT, `error_detail` TEXT, `error_at` INTEGER, " +
+                "`error_binding_revision` INTEGER, `error_desired_revision` INTEGER, " +
+                "`outcome_unknown_since` INTEGER, `needs_delivery` INTEGER NOT NULL DEFAULT 0, " +
+                "`attempts_at_revision` INTEGER NOT NULL DEFAULT 0, `last_attempt_at` INTEGER, " +
+                "`boundary_value` TEXT, `boundary_read_at` INTEGER, `boundary_binding_revision` INTEGER, " +
+                "`reconcile_pending` INTEGER NOT NULL DEFAULT 0, `last_request_id` TEXT, " +
+                "`last_request_at` INTEGER, PRIMARY KEY(`binding_id`), " +
+                "FOREIGN KEY(`binding_id`) REFERENCES `ha_publish_binding`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `ha_publish_decommission` (`id` TEXT NOT NULL, " +
+                "`connection_id` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `asset_id` TEXT, " +
+                "`installation_id` TEXT NOT NULL, `state` TEXT NOT NULL, `requested_at` INTEGER NOT NULL, " +
+                "`error_kind` TEXT, `error_at` INTEGER, `revision` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_ha_publish_decommission_connection_id_entity_id` " +
+                "ON `ha_publish_decommission` (`connection_id`, `entity_id`)",
+        )
+
+        // #125 (U-C1)
+        connection.execSQL(
+            "ALTER TABLE `maintenance_schedule` ADD COLUMN `season_source` TEXT NOT NULL DEFAULT 'ASSET'",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_season_activation` (`id` TEXT NOT NULL, " +
+                "`schedule_id` TEXT NOT NULL, `action` TEXT NOT NULL, `occurred_on` TEXT NOT NULL, " +
+                "`created_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`schedule_id`) " +
+                "REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_schedule_season_activation_schedule_id` " +
+                "ON `schedule_season_activation` (`schedule_id`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_season_sync_binding` (`schedule_id` TEXT NOT NULL, " +
+                "`connection_id` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `mode` TEXT NOT NULL, " +
+                "`enabled` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `observed_state` TEXT, " +
+                "`observed_changed_at` TEXT, `last_success_at` INTEGER, `last_attempt_at` INTEGER, " +
+                "`error_kind` TEXT, `error_detail` TEXT, `error_at` INTEGER, `applied_action` TEXT, " +
+                "`applied_on` TEXT, `applied_at` INTEGER, `last_applied_source` TEXT, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`schedule_id`), " +
+                "FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`connection_id`) REFERENCES `ha_connection`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_schedule_season_sync_binding_connection_id` " +
+                "ON `schedule_season_sync_binding` (`connection_id`)",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

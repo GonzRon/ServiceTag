@@ -919,18 +919,10 @@ class MaintenanceRoutesTest {
      * stored — never today, and never refused for being in the past. A malformed date is a 422
      * naming the field.
      *
-     * **A future date is accepted, and that is the contract as it stands.** D-25's principle is
-     * that "the API must not be unable to produce data the app can, nor able to produce data it
-     * cannot" (spec §2.9), and nothing in the completion path bounds `occurredOn` above: neither
-     * `LogEvent`'s validation nor `CompleteSchedule` nor `CompleteGroupMembers` looks at today, so
-     * the in-app completion flow accepts a future date too. Refusing one *here* would invent a rule
-     * no use case holds and make the two paths diverge — which is the half of D-25 that is easy to
-     * miss. `closedOn` **is** bounded, by `CloseRound`, and that bound is proved above.
-     *
-     * B12's brief reads this row as "a future one is refused"; the spec's sentence, D-25's own
-     * wording and the domain all say otherwise, so the contradiction is reported rather than
-     * resolved here. If a future bound is ever ruled, it belongs in the completion use cases and
-     * this assertion is what will fail and point at it.
+     * A future date is refused: O-16 as amended (C39) bounds a completion above by the phone's
+     * today, in the completion use cases where this paragraph said such a bound belongs, so it is
+     * 422 `COMPLETION_DATE_IN_FUTURE`. `closedOn` is bounded too, by `CloseRound`, and that bound is
+     * proved above.
      */
     @Test fun aBackdatedCompletionIsAcceptedWithTheDateItWasSent() {
         val asset = createAsset("Hot tub")
@@ -947,8 +939,10 @@ class MaintenanceRoutesTest {
         assertEquals(422, malformed.status)
         assertTrue(malformed.problems().toString(), malformed.problems().any { it.contains("BadDate") })
 
+        // O-16 as amended (C39): a completion is now bounded above by the phone's today.
         val future = call("POST", "/v1/schedules/$schedule/complete", completionBody(occurredOn = "2099-01-01"))
-        assertEquals("no use case bounds occurredOn above", 201, future.status)
+        assertEquals(future.text(), 422, future.status)
+        assertEquals("COMPLETION_DATE_IN_FUTURE", future.code())
     }
 
     // --- GET /v1/schedules/{id} and the derived read projection ---------------------------------
@@ -1195,7 +1189,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(20, report.formatVersion)
+        assertEquals(21, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1252,6 +1246,8 @@ class MaintenanceRoutesTest {
                 "supplyItems", "assetSupplies",
                 // #47 (format 19): table 23, the installed components.
                 "installedComponents",
+                // #125 (format 21): table 24, the schedules' own season rows.
+                "scheduleSeasonActivations",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1322,9 +1318,10 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
         assertEquals(
-            "after categories, in table order, before #72's loans, #77's transfers, #86's successions, #15's two and #47's",
+            "after categories, in table order, before #72's loans, #77's transfers, #86's successions, #15's two, #47's " +
+                "and #125's",
             listOf("serviceCases", "caseEntries", "loans"),
-            wire.keys.toList().dropLast(7).takeLast(3),
+            wire.keys.toList().dropLast(8).takeLast(3),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1375,9 +1372,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("assets"))
         assertEquals(5, inserts("loans"))
         assertEquals(
-            "after the case entries, before #77's transfers, #86's successions, #15's two and #47's",
+            "after the case entries, before #77's transfers, #86's successions, #15's two, #47's and #125's",
             "loans",
-            wire.keys.toList().dropLast(7).last(),
+            wire.keys.toList().dropLast(8).last(),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1549,8 +1546,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(21, status.schemaVersion)
-        assertEquals(20, status.backupFormatVersion)
+        assertEquals(22, status.schemaVersion)
+        assertEquals(21, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1581,11 +1578,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-20** archive (this build's export) and reports **twenty-three** tables: the donor's
+     * Import-merge reads a **format-21** archive (this build's export) and reports **twenty-four** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat20AndReportsTwentyThreeTables() {
+    @Test fun importMergeReadsFormat21AndReportsTwentyFourTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1595,9 +1592,9 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(23, tallies.size)
+        assertEquals(24, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(20, report.formatVersion)
+        assertEquals(21, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)
@@ -1609,6 +1606,8 @@ class MaintenanceRoutesTest {
         assertEquals(listOf(none, none), listOf(report.supplyItems, report.assetSupplies))
         // #47 (format 19): the installed components are on the report, empty for a donor with none.
         assertEquals(none, report.installedComponents)
+        // #125 (format 21): the schedules' own season rows are on the report, empty for a donor with none.
+        assertEquals(none, report.scheduleSeasonActivations)
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
@@ -1637,7 +1636,7 @@ class MaintenanceRoutesTest {
             val disjoint = IdGenerator { "00000000-0000-4000-8000-9000%08d".format(++n) }
             val createAsset =
                 CreateAsset(donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory)
-            val saveGroup = SaveGroup(donor.groups, donor.assets, donor.uow, disjoint, donor.clock)
+            val saveGroup = SaveGroup(donor.groups, donor.assets, donor.uow, disjoint, donor.clock, donor.schedules, donor.transferRecords)
             val saveSchedule = SaveSchedule(
                 donor.schedules, donor.assets, donor.groups, donor.definitions, donor.profiles,
                 donor.uow, disjoint, donor.clock, donor.recomputeSchedules, donor.healthSubjects,

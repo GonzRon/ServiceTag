@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Russian translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">Публиковать дату начала сезона в Home Assistant</string>
+    <string name="ha_publish_scope_datetimes">Вспомогательные объекты даты (input_datetime)</string>
+    <string name="ha_publish_date_not_date_only">%s должен быть вспомогательным объектом даты с датой и без времени.</string>
+    <string name="ha_publish_date_confirm">Публиковать дату начала сезона объекта %1$s в %2$s? Пока %1$s готов к сезону, ServiceTag задаёт дату обслуживания; иначе задаёт %3$s, что означает «не готов». Автоматизации Home Assistant должны читать его и никогда не задавать.</string>
+    <string name="ha_publish_date_not_a_date_helper">%s — не вспомогательный объект даты (input_datetime).</string>
+    <string name="ha_publish_stop_date_confirm">Прекратить публикацию в %1$s? Сначала ServiceTag задаст ему %2$s, чтобы Home Assistant перестал считать старую дату обслуживанием.</string>
+    <string name="ha_publish_date_not_yet_cleared">Ещё не очищено в Home Assistant: %1$s может по-прежнему разрешать запуски. ServiceTag продолжает попытки; если этот телефон не может связаться с Home Assistant, задайте там %2$s.</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTag больше не может связаться с %1$s. Он может по-прежнему разрешать запуски: задайте ему %2$s в Home Assistant.</string>
+    <string name="ha_publish_date_cleared_by_hand">Очищено вручную в Home Assistant</string>
+    <string name="ha_publish_date_cleared">Очищено в Home Assistant: в %1$s задано %2$s. Больше ничего не отправляется, пока объект в архиве, списан или передан.</string>
+    <string name="ha_publish_boundary_field">Вспомогательный объект окончания сезона (дата, которую Home Assistant записывает при окончании сезона)</string>
+    <string name="ha_publish_boundary_is_target">%s — вспомогательный объект, который задаёт ServiceTag. Выберите вспомогательный объект даты, в который Home Assistant записывает окончание сезона.</string>
+</resources>

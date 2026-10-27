@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -27,6 +28,10 @@ class NoSuchAsset(id: AssetId) : IllegalArgumentException("no asset ${id.value}"
  *   ([seasonModeProblems] and the strands rule, [strandedBy]: 409 [SeasonModeStrandsPolicy]), laid
  *   over with the rest of the edit.
  *
+ * **#114 (C11).** After the strands rule, 409 [SeasonStartStrands] when the edit would leave a live Season Start
+ * role where it may not stand ([seasonStartStrandedBy]): the pair's YEAR_ROUND on a covered asset (`NEEDS_SEASONS`),
+ * or a new parent leaving a covered asset — this one, or its old parent — a child with no child (`WOULD_BE_LEAF_CHILD`).
+ *
  * Everything is validated before anything is written, and the row and the recompute its new season
  * needs commit in one transaction. A 1.4-only field — the break, the health policy — is never reset.
  *
@@ -41,6 +46,12 @@ class UpdateAsset(
     private val clock: Clock,
     private val recompute: RecomputeSchedules,
     private val promoteCategory: PromoteCategory,
+    /**
+     * #114 (C11): where the Season Start strand rule reads group roles from. Trailing and defaulted, as G3 asks of the
+     * #16 commands, so `CT/seasonsync`'s shipped constructions stay byte-identical; null reads no group (an asset's
+     * own roles only) and production never uses it (`AppGraph` passes the graph's groups).
+     */
+    private val groups: GroupRepository? = null,
 ) {
     suspend fun run(id: AssetId, cmd: AssetCommand): Asset = uow.write {
         val all = assets.all()
@@ -52,6 +63,8 @@ class UpdateAsset(
         val pairChanged = clean.seasonStartMmdd != current.seasonStartMmdd ||
             clean.seasonEndMmdd != current.seasonEndMmdd
         val saved = if (pairChanged) translated(current, edited, clean) else edited
+        // #114 (C11): after the strands rule, the legacy pair's YEAR_ROUND and a re-parent may strand a role.
+        seasonStartStrandedBy(current, saved, all, schedules.all(), groups?.all().orEmpty())?.let { throw it }
         assets.upsert(saved)
         promoteCategory.write(promotion)
         if (pairChanged) recompute.forAsset(id)

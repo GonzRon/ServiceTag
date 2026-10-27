@@ -164,7 +164,8 @@ class SeasonSyncDaoTest {
                 }
             }
             val columns = withConnection(file) { c -> V21_TABLES.associateWith { c.columnNamesOf(it) } }
-            assertEquals(8, columns.getValue("ha_connection").size)
+            // eight, and v22's `config_generation` (#113/#114, F): a counter, never a credential
+            assertEquals(9, columns.getValue("ha_connection").size)
             assertEquals(19, columns.getValue("season_sync_binding").size)
             val credentialLike = Regex("token|secret|bearer|password|credential|auth", RegexOption.IGNORE_CASE)
             for ((table, names) in columns) {

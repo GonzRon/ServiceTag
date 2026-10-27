@@ -35,12 +35,17 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.seasonsync.EntityScope
 import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.MAX_LISTED_ENTITIES
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.l10n.localized
 import com.loosecannon.servicetag.ui.attachments.SAVE_LABEL
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.maintenance.SCHEDULE_SEASON_ENTITY_ID_HELP
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
@@ -52,7 +57,6 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
  * #78's question (P78-1a/1b, P78-2, P78-3) takes the sheet's place, and dismissing it answers P78-3, as in the
  * editor. [opening] keys a fresh model for each opening, kept across a rotation.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LinkSeasonSyncSheet(
     graph: AppGraph,
@@ -61,10 +65,29 @@ internal fun LinkSeasonSyncSheet(
     opening: Int,
     onReviewSchedules: () -> Unit,
     onDone: () -> Unit,
+) = LinkSeasonSyncSheet(
+    graph, SeasonSyncSheetTarget.Asset(AssetId(assetId)), purpose, opening, onReviewSchedules, onDone,
+)
+
+/**
+ * The same sheet for [target] (#125, U-C8): an asset's season, keyed as #16 keys it, or a schedule's own season, keyed
+ * under the schedule. Nothing else differs: the form, the browser, its `INPUT_BOOLEANS` scope and the expanded sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun LinkSeasonSyncSheet(
+    graph: AppGraph,
+    target: SeasonSyncSheetTarget,
+    purpose: SeasonSyncSheetPurpose,
+    opening: Int,
+    onReviewSchedules: () -> Unit,
+    onDone: () -> Unit,
 ) {
-    val model: LinkSeasonSyncViewModel = viewModel(key = "season-sync-sheet:$assetId:$opening") {
-        LinkSeasonSyncViewModel(graph, AssetId(assetId), purpose)
+    val key = when (target) {
+        is SeasonSyncSheetTarget.Asset -> "season-sync-sheet:${target.assetId.value}:$opening"
+        is SeasonSyncSheetTarget.Schedule -> "season-sync-sheet:schedule:${target.scheduleId.value}:$opening"
     }
+    val model: LinkSeasonSyncViewModel = viewModel(key = key) { LinkSeasonSyncViewModel(graph, target, purpose) }
     val state by model.state.collectAsStateWithLifecycle()
     val review by rememberUpdatedState(onReviewSchedules)
     val done by rememberUpdatedState(onDone)
@@ -147,7 +170,7 @@ private fun LinkSeasonSyncForm(
                     value = state.entityId,
                     onValueChange = onEntityId,
                     label = { Text(SEASON_SYNC_ENTITY_ID) },
-                    supportingText = { Text(state.entityLine ?: SEASON_SYNC_ENTITY_ID_HELP) },
+                    supportingText = { Text(state.entityLine ?: entityHelp(state)) },
                     isError = state.entityLine != null,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
@@ -160,7 +183,12 @@ private fun LinkSeasonSyncForm(
                 )
                 TextButton(onClick = onChooseEntity) { Text(SEASON_SYNC_CHOOSE_ENTITY) }
             } else {
-                ChosenEntityRow(chosen = state.chosen, entityLine = state.entityLine, onChooseEntity = onChooseEntity)
+                ChosenEntityRow(
+                    chosen = state.chosen,
+                    help = entityHelp(state),
+                    entityLine = state.entityLine,
+                    onChooseEntity = onChooseEntity,
+                )
                 TextButton(onClick = onEnterManually) { Text(SEASON_SYNC_ENTER_MANUALLY) }
             }
         }
@@ -175,12 +203,26 @@ private fun LinkSeasonSyncForm(
 }
 
 /**
- * #105 — the form's entity row. Nothing chosen: Choose entity (P105-1) over P16-43's helper, the whole row a tap.
- * Chosen: the friendly name over the exact id (the id alone when Home Assistant gave no name) and Change (P105-2).
- * A shape refusal (P16-49) under it, as under the field, though a picked id cannot earn one.
+ * The entity's help under the field and the Choose entity row: P16-43 for an asset; for a schedule (#125, H4 review I1)
+ * P125-8, since P16-43 names the asset's own in-season helper, the wrong one for a schedule's own switch.
+ */
+internal fun entityHelp(state: LinkSeasonSyncState): String = when (state.scheduleTarget) {
+    false -> SEASON_SYNC_ENTITY_ID_HELP
+    true -> SCHEDULE_SEASON_ENTITY_ID_HELP
+}
+
+/**
+ * #105 — the form's entity row. Nothing chosen: Choose entity (P105-1) over [help] (P16-43, or P125-8), the whole row
+ * a tap. Chosen: the friendly name over the exact id (the id alone when Home Assistant gave no name) and Change
+ * (P105-2). A shape refusal (P16-49) under it, as under the field, though a picked id cannot earn one.
  */
 @Composable
-private fun ChosenEntityRow(chosen: HaEntityCandidate?, entityLine: String?, onChooseEntity: () -> Unit) {
+private fun ChosenEntityRow(
+    chosen: HaEntityCandidate?,
+    help: String,
+    entityLine: String?,
+    onChooseEntity: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -191,7 +233,7 @@ private fun ChosenEntityRow(chosen: HaEntityCandidate?, entityLine: String?, onC
         Column(modifier = Modifier.weight(1f)) {
             if (chosen == null) {
                 Text(SEASON_SYNC_CHOOSE_ENTITY, style = MaterialTheme.typography.titleSmall)
-                QuietLine(SEASON_SYNC_ENTITY_ID_HELP)
+                QuietLine(help)
             } else {
                 Text(chosen.friendlyName ?: chosen.entityId, style = MaterialTheme.typography.titleSmall)
                 if (chosen.friendlyName != null) QuietLine(chosen.entityId)
@@ -209,16 +251,18 @@ private fun ChosenEntityRow(chosen: HaEntityCandidate?, entityLine: String?, onC
  * line (P105-6), the loading line (P105-5) while a read runs, the latest read's ratified failure sentences over the
  * last good rows, P105-10 over a bounded list, P105-8 for an empty scope, P105-9 for a query that matches nothing,
  * then the rows — friendly name over id, a tap the pick — and Enter entity ID manually, Cancel (back to the form,
- * keeping what was chosen) and Refresh.
+ * keeping what was chosen) and Refresh. #113/#114 (C36): [scope] names the domain the rows are from (the model filters
+ * them), so the publishing sheet reuses this browser with its title and scope line.
  */
 @Composable
-private fun EntityBrowser(
+internal fun EntityBrowser(
     browse: EntityBrowseState,
     onQuery: (String) -> Unit,
     onPick: (HaEntityCandidate) -> Unit,
     onRefresh: () -> Unit,
     onEnterManually: () -> Unit,
     onBack: () -> Unit,
+    scope: EntityScope = EntityScope.INPUT_BOOLEANS,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -227,7 +271,7 @@ private fun EntityBrowser(
             .padding(horizontal = 16.dp)
             .padding(bottom = 24.dp),
     ) {
-        Text(SEASON_SYNC_CHOOSE_ENTITY, style = MaterialTheme.typography.titleMedium)
+        Text(browserTitle(scope), style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             value = browse.query,
             onValueChange = onQuery,
@@ -237,11 +281,11 @@ private fun EntityBrowser(
             shape = ControlShape,
             modifier = Modifier.fillMaxWidth(),
         )
-        QuietLine(SEASON_SYNC_SCOPE_LINE)
+        browserScopeLine(scope)?.let { QuietLine(it) }
         if (browse.loading) QuietLine(SEASON_SYNC_READING_ENTITIES)
         browse.failure.forEach { RefusalLine(it.text) }
         if (browse.truncatedList) QuietLine(seasonSyncOnlyFirstShown(MAX_LISTED_ENTITIES))
-        if (browse.failure.isEmpty() && browse.scopeEmpty) QuietLine(SEASON_SYNC_NO_HELPERS)
+        if (browse.failure.isEmpty() && browse.scopeEmpty) QuietLine(browserNoHelpers(scope))
         if (browse.noMatch) QuietLine(SEASON_SYNC_NO_MATCH)
         // Bounded, because a lazy list cannot measure inside a scrolling column without a height of its own.
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
@@ -257,6 +301,29 @@ private fun EntityBrowser(
             TextButton(onClick = onRefresh, enabled = !browse.loading) { Text(SEASON_SYNC_REFRESH) }
         }
     }
+}
+
+/** The browser's title: #16's Choose entity for its on/off helpers, P113-3 for a publication's helpers. */
+private fun browserTitle(scope: EntityScope): String = when (scope) {
+    EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_CHOOSE_ENTITY
+    EntityScope.INPUT_SELECTS, EntityScope.INPUT_DATETIMES -> HA_PUBLISH_CHOOSE_HELPER
+}
+
+/**
+ * B6a review I1 — what an empty scope says: P105-8 only for #16's on/off helpers, whose sentence it is; each publishing
+ * scope its own (P190-3 for dropdown helpers, P190-4 for date helpers, ratified 2026-10-26).
+ */
+internal fun browserNoHelpers(scope: EntityScope): String = when (scope) {
+    EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_NO_HELPERS
+    EntityScope.INPUT_SELECTS -> localized(R.string.season_sync_no_dropdown_helpers)
+    EntityScope.INPUT_DATETIMES -> localized(R.string.season_sync_no_date_helpers)
+}
+
+/** The scope line (P105-6, P113-4, P114-31): the date kind's is B6b's, read through its words. */
+private fun browserScopeLine(scope: EntityScope): String? = when (scope) {
+    EntityScope.INPUT_BOOLEANS -> SEASON_SYNC_SCOPE_LINE
+    EntityScope.INPUT_SELECTS -> publishWordsOf(PublishKind.EQUIPMENT_STATUS)?.scopeLine
+    EntityScope.INPUT_DATETIMES -> publishWordsOf(PublishKind.SEASON_SERVICE_DATE)?.scopeLine
 }
 
 /** One candidate: its friendly name over its exact id, or the id alone; the whole row is the pick. */

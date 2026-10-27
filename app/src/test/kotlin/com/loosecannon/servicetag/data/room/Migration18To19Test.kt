@@ -32,7 +32,7 @@ class Migration18To19Test {
     fun bothTablesExistEmptyWithTheirIndicesAndForeignKeys() = runTest {
         migrating { file, before ->
             withConnection(file) { m ->
-                assertEquals("the two new tables", V19_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys - V21_TABLES)
+                assertEquals("the two new tables", V19_TABLES, m.tableNames() - ROOM_INTERNAL - before.keys - V21_TABLES - V22_TABLES)
                 for (table in V19_TABLES) {
                     assertEquals("$table is empty", listOf("0"), m.lines("SELECT COUNT(*) FROM $table"))
                     assertEquals("$table primary key", listOf("id"), m.primaryKeyOf(table))
@@ -230,9 +230,13 @@ class Migration18To19Test {
     }
 
     /** One table whole: its columns, key, foreign keys and indices, then every row by rowid. */
-    private fun SQLiteConnection.snapshotOf(table: String): List<String> =
-        columnsOf(table) + primaryKeyOf(table) + foreignKeysOf(table) + indexDefinitionsOn(table) +
-            lines("SELECT * FROM $table ORDER BY rowid")
+    private fun SQLiteConnection.snapshotOf(table: String): List<String> {
+        // less the columns v22 appends, whose defaults `Migration21To22Test` owns (the chain runs on to v22)
+        val kept = columnsOf(table).filterNot { it.substringBefore(' ') in v22ColumnsOf(table) }
+        val select = kept.joinToString(", ") { "`${it.substringBefore(' ')}`" }
+        return kept + primaryKeyOf(table) + foreignKeysOf(table) + indexDefinitionsOn(table) +
+            lines("SELECT $select FROM $table ORDER BY rowid")
+    }
 
     /** Each row of [sql] as its columns joined by `|`. */
     private fun SQLiteConnection.lines(sql: String): List<String> = buildList {

@@ -552,6 +552,7 @@ class ImportTransferPackTest {
                     assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
                     references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
                     successions, supplyItems, assetSupplies, installedComponents, emptyMap(), true,
+                    scheduleSeasonActivations,
                 ),
                 returning.mapTo(HashSet(), ::AssetId),
             )

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_ha_publishing_date.xml. -->
+<resources>
+    <string name="ha_publish_date_title">シーズン開始日をHome Assistantに公開</string>
+    <string name="ha_publish_scope_datetimes">日付ヘルパー（input_datetime）</string>
+    <string name="ha_publish_date_not_date_only">%sは、日付があり時刻がない日付ヘルパーである必要があります。</string>
+    <string name="ha_publish_date_confirm">%1$sのシーズン開始日を%2$sに公開しますか？%1$sがシーズンの準備完了である間、ServiceTagはメンテナンス日を設定します。そうでない場合は%3$sを設定し、これは準備未完了を意味します。Home Assistantのオートメーションはこれを読み取るだけにして、設定しないでください。</string>
+    <string name="ha_publish_date_not_a_date_helper">%sは日付ヘルパー（input_datetime）ではありません。</string>
+    <string name="ha_publish_stop_date_confirm">%1$sへの公開を停止しますか？ServiceTagはまずこれを%2$sに設定し、Home Assistantが古い日付をメンテナンスとして扱わないようにします。</string>
+    <string name="ha_publish_date_not_yet_cleared">Home Assistantでまだ消去されていません：%1$sによって、まだ起動できる場合があります。ServiceTagは試行を続けます。このスマートフォンからHome Assistantに接続できない場合は、Home Assistantで%2$sに設定してください。</string>
+    <string name="ha_publish_date_cannot_reach">ServiceTagは%1$sに接続できなくなりました。まだ起動できる場合があります：Home Assistantで%2$sに設定してください。</string>
+    <string name="ha_publish_date_cleared_by_hand">Home Assistantで消去しました</string>
+    <string name="ha_publish_date_cleared">Home Assistantで消去済み：%1$sは%2$sです。機器がアーカイブ済み、使用終了、または移管済みの間は、これ以上送信しません。</string>
+    <string name="ha_publish_boundary_field">シーズン終了ヘルパー（シーズン終了時にHome Assistantが記録する日付）</string>
+    <string name="ha_publish_boundary_is_target">%sはServiceTagが設定するヘルパーです。シーズン終了時にHome Assistantが日付を記録する日付ヘルパーを選んでください。</string>
+</resources>

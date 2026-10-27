@@ -38,6 +38,7 @@ import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
 
 data class ImportReport(
     val formatVersion: Int,
@@ -125,6 +126,12 @@ class ImportBackupReplace(
      * that computes it is not this layer's concern.
      */
     private val rebuildAll: suspend () -> Unit,
+    /**
+     * #125 — a schedule's own season rows (format 21), inserted after their schedules. Defaulted (F-6) so every shipped
+     * construction compiles unchanged; production passes the table, whose insert the default refuses loudly. The wipe
+     * needs no line: `schedule_season_activation.schedule_id` CASCADEs with `schedules.deleteAll()`.
+     */
+    private val scheduleSeasonActivations: ScheduleSeasonActivationRepository = ScheduleSeasonActivationRepository.NONE,
 ) {
     suspend fun run(bytes: ByteArray): ImportReport {
         val backup = BackupCodec.decode(bytes) // outside the transaction: refuse before touching data
@@ -237,6 +244,8 @@ class ImportBackupReplace(
             data.eventProfiles.forEach { profiles.upsert(it.toDomain()) }
             data.maintenanceSchedules.forEach { schedules.upsert(it.toDomain()) }
             data.occurrenceClosures.forEach { closures.insert(it.toDomain()) }
+            // #125: a schedule's own season rows after their schedule, as its closures.
+            data.scheduleSeasonActivations.forEach { scheduleSeasonActivations.insert(it.toDomain()) }
             // After assets and schedules, the two things they point at. `eventId` is a soft link,
             // so the facts need no event to be in first.
             data.seasonActivations.forEach { seasonActivations.insert(it.toDomain()) }

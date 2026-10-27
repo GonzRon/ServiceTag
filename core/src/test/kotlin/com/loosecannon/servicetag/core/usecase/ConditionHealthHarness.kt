@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
@@ -108,13 +109,13 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
     val setWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
     val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, healthSubjects)
-    val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, healthSubjects, assets, clock)
-    val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, healthSubjects, assets, clock, groups, InMemoryTransferRecordRepository())
+    val saveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, InMemoryTransferRecordRepository())
     val applyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val promoteCategory = PromoteCategory(categories)
     val saveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, activations, uow, ids, clock, todayPort, recompute, applyTemplate,
-        promoteCategory, SeasonSyncGuard(InMemorySeasonSyncRepository()),
+        promoteCategory, SeasonSyncGuard(InMemorySeasonSyncRepository()), groups,
     )
 
     /** An asset stored as it is, with no command in between — the state a test starts from. */

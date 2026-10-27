@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -1233,6 +1234,35 @@ class EventEntryViewModelTest {
         assertEquals("2026-05-01", dueOf(schedule.id))
     }
 
+    /**
+     * #114 row 77 (C33): the form opened to complete a Season Start service says, above Record entry, what completing it
+     * marks — P114-14 with the asset's name — and the same form for an ordinary schedule, or no schedule, says nothing.
+     */
+    @Test fun theEntryFormCompletingARoleScheduleShowsTheLine() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        assertNull(formModel(spa.id, spa.profile.id, schedule.id).state.first { it.loaded }.seasonStartLine)
+        assertNull(formModel(spa.id, spa.profile.id, scheduleId = null).state.first { it.loaded }.seasonStartLine)
+
+        graph.schedules.upsert(schedule.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-02-01"))
+        assertEquals(
+            "Completing this marks Spa ready for the season.",
+            formModel(spa.id, spa.profile.id, schedule.id).state.first { it.loaded }.seasonStartLine,
+        )
+    }
+
+    /** A5a review (Minor 1): an asset whose name reads blank draws no P114-14 with a gap where the name goes. */
+    @Test fun aBlankAssetNameDrawsNoCompletionLine() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        graph.schedules.upsert(schedule.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-02-01"))
+        graph.assets.upsert(spa.asset.copy(name = ""))
+
+        assertNull(formModel(spa.id, spa.profile.id, schedule.id).state.first { it.loaded }.seasonStartLine)
+    }
+
     /** V5 (pin): the same asset and profile without a schedule id — the asset screen's way in — log an ordinary entry. */
     @Test fun theSameProfileWithoutAScheduleIdStaysAnOrdinaryEntry() = runTest {
         onTheTenth()
@@ -1722,5 +1752,49 @@ class EventEntryViewModelTest {
         val fields = formModel(mower.id, profile.id, schedule.id).state.first { it.loaded }.fields
 
         assertEquals(listOf(mower.edge.id to true), fields.drawn())
+    }
+
+    // --- O-16 as amended (C39, row 130): a completion dated after today --------------------------------------------
+
+    /** A schedule's form completion dated tomorrow: S25 as the first problem, nothing written, no sweep. */
+    @Test fun aFormCompletionDatedTomorrowSaysS25AndWritesNothing() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val dueBefore = dueOf(schedule.id)
+        val vm = formModel(spa.id, spa.profile.id, schedule.id)
+        vm.typeWaterTest(spa)
+        vm.onDate("2026-02-11")
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, refused.firstProblem)
+        assertEquals(emptyList<AssetEvent>(), graph.events.all())
+        assertEquals(dueBefore, dueOf(schedule.id))
+        assertEquals("nothing written, nothing swept", 0, reconciles)
+    }
+
+    /** An edit that moves a completion to tomorrow: S25 as the first problem, the stored row unchanged, no sweep. */
+    @Test fun anEditMovingACompletionToTomorrowSaysS25AndWritesNothing() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val schedule = formSchedule(spa.id, spa.profile.id)
+        val done = graph.completeSchedule.run(
+            schedule.id,
+            CompletionCommand(
+                occurredOn = "2026-02-10", tzId = "UTC",
+                values = mapOf(spa.def("ph").id to "7.4", spa.def("free_chlorine").id to "2.0"),
+            ),
+        )
+        val storedBefore = graph.events.get(done.id)
+        val vm = formModel(spa.id, null, scheduleId = null, eventId = done.id)
+        vm.state.first { it.loaded }
+        vm.onDate("2026-02-11")
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, refused.firstProblem)
+        assertEquals(storedBefore, graph.events.get(done.id))
+        assertEquals("an edit never sweeps", 0, reconciles)
     }
 }

@@ -1,10 +1,39 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
+import com.loosecannon.servicetag.core.hapublish.PublishBinding
+import com.loosecannon.servicetag.core.hapublish.PublishDelivery
+import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.hapublish.RemoteEntity
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
+import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
+import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
+import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
+import com.loosecannon.servicetag.core.seasonsync.HelperAttributes
+import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBinding
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
+import com.loosecannon.servicetag.core.seasonsync.Secret
+import com.loosecannon.servicetag.core.seasonsync.SyncCadence
+import com.loosecannon.servicetag.core.seasonsync.SyncMode
+import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -24,7 +53,18 @@ class ApiReadsWriteNothingTest {
         now = dayMillis("2026-01-20")
         today = LocalDate.parse("2026-01-20")
     }
-    private val api = V1Client(graph)
+    /** #113/#114 (C29b): helper discovery's list read, scripted (no Home Assistant is called); two helpers. */
+    private val api = V1Client(
+        graph,
+        haEntities = {
+            HaListOutcome.Listed(
+                listOf(
+                    HaEntityCandidate("input_select.example_heater_equipment_status", "Status", HelperAttributes(listOf("UP", "DEGRADED", "DOWN"), null, null)),
+                    HaEntityCandidate("input_datetime.example_heater_service_done", "Done", HelperAttributes(null, true, false)),
+                ),
+            )
+        },
+    )
 
     @After fun close() = graph.close()
 
@@ -47,6 +87,15 @@ class ApiReadsWriteNothingTest {
             "service_case_entry" to graph.serviceCaseEntries.all().toSet(),
             // #72's aggregate: the loans, open and returned.
             "asset_loan" to graph.loans.all().toSet(),
+            // #113/#114 (row 108, D2): the Home Assistant tables, none of which a read may touch.
+            "ha_publish_binding" to graph.publishBindings.all().toSet(),
+            "ha_publish_delivery" to graph.publishBindings.all().mapNotNull { graph.publishDeliveries.get(it.id) }.toSet(),
+            "ha_publish_decommission" to graph.publishDecommissions.all().toSet(),
+            "ha_connection" to setOfNotNull(graph.haConnections.get()),
+            "season_sync_binding" to graph.seasonSyncBindings.all().toSet(),
+            // #125 (U-C7): a schedule's own season, its device-local binding and its rows.
+            "schedule_season_sync_binding" to graph.scheduleSeasonBindings.all().toSet(),
+            "schedule_season_activation" to graph.scheduleSeasonActivations.all().toSet(),
         )
     }
 
@@ -94,7 +143,10 @@ class ApiReadsWriteNothingTest {
         api.ok(ConditionResponse.serializer(), "POST", "/v1/assets/$generator/conditions", """{"condition":"DEGRADED","tzId":"UTC"}""", status = 201)
         val tub = api.asset("Hot tub")
         api.ok(AssetSeasonResponse.serializer(), "POST", "/v1/assets/$tub/season-mode", """{"seasonMode":"MANUAL","manualPhase":"IN_SEASON"}""")
-        schedule(tub, "Water change", """"servicePolicy":"IN_SERVICE_RESUME_CLAMPED"""")
+        val waterChange = schedule(tub, "Water change", """"servicePolicy":"IN_SERVICE_RESUME_CLAMPED"""")
+        // #114 (row 83): a Season Start role, so the readiness read runs C9 over a role, its schedule and its events.
+        runBlocking { graph.setScheduleRole.run(ScheduleId(waterChange), ScheduleRole.SEASON_START, "2026-01-20", quickElected = true) }
+        api.ok(CompletionResponse.serializer(), "POST", "/v1/schedules/$waterChange/complete", """{"occurredOn":"2026-01-20","tzId":"UTC"}""", status = 201)
         val case = api.ok(
             ServiceCaseResponse.serializer(), "POST", "/v1/service-cases",
             """{"assetId":"$generator","title":"Starter claim","type":"REPAIR","openedOn":"2026-01-19","coverage":"UNKNOWN"}""",
@@ -111,9 +163,75 @@ class ApiReadsWriteNothingTest {
             status = 201,
         ).loan.id
 
+        // Row 108: rows in the publishing tables, so the three #113/#114 reads have something to leave alone — seeded so
+        // that a read-side projection or boundary write would visibly move them (B5r review I1): the generator's
+        // stored `UP` against its recorded `DEGRADED`, and the hot tub's date binding following Home Assistant with no
+        // boundary read cached and no value projected.
+        runBlocking {
+            graph.haConnections.upsert(
+                HaConnection(
+                    id = "example-connection", baseUrl = "http://192.168.0.10:8123", cadence = SyncCadence.DAILY,
+                    networkEligibility = NetworkEligibility.HOME_NETWORK_ONLY, homeNetworkSsid = "ExampleHomeWifi",
+                    backgroundChecks = BackgroundChecks.OFF, createdAt = 1_000L, updatedAt = 1_000L, configGeneration = 1,
+                ),
+            )
+            graph.publishBindings.insert(
+                PublishBinding(
+                    id = "example-binding-1", assetId = AssetId(generator), connectionId = "example-connection",
+                    kind = PublishKind.EQUIPMENT_STATUS, entityId = "input_select.example_generator_status", enabled = true,
+                    revision = 2, activatedInstallationId = "example-installation", validatedAt = 1L, validatedRevision = 2,
+                    boundaryEntityId = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            graph.publishDeliveries.upsert(PublishDelivery("example-binding-1", "UP", 3, 1L))
+            graph.publishBindings.insert(
+                PublishBinding(
+                    id = "example-binding-2", assetId = AssetId(tub), connectionId = "example-connection",
+                    kind = PublishKind.SEASON_SERVICE_DATE, entityId = "input_datetime.example_heater_service_done",
+                    enabled = true, revision = 2, activatedInstallationId = "example-installation", validatedAt = 1L,
+                    validatedRevision = 2, boundaryEntityId = "input_datetime.example_heater_season_ended",
+                    createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            graph.publishDeliveries.upsert(PublishDelivery("example-binding-2", null, 0, 1L))
+            graph.seasonSyncBindings.insert(
+                SeasonSyncBinding(
+                    AssetId(tub), "example-connection", "input_boolean.example_heater_in_season", SyncMode.FOLLOW,
+                    enabled = true, revision = 1, observedState = null, observedChangedAt = null, lastSuccessAt = null,
+                    lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null, appliedAction = null,
+                    appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            // #125 (h15): the held job follows its own switch, with one row of its own season, so its read has a
+            // binding, a stale state row and an own season to leave alone.
+            graph.uow.write {
+                val stored = graph.schedules.get(ScheduleId(held))!!
+                graph.schedules.upsert(stored.copy(seasonSource = ScheduleSeasonSource.OWN))
+            }
+            graph.scheduleSeasonBindings.insert(
+                ScheduleSeasonBinding(
+                    ScheduleId(held), "example-connection", "input_boolean.example_generator_load_season", SyncMode.FOLLOW,
+                    enabled = true, revision = 1, observedState = null, observedChangedAt = null, lastSuccessAt = null,
+                    lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null, appliedAction = null,
+                    appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+            graph.scheduleSeasonActivations.insert(
+                ScheduleSeasonActivation("example-own-start", ScheduleId(held), SeasonAction.START, "2026-01-15", 1L),
+            )
+            graph.publishDecommissions.upsertMerging(
+                DecommissionTombstone(
+                    "example-tombstone-1", "example-connection", "input_datetime.example_gone", null, "example-installation",
+                    DecommissionState.PENDING, 1L, null, null, 1,
+                ),
+            )
+        }
+
         graph.today = LocalDate.parse("2026-02-10")
         graph.now = dayMillis("2026-02-10")
         val before = snapshot()
+        assertTrue("the publishing tables are not empty", before.getValue("ha_publish_binding").isNotEmpty())
+        assertTrue("a season sync binding is seeded", before.getValue("season_sync_binding").isNotEmpty())
         assertTrue("the stored state is stale", runBlocking { graph.scheduleStates.all() }.all { it.computedForOn == "2026-01-20" })
 
         for (path in listOf(
@@ -135,16 +253,52 @@ class ApiReadsWriteNothingTest {
             "/v1/loans/$loan",
             "/v1/schedules",
             "/v1/status",
+            // #114 (C29): readiness, derived for today and stored nowhere — with no role, and with one.
+            "/v1/assets/$generator/season-readiness",
+            "/v1/assets/$tub/season-readiness",
+            // #113/#114 (C29b, row 114): helper discovery reads Home Assistant and writes nothing here; row 108 re-runs
+            // it over the publishing tables.
+            "/v1/ha-connection/entities/input_select",
+            "/v1/ha-connection/entities/input_datetime",
+            "/v1/ha-connection/entities/input_boolean",
+            // #113/#114 (C35): the asset's publishing, derived from its rows and written nowhere.
+            "/v1/assets/$generator/ha-publishing",
+            // B5r (C35a): the collection, over the same snapshot (row 108).
+            "/v1/ha-publishing",
+            // #125 (U-C7, row h15): a schedule's own season, derived for today — its phase, binding state and rows.
+            "/v1/schedules/$held/season-sync",
         )) {
             val response = api.call("GET", path)
             assertEquals("$path: ${response.bodyText()}", 200, response.status)
             assertEquals(path, before, snapshot())
         }
+        // B5w1 (C35b, row 117): the publishing plan is a POST that reads — one fresh read of the helper from the
+        // scripted Home Assistant, a plan id, and no row of any table written.
+        runBlocking { graph.secretStore.put("example-connection", Secret("fictional-token-1")) }
+        graph.haPublish.helpers["input_select.example_generator_status"] = RemoteEntity(
+            "input_select.example_generator_status", "DOWN", listOf("UP", "DEGRADED", "DOWN"), null, null,
+        )
+        val beforePlan = snapshot()
+        val plan = api.call(
+            "POST", "/v1/assets/$generator/ha-publishing-plan",
+            """{"kind":"EQUIPMENT_STATUS","action":"ENABLE","entityId":"input_select.example_generator_status"}""",
+        )
+        assertEquals(plan.bodyText(), 200, plan.status)
+        assertTrue(plan.bodyText(), plan.bodyText().contains("\"refusal\":null"))
+        assertEquals("ha-publishing-plan", beforePlan, snapshot())
+        assertTrue(graph.haPublish.posts.isEmpty())
         // And what the reads answered was today's derivation, not the stored row.
         val detail = api.ok(ScheduleDetailResponse.serializer(), "GET", "/v1/schedules/$held")
         assertEquals("2026-02-10", detail.computedForOn)
         assertEquals("2026-03-01", detail.state.actionableDueOn)
         assertEquals("DEFERRED", detail.status)
+
+        // The positive control (B5r review I1): the seed is one a projection visibly moves, so a read that projected
+        // would have failed the loop above.
+        runBlocking { graph.publishProjector.reconcileDesired(graph.today) }
+        assertNotEquals(
+            "a projection moves the seeded deliveries", before.getValue("ha_publish_delivery"), snapshot().getValue("ha_publish_delivery"),
+        )
     }
 
     /**
@@ -271,6 +425,16 @@ class ApiReadsWriteNothingTest {
                 )
             },
         )
+        // #114 (C10, C29b; row 113): the role route writes the schedule row and no event; since #124 (C41) the same write
+        // rebuilds the covered asset's derived state, which a schedule counting from its opening service reads.
+        assertEquals(
+            setOf("maintenance_schedule", "schedule_state"),
+            tablesWrittenBy { api.call("POST", "/v1/schedules/$oilChange/role", """{"role":"SEASON_START","seasonStartQuickElected":true}""") },
+        )
+        assertEquals(
+            setOf("maintenance_schedule", "schedule_state"),
+            tablesWrittenBy { api.call("POST", "/v1/schedules/$oilChange/role", """{"role":"NONE"}""") },
+        )
         val coolant = schedule(generator, "Coolant flush")
         api.ok(SubjectResponse.serializer(), "POST", "/v1/health-subjects", subjectBody(generator, "Coolant", "MAINTENANCE_OVERDUE", coolant), status = 201)
         assertEquals(
@@ -286,6 +450,61 @@ class ApiReadsWriteNothingTest {
                        "servicePolicy":"IN_SERVICE_AT_START"}""",
                 )
             },
+        )
+
+        // B5w2 (C35b; row 120): the publishing controls write only the publishing tables, each awaited to its end
+        // (the delivery it asked for included), and the acknowledgement only its tombstone.
+        val status = "input_select.example_heater_equipment_status"
+        val date = "input_datetime.example_heater_service_done"
+        runBlocking {
+            graph.saveHaConnection.run(
+                "http://192.168.0.10:8123", Secret("fictional-token-1"), null, NetworkEligibility.HOME_NETWORK_ONLY,
+                "ExampleHomeWifi", null,
+            )
+        }
+        graph.haPublish.helpers[status] = RemoteEntity(status, "unknown", listOf("UP", "DEGRADED", "DOWN"), null, null)
+        graph.haPublish.helpers[date] = RemoteEntity(date, "2025-11-15", null, true, false)
+        for ((kind, entity) in listOf("EQUIPMENT_STATUS" to status, "SEASON_SERVICE_DATE" to date)) {
+            val plan = api.call(
+                "POST", "/v1/assets/$heater/ha-publishing-plan", """{"kind":"$kind","action":"ENABLE","entityId":"$entity"}""",
+            )
+            val planId = Json.parseToJsonElement(plan.bodyText()).jsonObject.getValue("planId").jsonPrimitive.content
+            val enabled = api.call(
+                "POST", "/v1/assets/$heater/ha-publishing",
+                """{"kind":"$kind","action":"ENABLE","planId":"$planId","confirmDestination":"$entity"}""",
+            )
+            assertEquals(enabled.bodyText(), 200, enabled.status)
+        }
+        runBlocking { graph.awaitDispatched() }
+        fun awaited(call: () -> ApiResponse): () -> ApiResponse = { call().also { runBlocking { graph.awaitDispatched() } } }
+        assertEquals(
+            setOf("ha_publish_binding"),
+            tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing", """{"kind":"EQUIPMENT_STATUS","action":"CHECK_HELPER"}""") }),
+        )
+        // A condition to publish, not yet projected (no observer is started here): Publish now projects it first (I18).
+        api.call("POST", "/v1/assets/$heater/conditions", """{"condition":"DOWN","tzId":"UTC"}""")
+        assertEquals(
+            setOf("ha_publish_delivery"),
+            tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing/publish-now", "{}") }),
+        )
+        // Away from home, so the date helper's obligation stays to be acknowledged: Disable reads nothing either way.
+        graph.currentNetwork = NetworkReading(CurrentNetwork.Wifi("ExampleOtherWifi"), null)
+        assertEquals(
+            setOf("ha_publish_binding", "ha_publish_decommission"),
+            tablesWrittenBy(awaited { api.call("POST", "/v1/assets/$heater/ha-publishing", """{"kind":"SEASON_SERVICE_DATE","action":"DISABLE"}""") }),
+        )
+        val owed = runBlocking { graph.publishDecommissions.all() }.single()
+        runBlocking { graph.publishDecommissions.upsertMerging(owed.copy(state = DecommissionState.UNDELIVERABLE)) }
+        assertEquals(
+            setOf("ha_publish_decommission"),
+            tablesWrittenBy(
+                awaited {
+                    api.call(
+                        "POST", "/v1/ha-publishing/decommissions/${owed.id}/acknowledge",
+                        """{"decommissionId":"${owed.id}","acknowledgedClearedInHa":true}""",
+                    )
+                },
+            ),
         )
     }
 }

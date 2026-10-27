@@ -15,6 +15,17 @@ private val SerialDescriptor.names: List<String>
     get() = (0 until elementsCount).map { getElementName(it) }
 
 /**
+ * 1.9.0: #114's role codes (C2, C10a), #113/#114's publishing codes (C29b, C35b), O-16's completion date (C39), #125's
+ * schedule-season codes (U-C7), and the schedule codes their routes answer.
+ */
+private val ERROR_CODES_1_9_0 = listOf(
+    "SEASON_START_STRANDED", "SEASON_START_REFUSED", "SEASON_START_DATE_INVALID", "HA_PUBLISH_REFUSED",
+    "STALE_PLAN", "HA_HELPER_READ_FAILED", "HA_PUBLISH_CONFIRMATION_REQUIRED", "NO_SUCH_DECOMMISSION",
+    "DECOMMISSION_STILL_PENDING", "COMPLETION_DATE_IN_FUTURE", "SCHEDULE_SEASON_REFUSED",
+    "SCHEDULE_SEASON_CONFIRMATION_REQUIRED", "SCHEDULE_ARCHIVED", "NO_SUCH_SCHEDULE",
+)
+
+/**
  * 1.4 (B09) — the two documents that describe the `/v1` wire are kept honest by the wire itself.
  *
  * **`docs/api/command-shapes.json`** (master plan §11.6; spec §9.4) lists every command's request
@@ -53,9 +64,34 @@ class CommandShapesGoldenTest {
                 "loan", "loanReturn",
                 // #92 (C26): the attachment edit, the upload's header object, save as document, the replace draft.
                 "attachmentUpdate", "attachmentUpload", "materialize", "replaceDraft", "replaceSuccessor",
+                // #114 (C29b): the Season Start role's own command, never a key of the schedule's.
+                "scheduleRole",
+                // #113/#114 (C35b): the publishing plan and the control that commits it; the tombstone acknowledgement.
+                "haPublishingPlan", "haPublishingAction", "haPublishingAcknowledgement",
+                // #125 (U-C7): a schedule's own season, linked or unlinked, each with the caller's own confirmation.
+                "scheduleSeason",
             ),
             shapes.keys.toList(),
         )
+        assertEquals(keysOf("scheduleSeason"), ScheduleSeasonRequest.serializer().descriptor.names)
+        assertEquals(listOf("action", "entityId", "confirmEntityId", "confirmUnlink"), keysOf("scheduleSeason"))
+        assertTrue("Follow only: no mode key", "mode" !in keysOf("scheduleSeason"))
+        assertEquals(keysOf("haPublishingPlan"), HaPublishingPlanRequest.serializer().descriptor.names)
+        assertEquals(listOf("kind", "action", "entityId", "boundaryEntityId"), keysOf("haPublishingPlan"))
+        assertEquals(keysOf("haPublishingAction"), HaPublishingActionRequest.serializer().descriptor.names)
+        assertEquals(listOf("kind", "action", "planId", "confirmDestination"), keysOf("haPublishingAction"))
+        assertEquals(keysOf("haPublishingAcknowledgement"), HaDecommissionAcknowledgement.serializer().descriptor.names)
+        assertEquals(listOf("decommissionId", "acknowledgedClearedInHa"), keysOf("haPublishingAcknowledgement"))
+        assertEquals("Publish now takes an empty body", emptyList<String>(), HaPublishNowRequest.serializer().descriptor.names.toList())
+        // #114 point 5, I33: no publishing body takes a value, a date to publish or READY.
+        val valueKeys = setOf("value", "desiredValue", "option", "date", "serviceOn", "seasonServiceDoneOn", "ready", "readyForSeason")
+        assertTrue(
+            "no publishing shape holds a value key",
+            (keysOf("haPublishingPlan") + keysOf("haPublishingAction") + keysOf("haPublishingAcknowledgement"))
+                .none { it in valueKeys },
+        )
+        assertEquals(keysOf("scheduleRole"), ScheduleRoleRequest.serializer().descriptor.names)
+        assertEquals(listOf("role", "sinceOn", "seasonStartQuickElected"), keysOf("scheduleRole"))
         assertEquals(keysOf("attachmentUpdate"), UpdateAttachmentRequest.serializer().descriptor.names)
         assertEquals(keysOf("attachmentUpload"), UploadMetadata.serializer().descriptor.names)
         assertEquals("operationKey", keysOf("attachmentUpload").first())
@@ -114,11 +150,15 @@ class CommandShapesGoldenTest {
         assertEquals(ScheduleForms.CURRENT_KEYS, keys.filter { it in ScheduleForms.CURRENT_KEYS })
         assertEquals(ScheduleForms.CURRENT_KEYS, listOf("servicePolicy", "policyOffsetDays"))
 
-        // The action flag: a PATCH's and an archive's, never a key of the command or a row field.
+        // The action flags: a PATCH's, never a key of the command or a row field. The archive takes the first
+        // only; #114's QUICK election (C11, C29b) is the PATCH's and the role command's.
         val flags = schedule.list("actionFlags")
+        assertEquals(listOf("unlinkHealthSubject", "seasonStartQuickElected"), flags)
         assertEquals(ScheduleForms.ACTION_FLAGS, flags)
         assertEquals(flags, ScheduleActionFlags.serializer().descriptor.names)
-        assertEquals(listOf("archived") + flags, ScheduleArchiveRequest.serializer().descriptor.names)
+        assertEquals(listOf("archived", "unlinkHealthSubject"), ScheduleArchiveRequest.serializer().descriptor.names)
+        assertTrue("seasonStartQuickElected" in keysOf("scheduleRole"))
+        assertTrue(keysOf("scheduleRole").none { it in command })
         val row = ScheduleRowResponse.serializer().descriptor.names
         assertTrue(flags.none { it in command || it in row })
 
@@ -129,21 +169,21 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat20AndTwentyThreeTables() {
+    @Test fun theContractDocumentNamesFormat21AndTwentyFourTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
         assertEquals(
-            "the import range reads 1–20 at both sites",
+            "the import range reads 1–21 at both sites",
             2,
-            lines.count { "format **1–20**" in it || "**format 1–20**" in it },
+            lines.count { "format **1–21**" in it || "**format 1–21**" in it },
         )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
                 listOf(
-                    "1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17", "1–18", "1–19",
+                    "1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17", "1–18", "1–19", "1–20",
                 ).any {
                     "format **$it**" in line || "**format $it**" in line
                 }
@@ -194,7 +234,9 @@ class CommandShapesGoldenTest {
             "a reference's document role" in identical && "format 17" in identical,
         )
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
-        assertTrue("the report's twenty-three tables", "twenty-three tables" in doc.lowercase())
+        // #125 (format 21): the schedules' own season rows are the twenty-fourth.
+        assertTrue("the report's twenty-four tables", "twenty-four tables" in doc.lowercase())
+        assertFalse("the report's old twenty-three tables", "twenty-three tables" in doc.lowercase())
         assertFalse("the report's old twenty-two tables", "twenty-two tables" in doc.lowercase())
         assertFalse("the report's old twenty tables", "twenty tables" in doc.lowercase())
         assertFalse("the report's old fourteen tables", "fourteen tables" in doc.lowercase())
@@ -242,8 +284,13 @@ class CommandShapesGoldenTest {
             "installationId", "X-ServiceTag-Attachment", "sourcesDigest",
             // #91 (C2): the one new code, a role on a reference that is not a web link.
             "REFERENCE_ROLE_NOT_ALLOWED",
-        )) {
+        ) + ERROR_CODES_1_9_0) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
+        }
+        // 1.9.0: a code that is also a reason's name (`SCHEDULE_ARCHIVED`, `STALE_PLAN`) is named in many places, so
+        // each code is pinned by its own Errors-table row too.
+        for (code in ERROR_CODES_1_9_0) {
+            assertTrue("docs/api/v1.md has no Errors row for $code", "| `$code` |" in doc)
         }
         for (path in listOf(
             "/v1/assets/{id}/season", "/v1/assets/{id}/season-mode", "/v1/assets/{id}/maintenance-break",

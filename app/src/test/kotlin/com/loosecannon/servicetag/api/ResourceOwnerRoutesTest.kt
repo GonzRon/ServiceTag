@@ -499,7 +499,7 @@ class ResourceOwnerRoutesTest {
         assertTrue(role, "`a document role cannot go on an entry's attachment`" in role)
         assertFalse("a document role belongs on an asset's attachment" in text)
         // The import range and both status lines.
-        assertTrue("format **1–20**" in text && "**format 1–20**" in text)
+        assertTrue("format **1–21**" in text && "**format 1–21**" in text)
         assertFalse("1–19" in text)
         assertEquals("both status lines say 20 since #69", 2, lines.count { "20 since #69 (resource owners)" in it })
         // A move between owners is named among what has no endpoint.

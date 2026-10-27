@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.testing.scheduleSeasonActivationOf
 import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
@@ -63,6 +65,7 @@ class TransferGraphRetainTest {
         assertEquals(listOf(EMPTY_GROUP), kept.maintenanceGroups.map { it.id })
         assertEquals(listOf("s2"), kept.maintenanceSchedules.map { it.id })
         assertEquals(listOf("cl3"), kept.occurrenceClosures.map { it.id })
+        assertEquals(listOf("ss2"), kept.scheduleSeasonActivations.map { it.id }, "the held schedule's own season goes with it")
         assertEquals(emptyList(), kept.assetReferences + kept.seasonActivations + kept.assetConditions)
         assertEquals(listOf("hs2"), kept.healthSubjects.map { it.id })
         assertEquals(estate.assetCategories, kept.assetCategories, "the catalog is the sender's")
@@ -90,6 +93,10 @@ class TransferGraphRetainTest {
             // #15 (C13): one SupplyItem, and one applicability row naming it from the heater.
             supplyItems = listOf(supplyItemOf("s1", "Example 12 V Battery").toDto()),
             assetSupplies = listOf(assetSupplyOf("as1", assetId = HEATER, supplyId = "s1", role = "Battery").toDto()),
+            // #125: one own-season row of the heater's schedule.
+            scheduleSeasonActivations = listOf(
+                scheduleSeasonActivationOf("ss1", "s1", SeasonAction.START, "2026-03-01").toDto(),
+            ),
             // #86: a succession between two assets, both in the file.
             assetSuccessions = listOf(successionOf("su1", predecessor = COMPRESSOR, successor = OPENER).toDto()),
             // #77: one record of an asset that came in by pack; an ordinary backup carries every record.

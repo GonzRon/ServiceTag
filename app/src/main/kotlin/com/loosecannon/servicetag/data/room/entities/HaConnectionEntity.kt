@@ -10,6 +10,9 @@ import androidx.room3.PrimaryKey
  * keep it so (C17). Eight columns for the model's eight fields, in its order; the three enum columns hold the enum's
  * name. Whether the connection can be used is never a column here: it is the platform store's answer alone (C18), so a
  * platform restore that brings this row back cannot bring back a stale marker with it (R16-Q-F).
+ *
+ * Schema v22 (#113/#114, F) appends `config_generation`, a counter every connection save moves by one, so a validation
+ * read before a save is stale whatever the clock says (C14, C28).
  */
 @Entity(tableName = "ha_connection")
 data class HaConnectionEntity(
@@ -21,4 +24,6 @@ data class HaConnectionEntity(
     @ColumnInfo(name = "background_checks") val backgroundChecks: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /** Schema v22 (#113/#114, F): moves by one on every connection save (C28); device-local like the row. */
+    @ColumnInfo(name = "config_generation", defaultValue = "0") val configGeneration: Long = 0,
 )

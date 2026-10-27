@@ -39,6 +39,7 @@ import com.loosecannon.servicetag.l10n.dateFieldText
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
+import com.loosecannon.servicetag.ui.settleKeyboard
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -133,15 +134,18 @@ class ServiceCaseScreensTest {
 
         field(CASE_TITLE).performScrollTo().performTextReplacement("")
         field(COST).performScrollTo().performTextReplacement("12.345")
+        rule.settleKeyboard()
         rule.onNodeWithText(SAVE_CASE).performScrollTo().performClick()
         rule.awaitText("Enter a cost like 123.45")
 
         field(COST).performScrollTo().performTextReplacement("12.34")
         field("Currency").performScrollTo().performTextReplacement("")
+        rule.settleKeyboard()
         rule.onNodeWithText(SAVE_CASE).performScrollTo().performClick()
         rule.awaitText(A_COST_NEEDS_A_CURRENCY)
 
         field("Currency").performScrollTo().performTextReplacement("EUR")
+        rule.settleKeyboard()
         rule.onNodeWithText(SAVE_CASE).performScrollTo().performClick()
         rule.awaitText(GIVE_THE_CASE_A_TITLE)
         rule.onNodeWithText(GIVE_THE_CASE_A_TITLE).performScrollTo().assertIsDisplayed()

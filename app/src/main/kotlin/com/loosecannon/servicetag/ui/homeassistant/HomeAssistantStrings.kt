@@ -1,8 +1,10 @@
 package com.loosecannon.servicetag.ui.homeassistant
 
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.hapublish.INVALID_SERVICE_DATE
 import com.loosecannon.servicetag.core.seasonsync.SyncCadence
 import com.loosecannon.servicetag.l10n.localized
+import com.loosecannon.servicetag.l10n.localizedPlural
 
 // #16 (§5) — the Home Assistant screen's sentences and the check outcomes both screens draw, each declared once here
 // and imported, never copied. P16-1…21 and P16-48…52 RATIFIED 2026-10-02 (R16-Q-C); P16-50 and P16-53…82 RATIFIED
@@ -131,6 +133,20 @@ internal val HA_PRECISE_LOCATION_REFUSED: String get() = localized(R.string.ha_p
 
 /** P16-67 (amended 2026-10-03): saving an http address with "Any network". */
 internal val HA_HTTP_NEEDS_HOME_WIFI: String get() = localized(R.string.ha_http_needs_home_wifi)
+
+/** P113-42 (#113/#114, O-12): a new address while a date helper is still owed `1970-01-01`. */
+internal val HA_PUBLISHING_BLOCKS_ADDRESS_CHANGE: String get() = localized(R.string.ha_publishing_blocks_address_change)
+
+/** P113-40 (#113, C36): the write disclosure, while any asset has a publish binding. */
+internal val HA_PUBLISH_WRITE_DISCLOSURE: String get() = localized(R.string.ha_publish_write_disclosure)
+
+/**
+ * P113-41 (#113/#114, O-11, F-15): the Forget warning above P16-9, with how many date helpers in Home Assistant still
+ * hold a Season Start date; a plural, so each language's rules pick the form. The date it names is the one constant,
+ * [INVALID_SERVICE_DATE] (C1).
+ */
+internal fun haPublishForgetDateHelpers(count: Int): String =
+    localizedPlural(R.plurals.ha_publish_forget_date_helpers, count, count, INVALID_SERVICE_DATE)
 
 /** P16-68: at capture with Location off; after P16-77 when Location is off. */
 internal val HA_TURN_ON_LOCATION: String get() = localized(R.string.ha_turn_on_location)

@@ -272,7 +272,7 @@ class CrossConceptWriteTest {
     private val recordSeasonActivation =
         RecordSeasonActivation(assets, events, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     private val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, today, SeasonSyncGuard(InMemorySeasonSyncRepository()))
-    private val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
+    private val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()), groups)
     private val setMaintenanceBreak = SetMaintenanceBreak(assets, schedules, uow, clock, recompute)
     private val setHealthPolicy = SetHealthPolicy(assets, subjects, uow, clock)
     private val setWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
@@ -280,19 +280,20 @@ class CrossConceptWriteTest {
     private val archiveHealthSubject = ArchiveHealthSubject(subjects, assets, schedules, uow, clock)
     private val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, subjects)
-    private val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock)
+    private val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock, groups, InMemoryTransferRecordRepository())
     private val promoteCategory = PromoteCategory(categories)
     private val saveAssetSettings = SaveAssetSettings(
         assets, schedules, subjects, activations, uow, ids, clock, today, recompute,
         ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory, SeasonSyncGuard(InMemorySeasonSyncRepository()),
+        groups,
     )
     private val createAsset =
         CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory)
-    private val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
+    private val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory, groups)
     private val renameCategory = RenameCategory(categories, assets, uow, clock)
     private val deleteCategory = DeleteCategory(categories, assets, uow)
     private val logEvent = LogEvent(events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
-    private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
+    private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute, today)
     private val openServiceCase = OpenServiceCase(assets, events, serviceCases, uow, ids, clock, today)
     private val updateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, today)
     private val addServiceCaseEntry = AddServiceCaseEntry(serviceCases, caseEntries, uow, ids, clock, today)

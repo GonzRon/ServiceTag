@@ -426,6 +426,7 @@ class ScheduleEditorTest {
 
         rule.awaitText(QUESTION)
         rule.onNodeWithText("Every N").performTextInput("3")
+        rule.settleKeyboard()
         gone("Start counting from")
         gone("The season's start")
 

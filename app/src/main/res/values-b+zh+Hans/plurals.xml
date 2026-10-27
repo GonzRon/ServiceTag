@@ -10,4 +10,7 @@
     <plurals name="health_grace_period">
         <item quantity="other">处于%1$d天宽限期内</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="other">Home Assistant 中仍有 %1$d 个日期辅助元素保存着使用季开始日期。断开连接时会先尽可能将它们设为 %2$s；无法访问的辅助元素会保留其日期，直到您在 Home Assistant 中将其清除。</item>
+    </plurals>
 </resources>

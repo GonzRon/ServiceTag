@@ -286,12 +286,22 @@ class OffersTest {
         down(ups)
         val flow = graph.completionFlow
 
+        // O-16 as amended (C39): the dialog no longer takes a completion dated after today, so none is written here.
         val outcome = async { flow.complete(schedule.id) }
         flow.prompt.first { it != null }
-        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-16")))
+        assertFalse(flow.submit(CompletionAnswer(occurredOn = "2026-04-16")))
+        flow.cancel()
         advanceUntilIdle()
-        assertNull("nothing is asked", flow.offer.value)
-        assertTrue("the completion returns with nothing to ask", outcome.await() is CompletionOutcome.Completed)
+        assertEquals(CompletionOutcome.Cancelled, outcome.await())
+        // One stored in advance — an older release's, or a merge's — is still never offered after.
+        val advance = AssetEvent(
+            id = EventId("e-advance"), assetId = ups, kind = EventKind.MAINTENANCE, title = "Battery self-test",
+            profileId = null, occurredOn = "2026-04-16", occurredTime = null, tzId = "UTC", notes = "",
+            source = EventSource.SCHEDULE_QUICK_COMPLETE, sourceRef = null, createdAt = 1L, updatedAt = 1L,
+            measurements = emptyList(), consumables = emptyList(), scheduleId = schedule.id, occurrenceOn = "2026-04-01",
+        )
+        graph.events.upsert(advance)
+        assertEquals(emptyList<Any>(), graph.eventOffers.offersAfter(advance))
 
         val (model, saved) = logged(ups, EventKind.REPLACEMENT, "Battery replaced", on = "2026-04-20")
         assertNull(model.state.value.offer)

@@ -29,6 +29,11 @@ data class HaConnection(
     val backgroundChecks: BackgroundChecks,
     val createdAt: Long,
     val updatedAt: Long,
+    /**
+     * #113/#114 (C28, F) — moves by one on every save of the connection, so a validation read before any save is stale
+     * whatever the clock says. Forget and a new connection start it again, so a plan names the connection's id too.
+     */
+    val configGeneration: Long = 0,
 )
 
 /**

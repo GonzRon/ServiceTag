@@ -387,6 +387,8 @@ class MergePlannerReferenceTest {
             MergeTable.ASSET_SUPPLIES to report.assetSupplies,
             // #47: the installed components close it.
             MergeTable.INSTALLED_COMPONENTS to report.installedComponents,
+            // #125: a schedule's own season rows close it.
+            MergeTable.SCHEDULE_SEASON_ACTIVATIONS to report.scheduleSeasonActivations,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })

@@ -3,9 +3,16 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.fetch.FetchProblem
+import com.loosecannon.servicetag.core.hapublish.DecommissionStillPending
+import com.loosecannon.servicetag.core.hapublish.NoSuchDecommission
+import com.loosecannon.servicetag.core.hapublish.PublishNotSetUp
+import com.loosecannon.servicetag.core.hapublish.PublishRefusal
+import com.loosecannon.servicetag.core.hapublish.PublishRefused
 import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefusal
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefused
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
 import com.loosecannon.servicetag.core.usecase.AssetCycle
@@ -17,6 +24,7 @@ import com.loosecannon.servicetag.core.usecase.BadScheduleDate
 import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.CloseNotSupported
 import com.loosecannon.servicetag.core.usecase.ClosedOnOutOfRange
+import com.loosecannon.servicetag.core.usecase.CompletionDateInFuture
 import com.loosecannon.servicetag.core.usecase.ConditionProblem
 import com.loosecannon.servicetag.core.usecase.ConditionValidation
 import com.loosecannon.servicetag.core.usecase.DefinitionInUse
@@ -70,6 +78,11 @@ import com.loosecannon.servicetag.core.usecase.ScheduleValidation
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyEnded
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonStartBadDate
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefusal
+import com.loosecannon.servicetag.core.usecase.SeasonStartRefused
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
@@ -328,6 +341,13 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     is BadScheduleDate -> errorResponse(
         422, "Unprocessable Content", "BAD_DATE", "that is not an ISO YYYY-MM-DD date",
     )
+    // O-16 as amended (C39): a schedule's completion dated after the phone's today, from the complete route (both
+    // target kinds) and an event PATCH whose result names a schedule. `CONDITION_DATE_IN_FUTURE`'s shape.
+    is CompletionDateInFuture -> errorResponse(
+        422, "Unprocessable Content", "COMPLETION_DATE_IN_FUTURE",
+        "occurredOn may not be later than today for a schedule's completion",
+        listOf("CompletionDateInFuture(occurredOn=${e.occurredOn}, today=${e.today})"), "occurredOn",
+    )
     // Both are the completion command's `assetId` naming the wrong asset, so both are 422 and not
     // 409: what was asked for describes a completion that cannot exist (§9.2's "validated as a
     // required member"). They stay two codes because they are two different facts — never in this
@@ -527,6 +547,65 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         409, "Conflict", "PRE_SERVICE_NEEDS_DATES",
         "this asset has neither a calendar season nor a maintenance break for PRE_SERVICE to count back from",
     )
+    // #114 (C2, C10): the role command's refusal, naming the `SeasonStartRefusal`; nothing was written. Reached over
+    // `/v1` by A4w's role route.
+    is SeasonStartRefused -> errorResponse(
+        409, "Conflict", "SEASON_START_REFUSED", seasonStartRefusalMessage(e.reason),
+        listOf(seasonStartRefusalName(e.reason)),
+    )
+    // #114 (C2, C11): a hooked shipped command would leave a Season Start role where it may not stand; the cause and
+    // the role schedules, as `SEASON_MODE_STRANDS_POLICY` names its schedules. A restore the asset may not take
+    // (`RESTORE_NOT_ELIGIBLE`) names the rule it fails, as the phone does (A4w review M2).
+    is SeasonStartStrands -> errorResponse(
+        409, "Conflict", "SEASON_START_STRANDED", seasonStartStrandMessage(e.strandCause),
+        listOf(
+            "SeasonStartStrands(cause=${e.strandCause.name}" + (e.assetId?.let { ", assetId=${it.value}" } ?: "") +
+                (e.refusal?.let { ", reason=${refusalReasonOf(it)}" } ?: "") + ")",
+        ) + e.schedules.map(::strandedName),
+    )
+    // #114 (C10, C29b): the role route's `sinceOn` is not an ISO `YYYY-MM-DD` date; nothing was written.
+    is SeasonStartBadDate -> errorResponse(
+        422, "Unprocessable Content", "SEASON_START_DATE_INVALID", "${e.field} must be an ISO YYYY-MM-DD date",
+        listOf("SeasonStartBadDate(field=${e.field})"), e.field,
+    )
+    // #125 (U-C3, U-C7): a schedule's link refused by its `ScheduleSeasonRefusal` name, nothing written — on the
+    // season-sync route, and on a schedule PATCH that would leave an own-season schedule on a group (`GROUP_TARGET`).
+    is ScheduleSeasonRefused -> errorResponse(
+        409, "Conflict", "SCHEDULE_SEASON_REFUSED", scheduleSeasonRefusalMessage(e.reason),
+        listOf("ScheduleSeasonRefused(reason=${e.reason.name})"),
+    )
+    // #125 (U-C7): a link or unlink without the caller's own confirmation, or with one the action does not check.
+    is ScheduleSeasonConfirmationRequired -> errorResponse(
+        422, "Unprocessable Content", "SCHEDULE_SEASON_CONFIRMATION_REQUIRED", scheduleSeasonConfirmationMessage(e),
+        listOf("ScheduleSeasonConfirmationRequired(field=${e.field})"), e.field,
+    )
+    // #113/#114 (C25, C25a, C29b): a publishing refusal by its `PublishRefusal` name — `STALE_PLAN` its own code.
+    is PublishRefused -> publishRefusedResponse(e)
+    // #113/#114 (C35b; B3 review M2): a control on a kind the asset does not publish — no binding to change. The
+    // `BAD_ENTITY_ID` reason of the controls' family, about the body's `kind`; nothing was written.
+    // Change target and Check helper both reach it, so its sentence names the kind, never an entity id (A4w review N4).
+    is PublishNotSetUp -> errorResponse(
+        409, "Conflict", "HA_PUBLISH_REFUSED",
+        "this asset has no ${e.kind.name} publishing to change or check; enable it first",
+        listOf("PublishRefused(reason=${PublishRefusal.BAD_ENTITY_ID.name})"), "kind",
+    )
+    // #113/#114 (C35b): a control or the acknowledgement without the caller's own confirmation, or with one the action
+    // does not check.
+    is PublishConfirmationRequired -> errorResponse(
+        422, "Unprocessable Content", "HA_PUBLISH_CONFIRMATION_REQUIRED", publishConfirmationMessage(e),
+        listOf("PublishConfirmationRequired(field=${e.field})"), e.field,
+    )
+    // #114 (C25a, C35b): the acknowledgement named no obligation, or one the phone is still delivering (kept).
+    is NoSuchDecommission -> errorResponse(404, "Not Found", "NO_SUCH_DECOMMISSION", "no such decommission")
+    is DecommissionStillPending -> errorResponse(
+        409, "Conflict", "DECOMMISSION_STILL_PENDING",
+        "the phone is still delivering 1970-01-01 to that helper; only an undeliverable one is acknowledged",
+    )
+    // #113/#114 (C29b): a read of Home Assistant answered nothing to use; its kind under the outbound name.
+    is HelperReadFailed -> errorResponse(
+        409, "Conflict", "HA_HELPER_READ_FAILED", "Home Assistant could not be read: ${e.kind.name}",
+        listOf("HelperReadFailed(errorKind=${e.kind.name}" + (e.detail?.let { ", detail=$it" } ?: "") + ")"),
+    )
     is HealthScheduleTaken -> errorResponse(
         409, "Conflict", "HEALTH_SCHEDULE_TAKEN", "that schedule already drives another health subject",
         listOf("HealthScheduleTaken(scheduleId=${e.scheduleId.value}, heldBy=${e.heldBy.value})"),
@@ -603,6 +682,144 @@ private fun unprocessable(refusal: Refusal, problems: List<String>): ApiResponse
 /** A stranded schedule as a refusal names it: the id to fix, and the title a person recognises. */
 private fun strandedName(schedule: StrandedSchedule): String =
     "StrandedSchedule(id=${schedule.id.value}, title=${schedule.title})"
+
+/** #114 (C2): a [SeasonStartRefusal] as `problems` names it — its upper-snake name, then whatever it carries. */
+private fun seasonStartRefusalName(reason: SeasonStartRefusal): String = when (reason) {
+    SeasonStartRefusal.ScheduleArchived -> "SeasonStartRefused(reason=SCHEDULE_ARCHIVED)"
+    SeasonStartRefusal.QuickNotElected -> "SeasonStartRefused(reason=QUICK_NOT_ELECTED)"
+    is SeasonStartRefusal.NotMaintainedHere -> "SeasonStartRefused(reason=NOT_MAINTAINED_HERE, assetId=${reason.assetId.value})"
+    is SeasonStartRefusal.YearRound -> "SeasonStartRefused(reason=YEAR_ROUND, assetId=${reason.assetId.value})"
+    is SeasonStartRefusal.LeafChild -> "SeasonStartRefused(reason=LEAF_CHILD, assetId=${reason.assetId.value})"
+    is SeasonStartRefusal.AlreadyCovered -> "SeasonStartRefused(reason=ALREADY_COVERED, assetId=${reason.assetId.value}, " +
+        "scheduleId=${reason.scheduleId.value}, title=${reason.title})"
+    SeasonStartRefusal.GroupArchived -> "SeasonStartRefused(reason=GROUP_ARCHIVED)"
+    SeasonStartRefusal.GroupHasNoMembers -> "SeasonStartRefused(reason=GROUP_HAS_NO_MEMBERS)"
+    SeasonStartRefusal.DateInFuture -> "SeasonStartRefused(reason=DATE_IN_FUTURE)"
+    is SeasonStartRefusal.NoSeasonStartService ->
+        "SeasonStartRefused(reason=NO_SEASON_START_SERVICE, assetId=${reason.assetId.value})"
+    SeasonStartRefusal.CountsFromItself -> "SeasonStartRefused(reason=COUNTS_FROM_ITSELF)"
+}
+
+/** #114 (A4w review M2): a [SeasonStartRefusal]'s bare upper-snake name, as a strand's `reason=…` carries it. */
+private fun refusalReasonOf(reason: SeasonStartRefusal): String = when (reason) {
+    SeasonStartRefusal.ScheduleArchived -> "SCHEDULE_ARCHIVED"
+    SeasonStartRefusal.QuickNotElected -> "QUICK_NOT_ELECTED"
+    is SeasonStartRefusal.NotMaintainedHere -> "NOT_MAINTAINED_HERE"
+    is SeasonStartRefusal.YearRound -> "YEAR_ROUND"
+    is SeasonStartRefusal.LeafChild -> "LEAF_CHILD"
+    is SeasonStartRefusal.AlreadyCovered -> "ALREADY_COVERED"
+    SeasonStartRefusal.GroupArchived -> "GROUP_ARCHIVED"
+    SeasonStartRefusal.GroupHasNoMembers -> "GROUP_HAS_NO_MEMBERS"
+    SeasonStartRefusal.DateInFuture -> "DATE_IN_FUTURE"
+    is SeasonStartRefusal.NoSeasonStartService -> "NO_SEASON_START_SERVICE"
+    SeasonStartRefusal.CountsFromItself -> "COUNTS_FROM_ITSELF"
+}
+
+/** #114 (C2): one developer sentence per [SeasonStartRefusal]; the phone's sentences are §5's, not these. */
+private fun seasonStartRefusalMessage(reason: SeasonStartRefusal): String = when (reason) {
+    SeasonStartRefusal.ScheduleArchived -> "this schedule is archived; restore it first"
+    SeasonStartRefusal.QuickNotElected ->
+        "this schedule is completed with one tap; elect one-tap completions to count before it becomes the Season Start service"
+    is SeasonStartRefusal.NotMaintainedHere -> "the asset is archived, retired or transferred out, so it cannot have a Season Start service"
+    is SeasonStartRefusal.YearRound -> "the asset is in use all year, so it has no season to start; give it a season first"
+    is SeasonStartRefusal.LeafChild ->
+        "the asset is a child with no child assets of its own, so it cannot have a Season Start service"
+    is SeasonStartRefusal.AlreadyCovered -> "the asset already has a Season Start service; stop using that one first"
+    SeasonStartRefusal.GroupArchived -> "this group is archived, so it has no assets to mark ready"
+    SeasonStartRefusal.GroupHasNoMembers -> "this group has no assets to mark ready"
+    SeasonStartRefusal.DateInFuture -> "sinceOn may not be later than today"
+    is SeasonStartRefusal.NoSeasonStartService ->
+        "the asset has no Season Start service to count from; give one of its schedules the role first"
+    SeasonStartRefusal.CountsFromItself ->
+        "a Season Start service cannot count from itself; change when the schedule starts counting first"
+}
+
+/**
+ * #113/#114 (C35b): the sentence for [PublishConfirmationRequired] — what the caller must send, or that the action
+ * takes no confirmation at all. The caller's own values only: nothing is filled for it.
+ */
+private fun publishConfirmationMessage(e: PublishConfirmationRequired): String = when (e.key) {
+    ConfirmationKey.PLAN_ID, ConfirmationKey.CONFIRM_DESTINATION ->
+        e.takenBy?.let { "${it.name} takes no ${e.field}: it checks no confirmation" }
+            ?: "${e.field} is required: send the planId the plan answered and confirmDestination equal to its entityId"
+    ConfirmationKey.DECOMMISSION_ID -> "decommissionId is required and must be the path's id"
+    ConfirmationKey.ACKNOWLEDGED_CLEARED_IN_HA ->
+        "acknowledgedClearedInHa must be true, sent by the caller once the helper was cleared in Home Assistant"
+}
+
+/**
+ * #113/#114 (C25, C25a, C29b): [PublishRefused] on the wire. `STALE_PLAN` is its own 409 — the caller plans again —
+ * and every other reason 409 `HA_PUBLISH_REFUSED`, `problems` naming it as `PublishRefused(reason=…)`, with the
+ * holding asset for `TARGET_IN_USE`. `field` is the refused key, but `NO_CONNECTION`'s, which is about this phone and
+ * no body key, is null.
+ */
+private fun publishRefusedResponse(e: PublishRefused): ApiResponse {
+    val named = listOf(
+        "PublishRefused(reason=${e.reason.name}" + (e.holderAssetId?.let { ", holderAssetId=${it.value}" } ?: "") + ")",
+    )
+    fun refused(message: String, field: String? = e.field) =
+        errorResponse(409, "Conflict", "HA_PUBLISH_REFUSED", message, named, field)
+    return when (e.reason) {
+        PublishRefusal.STALE_PLAN -> errorResponse(
+            409, "Conflict", "STALE_PLAN", "the plan no longer holds; plan again", named, e.field,
+        )
+        PublishRefusal.NO_CONNECTION -> refused("no Home Assistant connection is saved on this phone", field = null)
+        PublishRefusal.BAD_ENTITY_ID -> refused("${e.field} is not a Home Assistant entity id")
+        PublishRefusal.WRONG_DOMAIN -> refused("${e.field} is not a helper of the kind this publication writes")
+        PublishRefusal.OPTIONS_MISMATCH -> refused("the helper's options are not exactly UP, DEGRADED and DOWN")
+        PublishRefusal.NOT_DATE_ONLY -> refused("${e.field} is not a date-only helper")
+        PublishRefusal.NOT_MAINTAINED_HERE -> refused("the asset is archived, retired or transferred out")
+        PublishRefusal.TARGET_IN_USE -> refused("another asset already publishes to that helper")
+        PublishRefusal.INBOUND_SOURCE -> refused("ServiceTag reads that helper, so it cannot write it")
+        PublishRefusal.STALE_READ -> refused("the helper's check is out of date; check it again")
+        PublishRefusal.BOUNDARY_IS_TARGET -> refused("the season-ended helper is one ServiceTag writes")
+    }
+}
+
+/** #125 (U-C3): one developer sentence per [ScheduleSeasonRefusal]; nothing was written. */
+private fun scheduleSeasonRefusalMessage(reason: ScheduleSeasonRefusal): String = when (reason) {
+    ScheduleSeasonRefusal.NOT_MAINTAINED_HERE -> "the schedule's asset is archived, retired or transferred out"
+    ScheduleSeasonRefusal.NO_CONNECTION -> "no Home Assistant connection is saved on this phone"
+    ScheduleSeasonRefusal.NEEDS_TOKEN -> "the Home Assistant token is not on this phone; enter it on the phone first"
+    ScheduleSeasonRefusal.BAD_ENTITY_ID -> "entityId is not an input_boolean entity id"
+    ScheduleSeasonRefusal.ALREADY_LINKED -> "this schedule already follows a Home Assistant switch; unlink it first"
+    ScheduleSeasonRefusal.OUTBOUND_TARGET -> "ServiceTag writes that helper, so it cannot follow it"
+    ScheduleSeasonRefusal.GROUP_TARGET -> "a group's schedule follows no season of its own"
+    ScheduleSeasonRefusal.SCHEDULE_ARCHIVED -> "this schedule is archived; restore it first"
+    ScheduleSeasonRefusal.STRANDS_PRE_SERVICE ->
+        "this PRE_SERVICE schedule would have no boundary: its asset has no maintenance break; change its policy first"
+}
+
+/** #125 (U-C7): what the caller must send, or that the action takes no such key. */
+private fun scheduleSeasonConfirmationMessage(e: ScheduleSeasonConfirmationRequired): String = when (val action = e.takenBy) {
+    null -> when (e.field) {
+        FIELD_CONFIRM_UNLINK -> "UNLINK needs confirmUnlink: true, the caller's own confirmation"
+        else -> "LINK needs confirmEntityId, exactly entityId, the caller's own confirmation"
+    }
+    ScheduleSeasonAction.LINK, ScheduleSeasonAction.UNLINK -> "${action.name} takes no ${e.field}"
+}
+
+/** #114 (C2): one developer sentence per [SeasonStartStrandCause]; the remedy is always the role first. */
+private fun seasonStartStrandMessage(cause: SeasonStartStrandCause): String = when (cause) {
+    SeasonStartStrandCause.NEEDS_SEASONS ->
+        "a Season Start service covers this asset, so it needs seasons; clear that schedule's role first"
+    SeasonStartStrandCause.WOULD_BE_LEAF_CHILD ->
+        "this change would leave an asset with a Season Start service a child with no child assets; clear that schedule's role first"
+    SeasonStartStrandCause.ROLE_SCHEDULE_RETARGET ->
+        "this schedule is a Season Start service, so its asset or group cannot change; clear its role first"
+    SeasonStartStrandCause.QUICK_NEEDS_ELECTION ->
+        "this schedule is a Season Start service; changing it to one-tap completion needs seasonStartQuickElected: true"
+    SeasonStartStrandCause.MEMBER_NOT_ELIGIBLE ->
+        "the group's Season Start service would cover this asset, which cannot have one"
+    SeasonStartStrandCause.MEMBER_ALREADY_COVERED ->
+        "the group's Season Start service would cover this asset, which already has one"
+    SeasonStartStrandCause.RESTORE_NOT_ELIGIBLE ->
+        "restoring this would give a Season Start service to an asset that cannot have one"
+    SeasonStartStrandCause.RESTORE_ALREADY_COVERED ->
+        "restoring this would give a second Season Start service to an asset that already has one"
+    SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES ->
+        "schedules of this asset count from its Season Start service; change when they start counting first"
+}
 
 /**
  * The code a malformed value answers with: **the shipped validation shape** (spec §9.2) — 1.1.0's

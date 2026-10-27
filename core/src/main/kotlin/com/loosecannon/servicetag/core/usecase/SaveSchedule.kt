@@ -1,8 +1,11 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -16,6 +19,8 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.BoundaryKind
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefusal
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefused
 
 /**
  * Creates or edits one schedule: **the recurrence edit** of the operations table, and the only
@@ -63,6 +68,21 @@ import com.loosecannon.servicetag.core.schedule.BoundaryKind
  * the flag with nothing to unlink changes nothing. The guard's 422 comes after every bad-rule problem
  * and the target's 404, and before the 409s.
  *
+ * **The Season Start role** (#114, C11, C12). The form carries no role, so a save keeps the stored role and its
+ * boundary and a create has none. An edit of a role schedule that changes its target, or its completion mode from
+ * FORM to QUICK without [run]'s `seasonStartQuickElected`, is 409 [SeasonStartStrands], after the PRE_SERVICE 409.
+ * Both read the row as stored **inside** the write, so a role set after [run]'s first read is kept and judged, never
+ * wiped.
+ *
+ * **A schedule on its own season** (#125, H1b). A retarget to a group of a schedule following its own Home Assistant
+ * season, linked or stranded, is 409 [ScheduleSeasonRefused] `GROUP_TARGET` (inv. 106), after the role's strand: the
+ * remedy is the unlink. A move to another asset keeps the link.
+ *
+ * **Counting from the opening service** (#124, C42). Last, a save that chooses `IN_SERVICE_AFTER_OPENING_SERVICE` — a
+ * create, an edit into it, or a retarget while it holds it — is 409 [SeasonStartRefused]: `COUNTS_FROM_ITSELF` on a role
+ * schedule, `YEAR_ROUND` on an asset in use all year, `NO_SEASON_START_SERVICE` on an asset no live role covers (C9's
+ * coverage, a group's role included). [createInTransaction] (Replace asset) refuses alike.
+ *
  * One `uow.write`: the guard's read of the subjects, the row, any unlinked subject and the recompute
  * commit together or not at all.
  */
@@ -78,9 +98,14 @@ class SaveSchedule(
     private val recompute: RecomputeSchedules,
     private val healthSubjects: HealthSubjectRepository,
 ) {
-    suspend fun run(id: ScheduleId?, cmd: ScheduleCommand, unlinkHealthSubject: Boolean = false): MaintenanceSchedule {
+    suspend fun run(
+        id: ScheduleId?,
+        cmd: ScheduleCommand,
+        unlinkHealthSubject: Boolean = false,
+        seasonStartQuickElected: Boolean = false,
+    ): MaintenanceSchedule {
         val prepared = prepare(id, cmd)
-        return uow.write { commit(prepared, cmd, unlinkHealthSubject) }
+        return uow.write { commit(prepared, cmd, unlinkHealthSubject, seasonStartQuickElected) }
     }
 
     /**
@@ -88,7 +113,7 @@ class SaveSchedule(
      * transaction, so `ReplaceAsset` copies a schedule in its own one write.
      */
     internal suspend fun createInTransaction(cmd: ScheduleCommand): MaintenanceSchedule =
-        commit(prepare(null, cmd), cmd, unlinkHealthSubject = false)
+        commit(prepare(null, cmd), cmd, unlinkHealthSubject = false, seasonStartQuickElected = false)
 
     /** What [run] reads and decides before its write: the stored row, the target asset and the row to save. */
     private class Prepared(
@@ -177,6 +202,12 @@ class SaveSchedule(
             // it changed the rule, just below.
             ruleChangedAt = existing?.ruleChangedAt ?: now,
             providers = cmd.providers.sortedBy { it.provider },
+            // #114 (C12): the command never carries a role (K11), so a save keeps the stored one and a create —
+            // `ReplaceAsset`'s copy among them — has none.
+            role = existing?.role ?: ScheduleRole.NONE,
+            roleSinceOn = existing?.roleSinceOn,
+            // #125 (U-C2): no command carries the source either; a save keeps it and a create follows its asset.
+            seasonSource = existing?.seasonSource ?: ScheduleSeasonSource.ASSET,
         )
         val saved = if (existing != null && ruleChanged(existing, candidate)) {
             candidate.copy(postponedDueOn = null, ruleChangedAt = now)
@@ -191,10 +222,18 @@ class SaveSchedule(
         prepared: Prepared,
         cmd: ScheduleCommand,
         unlinkHealthSubject: Boolean,
+        seasonStartQuickElected: Boolean,
     ): MaintenanceSchedule {
         val existing = prepared.existing
         val targetAsset = prepared.targetAsset
-        val saved = prepared.saved
+        // The role is the stored row's as of this write (M-3): a role set since `prepare` read is neither wiped nor
+        // left unjudged.
+        val stored = existing?.let { schedules.get(it.id) }
+        val saved = prepared.saved.copy(
+            role = stored?.role ?: ScheduleRole.NONE,
+            roleSinceOn = stored?.roleSinceOn,
+            seasonSource = stored?.seasonSource ?: ScheduleSeasonSource.ASSET,
+        )
         // The guard's 422: its remedy is the flag in this very body.
         val driven = if (existing != null && breaksHealthLink(existing, saved)) {
             guardDriven(existing.id, unlinkHealthSubject, healthSubjects)
@@ -202,17 +241,59 @@ class SaveSchedule(
             emptyList()
         }
         // A 409, after every 422: the body is well formed, and the remedy is the asset — give it a
-        // season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99).
+        // season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99). #125: read through the
+        // schedule's effective season, so an `OWN` schedule counts back only from the asset's break.
         if (targetAsset != null && cmd.servicePolicy == ServicePolicy.PRE_SERVICE &&
-            targetAsset.boundaryKind() == BoundaryKind.NONE
+            targetAsset.boundaryKindFor(saved.seasonSource) == BoundaryKind.NONE
         ) {
             throw PreServiceNeedsDates(targetAsset.id)
+        }
+        if (stored != null) seasonStartStrandOf(stored, saved, seasonStartQuickElected)?.let { throw it }
+        // #125 (H1b): a schedule following its own season cannot become a group's, which reads no season (inv. 106).
+        // The stored source decides, read inside this write as the role is; the remedy is the unlink first.
+        if (saved.seasonSource == ScheduleSeasonSource.OWN && saved.target is ScheduleTarget.GroupTarget) {
+            throw ScheduleSeasonRefused(ScheduleSeasonRefusal.GROUP_TARGET)
+        }
+        // #124 (C42): a save choosing to count from the opening service needs a live role to count from, never itself.
+        if (choosesOpeningService(stored, saved)) {
+            openingServiceRefusalOf(saved, targetAsset, schedules.all(), groups.all())?.let { throw SeasonStartRefused(it) }
         }
         unlinkDriven(driven, assets, healthSubjects, prepared.now)
         schedules.upsert(saved)
         recompute.forSchedule(saved.id)
         return saved
     }
+
+    /**
+     * #114 (C11) — what an edit of a live or archived role schedule may not do: change its target (O-6,
+     * `ROLE_SCHEDULE_RETARGET`; clear the role first), or go from FORM to QUICK without the owner's election (O-2,
+     * F-22, `QUICK_NEEDS_ELECTION`). Null for any other edit, and for every edit of a schedule with no role.
+     */
+    private fun seasonStartStrandOf(
+        before: MaintenanceSchedule,
+        after: MaintenanceSchedule,
+        quickElected: Boolean,
+    ): SeasonStartStrands? {
+        if (before.role != ScheduleRole.SEASON_START) return null
+        val cause = if (before.target != after.target) {
+            SeasonStartStrandCause.ROLE_SCHEDULE_RETARGET
+        } else if (before.completionMode == CompletionMode.FORM && after.completionMode == CompletionMode.QUICK && !quickElected) {
+            SeasonStartStrandCause.QUICK_NEEDS_ELECTION
+        } else {
+            return null
+        }
+        val assetId = (before.target as? ScheduleTarget.AssetTarget)?.assetId
+        return SeasonStartStrands(assetId, cause, listOf(StrandedSchedule(before.id, before.title)))
+    }
+
+    /**
+     * #124 (C42) — whether this save **chooses** to count from the opening service: a create with it, an edit into it, or
+     * an edit that moves a schedule holding it to another target. An edit that keeps both is not judged again (an
+     * already-broken row blocks no unrelated edit).
+     */
+    private fun choosesOpeningService(before: MaintenanceSchedule?, after: MaintenanceSchedule): Boolean =
+        after.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE &&
+            (before == null || before.servicePolicy != after.servicePolicy || before.target != after.target)
 
     /**
      * Whether this edit would strand a subject the schedule drives (spec §6.1): it removes the time

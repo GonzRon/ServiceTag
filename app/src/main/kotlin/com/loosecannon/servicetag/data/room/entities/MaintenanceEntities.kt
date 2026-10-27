@@ -91,6 +91,9 @@ data class MaintenanceGroupMemberEntity(
  * Schema v8 (the 12-step recreate of `MIGRATION_7_8`) replaced the three 1.3 season columns with
  * `service_policy` and `policy_offset_days`, and added `rule_changed_at`: the pin's floor, written
  * only by a create or a rule change (#64). The four foreign keys and four indices are unchanged.
+ *
+ * Schema v22 (#114, C4.1) appends the passive role, `role` (`'NONE'` by default) and its boundary `role_since_on`; no
+ * index — coverage is a use-case rule (C10).
  */
 @Entity(
     tableName = "maintenance_schedule",
@@ -152,6 +155,15 @@ data class MaintenanceScheduleEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "rule_changed_at") val ruleChangedAt: Long,
+    /** Schema v22 (#114, C4.1): `NONE` or `SEASON_START`; the stored name of the passive role (C7). */
+    @ColumnInfo(name = "role", defaultValue = "NONE") val role: String = "NONE",
+    /** Schema v22 (#114, C4.1): the role's boundary day, set exactly while the role is `SEASON_START` (I1). */
+    @ColumnInfo(name = "role_since_on") val roleSinceOn: String? = null,
+    /**
+     * Schema v22 (#125, U-C1): `ASSET` or `OWN`, the stored name of the season the schedule's due rules read. Appended
+     * last, after the role pair, so the migration's `ADD COLUMN` and a fresh v22 agree on the column order.
+     */
+    @ColumnInfo(name = "season_source", defaultValue = "ASSET") val seasonSource: String = "ASSET",
 )
 
 /**

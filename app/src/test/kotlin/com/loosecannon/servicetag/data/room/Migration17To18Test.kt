@@ -29,7 +29,7 @@ class Migration17To18Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    val after = c.rowOf(row.table, row.id)
+                    val after = c.rowOf(row.table, row.id).filterNot { it.substringBefore('=') in v22ColumnsOf(row.table) }
                     val expected = if (row.table in V18_LINE_TABLES) {
                         before.getValue(row) + V18_LINE_COLUMNS.map { "$it=NULL" }
                     } else {
@@ -73,7 +73,7 @@ class Migration17To18Test {
                 }
             }
             withConnection(file) { m ->
-                assertEquals("the three new tables", V18_TABLES, m.tableNames() - ROOM_INTERNAL - v17Tables - V19_TABLES - V21_TABLES)
+                assertEquals("the three new tables", V18_TABLES, m.tableNames() - ROOM_INTERNAL - v17Tables - V19_TABLES - V21_TABLES - V22_TABLES)
                 for (table in V18_TABLES) {
                     assertEquals("$table is empty", listOf("0"), m.lines("SELECT COUNT(*) FROM $table"))
                     assertEquals("$table primary key", listOf("id"), m.primaryKeyOf(table))

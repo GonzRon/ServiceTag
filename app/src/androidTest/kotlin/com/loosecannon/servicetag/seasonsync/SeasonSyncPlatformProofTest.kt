@@ -100,7 +100,8 @@ import org.junit.runners.MethodSorters
  * **This class needs a fresh install** (the gate installs one per class): background location already granted when it
  * starts fails `foreground…` and `homeOn…` on purpose — uninstall the app and rerun. Before every case it waits, bounded,
  * for the app's start-up work on `appScope` (the token sweep and the schedule check, launched by `ServiceTagApp`), so
- * neither can race a case.
+ * neither can race a case. The publish triggers' Job (#113's B4b) is left out of that wait by identity: its observer and
+ * midnight tick live as long as the process, so it never ends.
  *
  * **Teardown, every time (N-15):** the connections this class stored (their bindings go by the CASCADE), their tokens
  * and the Keystore cases' keys and files, the `"season-sync"` work, the asset it created, the fake listeners, the
@@ -132,7 +133,8 @@ class SeasonSyncPlatformProofTest {
     fun setUp() {
         savedDispatch = SeasonSyncDispatch.runner
         waitUntil("the app's start-up work on appScope (the token sweep and the schedule check) to finish") {
-            graph.appScope.coroutineContext.job.children.none()
+            val publishing = graph.publishTriggers.started
+            graph.appScope.coroutineContext.job.children.none { it !== publishing }
         }
         assertNull(
             "this install already holds a Home Assistant connection, and this class never overwrites one",

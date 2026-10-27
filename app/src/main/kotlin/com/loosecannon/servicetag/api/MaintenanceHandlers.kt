@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -27,6 +28,7 @@ import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 
@@ -85,6 +87,8 @@ internal class MaintenanceHandlers(
     private val today: Today,
     /** 1.4.1 (#80): the provider repair's plan and apply, the same use case Reminder Health calls. */
     private val repairScheduleProviders: RepairScheduleProviders,
+    /** #114 (C10, C29b): the Season Start role, the same use case the phone's role action calls. */
+    private val setScheduleRole: SetScheduleRole,
 ) {
     constructor(graph: AppGraph) : this(
         graph.groups, graph.schedules, graph.closures, graph.assets,
@@ -92,6 +96,7 @@ internal class MaintenanceHandlers(
         graph.saveSchedule, graph.pauseSchedule, graph.archiveSchedule, graph.postponeSchedule,
         graph.completeSchedule, graph.completeGroupMembers, graph.closeRound,
         graph.dueReadModel, graph.recomputeSchedules, graph.today, graph.repairScheduleProviders,
+        graph.setScheduleRole,
     )
 
     // --- the provider repair (1.4.1, #80) --------------------------------------------------
@@ -200,7 +205,24 @@ internal class MaintenanceHandlers(
      */
     suspend fun updateSchedule(id: String, request: ApiRequest): ApiResponse {
         val parsed = ScheduleForms.read(request, schedules.get(ScheduleId(id)), acceptsFlags = true)
-        val saved = saveSchedule.run(ScheduleId(id), parsed.body.toCommand(parsed.form, creating = false), parsed.unlinkHealthSubject)
+        val saved = saveSchedule.run(
+            ScheduleId(id),
+            parsed.body.toCommand(parsed.form, creating = false),
+            parsed.unlinkHealthSubject,
+            parsed.seasonStartQuickElected,
+        )
+        return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
+    }
+
+    /**
+     * #114 (C10, C10a, C29b): sets or clears the Season Start role — one [SetScheduleRole] call, which writes
+     * `role`, `roleSinceOn` and `updatedAt` only and recomputes nothing. The election is the body's, never defaulted
+     * here: an absent `seasonStartQuickElected` is false. An unknown `role` is the shipped 400.
+     */
+    suspend fun setScheduleRole(id: String, request: ApiRequest): ApiResponse {
+        val body = request.decode(ScheduleRoleRequest.serializer())
+        val role = enumOr400<ScheduleRole>(body.role, "role")
+        val saved = setScheduleRole.run(ScheduleId(id), role, body.sinceOn, body.seasonStartQuickElected)
         return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 

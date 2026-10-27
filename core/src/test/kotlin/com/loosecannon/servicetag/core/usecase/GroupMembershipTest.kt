@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
@@ -70,8 +71,8 @@ class GroupMembershipTest {
         RecomputeSchedules(
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
-    private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
-    private val archiveGroup = ArchiveGroup(groups, uow, clock)
+    private val saveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, InMemoryTransferRecordRepository())
+    private val archiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, InMemoryTransferRecordRepository(), recompute)
     private val saveSchedule =
         SaveSchedule(
             schedules, assets, groups, defs, profiles, uow, ids, clock, recompute,
@@ -79,6 +80,7 @@ class GroupMembershipTest {
         )
     private val completeMembers = CompleteGroupMembers(
         schedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
+        todayPort,
     )
     private val archiveAsset = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
     private val retireAsset = RetireAsset(assets, uow, clock) { recompute.forAsset(it) }

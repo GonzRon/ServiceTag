@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /*
  * The 1.2 maintenance shapes on the wire (master plan §9).
@@ -438,9 +439,29 @@ internal data class PauseRequest(val paused: Boolean)
  * The action flags a schedule PATCH takes beside its command (spec §9.1): [unlinkHealthSubject]
  * archives, in the same write, every live health subject the edit would strand. Not a column, and
  * not a row field — `docs/api/command-shapes.json` lists it as the schedule's `actionFlags`.
+ * #114 (C11, C29b): [seasonStartQuickElected] is the owner's explicit election for a Season Start schedule's
+ * FORM → QUICK edit (O-2), passed to `SaveSchedule`; absent is false, never elected by default, so that edit without
+ * it is 409 `SEASON_START_STRANDED` `QUICK_NEEDS_ELECTION`.
  */
 @Serializable
-internal data class ScheduleActionFlags(val unlinkHealthSubject: Boolean = false)
+internal data class ScheduleActionFlags(
+    val unlinkHealthSubject: Boolean = false,
+    val seasonStartQuickElected: Boolean = false,
+)
+
+/**
+ * #114 (C10, C10a, C29b) — `POST /v1/schedules/{id}/role`: [role] `SEASON_START` or `NONE`, required; [sinceOn] the
+ * commissioning boundary, `YYYY-MM-DD`, absent or null for today; [seasonStartQuickElected] the owner's explicit
+ * election that a QUICK schedule's one-tap completions count (O-2), absent false — never defaulted true, so a QUICK
+ * schedule without it is 409 `SEASON_START_REFUSED` `QUICK_NOT_ELECTED`, and moving a QUICK role's date asks again.
+ * `NONE` ignores the other two. No key takes a value, a date to publish or READY (G17).
+ */
+@Serializable
+internal data class ScheduleRoleRequest(
+    val role: String,
+    val sinceOn: String? = null,
+    val seasonStartQuickElected: Boolean = false,
+)
 
 /**
  * `POST /v1/schedules/{id}/archive`: [archived] as every archive route takes it, plus the same
@@ -452,3 +473,46 @@ internal data class ScheduleArchiveRequest(val archived: Boolean, val unlinkHeal
 /** Omitted means today. Any date from the round's open date through today is accepted. */
 @Serializable
 internal data class CloseRoundRequest(val closedOn: String? = null)
+
+// --- #125 (U-C7): a schedule's own Home Assistant season ------------------------------------------
+
+/**
+ * `GET /v1/schedules/{id}/season-sync`, and the answer of its `POST`: `GET /v1/assets/{id}/season-sync`'s shape for one
+ * schedule. [seasonSource] is `ASSET` or `OWN`; [seasonPhase] is `IN_SEASON` or `OUT_OF_SEASON`, the phase the
+ * schedule's due rules read today — its own season's for `OWN`, its asset's for `ASSET` — and null for a group's
+ * schedule, which has no one season. [connection] is the phone's one connection as settings, [binding] the schedule's
+ * link or `null` (none, or stranded after Forget), and [activations] its own season rows, oldest first, kept as
+ * history after an unlink. Nothing here holds the address, the home Wi-Fi's name or the token.
+ */
+@Serializable
+internal data class ScheduleSeasonResponse(
+    val scheduleId: String,
+    val seasonSource: String,
+    val seasonPhase: String?,
+    val connection: SeasonSyncConnectionDto,
+    val binding: SeasonSyncBindingDto?,
+    val activations: List<ScheduleSeasonActivationDto>,
+)
+
+/** One row of a schedule's own season: `START` or `END`, the day it was applied, and when it was written. */
+@Serializable
+internal data class ScheduleSeasonActivationDto(
+    val id: String,
+    val action: String,
+    val occurredOn: String,
+    val createdAt: Long,
+)
+
+/**
+ * `POST /v1/schedules/{id}/season-sync`: `{"action": "LINK", "entityId", "confirmEntityId"}`, the caller's own
+ * confirmation equal to the entity (O-21's destination precedent), or `{"action": "UNLINK", "confirmUnlink": true}`,
+ * the JSON `true`. Each key is the caller's, decoded as given (null when absent) and never filled here; a key the
+ * action does not take is refused. [confirmUnlink] is kept as the JSON element sent, so only the literal `true` passes.
+ */
+@Serializable
+internal data class ScheduleSeasonRequest(
+    val action: String,
+    val entityId: String? = null,
+    val confirmEntityId: String? = null,
+    val confirmUnlink: JsonElement? = null,
+)

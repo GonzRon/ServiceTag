@@ -64,9 +64,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.hapublish.PublishKind
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.journal.Reading
@@ -261,6 +263,37 @@ fun AssetDetailScreen(
         }
     }
     val sync by syncModel.state.collectAsStateWithLifecycle()
+    // #114 (C33): the season card's readiness lines, their own model beside the screen's; read again on every resume.
+    val readinessModel: ReadinessLineViewModel = viewModel(key = "season-readiness:$assetId") {
+        ReadinessLineViewModel(graph, AssetId(assetId))
+    }
+    val readiness by readinessModel.state.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(readinessModel) {
+        readinessModel.onResumed()
+        onPauseOrDispose {}
+    }
+    // #113/#114 (C36): the two publishing blocks, each its own model, redrawn as their records change and read again on
+    // every resume.
+    val statusPublishModel: PublishBlockViewModel = viewModel(key = "publish:$assetId:${PublishKind.EQUIPMENT_STATUS}") {
+        PublishBlockViewModel(graph, AssetId(assetId), PublishKind.EQUIPMENT_STATUS)
+    }
+    val statusPublish by statusPublishModel.state.collectAsStateWithLifecycle()
+    val datePublishModel: PublishBlockViewModel = viewModel(key = "publish:$assetId:${PublishKind.SEASON_SERVICE_DATE}") {
+        PublishBlockViewModel(graph, AssetId(assetId), PublishKind.SEASON_SERVICE_DATE)
+    }
+    val datePublish by datePublishModel.state.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(statusPublishModel, datePublishModel) {
+        statusPublishModel.onResumed()
+        datePublishModel.onResumed()
+        onPauseOrDispose {}
+    }
+    // #113/#114 (C36): the publishing setup sheet for one kind; each opening a fresh model.
+    var publishSheet by rememberSaveable { mutableStateOf<PublishKind?>(null) }
+    var publishSheetOpening by rememberSaveable { mutableIntStateOf(0) }
+    val openPublishSheet: (PublishKind) -> Unit = { kind ->
+        publishSheetOpening += 1
+        publishSheet = kind
+    }
     // #16 (C27): the setup sheet, for Link or for Resume on an asset no longer MANUAL; each opening a fresh model.
     var syncSheet by rememberSaveable { mutableStateOf<SeasonSyncSheetPurpose?>(null) }
     var syncSheetOpening by rememberSaveable { mutableIntStateOf(0) }
@@ -394,6 +427,23 @@ fun AssetDetailScreen(
                 onDone = { syncSheet = null },
             )
         }
+        publishSheet?.let { kind ->
+            // B6a review M2: a stopped or copied setup reopens on its stored helper.
+            val stored = when (kind) {
+                PublishKind.EQUIPMENT_STATUS -> statusPublish
+                PublishKind.SEASON_SERVICE_DATE -> datePublish
+            }
+            LinkPublishSheet(
+                graph = graph,
+                assetId = assetId,
+                kind = kind,
+                opening = publishSheetOpening,
+                storedHelper = stored.storedHelper,
+                storedBoundary = stored.storedBoundary,
+            ) {
+                publishSheet = null
+            }
+        }
         // The screen's 16dp gutter is applied per block rather than to the whole scroll, because
         // 1.2's two maintenance sections draw their **own** gutter: they reuse the Maintenance
         // destination's heading and its due row verbatim, so a group's work reads the same on this
@@ -465,6 +515,8 @@ fun AssetDetailScreen(
                     onLogIncident = { onLogOutcome(assetId, EventKind.INCIDENT.name) },
                     onOpenEvent = onOpenEvent,
                 )
+                // #113 (C36): the recorded condition, published to Home Assistant, beside the condition it mirrors.
+                PublishBlock(statusPublishModel, statusPublish) { openPublishSheet(PublishKind.EQUIPMENT_STATUS) }
                 // #79 (C20, R79-17): the asset's service cases, right after Condition.
                 ServiceCasesSection(
                     rows = current.cases,
@@ -480,6 +532,7 @@ fun AssetDetailScreen(
                     onEnd = { model.askSeason(SeasonAction.END) },
                     editable = current.offersWrites,
                     syncOwnsSeason = sync.hidesStartAndEnd,
+                    readiness = readiness,
                     syncBlock = {
                         SeasonSyncBlock(
                             syncModel,
@@ -489,6 +542,8 @@ fun AssetDetailScreen(
                         )
                     },
                 )
+                // #114 (C36): the Season Start date, published to Home Assistant, beside the season it is read against.
+                PublishBlock(datePublishModel, datePublish) { openPublishSheet(PublishKind.SEASON_SERVICE_DATE) }
             }
             // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).
             //
@@ -1282,6 +1337,8 @@ private fun SeasonSection(
     editable: Boolean = true,
     /** #16 (C27, R16-1): an enabled Home Assistant binding owns the season, so Start and End are not drawn. */
     syncOwnsSeason: Boolean = false,
+    /** #114 (C33): the readiness line, then the source and cutoff lines, under the season; none drawn when all null. */
+    readiness: ReadinessLineState = ReadinessLineState(),
     /** #16 (C27, C-4): the Home Assistant block, drawn after whichever mode's branch is taken. */
     syncBlock: @Composable () -> Unit = {},
 ) {
@@ -1316,6 +1373,8 @@ private fun SeasonSection(
                 }
             }
         }
+        // #114 (C33, R-N1): under the season, only when a role covers the asset or a date binding exists.
+        ReadinessLines(readiness)
         // C-4: on every mode, after its branch — a stopped binding on a CALENDAR or YEAR_ROUND asset keeps its Resume.
         syncBlock()
     }
@@ -1335,6 +1394,21 @@ private fun SeasonSection(
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             SentenceLabelValue(BREAK_STARTS, monthDayText(breakStart))
             SentenceLabelValue(BREAK_ENDS, monthDayText(breakEnd))
+        }
+    }
+}
+
+/**
+ * #114 (C33, F) — the readiness line, then the source line, the "unverified since" disclosure (O-19) and the cutoff
+ * line, each its own quiet line; nothing when the readiness line is null (R-N1).
+ */
+@Composable
+private fun ReadinessLines(state: ReadinessLineState) {
+    val line = state.line ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(line, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        listOfNotNull(state.sourceLine, state.unverifiedLine, state.cutoffLine).forEach {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

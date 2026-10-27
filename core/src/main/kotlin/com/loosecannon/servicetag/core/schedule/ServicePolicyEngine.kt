@@ -11,6 +11,10 @@ import java.time.LocalDate
  * due `R` (`computedDueOn`, the occurrence key), the postponement `P`, and `O`, the day the
  * occurrence opened — the last termination's effective date, or the rule-change date of a schedule
  * that has never terminated. Never a title, a category or a template (inv. 98).
+ *
+ * [openingServiceOn] (#124, C40) is the day the schedule's asset became ready for the season — the
+ * `serviceOn` of #114's readiness rule, read by its one reader (C41) — or null while it is not ready.
+ * Only [ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE] reads it, and only in season.
  */
 data class PolicyInputs(
     val policy: ServicePolicy,
@@ -18,11 +22,13 @@ data class PolicyInputs(
     val rawDueOn: LocalDate?,
     val postponedDueOn: LocalDate?,
     val openedOn: LocalDate,
+    val openingServiceOn: LocalDate? = null,
 )
 
 /**
  * The policy's answer for one day (master plan §8.2). [actionableOn] is null for a meter-only
- * schedule and for a MANUAL asset waiting for its next START. [quietUntil] is the first allowed day
+ * schedule, for a MANUAL asset waiting for its next START and for a schedule waiting, in season, for
+ * its opening service (#124; its [phase] is then DORMANT). [quietUntil] is the first allowed day
  * after the break the day sits in, and null whenever [quiet] is false; it is derived here and stored
  * nowhere.
  */
@@ -48,17 +54,27 @@ data class PolicyOutcome(
 object ServicePolicyEngine {
 
     fun evaluate(inputs: PolicyInputs, season: SeasonContext?, at: LocalDate): PolicyOutcome {
-        val inService = inputs.policy == ServicePolicy.IN_SERVICE_AT_START ||
-            inputs.policy == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
-        val phase = if (inService && season?.phaseAt(at) == SeasonPhase.OUT_OF_SEASON) {
-            PolicyPhase.DORMANT
-        } else {
-            PolicyPhase.ACTIVE
+        val inService = when (inputs.policy) {
+            ServicePolicy.IN_SERVICE_AT_START,
+            ServicePolicy.IN_SERVICE_RESUME_CLAMPED,
+            ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE,
+            -> true
+            ServicePolicy.CONTINUOUS, ServicePolicy.PRE_SERVICE -> false
         }
         // Quiet belongs to the day, not to the due date: work already late when the break opens is
         // not moved, keeps its status and is quiet (inv. 102, H.3c). CONTINUOUS ignores the break.
         val quiet = inputs.policy != ServicePolicy.CONTINUOUS && season?.inBreak(at) == true
         val (actionableOn, reason) = actionable(inputs, season, at)
+        // #124: waiting in season for the opening service is held like the off-season — not counted,
+        // no reminder, no health day (`INACTIVE_SEASON`).
+        val phase = if (
+            (inService && season?.phaseAt(at) == SeasonPhase.OUT_OF_SEASON) ||
+            reason == PolicyReason.AWAITING_OPENING_SERVICE
+        ) {
+            PolicyPhase.DORMANT
+        } else {
+            PolicyPhase.ACTIVE
+        }
         return PolicyOutcome(
             actionableOn = actionableOn,
             reason = reason,
@@ -85,16 +101,21 @@ object ServicePolicyEngine {
             ServicePolicy.IN_SERVICE_AT_START, ServicePolicy.IN_SERVICE_RESUME_CLAMPED ->
                 inService(inputs, date, season, at)
             ServicePolicy.PRE_SERVICE -> preService(inputs, raw, season)
+            ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE -> afterOpeningService(inputs, date, season, at)
         }
         return result to if (result == date && reason in MOVING) PolicyReason.NONE else reason
     }
 
-    /** The reasons that claim the date moved; POLICY_INAPPLICABLE and AWAITING_START do not. */
+    /**
+     * The reasons that claim the date moved; POLICY_INAPPLICABLE, AWAITING_START and
+     * AWAITING_OPENING_SERVICE do not.
+     */
     private val MOVING = setOf(
         PolicyReason.SEASON_START,
         PolicyReason.AFTER_BREAK,
         PolicyReason.BEFORE_SEASON,
         PolicyReason.BEFORE_BREAK,
+        PolicyReason.OPENING_SERVICE,
     )
 
     /**
@@ -125,6 +146,43 @@ object ServicePolicyEngine {
             return season.firstAllowedAfter(reentered) to PolicyReason.AFTER_BREAK
         }
         return reentered to (if (reentered != date) PolicyReason.SEASON_START else PolicyReason.NONE)
+    }
+
+    /**
+     * IN_SERVICE_AFTER_OPENING_SERVICE (#124, C40). A MANUAL asset out of season waits for its START
+     * (AWAITING_START), as the other in-service policies do. With no cycle to count in — a YEAR_ROUND
+     * asset, no season at all, or a CALENDAR asset whose window is missing — the policy does not apply
+     * and the date stands (POLICY_INAPPLICABLE): a group target is refused by inv. 106 and a YEAR_ROUND
+     * asset by `SaveSchedule` (N2b, C42); a windowless CALENDAR asset only a merge stores. Out of season
+     * it is IN_SERVICE_AT_START with the same offset, exactly, and never reads `openingServiceOn`. In
+     * season it waits with no date until the opening service is known (AWAITING_OPENING_SERVICE, held
+     * DORMANT by [evaluate]); then it counts from the later of that day
+     * and the cycle's start `s`, plus the offset: an early service counts from the season's start
+     * (SEASON_START when that moved the date), a late one from its own day (OPENING_SERVICE). A later
+     * date is never dragged back (inv. 97), and a date in the break moves past it as shipped.
+     */
+    private fun afterOpeningService(
+        inputs: PolicyInputs,
+        date: LocalDate,
+        season: SeasonContext?,
+        at: LocalDate,
+    ): Pair<LocalDate?, PolicyReason> {
+        val s = season?.cycleStartAt(at)
+        if (s == null && season?.mode == SeasonMode.MANUAL) return null to PolicyReason.AWAITING_START
+        if (season == null || s == null) return date to PolicyReason.POLICY_INAPPLICABLE
+        if (season.phaseAt(at) == SeasonPhase.OUT_OF_SEASON) {
+            return inService(inputs.copy(policy = ServicePolicy.IN_SERVICE_AT_START), date, season, at)
+        }
+        val served = inputs.openingServiceOn ?: return null to PolicyReason.AWAITING_OPENING_SERVICE
+        val from = maxOf(served, s)
+        val opens = from.plusDays((inputs.offsetDays ?: 0).toLong())
+        val moved = if (date < opens) opens else date
+        if (season.inBreak(moved)) return season.firstAllowedAfter(moved) to PolicyReason.AFTER_BREAK
+        return moved to when {
+            moved == date -> PolicyReason.NONE
+            from == s -> PolicyReason.SEASON_START
+            else -> PolicyReason.OPENING_SERVICE
+        }
     }
 
     /**

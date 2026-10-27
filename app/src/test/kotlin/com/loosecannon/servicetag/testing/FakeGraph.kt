@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.season.SeasonReadinessReader
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.EditSeasonSyncEntity
 import com.loosecannon.servicetag.core.seasonsync.ForgetHaConnection
@@ -31,6 +32,7 @@ import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
+import com.loosecannon.servicetag.core.usecase.SetScheduleRole
 import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -180,6 +182,7 @@ import com.loosecannon.servicetag.seasonsync.JdkAead
 import com.loosecannon.servicetag.seasonsync.KeystoreSecretStore
 import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.seasonsync.ResumeRefresh
+import com.loosecannon.servicetag.seasonsync.ScheduleSeasonPolling
 import com.loosecannon.servicetag.seasonsync.SeasonSyncRunner
 import com.loosecannon.servicetag.seasonsync.SeasonSyncWork
 import com.loosecannon.servicetag.seasonsync.SeasonSyncWorkRequest
@@ -201,8 +204,47 @@ import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
 import com.loosecannon.servicetag.core.fetch.FetchDocument
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.fetch.HostResolver
+import com.loosecannon.servicetag.core.hapublish.ChangePublishTarget
+import com.loosecannon.servicetag.core.hapublish.DecommissionRepository
+import com.loosecannon.servicetag.core.hapublish.DisablePublishing
+import com.loosecannon.servicetag.core.hapublish.DismissDecommission
+import com.loosecannon.servicetag.core.hapublish.EnablePublishing
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
+import com.loosecannon.servicetag.core.hapublish.PublishDeliveryRepository
+import com.loosecannon.servicetag.core.hapublish.PublishOutboundTargets
+import com.loosecannon.servicetag.core.hapublish.RevalidatePublishing
+import com.loosecannon.servicetag.core.hapublish.HaServiceAction
+import com.loosecannon.servicetag.core.hapublish.PublishErrorKind
+import com.loosecannon.servicetag.core.hapublish.RemoteEntity
+import com.loosecannon.servicetag.core.hapublish.RemoteRead
+import com.loosecannon.servicetag.core.seasonsync.HaConnection
+import com.loosecannon.servicetag.hapublish.BoundaryCacheWriter
+import com.loosecannon.servicetag.hapublish.CallOutcome
+import com.loosecannon.servicetag.hapublish.DesiredStateReconciler
+import com.loosecannon.servicetag.hapublish.HaPublishTransport
+import com.loosecannon.servicetag.hapublish.PublishRunner
+import com.loosecannon.servicetag.hapublish.DeliveryRequester
+import com.loosecannon.servicetag.hapublish.PublishControls
+import com.loosecannon.servicetag.hapublish.PublishDispatch
+import com.loosecannon.servicetag.hapublish.PublishReconcileRequest
+import com.loosecannon.servicetag.hapublish.PublishWork
+import com.loosecannon.servicetag.hapublish.MidnightTick
+import com.loosecannon.servicetag.hapublish.PublishInputs
+import com.loosecannon.servicetag.hapublish.PublishProjector
+import com.loosecannon.servicetag.hapublish.PublishTriggers
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.seasonsync.LinkScheduleSeason
+import com.loosecannon.servicetag.core.seasonsync.OutboundTargets
+import com.loosecannon.servicetag.core.seasonsync.RecordScheduleSeasonSyncResult
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
+import com.loosecannon.servicetag.core.seasonsync.UnlinkScheduleSeason
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
+import com.loosecannon.servicetag.data.room.RoomDecommissionRepository
+import com.loosecannon.servicetag.data.room.RoomPublishBindingRepository
+import com.loosecannon.servicetag.data.room.RoomPublishDeliveryRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleSeasonActivationRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleSeasonBindingRepository
 import com.loosecannon.servicetag.fetch.CacheStagingArea
 import java.io.File
 import java.time.ZoneOffset
@@ -235,6 +277,11 @@ class FakeGraph(
      */
     val secretStore: KeystoreSecretStore =
         KeystoreSecretStore(kotlin.io.path.createTempDirectory("no-backup").toFile(), JdkAead()),
+    /**
+     * #113 (C27): the directory [installationIdentity] lives in. A test passes the previous graph's to model the same
+     * installation restarted (the id stays), and leaves the default to model another installation (a new id).
+     */
+    val installationDir: File = kotlin.io.path.createTempDirectory("installation").toFile(),
 ) {
 
     /** Move this before a call to give the write a timestamp the test can assert on. */
@@ -252,8 +299,7 @@ class FakeGraph(
     val commits: Int get() = countingUow.commits
 
     /** #92 (C5a): mirroring `AppGraph`'s field by name, over a fresh temporary directory in place of the no-backup one. */
-    val installationIdentity: InstallationIdentity =
-        InstallationIdentity(kotlin.io.path.createTempDirectory("installation").toFile())
+    val installationIdentity: InstallationIdentity = InstallationIdentity(installationDir)
 
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
     /** #77's transfer records, mirroring `AppGraph`'s field by name; before the ports, which its guard reads. */
@@ -287,6 +333,11 @@ class FakeGraph(
     // 1.4's three data ports, mirroring `AppGraph`'s fields by name.
     val seasonActivations: SeasonActivationRepository =
         heldWriteGuard.activations(RoomSeasonActivationRepository(db.seasonActivationDao()))
+    /** #125 (U-C1): a schedule's own season rows and its device-local binding, mirroring `AppGraph`'s fields by name. */
+    val scheduleSeasonActivations: ScheduleSeasonActivationRepository =
+        RoomScheduleSeasonActivationRepository(db.scheduleSeasonActivationDao())
+    val scheduleSeasonBindings: ScheduleSeasonBindingRepository =
+        RoomScheduleSeasonBindingRepository(db.scheduleSeasonSyncBindingDao())
     val conditions: ConditionRepository = heldWriteGuard.conditions(RoomConditionRepository(db.assetConditionDao()))
     val healthSubjects: HealthSubjectRepository =
         heldWriteGuard.subjects(RoomHealthSubjectRepository(db.healthSubjectDao()))
@@ -317,6 +368,9 @@ class FakeGraph(
     /** The real recompute over the real tables, so an event write in a test rebuilds for real. */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
         schedules, scheduleStates, events, closures, groups, assets, seasonActivations, todayPort, clock,
+        // #124 (C41): as `AppGraph` wires it — asked at each rebuild, the reader below with its Home Assistant stores.
+        openingService = { openingServiceReader.openingServiceOn(it) },
+        scheduleActivations = scheduleSeasonActivations,
         zone = { ZoneOffset.UTC },
     )
 
@@ -392,18 +446,34 @@ class FakeGraph(
     val deleteCategory: DeleteCategory = DeleteCategory(categories, assets, uow)
 
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)
-    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory)
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory, groups)
 
     /** #16: the Home Assistant connection and the season bindings, over the real tables, as `AppGraph` builds them; one
      * instance each, ahead of the five season writers whose guard reads [seasonSyncBindings] (C15). */
     val haConnections: HaConnectionRepository = RoomHaConnectionRepository(db.haConnectionDao())
     val seasonSyncBindings: SeasonSyncRepository = RoomSeasonSyncRepository(db.seasonSyncBindingDao())
 
+    /**
+     * #113/#114 (C24): the outbound bindings, their delivery records and the decommission tombstones — device-local,
+     * never exported, merged or packed — and the publishing side the four #16 commands consult (C26, C28).
+     */
+    val publishBindings: PublishBindingRepository = RoomPublishBindingRepository(db.haPublishBindingDao())
+    val publishDeliveries: PublishDeliveryRepository = RoomPublishDeliveryRepository(db.haPublishDeliveryDao())
+    val publishDecommissions: DecommissionRepository = RoomDecommissionRepository(db.haPublishDecommissionDao())
+    val outboundTargets: OutboundTargets =
+        PublishOutboundTargets(publishBindings, publishDeliveries, publishDecommissions, ids, clock)
+
+    /** #124 (C41): the one reader of an asset's opening-service day, as `AppGraph` builds it. */
+    val openingServiceReader: SeasonReadinessReader = SeasonReadinessReader(
+        assets, schedules, groups, events, seasonActivations, publishBindings, publishDeliveries, seasonSyncBindings,
+        haConnections, todayPort, clock,
+    ) { ZoneOffset.UTC }
+
     /** 1.4 — the season model's commands, mirroring `AppGraph`'s five fields by name (master plan §1). */
     val setSeasonMode: SetSeasonMode =
         SetSeasonMode(
             assets, schedules, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-            SeasonSyncGuard(seasonSyncBindings),
+            SeasonSyncGuard(seasonSyncBindings), groups,
         )
     val setMaintenanceBreak: SetMaintenanceBreak =
         SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
@@ -434,26 +504,131 @@ class FakeGraph(
     val recordSeasonSyncResult: RecordSeasonSyncResult = RecordSeasonSyncResult(
         seasonSyncBindings, assets, seasonActivations, transferRecords, recordSeasonActivation, uow, clock, todayPort,
     )
+    /** #125 (U-C5) — the schedule applier, built before the runner whose schedule pass records through it. */
+    val recordScheduleSeasonSyncResult: RecordScheduleSeasonSyncResult = RecordScheduleSeasonSyncResult(
+        scheduleSeasonBindings, schedules, assets, scheduleSeasonActivations, transferRecords, recomputeSchedules, uow,
+        ids, clock, todayPort,
+    )
     val seasonSyncRunner: SeasonSyncRunner = SeasonSyncRunner(
         seasonSyncBindings, haConnections, secretStore, assets, transferRecords, haStateReader, recordSeasonSyncResult,
         seasonSyncWork, seasonSyncBackgroundAllowed, seasonSyncScope, clock, io = queryContext,
+        scheduleSeasons = ScheduleSeasonPolling(scheduleSeasonBindings, schedules, recordScheduleSeasonSyncResult),
     )
-    val resumeRefresh: ResumeRefresh = ResumeRefresh { seasonSyncRunner.launchRefreshIfStale() }
+    val resumeRefresh: ResumeRefresh = ResumeRefresh {
+        seasonSyncRunner.launchRefreshIfStale()
+        publishTriggers.onResume()
+    }
     val linkSeasonSync: LinkSeasonSync = LinkSeasonSync(
         assets, seasonActivations, transferRecords, seasonSyncBindings, haConnections, secretStore, setSeasonMode,
-        seasonSyncRunner, uow, clock, todayPort,
+        seasonSyncRunner, uow, clock, todayPort, outboundTargets,
     )
     val setSeasonSyncMode: SetSeasonSyncMode =
         SetSeasonSyncMode(seasonSyncBindings, assets, recordSeasonSyncResult, seasonSyncRunner, uow, clock)
     val editSeasonSyncEntity: EditSeasonSyncEntity =
-        EditSeasonSyncEntity(seasonSyncBindings, seasonSyncRunner, uow, clock)
+        EditSeasonSyncEntity(seasonSyncBindings, seasonSyncRunner, uow, clock, outboundTargets)
     val stopSeasonSync: StopSeasonSync = StopSeasonSync(seasonSyncBindings, seasonSyncRunner, uow, clock)
     val resumeSeasonSync: ResumeSeasonSync =
         ResumeSeasonSync(linkSeasonSync, seasonSyncBindings, seasonSyncRunner, uow, clock)
-    val saveHaConnection: SaveHaConnection =
-        SaveHaConnection(haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock)
+    val saveHaConnection: SaveHaConnection = SaveHaConnection(
+        haConnections, seasonSyncBindings, secretStore, seasonSyncRunner, uow, ids, clock, outboundTargets,
+        // #125 (ruling 2b): a re-authorised save moves the schedule bindings too, and reads each enabled one afresh.
+        scheduleBindings = scheduleSeasonBindings, requestScheduleRead = { seasonSyncRunner.requestScheduleRead(it) },
+    )
     val forgetHaConnection: ForgetHaConnection =
-        ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow)
+        ForgetHaConnection(haConnections, secretStore, seasonSyncRunner, uow, outboundTargets)
+
+    /** #125 (U-C3) — the link and the unlink, mirroring `AppGraph`'s fields by name; the applier is above the runner. */
+    val linkScheduleSeason: LinkScheduleSeason = LinkScheduleSeason(
+        schedules, assets, transferRecords, scheduleSeasonBindings, haConnections, secretStore, recomputeSchedules,
+        seasonSyncRunner, uow, clock, outboundTargets,
+    )
+    val unlinkScheduleSeason: UnlinkScheduleSeason =
+        UnlinkScheduleSeason(schedules, scheduleSeasonBindings, recomputeSchedules, seasonSyncRunner, uow, clock)
+
+    /**
+     * #113/#114 (C25, C25a) — the publishing controls, one write each and no HTTP inside: the app layer reads the helper
+     * first (C30) and asks for delivery after the commit (C32).
+     */
+    val enablePublishing: EnablePublishing = EnablePublishing(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
+        transferRecords, uow, ids, clock, scheduleSeasons = scheduleSeasonBindings,
+    )
+    val changePublishTarget: ChangePublishTarget = ChangePublishTarget(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
+        transferRecords, uow, ids, clock, scheduleSeasons = scheduleSeasonBindings,
+    )
+    val disablePublishing: DisablePublishing = DisablePublishing(publishBindings, publishDecommissions, uow, ids, clock)
+    val revalidatePublishing: RevalidatePublishing =
+        RevalidatePublishing(publishBindings, publishDeliveries, haConnections, uow, clock)
+    val dismissDecommission: DismissDecommission = DismissDecommission(publishDecommissions, uow)
+
+    /**
+     * #113/#114 (C30, C31) — the publish runner, its projector and their triggers as `AppGraph` wires them, over the
+     * doubles: Home Assistant is [haPublish]'s script; the projector edge is [desiredStateReconciler]'s, which records
+     * each call and by default runs [publishProjector] (a test scripts it instead); the installation is
+     * [installationIdentity]'s. The triggers run on [publishScope] (on `queryContext`, cancelled by [close]), count
+     * each delivery request in [deliveryRequests], measure process time by [elapsedMillis] and sleep to midnight
+     * through [midnightSleeps]. Nothing starts until a test calls `publishTriggers.start()` or one of its passes.
+     */
+    val haPublish: ScriptedHaPublish = ScriptedHaPublish { countingUow.open }
+    val publishProjector: PublishProjector = PublishProjector(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, assets,
+        transferRecords, conditions, schedules, groups, events, seasonActivations, uow, ids, clock,
+    ) { ZoneOffset.UTC }
+    val desiredStateReconciler: ScriptedReconciler = ScriptedReconciler(publishProjector)
+    val publishRunner: PublishRunner = PublishRunner(
+        publishBindings, publishDeliveries, publishDecommissions, haConnections, seasonSyncBindings, secretStore, assets,
+        transferRecords, seasonActivations, installationIdentity::id, haPublish,
+        BoundaryCacheWriter(db.haPublishDeliveryDao()::recordBoundary), desiredStateReconciler, uow, clock, todayPort,
+    )
+    private val publishJobs = SupervisorJob()
+    val publishScope: CoroutineScope = CoroutineScope(publishJobs + queryContext)
+    val deliveryRequests: java.util.concurrent.atomic.AtomicInteger = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * #113/#114 (C32) — the dispatch as `AppGraph` wires it, over [publishWork]'s record, the scripted network
+     * ([currentNetwork]) and grant ([backgroundAllowed]); its GH2 lines land in [publishLogged]. [deliveryRequester]
+     * counts each request in [deliveryRequests] before handing it on; [publishControls] asks it after each commit.
+     */
+    val publishWork: RecordingPublishWork = RecordingPublishWork()
+    val publishLogged: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+    private val dispatchJobs = SupervisorJob(publishJobs)
+    private val dispatchScope: CoroutineScope = CoroutineScope(dispatchJobs + queryContext)
+    val publishDispatch: PublishDispatch = PublishDispatch(
+        publishRunner, desiredStateReconciler, publishWork, haConnections, CurrentNetworkReader { currentNetwork },
+        seasonSyncBackgroundAllowed, todayPort, dispatchScope, io = queryContext, log = { publishLogged += it },
+    )
+    val deliveryRequester: DeliveryRequester = DeliveryRequester {
+        deliveryRequests.incrementAndGet()
+        publishDispatch.requestDelivery()
+    }
+    val publishControls: PublishControls = PublishControls(
+        enablePublishing, changePublishTarget, disablePublishing, revalidatePublishing, dismissDecommission,
+        saveHaConnection, forgetHaConnection, publishBindings, publishDeliveries, haConnections, secretStore, assets,
+        transferRecords, installationIdentity::id, publishRunner, desiredStateReconciler, todayPort, deliveryRequester,
+        uow, ids, clock, dispatchScope,
+        log = { publishLogged += it },
+    )
+
+    /** Waits until every delivery request and Publish now launched so far has finished (none launches another). */
+    suspend fun awaitDispatched() {
+        while (true) {
+            val active = dispatchJobs.children.filter { it.isActive }.toList()
+            if (active.isEmpty()) return
+            active.forEach { it.join() }
+        }
+    }
+    @Volatile var elapsedMillis: Long = 0L
+    val midnightSleeps: ScriptedSleeper = ScriptedSleeper()
+    val publishInputs: PublishInputs = PublishInputs(
+        conditions, assets, schedules, groups, transferRecords, events, seasonActivations,
+        db.haPublishBindingDao().observeControls(), seasonSyncBindings, haConnections,
+        db.haPublishDecommissionDao().observeObligations(),
+    )
+    val publishTriggers: PublishTriggers = PublishTriggers(
+        desiredStateReconciler, publishProjector::deliveryWorkPending, publishDispatch, publishInputs, deliveryRequester,
+        todayPort, publishScope, { elapsedMillis }, MidnightTick(clock, { ZoneOffset.UTC }, midnightSleeps::sleep),
+    )
 
     /** 1.4 — condition and health configuration, mirroring `AppGraph`'s six fields by name (master plan §1). */
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
@@ -483,7 +658,7 @@ class FakeGraph(
     val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-        applyTemplate, promoteCategory, SeasonSyncGuard(seasonSyncBindings),
+        applyTemplate, promoteCategory, SeasonSyncGuard(seasonSyncBindings), groups,
     )
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
@@ -504,7 +679,7 @@ class FakeGraph(
     val logEvent: LogEvent =
         LogEvent(events, definitions, profiles, assets, supplyItems, uow, ids, clock, recomputeSchedules)
     val updateEvent: UpdateEvent =
-        UpdateEvent(events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules)
+        UpdateEvent(events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules, todayPort)
     val deleteEvent: DeleteEvent =
         DeleteEvent(events, attachments, attachmentStorage, uow, recomputeSchedules)
     val saveDefinition: SaveDefinition =
@@ -570,6 +745,7 @@ class FakeGraph(
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords,
         assetSuccessions, supplyItems, assetSupplies, installedComponents, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
@@ -579,12 +755,13 @@ class FakeGraph(
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },
+        scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, supplyItems, assetSupplies,
-        installedComponents, attachmentStorage, uow,
+        installedComponents, attachmentStorage, uow, scheduleSeasonActivations,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -596,6 +773,7 @@ class FakeGraph(
         serviceCases, serviceCaseEntries, loans, transferRecords, roomAssetSuccessions, supplyItems, assetSupplies,
         installedComponents, attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
+        scheduleSeasonActivations = scheduleSeasonActivations,
     )
     val importBackupMerge: ImportBackupMerge =
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
@@ -604,7 +782,7 @@ class FakeGraph(
     val backupRepositories = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
-        transferRecords, assetSuccessions, supplyItems, assetSupplies, installedComponents,
+        transferRecords, assetSuccessions, supplyItems, assetSupplies, installedComponents, scheduleSeasonActivations,
     )
     val createTransferPack: CreateTransferPack = CreateTransferPack(
         backupRepositories, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
@@ -619,7 +797,7 @@ class FakeGraph(
 
     /** #77 (C14, C15) — the Transfer Pack import over the same guarded stores, mirroring `AppGraph`'s fields by name. */
     val importTransferPack: ImportTransferPack = ImportTransferPack(
-        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock,
+        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock, todayPort,
     )
 
     /** `cache/transfer-in/`, in a temporary directory of its own. */
@@ -633,6 +811,7 @@ class FakeGraph(
      */
     val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
         schedules, groups, events, closures, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules,
+        todayPort,
     )
 
     /**
@@ -649,14 +828,19 @@ class FakeGraph(
     val repairScheduleProviders: RepairScheduleProviders =
         RepairScheduleProviders(schedules, assets, groups, transferRecords, uow, clock)
     val completeSchedule: CompleteSchedule =
-        CompleteSchedule(schedules, events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules)
+        CompleteSchedule(schedules, events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules, todayPort)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
     val archiveSchedule: ArchiveSchedule =
-        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock)
+        ArchiveSchedule(
+            schedules, uow, recomputeSchedules, healthSubjects, assets, clock, groups, transferRecords,
+            scheduleSeasons = scheduleSeasonBindings,
+        )
+    val setScheduleRole: SetScheduleRole =
+        SetScheduleRole(schedules, assets, groups, transferRecords, uow, clock, todayPort, recomputeSchedules)
     val closeRound: CloseRound =
         CloseRound(schedules, closures, uow, ids, clock, todayPort, recomputeSchedules)
-    val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock, schedules, transferRecords)
 
     /** #86 (C18): the tag retarget `ReplaceAsset` calls in-transaction, from exactly the members `AppGraph` builds it from. */
     val bindTag: BindTag = BindTag(tags, assets, uow, clock)
@@ -669,7 +853,7 @@ class FakeGraph(
         assets, schedules, groups, tags, definitions, profiles, loans, transferRecords, assetSuccessions,
         uow, ids, clock, todayPort, retireAsset, saveAssetSettings, saveSchedule, saveGroup, bindTag,
     )
-    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
+    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, transferRecords, recomputeSchedules)
 
     /** #15 (C15–C17): the SupplyItem and applicability use cases, from exactly the members `AppGraph` builds them from. */
     val saveSupplyItem: SaveSupplyItem = SaveSupplyItem(supplyItems, uow, ids, clock)
@@ -710,6 +894,7 @@ class FakeGraph(
     val completionFlow: CompletionFlow = CompletionFlow(
         schedules, definitions, completeSchedule, completeGroupMembers, todayPort,
         eventOffers,
+        assetNames = { assets.get(it)?.name },
     ) { java.time.ZoneOffset.UTC }
 
     /**
@@ -738,6 +923,7 @@ class FakeGraph(
 
     fun close() {
         seasonSyncReads.cancel()
+        publishJobs.cancel()
         db.close()
     }
 
@@ -811,11 +997,153 @@ private class InMemoryKeyValueStore : KeyValueStore {
     override fun putString(key: String, value: String) { strings[key] = value }
 }
 
-/** #92: [delegate], counting each write transaction that committed. Reads are not counted. */
+/**
+ * #92: [delegate], counting each write transaction that committed. Reads are not counted. #113 (C30, G15): [open] is
+ * the number of read or write transactions running right now, so a scripted Home Assistant can say none spans a request.
+ */
 private class CountingUnitOfWork(private val delegate: UnitOfWork) : UnitOfWork {
     private val committed = java.util.concurrent.atomic.AtomicInteger()
+    private val running = java.util.concurrent.atomic.AtomicInteger()
     val commits: Int get() = committed.get()
+    val open: Int get() = running.get()
 
-    override suspend fun <T> write(block: suspend () -> T): T = delegate.write(block).also { committed.incrementAndGet() }
-    override suspend fun <T> read(block: suspend () -> T): T = delegate.read(block)
+    override suspend fun <T> write(block: suspend () -> T): T =
+        delegate.write { counted(block) }.also { committed.incrementAndGet() }
+
+    override suspend fun <T> read(block: suspend () -> T): T = delegate.read { counted(block) }
+
+    private suspend fun <T> counted(block: suspend () -> T): T {
+        running.incrementAndGet()
+        try {
+            return block()
+        } finally {
+            running.decrementAndGet()
+        }
+    }
+}
+
+/**
+ * #113/#114 (C22, C30) — Home Assistant's helpers as a script, behind the runner's transport: every read and every
+ * service call is recorded in [log] (`GET <entity>` / `POST <entity>=<value>`), in order. By default a read answers the
+ * helper in [helpers] (`ENTITY_NOT_FOUND` when absent) and a call sets the helper and answers `Accepted`, as HA acts on
+ * one; a test replaces [onRead] or [onCall] to fail, hold or race a request. [openTransactions] is the graph's count of
+ * running transactions, recorded at each request in [transactionsAtRequest].
+ */
+class ScriptedHaPublish(private val openTransactions: () -> Int = { 0 }) : HaPublishTransport {
+    data class Call(val action: HaServiceAction, val entityId: String, val value: String)
+
+    val helpers: MutableMap<String, RemoteEntity> = java.util.concurrent.ConcurrentHashMap()
+    val log: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+    val calls: MutableList<Call> = java.util.Collections.synchronizedList(mutableListOf())
+    val transactionsAtRequest: MutableList<Int> = java.util.Collections.synchronizedList(mutableListOf())
+
+    /** Whether the request reached the stored connection with a token: the address and token as passed. */
+    val connections: MutableList<HaConnection> = java.util.Collections.synchronizedList(mutableListOf())
+    val tokens: MutableList<Secret> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var onRead: suspend (entityId: String) -> RemoteRead = { answer(it) }
+    @Volatile var onCall: suspend (call: Call) -> CallOutcome = { act(it) }
+
+    /** The helper as HA holds it now. */
+    fun answer(entityId: String): RemoteRead =
+        helpers[entityId]?.let { RemoteRead.Answered(it) } ?: RemoteRead.Failed(PublishErrorKind.ENTITY_NOT_FOUND, null)
+
+    /** HA acting on [call]: the helper takes the value, and the call is accepted. */
+    fun act(call: Call): CallOutcome {
+        helpers.computeIfPresent(call.entityId) { _, helper -> helper.copy(state = call.value) }
+        return CallOutcome.Accepted
+    }
+
+    fun state(entityId: String): String? = helpers[entityId]?.state
+
+    val posts: List<Call> get() = calls.toList()
+
+    override suspend fun read(connection: HaConnection, entityId: String, token: Secret): RemoteRead {
+        transactionsAtRequest += openTransactions()
+        connections += connection
+        tokens += token
+        log += "GET $entityId"
+        return onRead(entityId)
+    }
+
+    override suspend fun call(
+        connection: HaConnection,
+        action: HaServiceAction,
+        entityId: String,
+        value: String,
+        token: Secret,
+    ): CallOutcome {
+        transactionsAtRequest += openTransactions()
+        connections += connection
+        tokens += token
+        log += "POST $entityId=$value"
+        val call = Call(action, entityId, value)
+        calls += call
+        return onCall(call)
+    }
+}
+
+/**
+ * #113/#114 (C32) — the two publish works as a record: each call in [calls], in order, and [reconcile] (the periodic
+ * request ensured now, null when cancelled).
+ */
+class RecordingPublishWork : PublishWork {
+    sealed interface Call {
+        data object EnqueueOnce : Call
+
+        data class EnsureReconcile(val request: PublishReconcileRequest) : Call
+
+        data object Cancel : Call
+    }
+
+    val calls: MutableList<Call> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var reconcile: PublishReconcileRequest? = null
+
+    override fun enqueueOnce() {
+        calls += Call.EnqueueOnce
+    }
+
+    override fun ensureReconcile(request: PublishReconcileRequest) {
+        calls += Call.EnsureReconcile(request)
+        reconcile = request
+    }
+
+    override fun cancel() {
+        calls += Call.Cancel
+        reconcile = null
+    }
+}
+
+/**
+ * #113/#114 (C30) — the projector edge as a script: each call's day in [days], answered by [answer], which runs the
+ * graph's real projector ([projector]) unless a test replaces it.
+ */
+class ScriptedReconciler(private val projector: DesiredStateReconciler) : DesiredStateReconciler {
+    val days: MutableList<java.time.LocalDate> = java.util.Collections.synchronizedList(mutableListOf())
+
+    @Volatile var answer: suspend (java.time.LocalDate) -> Boolean = { projector.reconcileDesired(it) }
+
+    override suspend fun reconcileDesired(today: java.time.LocalDate): Boolean {
+        days += today
+        return answer(today)
+    }
+}
+
+/**
+ * #113/#114 (C31) — the midnight tick's sleep as a script: each requested wait is recorded in [requested], and the
+ * sleeper wakes only when a test calls [wake].
+ */
+class ScriptedSleeper {
+    val requested: MutableList<Long> = java.util.Collections.synchronizedList(mutableListOf())
+    private val wakes = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+
+    suspend fun sleep(millis: Long) {
+        requested += millis
+        wakes.receive()
+    }
+
+    fun wake() {
+        wakes.trySend(Unit)
+    }
 }

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: German translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">Gerätezustand an Home Assistant veröffentlichen</string>
+    <string name="ha_publish_helper_field">Helfer in Home Assistant</string>
+    <string name="ha_publish_choose_helper">Helfer wählen</string>
+    <string name="ha_publish_scope_selects">Dropdown-Helfer (input_select)</string>
+    <string name="ha_publish_status_confirm">Den Gerätezustand von %1$s in %2$s veröffentlichen? ServiceTag setzt diesen Helfer, sobald sich der erfasste Zustand ändert: Betriebsbereit → UP, Eingeschränkt → DEGRADED, Ausgefallen → DOWN. Automationen in Home Assistant sollten ihn lesen und nie setzen.</string>
+    <string name="ha_publish_confirm_button">Veröffentlichen</string>
+    <string name="ha_publish_waiting_for_status">Wartet: Es ist kein Gerätezustand erfasst, daher wird nichts gesendet.</string>
+    <string name="ha_publish_not_published_yet">Noch nicht veröffentlicht.</string>
+    <string name="ha_publish_sending">%s wird gesendet…</string>
+    <string name="ha_publish_published">Veröffentlicht: %1$s · %2$s</string>
+    <string name="ha_publish_matches">Home Assistant zeigt %1$s, das stimmt mit ServiceTag überein · geprüft %2$s</string>
+    <string name="ha_publish_now">Jetzt veröffentlichen</string>
+    <string name="ha_publish_stop">Veröffentlichen beenden</string>
+    <string name="ha_publish_stop_status_confirm">Veröffentlichen in %s beenden? Home Assistant behält den aktuellen Wert.</string>
+    <string name="ha_publish_options_mismatch">%s muss ein Dropdown-Helfer mit genau den Optionen UP, DOWN und DEGRADED sein.</string>
+    <string name="ha_publish_not_a_dropdown">%s ist kein Dropdown-Helfer (input_select).</string>
+    <string name="ha_publish_service_refused">Home Assistant hat den Wert %1$s für %2$s abgelehnt.</string>
+    <string name="ha_publish_write_forbidden">Home Assistant hat diese Änderung für den Benutzer des Zugriffstokens abgelehnt. Dieser Benutzer braucht die Berechtigung, Helfer zu ändern.</string>
+    <string name="ha_publish_outcome_unknown">Home Assistant hat die Änderung nicht bestätigt. ServiceTag prüft den Helfer, bevor es erneut sendet.</string>
+    <string name="ha_publish_remote_differs">Home Assistant zeigt nach der Änderung %1$s; möglicherweise setzt etwas anderes %2$s.</string>
+    <string name="ha_publish_copied_installation">Diese Einrichtung stammt aus der Sicherung eines anderen Telefons, daher veröffentlicht dieses Telefon nicht. Prüfe den Helfer und schalte das Veröffentlichen hier wieder ein.</string>
+    <string name="ha_publish_target_in_use">%s wird bereits von einem anderen Gerät auf diesem Telefon gesetzt.</string>
+    <string name="ha_publish_inbound_source">%s ist der Helfer, dem die Saison dieses Geräts folgt. Wähle einen anderen: ServiceTag setzt nie einen Helfer, den es liest.</string>
+    <string name="ha_publish_status_not_maintained">Es wird nichts gesendet: Das Gerät ist archiviert, ausgemustert oder übergeben. Home Assistant behält seinen letzten Wert.</string>
+    <string name="ha_publish_check_helper">Helfer prüfen</string>
+    <string name="ha_publish_delivery_limit">Gesendet, sobald das Telefon kann: beim Öffnen, bei „Jetzt veröffentlichen“ oder im Hintergrund, wo erlaubt. Es geschieht nicht sofort.</string>
+    <string name="ha_publish_http_error">Home Assistant hat mit %s geantwortet.</string>
+    <string name="ha_publish_checking">Helfer wird geprüft…</string>
+    <string name="ha_publish_choose_helper_first">Wähle zuerst einen Helfer.</string>
+    <string name="ha_publish_needs_validation">Prüfe den Helfer erneut, bevor ServiceTag in ihn veröffentlicht.</string>
+    <string name="ha_publish_stale_read">Der Helfer hat sich während der Prüfung geändert. Prüfe ihn erneut.</string>
+    <string name="ha_publish_asset_not_maintained">%s ist archiviert, ausgemustert oder übergeben und kann deshalb nicht an Home Assistant veröffentlichen.</string>
+    <string name="ha_publish_stale_plan">Seit der Prüfung dieses Helfers hat sich etwas geändert. Prüfe ihn erneut.</string>
+    <string name="ha_publish_write_disclosure">Wenn ein Gerät an Home Assistant veröffentlicht, setzt dieses Telefon diesen Helfer auch mit diesem Token. Gib dem Benutzer des Tokens nur die Rechte, die er braucht.</string>
+</resources>

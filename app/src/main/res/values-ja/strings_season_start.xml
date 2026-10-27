@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Japanese translation of values/strings_season_start.xml. -->
+<resources>
+    <string name="season_start_refused_leaf_child">%s は子機器で、自身の子機器がないため、シーズン開始メンテナンスを設定できません。</string>
+    <string name="season_start_refused_year_round">%s は通年で使用されるため、開始するシーズンがありません。先に日付指定または手動のシーズンを設定してください。</string>
+    <string name="season_start_refused_not_maintained_here">%s はアーカイブ済み、使用終了、または移管済みのため、シーズン開始メンテナンスを設定できません。</string>
+    <string name="season_start_refused_already_covered">%1$s にはすでにシーズン開始メンテナンス「%2$s」があります。先にそちらの使用をやめてください。</string>
+    <string name="season_start_refused_group_member">このグループのすべての機器が、シーズン開始メンテナンスを設定できる必要があります。%s</string>
+    <string name="season_start_ready">シーズンの準備完了 · %s にメンテナンス済み</string>
+    <string name="season_start_not_ready_since_season_end">準備未完了：シーズン終了日（%s）以降にメンテナンスされていません</string>
+    <string name="season_start_not_ready_since_commissioning">準備未完了：%s 以降の日付の有効なメンテナンスがありません。</string>
+    <string name="season_start_not_ready_details_pending">準備未完了：メンテナンスの詳細がまだ入力されていません</string>
+    <string name="season_start_not_ready_schedule_archived">準備未完了：シーズン開始メンテナンスはアーカイブ済みです</string>
+    <string name="season_start_not_ready_role_not_allowed">準備未完了：シーズン開始メンテナンスは、シーズンがあり、親機器がないか子機器を持つ機器にのみ適用されます</string>
+    <string name="season_start_not_ready_two_roles">準備未完了：この機器には 2 件のシーズン開始メンテナンスが設定されています。どちらか一方の使用をやめてください。</string>
+    <string name="season_start_not_ready_future_dated">まだ準備未完了：メンテナンスの日付が %s で、今日より後です</string>
+    <string name="season_start_not_ready_no_role">準備未完了：シーズン開始メンテナンスがありません</string>
+    <string name="season_start_not_ready_inherited_service_only">準備未完了：記録されているメンテナンスは別のスマートフォンで記録され、この機器とともに移されたものです。今シーズンのメンテナンスをこのスマートフォンで記録してください。</string>
+    <string name="season_start_not_ready_recorded_in_advance">準備未完了：%s の日付のメンテナンスはその日より前に入力されたため、対象になりません。確認するには、その日以降に編集してください。</string>
+    <string name="season_start_source_ha_season_ended">Home Assistant のシーズン終了日：%1$s · %2$s に確認</string>
+    <string name="season_start_source_ha_unverified">%1$s 以降 Home Assistant でシーズン終了日を確認できていません · %2$s を使用</string>
+    <string name="season_start_source_phone_season_end">このスマートフォンで記録したシーズン終了日：%s</string>
+    <string name="season_start_source_calendar_window">日付指定のシーズンによるシーズン終了日：%s</string>
+    <string name="season_start_source_commissioning">シーズン開始メンテナンスを設定した日から数えます：%s</string>
+    <string name="season_start_cutoff">%s 以降の日付のメンテナンスが対象です。</string>
+    <string name="season_start_completion_marks_asset_ready">これを完了すると、%s はシーズンの準備完了になります。</string>
+    <string name="season_start_completion_marks_member_ready">機器に対してこれを完了すると、その機器はシーズンの準備完了になります。</string>
+    <string name="season_start_service">シーズン開始メンテナンス</string>
+    <string name="season_start_use">シーズン開始メンテナンスとして使用</string>
+    <string name="season_start_stop">シーズン開始メンテナンスとしての使用をやめる</string>
+    <string name="season_start_confirm_asset">「%1$s」を %2$s のシーズン開始メンテナンスとして使用しますか？完了すると %2$s はシーズンの準備完了になります。%3$s 以降の日付のメンテナンスが対象です。</string>
+    <string name="season_start_confirm_group">「%1$s」を %2$s 内のすべての機器のシーズン開始メンテナンスとして使用しますか？機器について完了すると、その機器はシーズンの準備完了になります。%3$s 以降の日付のメンテナンスが対象です。</string>
+    <string name="season_start_quick_note">このスケジュールはワンタップで完了し、メンテナンスの詳細は記録されません。ワンタップでの完了でも機器は準備完了になります。</string>
+    <string name="season_start_counts_from">メンテナンスの対象開始日</string>
+    <string name="season_start_refused_schedule_archived">このスケジュールはアーカイブ済みです。先にアーカイブを解除してください。</string>
+    <!-- P190-1 -->
+    <string name="season_start_could_not_save_group">このグループを保存できませんでした。</string>
+    <!-- P190-2 -->
+    <string name="season_start_could_not_save_schedule">このスケジュールを保存できませんでした。</string>
+    <string name="season_start_refused_no_members">このグループには準備完了にする機器がありません。</string>
+    <string name="season_start_refused_date_in_future">メンテナンスの対象開始日を今日より後にすることはできません。</string>
+    <string name="season_start_refused_bad_date">メンテナンスの対象開始日をカレンダーの日付で入力してください。</string>
+    <string name="season_start_strand_needs_seasons">%1$s にはシーズン開始メンテナンスがあるため、シーズンが必要です。先に「%2$s」のシーズン開始メンテナンスとしての使用をやめてください。</string>
+    <string name="season_start_strand_would_be_leaf_child">この変更により、%1$s はシーズン開始メンテナンスがあるまま、自身の子機器がない子機器になります。先に「%2$s」のシーズン開始メンテナンスとしての使用をやめてください。</string>
+    <string name="season_start_strand_retarget">このスケジュールはシーズン開始メンテナンスのため、対象の機器やグループは変更できません。先にシーズン開始メンテナンスとしての使用をやめてください。</string>
+    <string name="season_start_strand_member">%s はこのグループに追加できません。グループのシーズン開始メンテナンスの対象になりますが、すでに別のものがあるか、設定できない機器です。</string>
+    <string name="season_start_strand_quick_needs_election">このスケジュールはシーズン開始メンテナンスです。ワンタップに変更する前に、ワンタップでの完了を対象にすることを確認してください。</string>
+    <string name="season_start_role_line">シーズン開始メンテナンス · %s 以降のメンテナンスが対象</string>
+    <string name="season_start_count_one_tap">ワンタップでの完了を対象にする</string>
+    <string name="season_start_refused_no_season_start_service">%s には、数え始める基準となるシーズン開始メンテナンスがありません。先にそのスケジュールのいずれかをシーズン開始メンテナンスとして使用してください。</string>
+    <string name="season_start_refused_counts_from_itself">このスケジュールはシーズン開始メンテナンスのため、自分自身から数え始めることはできません。</string>
+    <string name="season_start_refused_counts_from_the_service">このスケジュールはシーズン開始メンテナンスから数え始めるため、シーズン開始メンテナンスにはできません。先に数え始める日を変更してください。</string>
+    <string name="season_start_strand_dependent_schedules">「%1$s」は %2$s のシーズン開始メンテナンスから数え始めます。先に数え始める日を変更してください。</string>
+    <string name="season_start_counting_from_the_service">シーズン開始メンテナンス</string>
+    <string name="season_start_days_after_the_service">シーズン開始メンテナンス後の日数</string>
+    <string name="season_start_why_waiting">今シーズンのシーズン開始メンテナンスを待っています</string>
+    <string name="season_start_why_moved_to_the_service">シーズン開始メンテナンスから数えるため%1$sから移動</string>
+    <string name="season_start_status_waiting">待機中</string>
+</resources>

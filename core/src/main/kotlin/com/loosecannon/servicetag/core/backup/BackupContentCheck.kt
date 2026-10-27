@@ -140,6 +140,14 @@ internal object BackupContentCheck {
                 listOfNotNull(SeasonProblem.BadDate("occurredOn").takeIf { parseDate(row.occurredOn) == null }),
             )
         }
+        // #125 (U-C6): a schedule's own season row, as the asset's: its day must be a date.
+        data.scheduleSeasonActivations.forEach { dto ->
+            val row = dto.toDomain()
+            refuse(
+                "scheduleSeasonActivations", "row", row.id,
+                listOfNotNull(SeasonProblem.BadDate("occurredOn").takeIf { parseDate(row.occurredOn) == null }),
+            )
+        }
         checkCategories(data)
         checkServiceCases(data)
         checkLoans(data)

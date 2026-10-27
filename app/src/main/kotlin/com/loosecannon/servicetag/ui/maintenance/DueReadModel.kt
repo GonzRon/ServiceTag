@@ -10,10 +10,10 @@ import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
-import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
@@ -75,14 +75,15 @@ enum class AttentionSection { ATTENTION, UPCOMING, CURRENT, DEFERRED, OUT_OF_SEA
  * **1.4's policy facts** (master plan §13.1), all read from the state derived for today:
  * [actionableDueOn] is the date the status word is measured against and the sort key;
  * [policyReason], [policyPhase] and [quiet] are what a why-line says about it. [seasonMode] is the
- * target Asset's (null for a group, which has no season), and [dormantUntil] is the next season
- * start of a DORMANT row on a CALENDAR Asset — a meter-only one included — and null otherwise,
- * because a MANUAL start is never predicted (plan decision 37). [health] is the band of the
- * subject this schedule drives, when that subject is tracked: overdue-driven health rides its
- * schedule's row rather than being a row of its own (spec §10.2). [assetCondition] is the target
- * Asset's **current** condition — a component's own — and null for a group target or when none is
- * recorded, so a condition filter reads it off the row (the controller's ruling on B07's
- * concern 3).
+ * mode of the season the schedule's due rules read — the target Asset's, or MANUAL for a schedule
+ * following its own Home Assistant season (#125) — null for a group, which has no season; and
+ * [dormantUntil] is the next season start of a DORMANT row on a CALENDAR season — a meter-only one
+ * included — and null otherwise, because a MANUAL start is never predicted (plan decision 37).
+ * [health] is the band of the subject this schedule drives, when that subject is tracked:
+ * overdue-driven health rides its schedule's row rather than being a row of its own (spec §10.2).
+ * [assetCondition] is the target Asset's **current** condition — a component's own — and null for a
+ * group target or when none is recorded, so a condition filter reads it off the row (the
+ * controller's ruling on B07's concern 3).
  */
 data class DueItem(
     val scheduleId: ScheduleId,
@@ -130,6 +131,8 @@ data class DueItem(
     val health: SubjectBandFact?,
     val assetCondition: OperationalCondition?,
     val rank: Int,
+    /** #114 (C33): the schedule's Season Start role, so its row carries the label P114-1. */
+    val role: ScheduleRole = ScheduleRole.NONE,
 ) {
     /**
      * Whether this row contributes to a due total. `DUE` and `OVERDUE` do; `INACTIVE_SEASON`,
@@ -269,6 +272,9 @@ class DueReadModel(
         val asset = (schedule.target as? ScheduleTarget.AssetTarget)?.let { world.asset(it.assetId) }
         val group = (schedule.target as? ScheduleTarget.GroupTarget)?.let { world.group(it.groupId) }
         val progress = occurrence?.takeIf { schedule.target is ScheduleTarget.GroupTarget }?.progress
+        // #125 (U-C2): the season this schedule's due rules read — its asset's, or its own (MANUAL) — never the asset's
+        // for a schedule that follows its own Home Assistant season.
+        val season = recompute.seasonFor(schedule)
         return DueItem(
             scheduleId = schedule.id,
             title = schedule.title,
@@ -277,17 +283,20 @@ class DueReadModel(
             parentName = asset?.parentAssetId?.let { world.asset(it)?.name },
             category = asset?.category?.takeIf { it.isNotBlank() },
             status = status,
-            section = sectionOf(status, requiredSetEmpty),
+            section = sectionOf(status, requiredSetEmpty, state.policyReason),
             requiredSetEmpty = requiredSetEmpty,
             effectiveDueOn = state.effectiveDueOn?.let(LocalDate::parse),
             actionableDueOn = state.actionableDueOn?.let(LocalDate::parse),
             policyReason = state.policyReason,
             policyPhase = state.policyPhase,
             quiet = state.quiet,
-            seasonMode = asset?.seasonMode,
-            dormantUntil = asset?.takeIf {
-                it.seasonMode == SeasonMode.CALENDAR && state.policyPhase == PolicyPhase.DORMANT
-            }?.let { SeasonContext.of(it.seasonInputs(emptyList())).cycleStartAt(t) },
+            seasonMode = season?.mode,
+            // #124 (C43): a row waiting for the opening service is DORMANT while its asset is in season, so it has no
+            // next season start to name.
+            dormantUntil = season?.takeIf {
+                it.mode == SeasonMode.CALENDAR && state.policyPhase == PolicyPhase.DORMANT &&
+                    state.policyReason != PolicyReason.AWAITING_OPENING_SERVICE
+            }?.let { SeasonContext.of(it).cycleStartAt(t) },
             computedDueMeter = state.computedDueMeter,
             currentMeter = state.currentMeter,
             meterUnit = schedule.meterDefinitionId?.let { definitions.get(it)?.unit }?.takeIf { it.isNotBlank() },
@@ -300,6 +309,7 @@ class DueReadModel(
             health = band,
             assetCondition = condition,
             rank = 0,
+            role = schedule.role,
         )
     }
 
@@ -365,15 +375,17 @@ class DueReadModel(
          * reading" repairs it and #27 raises a finding for it) and takes ATTENTION, while an
          * **empty required set** is not actionable at all and takes no section (invariants 74, 77).
          * `PAUSED` takes no section either. `DEFERRED` has its own quiet section, never a due one
-         * (invariant 103).
+         * (invariant 103). #124's waiting row (`AWAITING_OPENING_SERVICE`) reads `INACTIVE_SEASON` but its
+         * asset is in season, so it sits in CURRENT, never OUT OF SEASON (C43) — still counted in no total.
          */
-        fun sectionOf(status: DueStatus, requiredSetEmpty: Boolean): AttentionSection? = when {
+        fun sectionOf(status: DueStatus, requiredSetEmpty: Boolean, reason: PolicyReason): AttentionSection? = when {
             requiredSetEmpty -> null
             status == DueStatus.OVERDUE || status == DueStatus.DUE -> AttentionSection.ATTENTION
             status == DueStatus.NO_DATA -> AttentionSection.ATTENTION
             status == DueStatus.DUE_SOON -> AttentionSection.UPCOMING
             status == DueStatus.OK -> AttentionSection.CURRENT
             status == DueStatus.DEFERRED -> AttentionSection.DEFERRED
+            status == DueStatus.INACTIVE_SEASON && reason == PolicyReason.AWAITING_OPENING_SERVICE -> AttentionSection.CURRENT
             status == DueStatus.INACTIVE_SEASON -> AttentionSection.OUT_OF_SEASON
             else -> null   // PAUSED
         }

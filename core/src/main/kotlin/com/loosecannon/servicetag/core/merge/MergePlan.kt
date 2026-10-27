@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthSubject
@@ -18,6 +19,9 @@ import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
@@ -25,7 +29,9 @@ import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.StoredBytes
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
 import java.security.MessageDigest
+import java.time.LocalDate
 
 /**
  * The twenty-three canonical tables. The first fourteen are **in the order a merge must write them**:
@@ -83,11 +89,16 @@ import java.security.MessageDigest
  * its parent — is decided, and parents first; nothing decided later names one. [MergeWrites] writes them straight
  * after the applicability rows. A composition has no table of its own: its entries are decided, written and tallied
  * with their row, as a SupplyItem's specifications are with theirs.
+ *
+ * #125 appended [SCHEDULE_SEASON_ACTIVATIONS] after [INSTALLED_COMPONENTS], so no shipped ordinal moves. A row is a
+ * schedule's own season fact, owned by its schedule alone, as a closure is: it is decided after the schedules, and
+ * [MergeWrites] writes the rows straight after the closures.
  */
 enum class MergeTable {
     ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
     REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS, CATEGORIES,
     SERVICE_CASES, CASE_ENTRIES, LOANS, TRANSFERS, SUCCESSIONS, SUPPLY_ITEMS, ASSET_SUPPLIES, INSTALLED_COMPONENTS,
+    SCHEDULE_SEASON_ACTIVATIONS,
 }
 
 /**
@@ -378,6 +389,58 @@ enum class MergeReason {
      * [MergeDecision.detail] is the holder's row id.
      */
     INSTALLED_COMPONENT_REPLACEMENT_TAKEN,
+
+    /**
+     * #114 (C19, O-9). An inserted `SEASON_START` schedule would cover an asset a live role here already covers — one
+     * live role per asset (C9's coverage, over this phone's rows and this plan's accepted groups and members). A
+     * `CONFLICT`, never a silent correction: dropping or re-dating either role would change what readiness reads.
+     * [MergeDecision.detail] is the local schedule's id.
+     */
+    SEASON_START_HELD_BY_A_LOCAL_ROW,
+
+    /**
+     * #114 (C19, O-9). Two inserted `SEASON_START` schedules of one archive would cover one asset. A `CONFLICT`: the
+     * archive disagrees with itself, and no single row of it can be chosen. [MergeDecision.detail] is the id of the
+     * archive row that claimed the asset first.
+     */
+    SEASON_START_DUPLICATED_IN_ARCHIVE,
+
+    /**
+     * #124 (C42, O-9). An inserted live schedule counting from its asset's opening service
+     * (`IN_SERVICE_AFTER_OPENING_SERVICE`) whose asset no live Season Start role covers once the plan's accepted rows
+     * are in — this phone's roles and the archive's accepted ones alike. A `CONFLICT`, never a silent fallback: the
+     * schedule would wait with no date for a service nothing can record. [MergeDecision.detail] is the asset's id.
+     */
+    SEASON_START_SERVICE_MISSING,
+}
+
+/**
+ * #114 (C20, A01): what makes a merge a Transfer Pack import — the recipient's import day, captured **once** by the
+ * preview and carried through the plan, its fingerprint and the apply's replan, never re-derived; so an import accepted
+ * after local midnight writes the day the owner saw. An inserted `SEASON_START` schedule is recommissioned on
+ * [importDay], and every inserted event is marked `imported`, unless a [ReturnCarry] names it. Null for every other
+ * merge, which writes each row's role and marker verbatim (O-20).
+ */
+data class ImportContext(val importDay: LocalDate)
+
+/**
+ * #114 (C20, A) — a returning asset's own provenance, read from exactly the rows its return removes here
+ * (`ReturnScope`): each removed schedule's local role and boundary, and each removed event's local marker. An inserted
+ * row the carry names takes these values, whatever the pack says, so a return never re-dates its role nor marks the
+ * owner's own earlier service imported. [NONE] for every other merge.
+ *
+ * #125 (U-C6): [seasonSources] is each removed schedule's local season source, which an inserted row it names keeps
+ * whatever the pack says (the role's precedent). Its binding is not carried: device-local, it went with the removed
+ * row, so a returning `OWN` schedule is stranded until the owner links it again or unlinks it.
+ */
+data class ReturnCarry(
+    val roles: Map<ScheduleId, Pair<ScheduleRole, String?>>,
+    val eventImported: Map<EventId, Boolean>,
+    val seasonSources: Map<ScheduleId, ScheduleSeasonSource> = emptyMap(),
+) {
+    companion object {
+        val NONE = ReturnCarry(emptyMap(), emptyMap())
+    }
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -446,6 +509,8 @@ data class MergeWrites(
     val profiles: List<EventProfile> = emptyList(),
     val schedules: List<MaintenanceSchedule> = emptyList(),
     val closures: List<OccurrenceClosure> = emptyList(),
+    /** #125 — a schedule's own season rows, after their schedule. */
+    val scheduleSeasonActivations: List<ScheduleSeasonActivation> = emptyList(),
     val links: List<ExternalLink> = emptyList(),
     val tags: List<TagBinding> = emptyList(),
     val events: List<AssetEvent> = emptyList(),
@@ -505,6 +570,8 @@ data class MergeSnapshot(
     val assetSupplies: List<AssetSupply> = emptyList(),
     /** #47 — the installed components, current and removed, each with its composition. */
     val installedComponents: List<InstalledComponent> = emptyList(),
+    /** #125 — every schedule's own season rows. The schedule bindings are device-local and never here. */
+    val scheduleSeasonActivations: List<ScheduleSeasonActivation> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -550,8 +617,10 @@ data class MergeReport(
     /** #15 — the SupplyItems, then their applicability. */
     val supplyItems: MergeTally,
     val assetSupplies: MergeTally,
-    /** #47 — the installed components, their composition counted with them: the report is twenty-three tables. */
+    /** #47 — the installed components, their composition counted with them. */
     val installedComponents: MergeTally,
+    /** #125 — a schedule's own season rows: the report is twenty-four tables. */
+    val scheduleSeasonActivations: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -567,10 +636,14 @@ data class MergeReport(
 class MergePlan internal constructor(
     /** The archive this was planned from, kept so an apply can re-plan against a fresh snapshot. */
     val backup: Backup,
+    /** #114 (C20, A01): a Transfer Pack's import context, carried to the apply's replan; null for every other merge. */
+    val context: ImportContext?,
     /** Every row's outcome, sorted by table order then id. */
     val decisions: List<MergeDecision>,
     val writes: MergeWrites,
     val duplicateCandidates: List<DuplicateCandidate>,
+    /** #114 (C20, A): the return's carried provenance this plan was built with, for [fingerprint] only. */
+    carry: ReturnCarry,
 ) {
     val conflicts: List<MergeDecision> = decisions.filter { it.verdict == MergeVerdict.CONFLICT }
 
@@ -588,11 +661,14 @@ class MergePlan internal constructor(
      * is not named stale, which is harmless because hints never affect [applicable] and nothing is
      * written differently for them.
      *
+     * #114 (C20, A01): it also covers the [context]'s import day and every carried role, so a plan built with another
+     * day or another return carry — which would write other roles and markers — is named stale.
+     *
      * It is **not** the safety mechanism: rebuilding the plan inside the apply's transaction is
      * ([com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan]). This is what lets a stale
      * plan be *named* stale instead of quietly producing a different report.
      */
-    val fingerprint: String = fingerprintOf(backup, decisions)
+    val fingerprint: String = fingerprintOf(backup, decisions, context, carry)
 
     fun tally(table: MergeTable): MergeTally {
         val rows = decisions.filter { it.table == table }
@@ -631,12 +707,18 @@ class MergePlan internal constructor(
         supplyItems = tally(MergeTable.SUPPLY_ITEMS),
         assetSupplies = tally(MergeTable.ASSET_SUPPLIES),
         installedComponents = tally(MergeTable.INSTALLED_COMPONENTS),
+        scheduleSeasonActivations = tally(MergeTable.SCHEDULE_SEASON_ACTIVATIONS),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )
 }
 
-private fun fingerprintOf(backup: Backup, decisions: List<MergeDecision>): String {
+private fun fingerprintOf(
+    backup: Backup,
+    decisions: List<MergeDecision>,
+    context: ImportContext?,
+    carry: ReturnCarry,
+): String {
     val digest = MessageDigest.getInstance("SHA-256")
     digest.update(backup.manifest.backupSetId.toByteArray(Charsets.UTF_8))
     digest.update(backup.manifest.dataSha256.toByteArray(Charsets.UTF_8))
@@ -645,6 +727,14 @@ private fun fingerprintOf(backup: Backup, decisions: List<MergeDecision>): Strin
             "${d.table.name}|${d.id}|${d.verdict.name}|${d.reason.name}|${d.detail}\n"
                 .toByteArray(Charsets.UTF_8),
         )
+    }
+    context?.let { digest.update("context|${it.importDay}\n".toByteArray(Charsets.UTF_8)) }
+    for ((scheduleId, role) in carry.roles.entries.sortedBy { it.key.value }) {
+        digest.update("carry|${scheduleId.value}|${role.first.name}|${role.second}\n".toByteArray(Charsets.UTF_8))
+    }
+    // #125 (U-C6): a carried season source writes another row, so it is part of what the plan decided.
+    for ((scheduleId, source) in carry.seasonSources.entries.sortedBy { it.key.value }) {
+        digest.update("carry-source|${scheduleId.value}|${source.name}\n".toByteArray(Charsets.UTF_8))
     }
     return digest.digest().joinToString("") { b -> "%02x".format(b) }
 }

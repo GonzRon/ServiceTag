@@ -15,6 +15,8 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -80,6 +82,12 @@ fun GroupMember.toEntity(groupId: GroupId): MaintenanceGroupMemberEntity =
  * The two nullable target columns are one value in the domain: exactly one of them is set. A row
  * with both, or with neither, is one no writer above this layer can produce and the backup decoder
  * refuses, so it is reported here rather than being half-assembled into a schedule that cannot be.
+ *
+ * #114 (C13): `role` by its enum name and `role_since_on` verbatim. A row that breaks R1 (a boundary exactly while
+ * the role is `SEASON_START`) fails only a debug assertion — JVM assertions, off on the device — and is otherwise
+ * mapped as stored, which readiness reads as `NO_ROLE`: a merged row never crashes a read model.
+ *
+ * #125 (U-C1): `season_source` by its enum name, both ways, so every full-row write keeps it.
  */
 fun ScheduleWithProviders.toDomain(): MaintenanceSchedule = MaintenanceSchedule(
     id = ScheduleId(schedule.id),
@@ -106,7 +114,14 @@ fun ScheduleWithProviders.toDomain(): MaintenanceSchedule = MaintenanceSchedule(
     updatedAt = schedule.updatedAt,
     ruleChangedAt = schedule.ruleChangedAt,
     providers = providers.sortedBy { it.provider }.map { it.toDomain() },
-)
+    role = enumValueOf<ScheduleRole>(schedule.role),
+    roleSinceOn = schedule.roleSinceOn,
+    seasonSource = enumValueOf<ScheduleSeasonSource>(schedule.seasonSource),
+).also { mapped ->
+    assert((mapped.roleSinceOn != null) == (mapped.role == ScheduleRole.SEASON_START)) {
+        "schedule ${mapped.id.value} breaks R1: role ${mapped.role} with roleSinceOn ${mapped.roleSinceOn}"
+    }
+}
 
 private fun MaintenanceScheduleEntity.target(): ScheduleTarget {
     val asset = assetId
@@ -146,6 +161,9 @@ fun MaintenanceSchedule.toEntity(): MaintenanceScheduleEntity = MaintenanceSched
     createdAt = createdAt,
     updatedAt = updatedAt,
     ruleChangedAt = ruleChangedAt,
+    role = role.name,
+    roleSinceOn = roleSinceOn,
+    seasonSource = seasonSource.name,
 )
 
 fun ScheduleProviderRow.toEntity(scheduleId: ScheduleId): ScheduleProviderEntity =

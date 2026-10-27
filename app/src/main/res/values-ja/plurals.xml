@@ -10,4 +10,7 @@
     <plurals name="health_grace_period">
         <item quantity="other">%1$d日間の猶予期間内</item>
     </plurals>
+    <plurals name="ha_publish_forget_date_helpers">
+        <item quantity="other">Home Assistantの日付ヘルパー%1$d個に、まだシーズン開始日が残っています。接続を解除すると、可能な場合はまず%2$sに設定します。届かないヘルパーは、Home Assistantで消去するまで日付が残ります。</item>
+    </plurals>
 </resources>

@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.ports.Clock
@@ -19,6 +20,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 
@@ -46,6 +48,9 @@ import com.loosecannon.servicetag.core.schedule.GroupOccurrence
  *   leaves it, because the date the owner agreed still governs the members who have not been round
  *   yet; and when the round does finish, the clear writes that one column and leaves `updated_at`
  *   alone, because only an explicit edit moves the D-27 pin's floor (invariants 19, 25, 68, 69).
+ *
+ * A batch dated after [today] is [CompletionDateInFuture] (O-16, C39) before the write, so no member is written.
+ * When the schedule carries the Season Start role, the write also rebuilds each completed member's asset (#124, C41).
  */
 class CompleteGroupMembers(
     private val schedules: ScheduleRepository,
@@ -59,6 +64,7 @@ class CompleteGroupMembers(
     private val ids: IdGenerator,
     private val clock: Clock,
     private val recompute: RecomputeSchedules,
+    private val today: Today,
 ) {
     /** "Complete selected": exactly the members named, minus any already done. */
     suspend fun run(id: ScheduleId, assetIds: List<AssetId>, cmd: CompletionCommand): List<AssetEvent> {
@@ -70,8 +76,10 @@ class CompleteGroupMembers(
      * "Complete all": every required member that is not yet done, in one write.
      *
      * The list is derived here rather than passed in so that a surface cannot accidentally complete
-     * a member the round does not oblige — and a second run writes nothing, because by then there is
-     * nothing in the round left to do.
+     * a member the round does not oblige. A second run never writes this round again: the write that
+     * covers the required set finishes it and moves the schedule on, so a second run opens the next
+     * round and completes that round's required members. The empty answer comes from [run] naming
+     * members already done.
      */
     suspend fun all(id: ScheduleId, cmd: CompletionCommand): List<AssetEvent> {
         val round = openRound(id)
@@ -93,6 +101,9 @@ class CompleteGroupMembers(
             if (assetId !in everAMember) throw NotAGroupMember(schedule.id, assetId)
             if (assetId !in occurrence.required) throw NotARequiredMember(schedule.id, assetId)
         }
+        // O-16 (C39): the whole batch, before the write and before "nothing left to record", so a date after today is
+        // refused however many of the named members are already done.
+        refuseFutureCompletion(cmd.occurredOn, today.localDate())
 
         val outstanding = assetIds.distinct().filterNot { it in occurrence.completed }
         // Nothing to record is not an error: the members named are already done, which is the
@@ -110,6 +121,9 @@ class CompleteGroupMembers(
                 schedules.upsert(schedule.copy(postponedDueOn = null))
             }
             recompute.forSchedule(schedule.id)
+            // #124 (C41): a role schedule's completion moves each completed member's readiness, which that member's own
+            // schedules counting from its opening service read.
+            if (schedule.role == ScheduleRole.SEASON_START) outstanding.forEach { recompute.forAsset(it) }
             written
         }
     }

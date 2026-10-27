@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -25,6 +26,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * changing a completion's date or its meter reading changes what the engine derives from it, and
  * re-pointing one at another schedule changes what *both* derive. Both schedules are the same
  * Asset's, so the one closure covers them.
+ *
+ * O-16 (C39): an edit whose result names a schedule — the command's, or the link the stored row keeps — is a
+ * completion, and one dated after [today] is [CompletionDateInFuture] with nothing written: a completion moved to a
+ * later day, an entry re-pointed onto a schedule, or a completion stored in advance (an older release's, or one a
+ * merge brought) saved with its date kept. An ordinary entry keeps any date.
  */
 class UpdateEvent(
     private val events: EventRepository,
@@ -35,6 +41,7 @@ class UpdateEvent(
     private val ids: IdGenerator,
     private val clock: Clock,
     private val recompute: RecomputeSchedules,
+    private val today: Today,
 ) {
     suspend fun run(id: EventId, cmd: EventCommand): AssetEvent = uow.write {
         val existing = events.get(id) ?: throw NoSuchEvent(id)
@@ -43,6 +50,7 @@ class UpdateEvent(
                 "event ${id.value} belongs to asset ${existing.assetId.value}, not ${cmd.assetId.value}",
             )
         }
+        if ((cmd.scheduleId ?: existing.scheduleId) != null) refuseFutureCompletion(cmd.occurredOn, today.localDate())
         val profile = resolveOwnedProfile(cmd, definitions, profiles)
         val event = buildEvent(cmd, definitions, supplyItems, profile, existing, ids, clock.nowMillis())
         events.upsert(event)

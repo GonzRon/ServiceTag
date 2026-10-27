@@ -1,6 +1,8 @@
 package com.loosecannon.servicetag.core.testing
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
 import com.loosecannon.servicetag.core.seasonsync.HaConnectionRepository
@@ -8,6 +10,10 @@ import com.loosecannon.servicetag.core.seasonsync.HaReadOutcome
 import com.loosecannon.servicetag.core.seasonsync.HaStateReader
 import com.loosecannon.servicetag.core.seasonsync.HaSwitchState
 import com.loosecannon.servicetag.core.seasonsync.NetworkEligibility
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivation
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonActivationRepository
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBinding
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonBindingRepository
 import com.loosecannon.servicetag.core.seasonsync.Secret
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncBinding
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
@@ -48,6 +54,8 @@ class InMemorySeasonSyncRepository : SeasonSyncRepository, Rollbackable, Witness
 
     override fun observeFor(assetId: AssetId): Flow<SeasonSyncBinding?> = version.map { rows[assetId.value] }
 
+    override fun observeAll(): Flow<List<SeasonSyncBinding>> = version.map { rows.values.sortedBy { it.assetId.value } }
+
     override suspend fun insert(binding: SeasonSyncBinding) {
         if (binding.assetId.value in rows) {
             throw RiggedFailure("season_sync_binding already holds a binding for ${binding.assetId.value}")
@@ -81,20 +89,145 @@ class InMemorySeasonSyncRepository : SeasonSyncRepository, Rollbackable, Witness
 }
 
 /**
+ * #125 (U-C1) — the schedule bindings in memory: [InMemorySeasonSyncRepository]'s rules keyed by the schedule, plus
+ * the per-binding [delete] the unlink and the archive use. [cascadeFromConnection] is the schema's CASCADE from
+ * `ha_connection` (Forget), wired by [InMemoryHaConnectionRepository.cascadesTo].
+ */
+class InMemoryScheduleSeasonBindingRepository : ScheduleSeasonBindingRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, ScheduleSeasonBinding>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun get(scheduleId: ScheduleId): ScheduleSeasonBinding? = rows[scheduleId.value]
+
+    override suspend fun all(): List<ScheduleSeasonBinding> {
+        witness?.observeAll()
+        return rows.values.sortedBy { it.scheduleId.value }
+    }
+
+    override fun observeFor(scheduleId: ScheduleId): Flow<ScheduleSeasonBinding?> = version.map { rows[scheduleId.value] }
+
+    override suspend fun insert(binding: ScheduleSeasonBinding) {
+        if (binding.scheduleId.value in rows) {
+            throw RiggedFailure("schedule_season_sync_binding already holds a binding for ${binding.scheduleId.value}")
+        }
+        rows[binding.scheduleId.value] = binding
+        version.value += 1
+    }
+
+    override suspend fun update(binding: ScheduleSeasonBinding): Boolean {
+        val stored = rows[binding.scheduleId.value]
+        if (stored == null || stored.revision != binding.revision - 1) return false
+        rows[binding.scheduleId.value] = binding
+        version.value += 1
+        return true
+    }
+
+    override suspend fun delete(scheduleId: ScheduleId) {
+        if (rows.remove(scheduleId.value) != null) version.value += 1
+    }
+
+    override suspend fun anyEnabled(): Boolean = rows.values.any { it.enabled }
+
+    /** The schema's CASCADE from `ha_connection`: every schedule binding on that connection goes. */
+    fun cascadeFromConnection(connectionId: String) {
+        if (rows.values.removeAll { it.connectionId == connectionId }) version.value += 1
+    }
+}
+
+/** #125 (U-C1) — a schedule's own season rows in memory, insert and query only, in `(occurredOn, createdAt, id)` order. */
+class InMemoryScheduleSeasonActivationRepository : ScheduleSeasonActivationRepository, Rollbackable {
+    val rows = LinkedHashMap<String, ScheduleSeasonActivation>()
+    private val version = MutableStateFlow(0)
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun insert(row: ScheduleSeasonActivation) {
+        if (row.id in rows) throw RiggedFailure("schedule_season_activation already holds ${row.id}")
+        rows[row.id] = row
+        version.value += 1
+    }
+
+    override suspend fun forSchedule(scheduleId: ScheduleId): List<ScheduleSeasonActivation> =
+        rows.values.filter { it.scheduleId == scheduleId }.sortedWith(ORDER)
+
+    override suspend fun all(): List<ScheduleSeasonActivation> = rows.values.sortedWith(ORDER)
+
+    override fun observeForSchedule(scheduleId: ScheduleId): Flow<List<ScheduleSeasonActivation>> =
+        version.map { rows.values.filter { it.scheduleId == scheduleId }.sortedWith(ORDER) }
+
+    private companion object {
+        val ORDER = compareBy<ScheduleSeasonActivation>({ it.occurredOn }, { it.createdAt }, { it.id })
+    }
+}
+
+/** A fictional schedule binding as a link leaves it: FOLLOW, enabled, revision 1, no status yet (U-C3). */
+fun scheduleSeasonBindingOf(
+    scheduleId: String,
+    connectionId: String = "conn-1",
+    entityId: String = "input_boolean.example_heater_winterize_season",
+    enabled: Boolean = true,
+    revision: Long = 1,
+    at: Long = 1_759_000_000_000L,
+): ScheduleSeasonBinding = ScheduleSeasonBinding(
+    scheduleId = ScheduleId(scheduleId),
+    connectionId = connectionId,
+    entityId = entityId,
+    mode = SyncMode.FOLLOW,
+    enabled = enabled,
+    revision = revision,
+    observedState = null,
+    observedChangedAt = null,
+    lastSuccessAt = null,
+    lastAttemptAt = null,
+    errorKind = null,
+    errorDetail = null,
+    errorAt = null,
+    appliedAction = null,
+    appliedOn = null,
+    appliedAt = null,
+    lastAppliedSource = null,
+    createdAt = at,
+    updatedAt = at,
+)
+
+/** A fictional schedule season row, created on its own day. */
+fun scheduleSeasonActivationOf(id: String, scheduleId: String, action: SeasonAction, on: String, createdAt: Long = 0L) =
+    ScheduleSeasonActivation(id, ScheduleId(scheduleId), action, on, createdAt)
+
+/**
  * #16 (C7) — the one connection in memory. [get] fails loudly if a writer ever left two rows, which R16-10 rules
  * out. [upsert] refuses a row that breaks C4a's three invariants, which C17's writers keep: a home-network connection
  * exactly when a network is captured, an http address only on the home network, and a captured name never blank.
- * [delete] hands the id to [bindings], the schema's CASCADE from `ha_connection`.
+ * [delete] hands the id to [bindings], the schema's CASCADE from `ha_connection`, and to every table added by
+ * [cascadesTo] (#113/#114: the publish bindings).
  */
 class InMemoryHaConnectionRepository(
     private val bindings: InMemorySeasonSyncRepository,
 ) : HaConnectionRepository, Rollbackable {
     val rows = LinkedHashMap<String, HaConnection>()
+    private val version = MutableStateFlow(0)
+    private val cascades = mutableListOf<(String) -> Unit>()
+
+    /** Another table whose rows the schema deletes with their connection. */
+    fun cascadesTo(cascade: (String) -> Unit) {
+        cascades += cascade
+    }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
+
+    override fun observe(): Flow<HaConnection?> = version.map { rows.values.firstOrNull() }
 
     override suspend fun get(): HaConnection? {
         check(rows.size <= 1) { "ha_connection holds ${rows.size} rows; one installation has one connection" }
@@ -117,11 +250,14 @@ class InMemoryHaConnectionRepository(
             throw AssertionError("ha_connection: a blank home network name")
         }
         rows[connection.id] = connection
+        version.value += 1
     }
 
     override suspend fun delete(id: String) {
         rows.remove(id)
         bindings.cascadeFromConnection(id)
+        cascades.forEach { it(id) }
+        version.value += 1
     }
 }
 

@@ -2,19 +2,31 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.GroupProblem
 import com.loosecannon.servicetag.core.usecase.GroupValidation
+import com.loosecannon.servicetag.core.usecase.SaveGroup
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import java.time.LocalDate
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -32,7 +44,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertFailsWith
 
 /**
  * The group form. Every assertion here is about what the form left **alone** as much as what it
@@ -262,5 +273,109 @@ class GroupEditViewModelTest {
         val state = loaded(viewModel("g1"))
         assertEquals(listOf<AssetId>(member.id), state.candidates.map { it.assetId })
         assertTrue(state.candidates.single().selected)
+    }
+
+    /** #114 row 78 (C11): an asset the group's Season Start service may not cover cannot join it — P114-27, nothing written. */
+    @Test fun anAddedMemberTheGroupsRoleCannotCoverSaysP114_27() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler"))
+        graph.groups.upsert(groupOf("pre", name = "Example pre-season", members = listOf(Triple("heater", "2026-01-01", null))))
+        graph.schedules.upsert(scheduleOf("pre-check", groupId = "pre", title = "Example pre-season check"))
+        graph.setScheduleRole.run(ScheduleId("pre-check"), ScheduleRole.SEASON_START, quickElected = true)
+
+        val vm = viewModel("pre")
+        loaded(vm)
+        vm.toggle(AssetId("boiler"))
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+        assertEquals(
+            "Example Boiler cannot join this group: the group's Season Start service would cover it, and it already has " +
+                "one or cannot have one.",
+            refused.seasonStartRefusal,
+        )
+        assertEquals(listOf(AssetId("heater")), openMembers("pre").map { it.assetId })
+        assertNull(GroupEditState().seasonStartRefusal)
+    }
+
+    /**
+     * #124 row 149 (N2b, C42): taking a member out of the group whose Season Start service a schedule of it counts from
+     * says P124-8, and the member stays.
+     */
+    @Test fun removingAMemberACountingScheduleNeedsSaysP124_8() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("stove", name = "Example Stove", seasonMode = SeasonMode.MANUAL))
+        graph.groups.upsert(
+            groupOf(
+                "pre",
+                name = "Example pre-season",
+                members = listOf(Triple("heater", "2026-01-01", null), Triple("stove", "2026-01-01", null)),
+            ),
+        )
+        graph.schedules.upsert(scheduleOf("pre-check", groupId = "pre", title = "Example pre-season check"))
+        graph.setScheduleRole.run(ScheduleId("pre-check"), ScheduleRole.SEASON_START, quickElected = true)
+        graph.schedules.upsert(
+            scheduleOf("filter", assetId = "stove", title = "Example filter check", completionMode = CompletionMode.FORM)
+                .copy(servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0),
+        )
+
+        val vm = viewModel("pre")
+        loaded(vm)
+        vm.toggle(AssetId("stove"))
+        vm.save()
+        assertEquals(
+            "\"Example filter check\" counts from Example Stove's Season Start service. Change when it starts counting first.",
+            vm.state.first { !it.saving }.seasonStartRefusal,
+        )
+        assertEquals(listOf(AssetId("heater"), AssetId("stove")), openMembers("pre").map { it.assetId })
+    }
+
+    /**
+     * #114 (A5b review, minor 3): when the asset's row cannot be read at refusal time, P114-27 still names it — by the
+     * name the editor itself lists — so the refused save never draws no line at all.
+     */
+    @Test fun aRefusedMemberWhoseRowCannotBeReadIsStillNamedFromTheForm() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler"))
+        graph.groups.upsert(groupOf("pre", name = "Example pre-season", members = listOf(Triple("heater", "2026-01-01", null))))
+        graph.schedules.upsert(scheduleOf("pre-check", groupId = "pre", title = "Example pre-season check"))
+        graph.setScheduleRole.run(ScheduleId("pre-check"), ScheduleRole.SEASON_START, quickElected = true)
+        // The editor's reads of one asset fail from here on; the list and the save are untouched.
+        val unreadable = object : AssetRepository by graph.assets {
+            override suspend fun get(id: AssetId): Asset? = null
+        }
+
+        val vm = GroupEditViewModel(graph.groups, unreadable, graph.saveGroup, GroupId("pre"))
+        loaded(vm)
+        vm.toggle(AssetId("boiler"))
+        vm.save()
+        assertEquals(
+            "Example Boiler cannot join this group: the group's Season Start service would cover it, and it already has " +
+                "one or cannot have one.",
+            vm.state.first { !it.saving }.seasonStartRefusal,
+        )
+        assertEquals(listOf(AssetId("heater")), openMembers("pre").map { it.assetId })
+    }
+
+    /**
+     * A5b review, minor 3: a Season Start strand with no asset to name has no sentence of its own, so the refused save
+     * says P190-1 rather than no line at all, and writes nothing.
+     */
+    @Test fun aStrandWithNoAssetToNameSaysTheGroupCouldNotBeSaved() = runTest {
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler"))
+        val strands = object : GroupRepository by graph.groups {
+            override suspend fun upsert(group: MaintenanceGroup) =
+                throw SeasonStartStrands(null, SeasonStartStrandCause.MEMBER_NOT_ELIGIBLE, emptyList())
+        }
+        val save = SaveGroup(
+            strands, graph.assets, graph.uow, graph.ids, graph.clock, graph.schedules, graph.transferRecords,
+        )
+
+        val vm = GroupEditViewModel(graph.groups, graph.assets, save, null)
+        loaded(vm)
+        vm.onName("Example run")
+        vm.toggle(AssetId("boiler"))
+        vm.save()
+        assertEquals("Could not save this group.", vm.state.first { !it.saving }.seasonStartRefusal)
+        assertTrue(graph.groups.all().isEmpty())
     }
 }

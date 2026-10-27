@@ -140,7 +140,7 @@ class MergePlannerInstalledComponentTest {
         assertEquals(listOf(pack), plan.writes.installedComponents)
         assertEquals(MergeTally(insert = 1, identical = 0, conflict = 0, skipped = 0), plan.report().installedComponents)
         // Row 26: the table is the twenty-third, last, and its tally is the report's last.
-        assertEquals(MergeTable.INSTALLED_COMPONENTS, MergeTable.entries.last())
+        assertEquals(MergeTable.INSTALLED_COMPONENTS, MergeTable.entries[22])
     }
 
     // --- row 20: parents first --------------------------------------------------------------

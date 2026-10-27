@@ -186,6 +186,7 @@ fun EventWithParts.toDomain(): AssetEvent = AssetEvent(
     scheduleId = event.scheduleId?.let(::ScheduleId),
     occurrenceOn = event.occurrenceOn,
     detailsPending = event.detailsPending,
+    imported = event.imported,
 )
 
 fun AssetEvent.toEntity(): AssetEventEntity = AssetEventEntity(
@@ -205,6 +206,8 @@ fun AssetEvent.toEntity(): AssetEventEntity = AssetEventEntity(
     scheduleId = scheduleId?.value,
     occurrenceOn = occurrenceOn,
     detailsPending = detailsPending,
+    // #114 (B, C13): the Transfer Pack marker, both ways; only the pack import ever sets it.
+    imported = imported,
 )
 
 fun Measurement.toEntity(eventId: EventId): MeasurementEntity = MeasurementEntity(

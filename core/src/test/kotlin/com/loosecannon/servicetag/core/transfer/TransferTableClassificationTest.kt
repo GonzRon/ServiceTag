@@ -35,6 +35,8 @@ class TransferTableClassificationTest {
         assertEquals(TransferTableClass.ASSET_OWNED, TransferTables.CLASSES["assetSupplies"])
         // #47 (C13; R47-4): an installed component is its asset's and travels with it, current and removed.
         assertEquals(TransferTableClass.ASSET_OWNED, TransferTables.CLASSES["installedComponents"])
+        // #125 (U-C6): a schedule's own season rows travel with their schedule, as its closures do.
+        assertEquals(TransferTableClass.ASSET_OWNED, TransferTables.CLASSES["scheduleSeasonActivations"])
     }
 
     /** R77-6: a returned loan is the sender's history, and it stays with the sender. */

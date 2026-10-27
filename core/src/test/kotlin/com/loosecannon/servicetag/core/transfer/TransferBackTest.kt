@@ -85,7 +85,16 @@ class TransferBackTest {
         val here = s.data()
         val sent = r.data()
         assertEquals(sent.assets.filter { it.id in setOf(HEATER, ANODE) }, here.assets.filter { it.id in setOf(HEATER, ANODE) })
-        assertEquals(sent.assetEvents.filter { it.assetId == HEATER }, here.assetEvents.filter { it.assetId == HEATER })
+        // #114 (C20, A, B): the events come back as sent, but for the marker — the sender's own `e1` keeps its local
+        // `false`, and the borrower's `e9` arrives `imported`.
+        assertEquals(
+            sent.assetEvents.filter { it.assetId == HEATER }.map { it.copy(imported = false) },
+            here.assetEvents.filter { it.assetId == HEATER }.map { it.copy(imported = false) },
+        )
+        assertEquals(
+            mapOf("e1" to false, "e9" to true),
+            here.assetEvents.filter { it.id in setOf("e1", "e9") }.associate { it.id to it.imported },
+        )
         assertTrue(here.assetReferences.none { it.id == "r1" }, "the stale reference was replaced away")
         assertTrue(here.attachments.none { it.id == "at1" }, "the stale document row was replaced away")
         val heater = s.raw.assets.get(AssetId(HEATER))!!

@@ -62,7 +62,10 @@ Boundaries that earn their keep (they hide foreign vocabularies):
 > reference; **Home Assistant season sync** (#16) uses authenticated GETs to the configured Home Assistant
 > endpoint under its network-eligibility rules. The Developer API remains loopback-only. The current permission
 > and privacy inventory is maintained in `docs/local-first-and-permissions.md`, and the manifest comment is kept
-> in step with those two intentional outbound uses.
+> in step with those two intentional outbound uses. **Amended 2026-10-26 (#113, #114):** a third, **Home Assistant
+> publishing**, off until the owner turns it on per Asset, writes to the one chosen helper through two allowlisted
+> service calls (`input_select.select_option`, `input_datetime.set_datetime`) at the same endpoint under the same
+> rules, reading each helper back (`HomeAssistantPublishClient`); the manifest comment names all three.
 
 ## 2. Component diagram
 

@@ -56,10 +56,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs181AndCode22() {
-        assertEquals("1.8.1", BuildConfig.VERSION_NAME)
-        assertEquals(22, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.8.1", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs190AndCode23() {
+        assertEquals("1.9.0", BuildConfig.VERSION_NAME)
+        assertEquals(23, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.9.0", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -75,7 +75,8 @@ class VersionAgreementTest {
      * first and format 13 follows with the archive that carries the loans. #77 moves both in one brief:
      * schema 14 (the transfer record table) and format 14 (the archive that carries the records) — so at
      * this tip the schema is 14 and the format is 14. #16 moves the schema alone: schema 21 adds two
-     * device-local tables that no archive carries, so the format stays 20.
+     * device-local tables that no archive carries, so the format stays 20. #113/#114 move the schema to 22 first
+     * (the role columns, the event marker and the publishing tables) and the format to 21 after.
      *
      * The expected numbers are this test's own, deliberately: they are what the schema and the
      * format are at this tip, and they move only when a release changes them. They are **not**
@@ -83,9 +84,9 @@ class VersionAgreementTest {
      * `versionName`/`versionCode` cases own — otherwise bumping the schema in one file only would
      * still pass here, which is the whole failure this class exists to catch.
      */
-    @Test fun theSchemaIsTwentyOneAndTheFormatIsTwenty() {
-        assertEquals(21, AppGraph.SCHEMA_VERSION)
-        assertEquals(20, BackupCodec.FORMAT_VERSION)
+    @Test fun theSchemaIsTwentyTwoAndTheFormatIsTwentyOne() {
+        assertEquals(22, AppGraph.SCHEMA_VERSION)
+        assertEquals(21, BackupCodec.FORMAT_VERSION)
     }
 
     /**
@@ -154,9 +155,9 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.8.1", status.appVersion)
-        assertEquals(21, status.schemaVersion)
-        assertEquals(20, status.backupFormatVersion)
+        assertEquals("1.9.0", status.appVersion)
+        assertEquals(22, status.schemaVersion)
+        assertEquals(21, status.backupFormatVersion)
     }
 
     /**
@@ -531,6 +532,55 @@ class VersionAgreementTest {
             "the 1.8.1 row must follow the 1.8.0 row",
             previous.single().range.first < text.indexOf(rows.single()),
         )
+    }
+
+    /**
+     * The 1.9.0 / 23 row: a MINOR with one forward-only step, so it names its eight issues — the
+     * five capabilities (#113 equipment status to Home Assistant, #114 the Season Start service and
+     * its date, #116 the Assets list's marks and Condition filter, #124 counting from the Season
+     * Start service, #125 a schedule's own Home Assistant season) and the three fixes 1.8.2 was to
+     * carry (#119, #121, #123) — the schema and the format it ships, and the forward-only reason it
+     * is a MINOR, as the 1.7.0 row does. There is no 1.8.2: the 1.8.1 row no longer promises one. It
+     * links release notes that exist and names its tag. Anchored at the start of the row;
+     * `versionCode` 23 is claimed by this row and by nothing else, and the 1.8.1 row it follows is
+     * still there, once (`versioningRecords181` holds what that row says).
+     */
+    @Test fun versioningRecords190() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.9\.0\s*\|\s*23\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.9.0 / 23 row", 1, rows.size)
+        val row = rows.single()
+        for (issue in listOf("#113", "#114", "#116", "#124", "#125", "#119", "#121", "#123")) {
+            assertTrue("the row must name $issue", Regex("""$issue\b""").containsMatchIn(row))
+        }
+        assertTrue(
+            "the row must name the schema and the format it ships",
+            Regex("""schema \*\*22\*\*.*format \*\*21\*\*""").containsMatchIn(row),
+        )
+        assertTrue("the row must say the format bump is forward-only", row.contains("forward-only"))
+        assertTrue(
+            "the row must give the forward-only reason it is a MINOR",
+            row.contains("`BackupNewerFormat`") && row.contains("MINOR by the rule above"),
+        )
+        assertTrue(
+            "the row must link the 1.9.0 release notes, which must exist",
+            row.contains("`docs/releases/1.9.0.md`") && repoFile("docs/releases/1.9.0.md").isFile,
+        )
+        assertTrue("the row must name its tag", row.contains("`servicetag-v1.9.0`"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 23",
+            1,
+            Regex("""^\|[^\n]*\|\s*23\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        val previous = Regex("""^\|\s*1\.8\.1\s*\|\s*22\s*\|.*$""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("the 1.8.1 / 22 row must still be there, once", 1, previous.size)
+        assertTrue(
+            "the 1.9.0 row must follow the 1.8.1 row",
+            previous.single().range.first < text.indexOf(rows.single()),
+        )
+        assertFalse("the 1.8.1 row must not promise a 1.8.2", previous.single().value.contains("1.8.2"))
     }
 
     /**

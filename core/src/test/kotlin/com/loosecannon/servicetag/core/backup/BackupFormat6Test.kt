@@ -280,8 +280,10 @@ class BackupFormat6Test {
         assertFalse("updatedAt" in OccurrenceClosureDto.serializer().descriptor.elementNames)
 
         val eventFields = AssetEventDto.serializer().descriptor.elementNames.toList()
-        assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.takeLast(3))
-        assertEquals(18, eventFields.size)
+        assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.subList(15, 18))
+        // Format 21 (#114) appends the Transfer Pack marker after them (`BackupFormat21Test`).
+        assertEquals("imported", eventFields.last())
+        assertEquals(19, eventFields.size)
         val tables = BackupData.serializer().descriptor.elementNames.toList()
         // By position, not `takeLast`: formats 7, 8, 9, 12, 13 and 14 append their tables after these three, and
         // where format 6's tables sit is the claim this line makes.
@@ -289,7 +291,7 @@ class BackupFormat6Test {
             listOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures"),
             tables.subList(7, 10),
         )
-        assertEquals(23, tables.size)
+        assertEquals(24, tables.size)
         // and neither derived nor delivery state is a table of this format
         assertTrue(tables.none { it.startsWith("scheduleState") || it.startsWith("scheduleLocal") })
     }
@@ -360,7 +362,7 @@ class BackupFormat6Test {
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
         // What a 1.1.x build sees: 14 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(20, BackupCodec.FORMAT_VERSION)
+        assertEquals(21, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 
@@ -404,11 +406,11 @@ class BackupFormat6Test {
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
                 // Format 19's two keys (#47), at zero here for the same reason.
-                "installedComponents" to 0, "compositionEntries" to 0,
+                "installedComponents" to 0, "compositionEntries" to 0, "scheduleSeasonActivations" to 0,
             ),
             manifest.counts,
         )
-        assertEquals(31, manifest.counts.size)
+        assertEquals(32, manifest.counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

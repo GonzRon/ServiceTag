@@ -14,10 +14,14 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ScheduleSeasonSource
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.reminders.ProviderId
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
@@ -26,8 +30,10 @@ import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
+import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.scheduleOf
@@ -39,8 +45,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -901,5 +907,317 @@ class ScheduleEditViewModelTest {
 
         vm.cancelLinkGuard()
         assertNull(vm.state.value.linkGuard)
+    }
+
+    /**
+     * #124 (C40, row 140): a stored `IN_SERVICE_AFTER_OPENING_SERVICE` schedule opened in the editor
+     * and saved after an unrelated edit keeps its policy and its offset — never rewritten to
+     * AT_START, whose "Days after it starts" names the wrong anchor. The editor draws no option for
+     * it yet (N3 adds the third answer): it loads under S67 with the stored offset and saves it back.
+     */
+    @Test fun aStoredOpeningServicePolicyRoundTripsThroughAnEdit() = runTest {
+        val heater = graph.createAsset.run(AssetCommand(name = "Example Heater", category = "Heating"))
+        graph.setSeasonMode.run(
+            heater.id,
+            SeasonModeCommand(seasonMode = SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON),
+        )
+        // N2b (C42): a schedule counts from the opening service only under a live Season Start service of its asset.
+        graph.schedules.upsert(
+            scheduleOf("s-annual", assetId = heater.id.value, title = "Example annual service", completionMode = CompletionMode.FORM)
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        val row = scheduleOf("s-opening", assetId = heater.id.value, timeInterval = 1, timeUnit = RecurrenceUnit.MONTH)
+            .copy(servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 7)
+        graph.schedules.upsert(row)
+
+        val vm = viewModel(scheduleId = row.id.value)
+        val opened = vm.state.first { it.loaded }
+        assertEquals(PolicyOption.WHEN_SEASON_STARTS, opened.policyOption)
+        assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, opened.servicePolicy)
+        assertEquals(7, opened.policyOffsetDays)
+        assertTrue("Save must be open, or the round trip below would pass by never saving", opened.canSave)
+
+        vm.onDescription("Clean the burn pot first")
+        val saved = savedId(vm)
+        vm.save()
+        val stored = graph.schedules.get(saved.await())!!
+        assertEquals("Clean the burn pot first", stored.description)
+        assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, stored.servicePolicy)
+        assertEquals(7, stored.policyOffsetDays)
+    }
+
+    /**
+     * #124 row 149 (N2b, C42): a save the core refuses for counting from the opening service draws its sentence — P124-5
+     * on an asset no Season Start service covers, P124-6 on the Season Start service itself — and writes nothing.
+     */
+    @Test fun countingFromTheOpeningServiceIsRefusedWithItsSentence() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.schedules.upsert(
+            scheduleOf("filter", assetId = "heater", title = "Example filter check", completionMode = CompletionMode.FORM),
+        )
+        suspend fun refusalOf(id: String): String? {
+            val vm = viewModel(scheduleId = id)
+            vm.state.first { it.loaded }
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            vm.save()
+            return vm.state.first { !it.saving }.seasonStartRefusal
+        }
+
+        assertEquals(
+            "Example Heater has no Season Start service to count from. Use one of its schedules as its Season Start " +
+                "service first.",
+            refusalOf("filter"),
+        )
+        assertEquals(ServicePolicy.CONTINUOUS, graph.schedules.get(ScheduleId("filter"))!!.servicePolicy)
+
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+        assertEquals("This schedule is the Season Start service, so it cannot count from itself.", refusalOf("annual"))
+        assertEquals(ServicePolicy.CONTINUOUS, graph.schedules.get(ScheduleId("annual"))!!.servicePolicy)
+    }
+
+    /**
+     * #124 row 150 (C43; N1 review M-2): "The Season Start service" (P124-1) is S73's third answer for an asset target on a
+     * `CALENDAR` or a `MANUAL` asset whose schedule has a time rule, and its field is P124-2, never S72's "Days after it
+     * starts". A meter-only schedule stays phase-only: taking the time rule away withdraws the answer and a chosen one with
+     * it, so the question stands unanswered and is never re-answered for the owner.
+     */
+    @Test fun theOpeningServiceAnswerIsOfferedOnASeasonalAssetWithATimeRule() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        graph.assets.upsert(assetRow("boiler", name = "Example Boiler", seasonMode = SeasonMode.MANUAL))
+        val all = listOf(StartCountingFrom.SEASON_START, StartCountingFrom.OWN_DATE, StartCountingFrom.OPENING_SERVICE)
+        for (asset in listOf("heater", "boiler")) {
+            val vm = viewModel(targetAssetId = asset)
+            vm.state.first { it.loaded }
+            vm.onInterval("1")
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            assertEquals(asset, all, vm.state.value.startCountingOptions)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(asset, ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, vm.state.value.servicePolicy)
+
+            vm.onInterval("")
+            assertEquals(asset, all - StartCountingFrom.OPENING_SERVICE, vm.state.value.startCountingOptions)
+            assertNull("$asset: the withdrawn answer leaves the question unanswered", vm.state.value.servicePolicy)
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(asset, ServicePolicy.IN_SERVICE_AT_START, vm.state.value.servicePolicy)
+        }
+        // A meter-only row an API wrote with the value is an answer the form does not offer: shown unanswered, never guessed.
+        graph.definitions.upsert(meterDefinitionOf("d-hours", assetId = "heater"))
+        graph.schedules.upsert(
+            scheduleOf(
+                "s-meter", assetId = "heater", timeInterval = null, timeUnit = null, anchorOn = null,
+                meterDefinitionId = "d-hours", meterInterval = 100.0,
+                servicePolicy = ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, policyOffsetDays = 0,
+            ),
+        )
+        val meterOnly = viewModel(scheduleId = "s-meter").state.first { it.loaded }
+        assertNull(meterOnly.policyOption)
+        assertNull(meterOnly.servicePolicy)
+        assertFalse(meterOnly.canSave)
+
+        assertEquals("The Season Start service", startCountingLabel(StartCountingFrom.OPENING_SERVICE))
+        assertEquals("Days after the Season Start service", daysAfterLabel(StartCountingFrom.OPENING_SERVICE))
+        assertEquals("Days after it starts", daysAfterLabel(StartCountingFrom.SEASON_START))
+        assertNull(daysAfterLabel(StartCountingFrom.OWN_DATE))
+    }
+
+    /** #124 row 150 (C43, inv. 106): never on a `YEAR_ROUND` asset, with a maintenance break or without, and never on a group. */
+    @Test fun theOpeningServiceAnswerIsNeverOfferedOnAYearRoundAssetOrAGroup() = runTest {
+        graph.assets.upsert(assetRow("pool", name = "Example Pool", breakStart = "12-01", breakEnd = "02-28"))
+        graph.assets.upsert(assetRow("pump", name = "Example Pump"))
+        val group = aGroupOf(listOf(AssetId("pump")))
+        val editors = listOf(
+            viewModel(targetAssetId = "pool"), viewModel(targetAssetId = "pump"), viewModel(targetGroupId = group.id.value),
+        )
+        for (vm in editors) {
+            vm.state.first { it.loaded }
+            vm.onInterval("1")
+            val target = vm.state.value.target.toString()
+            assertEquals(target, emptyList<StartCountingFrom>(), vm.state.value.startCountingOptions)
+            (vm.state.value.policyOptions + PolicyOption.WHEN_SEASON_STARTS).forEach { option ->
+                vm.onPolicy(option)
+                vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+                assertEquals(target, emptyList<StartCountingFrom>(), vm.state.value.startCountingOptions)
+                assertTrue(target, vm.state.value.servicePolicy != ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE)
+            }
+        }
+    }
+
+    /**
+     * #124 (C43; N3 review I1): P124-1 never comes back hidden behind another answer. Chosen, then S65 moved to S68 or to
+     * "Before the season", the time rule cleared and S67 picked again: S73 reads S74 and the policy is
+     * `IN_SERVICE_AT_START`, never the opening-service value on a schedule with no time rule.
+     */
+    @Test fun aWithdrawnOpeningServiceAnswerNeverComesBackHidden() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        for (via in listOf(PolicyOption.WHENEVER_DUE, PolicyOption.BEFORE_SEASON)) {
+            val vm = viewModel(targetAssetId = "heater")
+            vm.state.first { it.loaded }
+            vm.onInterval("1")
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(via.name, ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, vm.state.value.servicePolicy)
+            vm.onPolicy(via)
+            vm.onInterval("")
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+
+            assertEquals(via.name, StartCountingFrom.SEASON_START, vm.state.value.startCountingFrom)
+            assertEquals(via.name, ServicePolicy.IN_SERVICE_AT_START, vm.state.value.servicePolicy)
+        }
+    }
+
+    /**
+     * #124 (C43; the controller's fold ruling after #125): P124-1 reads the **asset's** season, never the schedule's own. A
+     * schedule following its own Home Assistant season is offered S67 by that season, yet on a YEAR_ROUND asset never
+     * P124-1 — the Season Start role it would count from needs the asset's seasons (NEEDS_SEASONS); on a CALENDAR asset
+     * its own-season schedule is offered it.
+     */
+    @Test fun theOpeningServiceAnswerReadsTheAssetsSeasonNeverAnOwnSeason() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Example Pump"))
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        for ((asset, offered) in listOf("pump" to false, "heater" to true)) {
+            graph.schedules.upsert(
+                scheduleOf("own-$asset", assetId = asset, title = "Example own-season check")
+                    .copy(seasonSource = ScheduleSeasonSource.OWN),
+            )
+            val vm = ScheduleEditViewModel(
+                schedules = graph.schedules,
+                assets = graph.assets,
+                groups = graph.groups,
+                definitions = graph.definitions,
+                profiles = graph.profiles,
+                saveSchedule = graph.saveSchedule,
+                notifications = permission,
+                today = graph.todayPort,
+                scheduleId = ScheduleId("own-$asset"),
+                targetAssetId = null,
+                targetGroupId = null,
+                recompute = graph.recomputeSchedules,
+            )
+            val opened = vm.state.first { it.loaded }
+            assertTrue(asset, PolicyOption.WHEN_SEASON_STARTS in opened.policyOptions)
+            assertEquals(asset, offered, StartCountingFrom.OPENING_SERVICE in opened.startCountingOptions)
+            vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+            vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+            assertEquals(asset, offered, vm.state.value.servicePolicy == ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE)
+        }
+    }
+
+    /** #124 row 150 (C43): saving the answer sends `IN_SERVICE_AFTER_OPENING_SERVICE` with the offset typed under P124-2. */
+    @Test fun savingTheOpeningServiceAnswerSendsTheValueAndItsOffset() = runTest {
+        graph.assets.upsert(
+            assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM)
+                .copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-01-01"),
+        )
+        val vm = viewModel(targetAssetId = "heater")
+        vm.state.first { it.loaded }
+        vm.onTitle("Example filter check")
+        vm.onInterval("1")
+        vm.onUnit(RecurrenceUnit.MONTH)
+        vm.onAnchor("2026-04-01")
+        vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+        vm.onStartCountingFrom(StartCountingFrom.OPENING_SERVICE)
+        vm.onDaysAfter("14")
+        val saved = savedId(vm)
+        vm.save()
+
+        val stored = graph.schedules.get(saved.await())!!
+        assertEquals(ServicePolicy.IN_SERVICE_AFTER_OPENING_SERVICE, stored.servicePolicy)
+        assertEquals(14, stored.policyOffsetDays)
+    }
+
+    /**
+     * #114 row 78 (C11, O-2, F-22): a Season Start service's FORM → QUICK edit asks the owner's election first (P114-5,
+     * P114-42); declined, P114-43 and nothing written; confirmed, the same edit saves with the role kept.
+     */
+    @Test fun aFormToQuickEditOfARoleScheduleAsksTheElection() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+
+        val vm = viewModel(scheduleId = "annual")
+        vm.state.first { it.loaded }
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        assertTrue("the election is asked", vm.state.first { !it.saving }.quickElection)
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+
+        vm.cancelElection()
+        assertEquals(
+            "This schedule is a Season Start service. Confirm that one-tap completions should count before changing it " +
+                "to one tap.",
+            vm.state.value.seasonStartRefusal,
+        )
+        assertFalse(vm.state.value.quickElection)
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+
+        vm.save()
+        vm.state.first { !it.saving && it.quickElection }
+        val saved = savedId(vm)
+        vm.electQuick()
+        saved.await()
+        val stored = graph.schedules.get(ScheduleId("annual"))!!
+        assertEquals(CompletionMode.QUICK, stored.completionMode)
+        assertEquals(ScheduleRole.SEASON_START, stored.role)
+        assertNull(vm.state.value.seasonStartRefusal)
+    }
+
+    /**
+     * #114 (O-2; A5b review, minors 1 and 2): every FORM → QUICK is asked again — an election made earlier in the same
+     * editor does not carry across a switch back to FORM — and P114-43 goes when the owner switches back to FORM.
+     */
+    @Test fun everySwitchToOneTapAsksAgainAndP114_43GoesWithFormAgain() = runTest {
+        graph.assets.upsert(assetRow("heater", name = "Example Heater", seasonMode = SeasonMode.MANUAL))
+        graph.schedules.upsert(
+            scheduleOf("annual", assetId = "heater", title = "Example annual service", completionMode = CompletionMode.FORM),
+        )
+        graph.setScheduleRole.run(ScheduleId("annual"), ScheduleRole.SEASON_START)
+        val vm = viewModel(scheduleId = "annual")
+        vm.state.first { it.loaded }
+
+        // Declined: P114-43 is drawn, and switching back to FORM takes it down.
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        vm.state.first { !it.saving && it.quickElection }
+        vm.cancelElection()
+        assertTrue(vm.state.value.seasonStartRefusal != null)
+        vm.onCompletionMode(CompletionMode.FORM)
+        assertNull("P114-43 is about the mode just changed back", vm.state.value.seasonStartRefusal)
+
+        // Elected once: saved QUICK with the role kept.
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        vm.state.first { !it.saving && it.quickElection }
+        val elected = savedId(vm)
+        vm.electQuick()
+        elected.await()
+        assertEquals(CompletionMode.QUICK, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+
+        // Back to FORM (no election needed), then QUICK again in the same editor: asked again, nothing written.
+        vm.onCompletionMode(CompletionMode.FORM)
+        val back = savedId(vm)
+        vm.save()
+        back.await()
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+        vm.onCompletionMode(CompletionMode.QUICK)
+        vm.save()
+        assertTrue("the election is asked again", vm.state.first { !it.saving }.quickElection)
+        assertEquals(CompletionMode.FORM, graph.schedules.get(ScheduleId("annual"))!!.completionMode)
+        assertEquals(ScheduleRole.SEASON_START, graph.schedules.get(ScheduleId("annual"))!!.role)
     }
 }

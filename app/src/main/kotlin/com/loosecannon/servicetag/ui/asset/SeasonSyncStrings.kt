@@ -163,6 +163,8 @@ internal fun seasonSyncRefusalNotices(reason: SeasonSyncLinkRefusal): List<Notic
     SeasonSyncLinkRefusal.NO_CONNECTION -> listOf(Notice(HA_NOT_CONNECTED))
     SeasonSyncLinkRefusal.NEEDS_TOKEN -> listOf(Notice(HA_ENTER_TOKEN_AGAIN))
     SeasonSyncLinkRefusal.BAD_ENTITY_ID, SeasonSyncLinkRefusal.ALREADY_LINKED -> emptyList()
+    // #113/#114 (C26): only an entity id causes it, and Resume names none.
+    SeasonSyncLinkRefusal.OUTBOUND_TARGET -> emptyList()
 }
 
 /** P16-42 — the setup sheet's field. */
@@ -192,6 +194,9 @@ internal val SEASON_SYNC_FOLLOWS_HA: String get() = localized(R.string.season_sy
 
 /** P16-49 — C16's `BAD_ENTITY_ID`, under the field. */
 internal val SEASON_SYNC_BAD_ENTITY_ID: String get() = localized(R.string.season_sync_bad_entity_id)
+
+/** P113-43 (#113/#114, C26) — `OUTBOUND_TARGET`, under the field: [entityId] is a helper this phone writes. */
+internal fun seasonSyncOutboundTarget(entityId: String): String = localized(R.string.season_sync_outbound_target, entityId)
 
 // #105 (B3) — the setup sheet's entity browser, P105-1…10 RATIFIED 2026-10-05; resources in `strings_asset_edit.xml`.
 

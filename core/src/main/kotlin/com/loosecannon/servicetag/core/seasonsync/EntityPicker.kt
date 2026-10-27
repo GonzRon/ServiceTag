@@ -3,9 +3,13 @@ package com.loosecannon.servicetag.core.seasonsync
 /**
  * #105 — what the browser lists. One scope in 1.8.0 (owner ruling Q3): Home Assistant's on/off helpers, the entities
  * whose id is in the `input_boolean` domain. A candidate is in a scope by its id's domain alone — never by its state.
+ * #113/#114 (C29b) add the two helper domains a publication writes: the dropdowns (`input_select`) and the date
+ * helpers (`input_datetime`), listed by `GET /v1/ha-connection/entities/{scope}` and the setup sheet.
  */
 enum class EntityScope(val domain: String) {
     INPUT_BOOLEANS("input_boolean"),
+    INPUT_SELECTS("input_select"),
+    INPUT_DATETIMES("input_datetime"),
 }
 
 /** #105 — the most rows the browser lists; past it the owner is asked to search (P105-10). */

@@ -312,12 +312,12 @@ class HeldWriteGuardTest {
     @Test
     fun theAssetUseCasesAreRefused() = runTest {
         seed()
-        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote)
+        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote, groups)
         val archive = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
         val retire = RetireAsset(assets, uow, clock) { recompute.forAsset(it) }
         val settings = SaveAssetSettings(
             assets, schedules, subjects, activations, uow, ids, clock, today, recompute, applyTemplate, promote,
-            SeasonSyncGuard(install.seasonSyncBindings),
+            SeasonSyncGuard(install.seasonSyncBindings), groups,
         )
         val create = CreateAsset(assets, uow, ids, clock, applyTemplate, promote)
         refused(
@@ -338,7 +338,7 @@ class HeldWriteGuardTest {
             },
             "SetWarrantyReminder" to { SetWarrantyReminder(assets, uow, clock).run(heater, com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand(14)) },
             "SetSeasonMode" to {
-                SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(install.seasonSyncBindings))
+                SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute, SeasonSyncGuard(install.seasonSyncBindings), groups)
                     .run(heater, SeasonModeCommand(SeasonMode.CALENDAR, "11-01", "03-31"))
             },
             "SetMaintenanceBreak" to {
@@ -396,7 +396,7 @@ class HeldWriteGuardTest {
         refused(
             heater,
             "LogEvent" to { log.run(note(heater)) },
-            "UpdateEvent" to { UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute).run(EventId("e3"), note(heater)) },
+            "UpdateEvent" to { UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today).run(EventId("e3"), note(heater)) },
             "DeleteEvent" to { DeleteEvent(events, attachments, install.storage, uow, recompute).run(EventId("e3")) },
             "RecordCondition" to { recordCondition.run(heater, ConditionCommand(OperationalCondition.OPERATIONAL, tzId = "UTC")) },
             "RecordConditionWithIncident" to {
@@ -448,7 +448,7 @@ class HeldWriteGuardTest {
         seed()
         recompute.all()
         val save = SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, subjects)
-        val archiveGroup = ArchiveGroup(groups, uow, clock)
+        val archiveGroup = ArchiveGroup(groups, uow, clock, schedules, assets, install.transfers, recompute)
         refused(
             heater,
             "SaveSchedule (create)" to { save.run(null, monthlyCommand(heater, null)) },
@@ -456,19 +456,19 @@ class HeldWriteGuardTest {
             "PauseSchedule" to { PauseSchedule(schedules, uow, recompute).run(ScheduleId("s1"), paused = true) },
             "PostponeSchedule" to { PostponeSchedule(schedules, uow, recompute).run(ScheduleId("s1"), "2026-12-01") },
             "ArchiveSchedule" to {
-                ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock).run(ScheduleId("s1"), archived = true)
+                ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock, groups, install.transfers).run(ScheduleId("s1"), archived = true)
             },
             "CompleteSchedule" to {
-                CompleteSchedule(schedules, events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute)
+                CompleteSchedule(schedules, events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today)
                     .run(ScheduleId("s1"), CompletionCommand(occurredOn = "2026-09-24", tzId = "UTC"))
             },
             "CompleteGroupMembers" to {
-                CompleteGroupMembers(schedules, groups, events, closures, definitions, profiles, install.supplyItems, uow, ids, clock, recompute)
+                CompleteGroupMembers(schedules, groups, events, closures, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today)
                     .run(ScheduleId("sg"), listOf(heater), CompletionCommand(occurredOn = "2026-09-24", tzId = "UTC"))
             },
             "CloseRound" to { CloseRound(schedules, closures, uow, ids, clock, today, recompute).run(ScheduleId("sg")) },
             "SaveGroup" to {
-                SaveGroup(groups, assets, uow, ids, clock).run(
+                SaveGroup(groups, assets, uow, ids, clock, schedules, install.transfers).run(
                     GroupId("G1"),
                     GroupCommand(
                         "Example Flush Round 2",
@@ -577,7 +577,7 @@ class HeldWriteGuardTest {
         refused(
             heater,
             "SaveGroup (omitting h1)" to {
-                SaveGroup(groups, assets, uow, ids, clock).run(GroupId("G3"), GroupCommand("Example Mixed Round", members = listOf(GroupMemberInput(compressor, id = "G3-m1"))))
+                SaveGroup(groups, assets, uow, ids, clock, schedules, install.transfers).run(GroupId("G3"), GroupCommand("Example Mixed Round", members = listOf(GroupMemberInput(compressor, id = "G3-m1"))))
             },
         )
         assertTrue(install.groups.get(GroupId("G3"))!!.members.all { it.removedAt == null }, "nothing was stamped")
@@ -615,7 +615,7 @@ class HeldWriteGuardTest {
     @Test
     fun aCategoryOnlyEditOfAHeldAssetIsRefused() = runTest {
         seed()
-        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote)
+        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote, groups)
         refused(
             heater,
             "UpdateAsset (the category alone)" to {
@@ -765,7 +765,7 @@ class HeldWriteGuardTest {
     fun anEditKeepingAnEarlierReferencePasses() = runTest {
         seed()
         install.events.upsert(install.events.get(EventId("ex"))!!.copy(scheduleId = ScheduleId("s1"), occurrenceOn = "2026-02-01"))
-        val edited = UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute).run(
+        val edited = UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute, today).run(
             EventId("ex"), note(compressor).copy(title = "Example edited note", occurredOn = "2026-09-20"),
         )
         assertEquals("Example edited note", install.events.get(EventId("ex"))!!.title)

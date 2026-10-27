@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.ui.asset
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
@@ -12,6 +13,7 @@ import com.loosecannon.servicetag.core.seasonsync.HaEntityCandidate
 import com.loosecannon.servicetag.core.seasonsync.HaListOutcome
 import com.loosecannon.servicetag.core.seasonsync.LinkSeasonSync
 import com.loosecannon.servicetag.core.seasonsync.ResumeSeasonSync
+import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefused
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefusal
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefused
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinked
@@ -25,6 +27,8 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.homeassistant.HA_ENTER_TOKEN_AGAIN
 import com.loosecannon.servicetag.ui.homeassistant.HA_NOT_CONNECTED
 import com.loosecannon.servicetag.ui.homeassistant.Notice
+import com.loosecannon.servicetag.ui.maintenance.ScheduleSeasonRefusalLine
+import com.loosecannon.servicetag.ui.maintenance.scheduleSeasonRefusalLine
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +42,16 @@ internal enum class SeasonSyncSheetPurpose { LINK, RESUME }
 
 /** How the sheet ended: closed, or closed onto the asset's schedules (#78's P78-2). */
 internal enum class SeasonSheetExit { CLOSED, REVIEW_SCHEDULES }
+
+/**
+ * #125 (U-C8) — whose season the sheet links: an asset's (#16, as shipped), or one asset-targeted schedule's own
+ * season. The same sheet, browser and `INPUT_BOOLEANS` scope either way; only the write on Save differs.
+ */
+internal sealed interface SeasonSyncSheetTarget {
+    data class Asset(val assetId: AssetId) : SeasonSyncSheetTarget
+
+    data class Schedule(val scheduleId: ScheduleId) : SeasonSyncSheetTarget
+}
 
 /**
  * #105 (B3) — the entity browser as drawn, one immutable value, inside the sheet's state while the browser is open.
@@ -71,6 +85,8 @@ internal data class EntityBrowseState(
 internal data class LinkSeasonSyncState(
     val purpose: SeasonSyncSheetPurpose,
     val sentence: String? = null,
+    /** #125: a schedule's own season — no asset mode is reconciled, so no sentence is waited for. */
+    val scheduleTarget: Boolean = false,
     val entityId: String = "",
     val entityLine: String? = null,
     val refusal: String? = null,
@@ -82,7 +98,8 @@ internal data class LinkSeasonSyncState(
     val browse: EntityBrowseState? = null,
 ) {
     /** Link also waits for something to send (#105 row 16): a pick, or typed text. Resume sends no entity. */
-    val canSave: Boolean get() = sentence != null && !saving && prompt == null && finished == null &&
+    val canSave: Boolean get() = (sentence != null || scheduleTarget) && !saving && prompt == null &&
+        finished == null &&
         (purpose == SeasonSyncSheetPurpose.RESUME || entityToLink.isNotEmpty())
 
     val entityToLink: String get() = chosen?.entityId ?: entityId.trim()
@@ -93,15 +110,23 @@ internal data class LinkSeasonSyncState(
  * only through the shipped [LinkSeasonSync] or [ResumeSeasonSync] on Save; each refusal comes back as a code or a
  * shipped exception and is drawn as its ratified sentence. After a write that left YEAR_ROUND it asks #78's question
  * with core's [liveContinuousCount], never silently; the answer writes nothing.
+ *
+ * #125 (U-C8): with a [SeasonSyncSheetTarget.Schedule] target, Save writes through [linkSchedule] instead — the
+ * schedule's own season, never the asset's — and its refusals are drawn by `scheduleSeasonRefusalLine`.
  */
 internal class LinkSeasonSyncViewModel(
-    private val assetId: AssetId,
+    private val target: SeasonSyncSheetTarget,
     purpose: SeasonSyncSheetPurpose,
     private val assets: AssetRepository,
     private val schedules: ScheduleRepository,
     private val connections: HaConnectionRepository,
     private val link: LinkSeasonSync,
     private val resume: ResumeSeasonSync,
+    /**
+     * #125: a schedule's link (`LinkScheduleSeason`), then its post-link check launched and never awaited. Reached only
+     * for a [SeasonSyncSheetTarget.Schedule] target.
+     */
+    private val linkSchedule: suspend (ScheduleId, String) -> Unit,
     /**
      * #105: the one foreground list read, over the stored connection and its token (`AppGraph.listHaEntities`): null
      * when no connection is stored, else the client's outcome. Called only by Choose entity and Refresh, never on
@@ -110,18 +135,46 @@ internal class LinkSeasonSyncViewModel(
     private val listEntities: suspend () -> HaListOutcome?,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, assetId: AssetId, purpose: SeasonSyncSheetPurpose) : this(
-        assetId, purpose, graph.assets, graph.schedules, graph.haConnections, graph.linkSeasonSync,
-        graph.resumeSeasonSync, graph.listHaEntities,
+    /** #16's asset sheet, as shipped. */
+    constructor(
+        assetId: AssetId,
+        purpose: SeasonSyncSheetPurpose,
+        assets: AssetRepository,
+        schedules: ScheduleRepository,
+        connections: HaConnectionRepository,
+        link: LinkSeasonSync,
+        resume: ResumeSeasonSync,
+        listEntities: suspend () -> HaListOutcome?,
+    ) : this(
+        SeasonSyncSheetTarget.Asset(assetId), purpose, assets, schedules, connections, link, resume, NO_SCHEDULE_LINK,
+        listEntities,
     )
 
-    private val _state = MutableStateFlow(LinkSeasonSyncState(purpose))
+    constructor(graph: AppGraph, target: SeasonSyncSheetTarget, purpose: SeasonSyncSheetPurpose) : this(
+        target, purpose, graph.assets, graph.schedules, graph.haConnections, graph.linkSeasonSync,
+        graph.resumeSeasonSync,
+        { scheduleId, entityId ->
+            graph.linkScheduleSeason.run(scheduleId, entityId)
+            graph.seasonSyncRunner.requestScheduleRead(scheduleId)
+        },
+        graph.listHaEntities,
+    )
+
+    private val _state = MutableStateFlow(
+        LinkSeasonSyncState(purpose, scheduleTarget = target is SeasonSyncSheetTarget.Schedule),
+    )
     val state: StateFlow<LinkSeasonSyncState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            val mode = assets.get(assetId)?.seasonMode
-            _state.update { it.copy(sentence = mode?.let(::seasonSyncLinkSentence)) }
+        when (target) {
+            is SeasonSyncSheetTarget.Asset -> viewModelScope.launch {
+                val mode = assets.get(target.assetId)?.seasonMode
+                _state.update { it.copy(sentence = mode?.let(::seasonSyncLinkSentence)) }
+            }
+            // #125: the asset's mode is not changed by a schedule's link, so there is no sentence to reconcile; and a
+            // schedule's binding is never stopped in 1.9.0 (H-3), so its sheet only links.
+            is SeasonSyncSheetTarget.Schedule ->
+                require(purpose == SeasonSyncSheetPurpose.LINK) { "a schedule's season is never resumed" }
         }
     }
 
@@ -165,8 +218,8 @@ internal class LinkSeasonSyncViewModel(
 
     /**
      * The sheet is going away without a Save — Cancel, back, a scrim tap or a swipe: a list read still running stops,
-     * which disconnects it. Each opening's model is keyed under the asset page and outlives its sheet, so nothing else
-     * would stop it.
+     * which disconnects it. Each opening's model is keyed under its page (the asset's, or the schedule's) and outlives
+     * its sheet, so nothing else would stop it.
      */
     fun dismiss() = closeBrowse()
 
@@ -242,15 +295,29 @@ internal class LinkSeasonSyncViewModel(
         _state.update { it.copy(saving = true, entityLine = null, refusal = null) }
         viewModelScope.launch {
             val next = try {
-                val written = when (asked.purpose) {
-                    SeasonSyncSheetPurpose.LINK -> link.run(assetId, asked.entityToLink)
-                    SeasonSyncSheetPurpose.RESUME -> resume.run(assetId)
+                when (target) {
+                    is SeasonSyncSheetTarget.Asset -> {
+                        val written = when (asked.purpose) {
+                            SeasonSyncSheetPurpose.LINK -> link.run(target.assetId, asked.entityToLink)
+                            SeasonSyncSheetPurpose.RESUME -> resume.run(target.assetId)
+                        }
+                        afterWrite(target.assetId, written)
+                    }
+                    is SeasonSyncSheetTarget.Schedule -> when (asked.purpose) {
+                        SeasonSyncSheetPurpose.LINK -> {
+                            linkSchedule(target.scheduleId, asked.entityToLink)
+                            Done(SeasonSheetExit.CLOSED)
+                        }
+                        // Refused at construction (`init`); the arm is the exhaustive `when`'s, never reached.
+                        SeasonSyncSheetPurpose.RESUME -> Done(SeasonSheetExit.CLOSED)
+                    }
                 }
-                afterWrite(written)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: ScheduleSeasonRefused) {
+                scheduleRefusedFor(scheduleSeasonRefusalLine(e.reason, asked.entityToLink))
             } catch (e: SeasonSyncLinkRefused) {
-                refusedFor(e.reason)
+                refusedFor(e.reason, asked.entityToLink)
             } catch (e: SeasonModeStrandsPolicy) {
                 Refused(refusal = seasonStrands(e.schedules.map(StrandedSchedule::title)))
             } catch (e: SeasonSyncOwnsSeason) {
@@ -277,7 +344,7 @@ internal class LinkSeasonSyncViewModel(
     }
 
     /** After the write: #78's question when the asset left YEAR_ROUND with live CONTINUOUS schedules, else close. */
-    private suspend fun afterWrite(written: SeasonSyncLinked): Next {
+    private suspend fun afterWrite(assetId: AssetId, written: SeasonSyncLinked): Next {
         if (written.switchedFrom != SeasonMode.YEAR_ROUND) return Done(SeasonSheetExit.CLOSED)
         // A failed read closes as a write that asked nothing, as the editor's does; a cancellation goes back out.
         val count = runCatching { liveContinuousCount(schedules.forAsset(assetId)) }
@@ -287,12 +354,20 @@ internal class LinkSeasonSyncViewModel(
     }
 
     /** C16's codes, each its ratified sentence. ALREADY_LINKED has none: the asset is linked, and the card says so. */
-    private fun refusedFor(reason: SeasonSyncLinkRefusal): Next = when (reason) {
+    private fun refusedFor(reason: SeasonSyncLinkRefusal, entityId: String): Next = when (reason) {
         SeasonSyncLinkRefusal.BAD_ENTITY_ID -> Refused(entityLine = SEASON_SYNC_BAD_ENTITY_ID)
+        SeasonSyncLinkRefusal.OUTBOUND_TARGET -> Refused(entityLine = seasonSyncOutboundTarget(entityId))
         SeasonSyncLinkRefusal.NOT_MAINTAINED_HERE -> Refused(refusal = SEASON_SYNC_NOT_MAINTAINED_HERE)
         SeasonSyncLinkRefusal.NO_CONNECTION -> Refused(refusal = HA_NOT_CONNECTED)
         SeasonSyncLinkRefusal.NEEDS_TOKEN -> Refused(refusal = HA_ENTER_TOKEN_AGAIN)
         SeasonSyncLinkRefusal.ALREADY_LINKED -> Done(SeasonSheetExit.CLOSED)
+    }
+
+    /** #125: a schedule's refusal, where its sentence goes; none (`ALREADY_LINKED`) closes onto the row saying so. */
+    private fun scheduleRefusedFor(line: ScheduleSeasonRefusalLine?): Next = when (line) {
+        null -> Done(SeasonSheetExit.CLOSED)
+        is ScheduleSeasonRefusalLine.UnderEntity -> Refused(entityLine = line.text)
+        is ScheduleSeasonRefusalLine.InSheet -> Refused(refusal = line.text)
     }
 
     /** What a Save came to, applied to the state in one step. */
@@ -310,5 +385,10 @@ internal class LinkSeasonSyncViewModel(
 
     private data class Done(val exit: SeasonSheetExit) : Next {
         override fun applyTo(state: LinkSeasonSyncState) = state.copy(finished = exit)
+    }
+
+    private companion object {
+        /** The asset sheet's constructions link no schedule; reaching this is a wiring fault, never a fallback. */
+        val NO_SCHEDULE_LINK: suspend (ScheduleId, String) -> Unit = { _, _ -> error("this sheet links an asset") }
     }
 }

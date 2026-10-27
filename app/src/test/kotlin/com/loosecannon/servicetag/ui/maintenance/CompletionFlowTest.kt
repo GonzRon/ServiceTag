@@ -7,6 +7,8 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleRole
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
@@ -15,7 +17,9 @@ import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.meterDefinitionOf
+import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -388,5 +392,134 @@ class CompletionFlowTest {
         assertEquals("the event stands", 1, graph.events.all().size)
         assertTrue("no offer published", offered.isEmpty())
         assertNull(flow.offer.value)
+    }
+
+    // --- O-16 as amended (C39, row 129): a completion dated after today --------------------------------------------
+
+    /**
+     * The dialog with a date after today: Done is held and S25 is drawn under the date field — for a QUICK asset
+     * completion and a group round alike — and nothing is written; today itself is accepted.
+     */
+    @Test fun aDateAfterTodayHoldsDoneAndDrawsS25AndWritesNothing() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val schedule = graph.saveSchedule.run(null, quarterly(mower.id))
+        val (round, _) = aGroupRound()
+        val sweep = sweep()
+        val flow = graph.completionFlow
+
+        val asset = async { flow.complete(schedule.id) { sweep.run() } }
+        val prompt = flow.prompt.first { it != null }!!
+        assertNull("today is accepted", prompt.dateRefusal("2026-04-15"))
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, prompt.dateRefusal("2026-04-16"))
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, prompt.dateRefusal(" 2026-04-16 "))
+        assertNull("not a date is the field's own problem, not S25", prompt.dateRefusal("2026-04-31"))
+        assertFalse("Done is held", flow.submit(CompletionAnswer(occurredOn = "2026-04-16")))
+        assertNotNull("and the dialog stays open", flow.prompt.value)
+        flow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, asset.await())
+
+        val group = async { flow.completeAll(round) { sweep.run() } }
+        val groupPrompt = flow.prompt.first { it != null }!!
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, groupPrompt.dateRefusal("2026-04-16"))
+        assertFalse(flow.submit(CompletionAnswer(occurredOn = "2026-04-16")))
+        flow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, group.await())
+
+        assertEquals(0, sweep.runs)
+        assertEquals(0, graph.events.all().size)
+    }
+
+    /**
+     * The refusal that still arrives: the dialog opened on the 16th and the write reads the 15th (midnight, or a zone
+     * change, between the two). Nothing is written and no `afterWrite` sweep runs (#123); the dialog asks again with
+     * the owner's answer kept and today read afresh, so S25 is drawn under that date and Done is held until the date
+     * is one the write accepts.
+     */
+    @Test fun aCompletionRefusedForItsDateAsksAgainWithS25AndRunsNoSweep() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val schedule = graph.saveSchedule.run(null, quarterly(mower.id))
+        val sweep = sweep()
+        val flow = graph.completionFlow
+        graph.today = LocalDate.parse("2026-04-16")
+
+        val outcome = async { flow.complete(schedule.id) { sweep.run() } }
+        val opened = flow.prompt.first { it != null }!!
+        assertNull(opened.dateRefusal("2026-04-16"))
+        graph.today = LocalDate.parse("2026-04-15")
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-16", occurredTime = "07:30")))
+
+        val again = flow.prompt.first { it != null && it.today == LocalDate.parse("2026-04-15") }!!
+        assertEquals("the owner's answer is kept", "2026-04-16", again.occurredOn)
+        assertEquals("07:30", again.occurredTime)
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, again.dateRefusal(again.occurredOn))
+        assertFalse(flow.submit(CompletionAnswer(occurredOn = "2026-04-16")))
+        assertEquals("no sweep after a refused write", 0, sweep.runs)
+        assertEquals(0, graph.events.all().size)
+
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        val written = (outcome.await() as CompletionOutcome.Completed).events.single()
+        assertEquals("2026-04-15", written.occurredOn)
+        assertEquals(1, sweep.runs)
+    }
+
+    // ---------------------------------------------------------------- #114: the completion line (C33, row 77)
+
+    /** A schedule written back with the Season Start role, past the command: the prompt reads what is stored. */
+    private suspend fun asSeasonStart(id: ScheduleId) = graph.uow.write {
+        graph.schedules.upsert(graph.schedules.get(id)!!.copy(role = ScheduleRole.SEASON_START, roleSinceOn = "2026-04-01"))
+    }
+
+    /** The graph's flow with the asset store's name read, as the card's lines need it for P114-14. */
+    private fun namingFlow() = CompletionFlow(
+        graph.schedules, graph.definitions, graph.completeSchedule, graph.completeGroupMembers, graph.todayPort,
+        graph.eventOffers, { id -> graph.assets.get(id)?.name },
+    ) { ZoneOffset.UTC }
+
+    /**
+     * Row 77: completing a Season Start service says what it marks before the write — P114-14 with the asset's name for
+     * an asset's, P114-15 for a group's — and the answer still writes the one completion as before.
+     */
+    @Test fun aRoleScheduleShowsTheLine() = runTest {
+        val heater = graph.createAsset.run(AssetCommand(name = "Example Heater", category = "Heating"))
+        val own = graph.saveSchedule.run(null, quarterly(heater.id, title = "Example annual service"))
+        asSeasonStart(own.id)
+        val flow = namingFlow()
+        val asset = async { flow.complete(own.id) }
+        val prompt = flow.prompt.filterNotNull().first()
+        assertEquals("Completing this marks Example Heater ready for the season.", prompt.seasonStartLine)
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        assertTrue(asset.await() is CompletionOutcome.Completed)
+
+        val boiler = graph.createAsset.run(AssetCommand(name = "Example Boiler", category = "Heating"))
+        val group = graph.saveGroup.run(
+            null,
+            GroupCommand(name = "Example heating", members = listOf(GroupMemberInput(assetId = boiler.id))),
+        )
+        val check = graph.saveSchedule.run(
+            null,
+            quarterly(heater.id, title = "Example pre-season check").copy(targetAssetId = null, targetGroupId = group.id),
+        )
+        asSeasonStart(check.id)
+        val member = async { graph.completionFlow.complete(check.id, boiler.id) }
+        assertEquals(
+            "Completing this for an asset marks that asset ready for the season.",
+            graph.completionFlow.prompt.filterNotNull().first().seasonStartLine,
+        )
+        graph.completionFlow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, member.await())
+    }
+
+    /** Row 77: an ordinary schedule draws no line — a seasonal policy without the role included (keyed on the role). */
+    @Test fun anOrdinaryScheduleDoesNot() = runTest {
+        val heater = graph.createAsset.run(AssetCommand(name = "Example Heater", category = "Heating"))
+        val plain = graph.saveSchedule.run(null, quarterly(heater.id, title = "Example filter check"))
+        graph.uow.write {
+            graph.schedules.upsert(graph.schedules.get(plain.id)!!.copy(servicePolicy = ServicePolicy.IN_SERVICE_AT_START))
+        }
+        val flow = namingFlow()
+        val outcome = async { flow.complete(plain.id) }
+        assertNull(flow.prompt.filterNotNull().first().seasonStartLine)
+        flow.cancel()
+        assertEquals(CompletionOutcome.Cancelled, outcome.await())
     }
 }

@@ -79,14 +79,14 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
         schedules, states, events, closures, groups, assets, activations, todayPort, clock,
     ) { ZoneOffset.UTC }
 
-    val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, todayPort, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
+    val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, todayPort, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()), groups)
     val setMaintenanceBreak = SetMaintenanceBreak(assets, schedules, uow, clock, recompute)
     val recordSeasonActivation =
         RecordSeasonActivation(assets, events, activations, uow, ids, clock, todayPort, recompute, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     val getAssetSeason = GetAssetSeason(assets, activations, uow, todayPort)
     val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, todayPort, SeasonSyncGuard(InMemorySeasonSyncRepository()))
     val promoteCategory = PromoteCategory(categories)
-    val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
+    val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory, groups)
     val createAsset = CreateAsset(
         assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory,
     )

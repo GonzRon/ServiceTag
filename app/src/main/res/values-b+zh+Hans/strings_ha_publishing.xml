@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Simplified Chinese translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">将设备状态发布到 Home Assistant</string>
+    <string name="ha_publish_helper_field">Home Assistant 辅助元素</string>
+    <string name="ha_publish_choose_helper">选择辅助元素</string>
+    <string name="ha_publish_scope_selects">下拉列表辅助元素（input_select）</string>
+    <string name="ha_publish_status_confirm">要将 %1$s 的设备状态发布到 %2$s 吗？每当记录的状况发生变化，ServiceTag 都会设置此辅助元素：正常运行 → UP，性能下降 → DEGRADED，停机 → DOWN。Home Assistant 自动化应读取它，绝不要设置它。</string>
+    <string name="ha_publish_confirm_button">发布</string>
+    <string name="ha_publish_waiting_for_status">等待中：未记录设备状态，因此不会发送任何内容。</string>
+    <string name="ha_publish_not_published_yet">尚未发布。</string>
+    <string name="ha_publish_sending">正在发送 %s…</string>
+    <string name="ha_publish_published">已发布 %1$s · %2$s</string>
+    <string name="ha_publish_matches">Home Assistant 显示 %1$s，与 ServiceTag 一致 · 检查于 %2$s</string>
+    <string name="ha_publish_now">立即发布</string>
+    <string name="ha_publish_stop">停止发布</string>
+    <string name="ha_publish_stop_status_confirm">要停止发布到 %s 吗？Home Assistant 会保留当前的值。</string>
+    <string name="ha_publish_options_mismatch">%s 必须是选项恰好为 UP、DOWN 和 DEGRADED 的下拉列表辅助元素。</string>
+    <string name="ha_publish_not_a_dropdown">%s 不是下拉列表辅助元素（input_select）。</string>
+    <string name="ha_publish_service_refused">Home Assistant 拒绝了 %2$s 的值 %1$s。</string>
+    <string name="ha_publish_write_forbidden">Home Assistant 拒绝了访问令牌所属用户的这项更改。该用户需要有更改辅助元素的权限。</string>
+    <string name="ha_publish_outcome_unknown">Home Assistant 未确认此更改。ServiceTag 会先检查辅助元素，再重新发送。</string>
+    <string name="ha_publish_remote_differs">更改后 Home Assistant 显示 %1$s；可能有其他东西在设置 %2$s。</string>
+    <string name="ha_publish_copied_installation">此设置来自另一部手机的备份，因此此手机不会发布。请检查辅助元素，并在此处重新开启发布。</string>
+    <string name="ha_publish_target_in_use">%s 已由此手机上的另一台设备设置。</string>
+    <string name="ha_publish_inbound_source">%s 是此设备的使用季所跟随的辅助元素。请另选一个：ServiceTag 从不设置它读取的辅助元素。</string>
+    <string name="ha_publish_status_not_maintained">不发送：该设备已归档、已退役或已转出。Home Assistant 保留其最后的值。</string>
+    <string name="ha_publish_check_helper">检查辅助元素</string>
+    <string name="ha_publish_delivery_limit">手机可以发送时才发送：打开时、点按“立即发布”时，或在允许的情况下于后台发送。并非即时。</string>
+    <string name="ha_publish_http_error">Home Assistant 回复了 %s。</string>
+    <string name="ha_publish_checking">正在检查辅助元素…</string>
+    <string name="ha_publish_choose_helper_first">请先选择一个辅助元素。</string>
+    <string name="ha_publish_needs_validation">在 ServiceTag 向其发布之前，请再次检查该辅助元素。</string>
+    <string name="ha_publish_stale_read">检查期间辅助元素发生了变化。请再次检查。</string>
+    <string name="ha_publish_asset_not_maintained">%s 已归档、已退役或已转出，因此无法发布到 Home Assistant。</string>
+    <string name="ha_publish_stale_plan">检查此辅助元素之后有内容发生了变化。请再次检查。</string>
+    <string name="ha_publish_write_disclosure">当设备发布到 Home Assistant 时，此手机也会使用此令牌设置相应的辅助元素。请只授予该令牌的用户所需的权限。</string>
+</resources>

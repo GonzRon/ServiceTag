@@ -261,7 +261,7 @@ class BackupCodecTest {
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
                 // Format 19's two keys (#47), at zero here for the same reason.
-                "installedComponents" to 0, "compositionEntries" to 0,
+                "installedComponents" to 0, "compositionEntries" to 0, "scheduleSeasonActivations" to 0,
             ),
             manifest.counts,
         )
@@ -495,7 +495,7 @@ class BackupCodecTest {
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
                 // Format 19's two keys (#47), at zero here for the same reason.
-                "installedComponents" to 0, "compositionEntries" to 0,
+                "installedComponents" to 0, "compositionEntries" to 0, "scheduleSeasonActivations" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -1064,11 +1064,12 @@ class BackupCodecTest {
 
     /**
      * The numbers this tip carries: the format moved to 10 (#67), on to 11 (#79), on to 12 (#79b) and on
-     * to 13 (#72), on to 16 (#85), on to 17 (#91), on to 18 (#15), on to 19 (#47) and on to 20 (#69), the legacy boundary did not.
+     * to 13 (#72), on to 16 (#85), on to 17 (#91), on to 18 (#15), on to 19 (#47), on to 20 (#69) and on to 21 (#114), the
+     * legacy boundary did not.
      */
     @Test
-    fun theFormatIsTwentyAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(20, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsTwentyOneAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(21, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 

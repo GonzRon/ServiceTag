@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.condition.currentIncident
 import com.loosecannon.servicetag.core.condition.needsIncident
+import com.loosecannon.servicetag.core.hapublish.PublishBindingRepository
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
@@ -19,6 +20,7 @@ import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.journal.Reading
 import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
@@ -85,6 +87,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.seasonsync.SeasonSyncGuard
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncRepository
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
@@ -113,6 +116,8 @@ import com.loosecannon.servicetag.core.usecase.SeasonAlreadyEnded
 import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrandCause
+import com.loosecannon.servicetag.core.usecase.SeasonStartStrands
 import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonSyncOwnsSeason
@@ -156,6 +161,7 @@ import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.ENTER_THE_NUMBER_OF_DAYS
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.maintenance.SeasonStartStrings
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.service.ServiceCaseRow
 import com.loosecannon.servicetag.ui.service.openServiceCasesLine
@@ -214,7 +220,8 @@ data class AssetRow(
     /**
      * #71 (plan E2, E4): the read model's own health view, the one `forAsset` gives, while the row is
      * a health surface — the asset in service (lifecycle, E1) and tracked (a non-null aggregate) —
-     * and null otherwise, when the row draws no health and no condition beside it ([rowHealthOf]).
+     * and null otherwise, when the row draws no health (#116, U-C4: the condition badge is drawn from [condition] on
+     * every in-service row) ([rowHealthOf]).
      */
     val health: AssetHealthView? = null,
     /**
@@ -229,12 +236,22 @@ data class AssetRow(
      * health, and is listed only with the Archived control on, whatever its status.
      */
     val transferred: Boolean = false,
+    /** #116 (U-C1): an enabled Home Assistant binding of either direction names the asset ([rowFactsOf]). */
+    val haLinked: Boolean = false,
+    /**
+     * #116 (U-C1): the asset's current condition, while it is maintained here — the value #113 publishes, built as
+     * the health read model builds it but never opening the event — or null.
+     */
+    val condition: ConditionView? = null,
+    /** #116 (U-C1): seasonal by its own mode and in season today by its own phase; never for a year-round asset. */
+    val inSeason: Boolean = false,
 )
 
 /**
  * #71's gate (plan E2): the row shows health only for an asset **in service** — active and not
  * retired; its season plays no part — whose health is **tracked**. A row that shows no health shows
- * none of the group, the condition badge included (R71-6, R71-11). Decided here, never in Compose.
+ * none of the group but its condition badge, which #116 (U-C4) draws from [AssetRow.condition] on every in-service
+ * row (R71-11 amended). Decided here, never in Compose.
  *
  * In service is asked of both the view and the list's own [asset] row: the view is the read model's
  * snapshot, and a view kept across a restart (review MINOR-1) or a pass still running can be older
@@ -257,15 +274,17 @@ fun rowHealthLines(view: AssetHealthView): List<String> = healthBlocksOf(view).m
 }
 
 /**
- * The Assets list's three controls (#73, C1): the category it is narrowed to — a [CategoryKey], null
- * for All — and whether components and archived rows are admitted. One value, updated by `copy`, so
- * changing one control can never reset another. Session state (R73-2): the view model holds it across
- * a rotation, and nothing persists it.
+ * The Assets list's controls (#73, C1): the category it is narrowed to — a [CategoryKey], null
+ * for All — and whether components and archived rows are admitted; and (#116, U-C3) the [condition]
+ * it is narrowed to, null for All. One value, updated by `copy`, so changing one control can never
+ * reset another. Session state (R73-2): the view model holds it across a rotation, and nothing
+ * persists it.
  */
 data class AssetFilters(
     val type: String? = null,
     val showComponents: Boolean = false,
     val showArchived: Boolean = false,
+    val condition: OperationalCondition? = null,
 )
 
 /**
@@ -290,11 +309,16 @@ enum class EmptyReason {
     ARCHIVED_HIDDEN,
     /** Every match of the chosen type is hidden, and both controls hide at least one of them. */
     BOTH_HIDDEN,
+    /**
+     * #116 (U-C4): the other controls, Type and the query admit at least one row, and the Condition choice alone
+     * removes every one. Decided last: in every other case the reasons above decide exactly as before.
+     */
+    CONDITION_HIDDEN,
 }
 
 data class AssetsState(
     val items: List<AssetRow> = emptyList(),
-    /** The three controls, exactly as the owner left them. */
+    /** The four controls, exactly as the owner left them. */
     val filters: AssetFilters = AssetFilters(),
     /** How many rows are archived, so the blank-query empty state can say how many are behind it. */
     val archivedCount: Int = 0,
@@ -323,6 +347,8 @@ data class AssetsState(
  * query lists root assets only and a component appears once the owner turns Components on, still
  * naming its system. A query searches **within** the admitted set and never widens it or touches a
  * control (R73-1); when the controls hide every match, [EmptyReason] names the ones in the way.
+ * #116 (U-C3) ANDs a fifth, the Condition control, over each row's own current condition; it takes
+ * no part in the shipped empty reasons.
  *
  * **Type** is the durable category catalog (#74) matched by [CategoryKey], so a spelling stored before
  * promotion still matches (R73-5). A category renamed to a new key, or deleted, while it is the chosen
@@ -359,6 +385,14 @@ class AssetsViewModel(
      * part. False (the tab) lists them as #73 and #77 rule them.
      */
     activeOnly: Boolean = false,
+    /**
+     * #116 (U-C2): the row facts' three sources, each collected once through `observeAll()` and joined to the rows by
+     * asset id — every condition row, every #16 binding and every publish binding. Null observes nothing — a test not
+     * about them; `AppGraph` passes the real repositories.
+     */
+    conditions: ConditionRepository? = null,
+    inbound: SeasonSyncRepository? = null,
+    publishing: PublishBindingRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, activeOnly: Boolean = false) : this(
@@ -366,6 +400,9 @@ class AssetsViewModel(
         loans = graph.loans,
         transfers = graph.transferRecords,
         activeOnly = activeOnly,
+        conditions = graph.conditions,
+        inbound = graph.seasonSyncBindings,
+        publishing = graph.publishBindings,
     )
 
     private val filters = MutableStateFlow(AssetFilters())
@@ -441,8 +478,20 @@ class AssetsViewModel(
             Facts(rows, activationsOf, writtenTagsOf(tagRows), views, lent, held)
         }
 
+    /**
+     * #116 (U-C2, constraint 5): the row facts' sources, each collected once for the whole list — never a flow per
+     * row — and folded once per emission: the condition rows by asset id, and the assets an enabled binding of each
+     * direction names. The rows read them by their own id, O(assets + rows).
+     */
+    private val links: Flow<Links> =
+        combine(
+            (conditions?.observeAll() ?: flowOf(emptyList())).map { rows -> rows.groupBy { it.assetId } },
+            (inbound?.observeAll() ?: flowOf(emptyList())).map { bindings -> enabledInboundIds(bindings) },
+            (publishing?.observeAll() ?: flowOf(emptyList())).map { bindings -> enabledPublishingIds(bindings) },
+        ) { conditionsOf, inboundIds, publishingIds -> Links(conditionsOf, inboundIds, publishingIds) }
+
     val state: StateFlow<AssetsState> =
-        combine(facts, filters, categories.observeAll(), queries) { (rows, activationsOf, tagged, views, lent, held), picked, custom, query ->
+        combine(facts, links, filters, categories.observeAll(), queries) { (rows, activationsOf, tagged, views, lent, held), (conditionsOf, inboundIds, publishingIds), picked, custom, query ->
             val choices = CategoryCatalog.choices(custom)
             val stale = picked.type?.takeIf { key -> choices.none { it.key == key } }
             // C4: a chosen category the catalog no longer holds (renamed to a new key, or deleted)
@@ -456,33 +505,54 @@ class AssetsViewModel(
             // #93 (C2), #69 (C30): the picker's rows — those not maintained here dropped once, here, before the controls,
             // the count and the reason; byId above keeps every row, so a component of a held parent still names it.
             val eligible = if (activeOnly) rows.filter { it.maintainedHere(held) } else rows
-            // The four predicates, ANDed: the three controls admit a row, and the query searches only
-            // what they admitted (R73-1) — #39's six-field predicate, unchanged.
+            // The five predicates, ANDed: the three #73 controls admit a row, the query searches only
+            // what they admitted (R73-1) — #39's six-field predicate, unchanged — and (#116, U-C3) the
+            // Condition control admits a row by its own current condition, the row's fact below.
             val matching = eligible.filter { controls.admits(it, held) && it.matches(query) }
+            val items = matching
+                .sortedWith(compareBy({ lifecycleRank(it, held) }, { it.name.lowercase() }))
+                .mapNotNull { row ->
+                    val outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day)
+                    // #116 (U-C1): the three facts, each from its own source, read by the row's own id.
+                    val rowFacts = rowFactsOf(
+                        asset = row,
+                        held = row.id in held,
+                        outOfSeason = outOfSeason,
+                        conditionRows = conditionsOf[row.id].orEmpty(),
+                        inboundEnabled = row.id in inboundIds,
+                        publishingEnabled = row.id in publishingIds,
+                    )
+                    // The Condition control reads the row's own fact, so a row it drops builds nothing more.
+                    if (!controls.admitsCondition(rowFacts)) return@mapNotNull null
+                    AssetRow(
+                        asset = row,
+                        // The parent by name, from the rows already in hand: no second query,
+                        // and a parent that has gone leaves the subtitle off rather than
+                        // showing an id.
+                        parentName = row.parentAssetId?.let { byId[it]?.name },
+                        outOfSeason = outOfSeason,
+                        hasWrittenTag = row.id in tagged,
+                        // #77 (C11, C19): a held asset is quiesced — no health on its row.
+                        health = if (row.id in held) null else rowHealthOf(row, views[row.id]),
+                        loan = lent[row.id]?.standingOn(day),
+                        transferred = row.id in held,
+                        haLinked = rowFacts.haLinked,
+                        condition = rowFacts.condition,
+                        inSeason = rowFacts.inSeason,
+                    )
+                }
             AssetsState(
-                items = matching
-                    .sortedWith(compareBy({ lifecycleRank(it, held) }, { it.name.lowercase() }))
-                    .map { row ->
-                        AssetRow(
-                            asset = row,
-                            // The parent by name, from the rows already in hand: no second query,
-                            // and a parent that has gone leaves the subtitle off rather than
-                            // showing an id.
-                            parentName = row.parentAssetId?.let { byId[it]?.name },
-                            outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day),
-                            hasWrittenTag = row.id in tagged,
-                            // #77 (C11, C19): a held asset is quiesced — no health on its row.
-                            health = if (row.id in held) null else rowHealthOf(row, views[row.id]),
-                            loan = lent[row.id]?.standingOn(day),
-                            transferred = row.id in held,
-                        )
-                    },
+                items = items,
                 filters = controls,
                 archivedCount = eligible.count { it.status != AssetStatus.ACTIVE || it.id in held },
                 query = query,
                 typeLabel = controls.type?.let { key -> choices.first { it.key == key }.display },
                 typeChoices = choices,
-                emptyReason = emptyReason(eligible, controls, query, listed = matching.isNotEmpty(), held = held),
+                // The shipped reasons decide from what the other controls and the query admit: the
+                // condition takes no part in them. CONDITION_HIDDEN is decided last (#116, U-C4): only
+                // when they admit a row and the Condition choice alone removes every one.
+                emptyReason = if (matching.isNotEmpty() && items.isEmpty()) EmptyReason.CONDITION_HIDDEN
+                else emptyReason(eligible, controls, query, listed = matching.isNotEmpty(), held = held),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
@@ -494,6 +564,9 @@ class AssetsViewModel(
 
     /** The Type control: a category key from [AssetsState.typeChoices], or null for All. */
     fun pickType(key: String?) = filters.update { it.copy(type = key) }
+
+    /** #116 (U-C3): the Condition control — one of the three conditions, or null for All. */
+    fun pickCondition(condition: OperationalCondition?) = filters.update { it.copy(condition = condition) }
 
     /**
      * What the search box holds. Filtering is a pass over rows the store flow already produced, so
@@ -519,6 +592,13 @@ class AssetsViewModel(
         val lent: Map<AssetId, AssetLoan>,
         val held: Set<AssetId>,
     )
+
+    /** #116 (U-C2): the condition rows by asset, and the assets an enabled inbound or publish binding names. */
+    private data class Links(
+        val conditionsOf: Map<AssetId, List<AssetCondition>>,
+        val inboundIds: Set<AssetId>,
+        val publishingIds: Set<AssetId>,
+    )
 }
 
 /** #71 (R71-1): the assets some tag row [isWrittenFor] — one fold of every tag row, the predicate its one home. */
@@ -540,6 +620,12 @@ private fun AssetFilters.admitsType(asset: Asset): Boolean = type == null || Cat
 
 private fun AssetFilters.admits(asset: Asset, held: Set<AssetId>): Boolean =
     admitsStatus(asset, held) && admitsPlace(asset) && admitsType(asset)
+
+/**
+ * #116 (U-C3): the Condition control's predicate — the row's own current condition equals the choice; All admits every
+ * row. A row with no condition (none recorded, or an asset not maintained here) is admitted only by All.
+ */
+private fun AssetFilters.admitsCondition(facts: RowFacts): Boolean = condition == null || facts.condition?.condition == condition
 
 /**
  * C5's ordered table. [listed] is whether the list has a row at all; `hits` are the rows the query
@@ -2504,6 +2590,23 @@ class AssetEditViewModel(
                 }
                 is SeasonSyncOwnsSeason -> {
                     _state.update { it.copy(saving = false, seasonRefusal = SEASON_SYNC_FOLLOWS_HA) }
+                    return
+                }
+                is SeasonStartStrands -> {
+                    // #114 (C11): a change into all year sits under the season field (P114-24, and #124's P124-8 for the
+                    // schedules counting from the opening service); a parent change that would leave a covered asset a
+                    // leaf child is about the pair, said as the cycle is (P114-25).
+                    val name = failure.assetId?.let { assets.get(it) }?.name
+                    val line = SeasonStartStrings.strand(failure, name)
+                        ?: localized(R.string.asset_model_could_not_save)
+                    if (failure.strandCause == SeasonStartStrandCause.NEEDS_SEASONS ||
+                        failure.strandCause == SeasonStartStrandCause.HAS_DEPENDENT_SCHEDULES
+                    ) {
+                        _state.update { it.copy(saving = false, seasonRefusal = line) }
+                    } else {
+                        _state.update { it.copy(saving = false) }
+                        _messages.tryEmit(line)
+                    }
                     return
                 }
                 is WarrantyReminderValidation -> {

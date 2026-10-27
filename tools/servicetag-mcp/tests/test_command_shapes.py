@@ -56,21 +56,25 @@ def test_the_vendored_key_lists_equal_the_golden_file() -> None:
     vendored = command_shapes.vendored()
     assert set(vendored) == {
         "asset", "schedule", "healthSubject", "serviceCase", "loan", "attachmentUpdate", "attachmentUpload",
-        "materialize", "replaceDraft", "replaceSuccessor",
+        "materialize", "replaceDraft", "replaceSuccessor", "scheduleRole", "haPublishingPlan", "haPublishingAction",
+        "haPublishingAcknowledgement", "scheduleSeason",
     }
     for name, entry in vendored.items():
         assert entry == shapes[name], name
 
 
 def test_the_server_names_only_vendored_schedule_keys_for_its_forms_and_flag() -> None:
-    """The three names `server.py` uses outside the key lists — the two 1.4 policy keys that decide
-    the form, and the action flag — are themselves vendored entries, so they cannot drift apart."""
+    """The names `server.py` uses outside the key lists — the two 1.4 policy keys that decide the form, and the two
+    action flags — are themselves vendored entries, so they cannot drift apart."""
     current = {server_module._wire(name) for name in server_module._CURRENT_POLICY_ARGUMENTS}
     assert current == {"servicePolicy", "policyOffsetDays"}
     assert current <= set(command_shapes.SCHEDULE_KEYS)
     legacy = {server_module._wire(name) for name in server_module._DEPRECATED_SEASON_ARGUMENTS}
     assert legacy == set(command_shapes.SCHEDULE_LEGACY_KEYS)
     assert server_module._UNLINK_HEALTH_SUBJECT in command_shapes.SCHEDULE_ACTION_FLAGS
+    # #114 (C29b): the QUICK election is a vendored flag of the PATCH and a key of the role command.
+    assert server_module._SEASON_START_QUICK_ELECTED in command_shapes.SCHEDULE_ACTION_FLAGS
+    assert server_module._SEASON_START_QUICK_ELECTED in command_shapes.SCHEDULE_ROLE_KEYS
 
 
 # --- every overlay submits exactly those keys ------------------------------------------------------

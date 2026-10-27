@@ -71,7 +71,7 @@ class BackupFormat18Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(20, decoded.manifest.formatVersion)
+        assertEquals(21, decoded.manifest.formatVersion)
         assertEquals(listOf(SupplyEstate.prefilter, SupplyEstate.membrane), decoded.data.supplyItems.map { it.toDomain() })
         assertEquals(
             listOf(SupplyEstate.prefilterOnSystem, SupplyEstate.membraneOnSoftener),
@@ -123,7 +123,7 @@ class BackupFormat18Test {
         }
         assertEquals(listOf("id", "name", "defaultQuantity", "unit", "sortOrder", "supplyId"), ProfileConsumableDto.serializer().descriptor.names)
         assertEquals(listOf("id", "name", "quantity", "unit", "sortOrder", "supplyId"), ConsumableUsageDto.serializer().descriptor.names)
-        assertEquals(listOf("supplyItems", "assetSupplies"), BackupData.serializer().descriptor.names.dropLast(1).takeLast(2))
+        assertEquals(listOf("supplyItems", "assetSupplies"), BackupData.serializer().descriptor.names.dropLast(2).takeLast(2))
     }
 
     // --- row 8: the format ≤ 17 gate -------------------------------------------------------------
@@ -331,7 +331,7 @@ class BackupFormat18Test {
         assertEquals(2, counts["supplyItems"])
         assertEquals(3, counts["supplySpecifications"])
         assertEquals(2, counts["assetSupplies"])
-        assertEquals(31, counts.size)
+        assertEquals(32, counts.size)
         val none = BackupCodec.decode(archiveOf(unlinked)).manifest.counts
         assertEquals(listOf(0, 0, 0), listOf("supplyItems", "supplySpecifications", "assetSupplies").map { none[it] }, "present at zero")
     }
@@ -340,13 +340,13 @@ class BackupFormat18Test {
 
     /** One format past this build's, over a tree no format could read: refused as newer before a row is parsed. */
     @Test
-    fun aFormat21ArchiveIsRefusedAsNewer() {
+    fun aFormat22ArchiveIsRefusedAsNewer() {
         val unreadable = dataTreeOf(archiveOf(estate)).editRows("supplyItems") { it.with("name", JsonNull) }
-        val bytes = sealed(unreadable, formatVersion = 21)
+        val bytes = sealed(unreadable, formatVersion = 22)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
 
-        assertEquals(21, refusal.found)
-        assertEquals(20, refusal.supported)
+        assertEquals(22, refusal.found)
+        assertEquals(21, refusal.supported)
     }
 }

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #102: Spanish translation of values/strings_ha_publishing.xml. -->
+<resources>
+    <string name="ha_publish_status_title">Publicar el estado del equipo en Home Assistant</string>
+    <string name="ha_publish_helper_field">Ayudante de Home Assistant</string>
+    <string name="ha_publish_choose_helper">Elegir ayudante</string>
+    <string name="ha_publish_scope_selects">Ayudantes de lista desplegable (input_select)</string>
+    <string name="ha_publish_status_confirm">¿Publicar el estado del equipo de %1$s en %2$s? ServiceTag establece este ayudante cada vez que cambia el estado registrado: Operativo → UP, Degradado → DEGRADED, Fuera de servicio → DOWN. Las automatizaciones de Home Assistant deben leerlo y nunca establecerlo.</string>
+    <string name="ha_publish_confirm_button">Publicar</string>
+    <string name="ha_publish_waiting_for_status">En espera: no hay ningún estado del equipo registrado, así que no se envía nada.</string>
+    <string name="ha_publish_not_published_yet">Aún no se ha publicado.</string>
+    <string name="ha_publish_sending">Enviando %s…</string>
+    <string name="ha_publish_published">Publicado %1$s · %2$s</string>
+    <string name="ha_publish_matches">Home Assistant muestra %1$s, que coincide con ServiceTag · comprobado %2$s</string>
+    <string name="ha_publish_now">Publicar ahora</string>
+    <string name="ha_publish_stop">Dejar de publicar</string>
+    <string name="ha_publish_stop_status_confirm">¿Dejar de publicar en %s? Home Assistant conserva el valor que tiene ahora.</string>
+    <string name="ha_publish_options_mismatch">%s debe ser un ayudante de lista desplegable cuyas opciones sean exactamente UP, DOWN y DEGRADED.</string>
+    <string name="ha_publish_not_a_dropdown">%s no es un ayudante de lista desplegable (input_select).</string>
+    <string name="ha_publish_service_refused">Home Assistant rechazó el valor %1$s para %2$s.</string>
+    <string name="ha_publish_write_forbidden">Home Assistant rechazó este cambio para el usuario del token de acceso. Ese usuario necesita permiso para cambiar ayudantes.</string>
+    <string name="ha_publish_outcome_unknown">Home Assistant no confirmó el cambio. ServiceTag comprobará el ayudante antes de volver a enviar.</string>
+    <string name="ha_publish_remote_differs">Home Assistant muestra %1$s después del cambio; puede que otra cosa esté estableciendo %2$s.</string>
+    <string name="ha_publish_copied_installation">Esta configuración procede de la copia de seguridad de otro teléfono, así que este teléfono no publica. Comprueba el ayudante y vuelve a activar la publicación aquí.</string>
+    <string name="ha_publish_target_in_use">Otro equipo de este teléfono ya establece %s.</string>
+    <string name="ha_publish_inbound_source">%s es el ayudante que sigue la temporada de este equipo. Elige otro: ServiceTag nunca establece un ayudante que lee.</string>
+    <string name="ha_publish_status_not_maintained">No se envía nada: el equipo está archivado, retirado o transferido. Home Assistant conserva su último valor.</string>
+    <string name="ha_publish_check_helper">Comprobar ayudante</string>
+    <string name="ha_publish_delivery_limit">Se envía cuando el teléfono puede: al abrir la app, con “Publicar ahora” o en segundo plano donde esté permitido. No es instantáneo.</string>
+    <string name="ha_publish_http_error">Home Assistant respondió %s.</string>
+    <string name="ha_publish_checking">Comprobando el ayudante…</string>
+    <string name="ha_publish_choose_helper_first">Primero elige un ayudante.</string>
+    <string name="ha_publish_needs_validation">Vuelve a comprobar el ayudante antes de que ServiceTag publique en él.</string>
+    <string name="ha_publish_stale_read">El ayudante cambió mientras se comprobaba. Vuelve a comprobarlo.</string>
+    <string name="ha_publish_asset_not_maintained">%s está archivado, retirado o transferido, así que no puede publicar en Home Assistant.</string>
+    <string name="ha_publish_stale_plan">Algo cambió desde que se comprobó este ayudante. Vuelve a comprobarlo.</string>
+    <string name="ha_publish_write_disclosure">Cuando un equipo publica en Home Assistant, este teléfono también establece ese ayudante con este token. Da al usuario del token solo los permisos que necesita.</string>
+</resources>

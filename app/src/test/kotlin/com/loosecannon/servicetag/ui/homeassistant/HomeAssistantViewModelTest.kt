@@ -1,5 +1,13 @@
 package com.loosecannon.servicetag.ui.homeassistant
 
+import com.loosecannon.servicetag.core.hapublish.DecommissionState
+import com.loosecannon.servicetag.core.hapublish.DecommissionTombstone
+import com.loosecannon.servicetag.core.hapublish.PublishBinding
+import com.loosecannon.servicetag.core.hapublish.PublishKind
+import com.loosecannon.servicetag.core.hapublish.RemoteEntity
+import com.loosecannon.servicetag.core.hapublish.ValidationResult
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.seasonsync.BackgroundChecks
 import com.loosecannon.servicetag.core.seasonsync.CurrentNetwork
 import com.loosecannon.servicetag.core.seasonsync.HaConnection
@@ -17,6 +25,8 @@ import com.loosecannon.servicetag.seasonsync.NetworkPlatform
 import com.loosecannon.servicetag.seasonsync.NetworkReading
 import com.loosecannon.servicetag.seasonsync.UnconfirmedCause
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.ui.asset.PublishTombstoneLine
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -93,8 +103,7 @@ class HomeAssistantViewModelTest {
         val model = HomeAssistantViewModel(
             graph.haConnections,
             secrets,
-            graph.saveHaConnection,
-            graph.forgetHaConnection,
+            graph.publishControls,
             { connection, token ->
                 tested += connection to token
                 answer
@@ -102,6 +111,10 @@ class HomeAssistantViewModelTest {
             graph.currentNetworkReader,
             grants,
             { "Allow all the time" },
+            HaPublishingReads(
+                graph.publishBindings, graph.publishDeliveries, graph.publishDecommissions, graph.assets, graph.haConnections,
+                graph.uow,
+            ),
         )
         val asked = mutableListOf<PermissionRequest>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.requests.collect { asked += it } }
@@ -422,7 +435,8 @@ class HomeAssistantViewModelTest {
         screen.model.save()
         advanceUntilIdle()
         val after = graph.haConnections.get()!!
-        assertEquals(saved.copy(updatedAt = after.updatedAt), after)
+        // #113/#114 (C28, F): every save moves the generation by one.
+        assertEquals(saved.copy(updatedAt = after.updatedAt, configGeneration = saved.configGeneration + 1), after)
         assertEquals(Secret("fictional-token-2"), graph.secretStore.get(saved.id))
         assertTrue(screen.state.tokenPresent)
         assertNull(screen.state.statusLine)
@@ -742,9 +756,232 @@ class HomeAssistantViewModelTest {
         }
     }
 
+    // Row 90 (#113/#114, C36, O-11, O-12; B4b2's and B5's carries) — the publishing lines, and Save and Forget through
+    // the publishing controls.
+
+    private suspend fun connected(): HaConnection {
+        graph.assets.upsert(
+            assetRow(HEATER.value, "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-01", seasonEnd = "10-31"),
+        )
+        return graph.saveHaConnection.run(
+            "http://192.168.0.10:8123", Secret("fictional-token-1"), null, NetworkEligibility.HOME_NETWORK_ONLY,
+            "ExampleHomeWifi", null,
+        )
+    }
+
+    private suspend fun enable(connection: HaConnection, kind: PublishKind, entityId: String, remote: RemoteEntity): PublishBinding {
+        graph.haPublish.helpers[entityId] = remote
+        val fresh = ValidationResult(entityId, remote, connection.id, connection.configGeneration, 0, graph.now)
+        return graph.enablePublishing.run(HEATER, kind, entityId, fresh, null, graph.installationIdentity.id())
+    }
+
+    private suspend fun enableStatus(connection: HaConnection) =
+        enable(connection, PublishKind.EQUIPMENT_STATUS, STATUS, RemoteEntity(STATUS, "unknown", listOf("UP", "DEGRADED", "DOWN"), null, null))
+
+    private suspend fun enableDate(connection: HaConnection) =
+        enable(connection, PublishKind.SEASON_SERVICE_DATE, DATE, RemoteEntity(DATE, "2025-11-15", null, true, false))
+
+    private suspend fun tombstone(
+        connection: HaConnection,
+        id: String,
+        entityId: String,
+        assetId: String,
+        state: DecommissionState = DecommissionState.PENDING,
+    ) = graph.uow.write {
+        graph.publishDecommissions.upsertMerging(
+            DecommissionTombstone(
+                id, connection.id, entityId, AssetId(assetId), graph.installationIdentity.id(), state, graph.now, null, null, 1,
+            ),
+        )
+    }
+
+    @Test fun theWriteDisclosureAppearsWithABinding() = runTest {
+        val connection = connected()
+        // A season binding reads Home Assistant; it writes nothing, so no disclosure.
+        graph.linkSeasonSync.run(HEATER, "input_boolean.example_heater_in_season")
+        val screen = open()
+        assertNull(screen.state.writeDisclosure)
+
+        enableStatus(connection)
+        advanceUntilIdle()
+        assertEquals(
+            "When an asset publishes to Home Assistant, this phone also sets that helper with this token. Give the " +
+                "token's user only the rights it needs.",
+            screen.state.writeDisclosure,
+        )
+    }
+
+    @Test fun forgetWarnsWithTheCountAsAPlural() = runTest {
+        val connection = connected()
+        enableStatus(connection)
+        val screen = open()
+        // A status helper holds no Season Start date: P16-9 alone.
+        screen.model.askDisconnect()
+        assertNull(screen.state.forgetWarning)
+        screen.model.dismissDisconnect()
+
+        enableDate(connection)
+        advanceUntilIdle()
+        screen.model.askDisconnect()
+        assertEquals(
+            "1 date helper in Home Assistant still holds a Season Start date. Disconnecting first sets it to " +
+                "1970-01-01 if it can; if it cannot, it keeps its date until you clear it in Home Assistant.",
+            screen.state.forgetWarning,
+        )
+        assertEquals(DISCONNECT_BODY, screen.state.disconnectAsk)
+        screen.model.dismissDisconnect()
+        assertNull(screen.state.forgetWarning)
+
+        tombstone(connection, "decommission-1", "input_datetime.example_boiler_service_done", "example-boiler")
+        advanceUntilIdle()
+        screen.model.askDisconnect()
+        assertEquals(
+            "2 date helpers in Home Assistant still hold a Season Start date. Disconnecting first sets them to " +
+                "1970-01-01 where it can; any it cannot reach keep their date until you clear them in Home Assistant.",
+            screen.state.forgetWarning,
+        )
+    }
+
+    @Test fun aDateHelperAlreadyReadBackAt1970IsNotCounted() = runTest {
+        val binding = enableDate(connected())
+        // B3's ruling (6): the helper already holds 1970-01-01, read back at the current pair with nothing outstanding.
+        graph.uow.write {
+            val held = graph.publishDeliveries.get(binding.id)!!
+            graph.publishDeliveries.upsert(
+                held.copy(
+                    desiredValue = "1970-01-01", lastVerifiedValue = "1970-01-01", lastVerifiedAt = graph.now,
+                    verifiedBindingRevision = binding.revision, verifiedDesiredRevision = held.desiredRevision,
+                    needsDelivery = false, reconcilePending = false, outcomeUnknownSince = null,
+                ),
+            )
+        }
+        val screen = open()
+        screen.model.askDisconnect()
+        assertEquals(DISCONNECT_BODY, screen.state.disconnectAsk)
+        assertNull("a helper already read back at 1970-01-01 holds no date", screen.state.forgetWarning)
+    }
+
+    @Test fun theForgetWarningFollowsTheCountWhileTheConfirmIsOpen() = runTest {
+        val connection = connected()
+        enableStatus(connection)
+        val screen = open()
+        screen.model.askDisconnect()
+        assertNull(screen.state.forgetWarning)
+
+        // B6a review N1: a date binding enabled while the confirm is open is warned about at once.
+        enableDate(connection)
+        advanceUntilIdle()
+        assertEquals(
+            "1 date helper in Home Assistant still holds a Season Start date. Disconnecting first sets it to " +
+                "1970-01-01 if it can; if it cannot, it keeps its date until you clear it in Home Assistant.",
+            screen.state.forgetWarning,
+        )
+        screen.model.dismissDisconnect()
+        assertNull(screen.state.forgetWarning)
+    }
+
+    @Test fun anAddressChangeRefusalHasItsSentence() = runTest {
+        enableDate(connected())
+        val screen = open()
+        screen.model.onAddressChange("http://192.168.0.11:8123")
+        screen.model.save()
+        advanceUntilIdle()
+        assertEquals(
+            listOf(
+                Notice(
+                    "Stop publishing Season Start dates before changing the address: the old Home Assistant has to be " +
+                        "told first.",
+                ),
+            ),
+            screen.state.notices,
+        )
+        assertEquals("http://192.168.0.10:8123", graph.haConnections.get()!!.baseUrl)
+    }
+
+    @Test fun saveAndForgetGoThroughThePublishingControls() = runTest {
+        val connection = connected()
+        enableDate(connection)
+        val screen = open()
+
+        // B4b2's carry: a Save asks for delivery, so a cadence or network change reaches every binding at once.
+        val beforeSave = graph.deliveryRequests.get()
+        screen.model.save()
+        advanceUntilIdle()
+        assertTrue(graph.deliveryRequests.get() > beforeSave)
+
+        // B5's carry: Forget drains 1970-01-01 into the date helper first, then forgets, then asks for delivery.
+        val beforeForget = graph.deliveryRequests.get()
+        screen.model.askDisconnect()
+        screen.model.confirmDisconnect()
+        advanceUntilIdle()
+        graph.awaitDispatched()
+        advanceUntilIdle()
+        assertEquals("1970-01-01", graph.haPublish.state(DATE))
+        assertNull(graph.haConnections.get())
+        assertTrue(graph.deliveryRequests.get() > beforeForget)
+        assertFalse(screen.state.connected)
+    }
+
+    @Test fun anOrphanTombstoneIsListedOnTheScreen() = runTest {
+        val connection = connected()
+        tombstone(connection, "decommission-1", "input_datetime.example_gone_service_done", "example-gone")
+        tombstone(connection, "decommission-2", DATE, HEATER.value)
+        val screen = open()
+        // The heater's own obligation is drawn on its page; only the one whose asset is gone is listed here, in its
+        // sentence (B6b: P114-36 while ServiceTag still tries, so nothing to acknowledge yet).
+        assertEquals(
+            listOf(
+                PublishTombstoneLine(
+                    "decommission-1",
+                    "Not yet cleared in Home Assistant: input_datetime.example_gone_service_done may still allow starts. " +
+                        "ServiceTag keeps trying; if this phone cannot reach Home Assistant, set it to 1970-01-01 there.",
+                    dismissible = false,
+                ),
+            ),
+            screen.state.publishing.orphanTombstones,
+        )
+    }
+
+    @Test fun anOrphanThatCannotBeReachedIsLetGoOnlyByTheOwnersWord() = runTest {
+        val connection = connected()
+        tombstone(connection, "decommission-1", "input_datetime.example_gone_service_done", "example-gone", DecommissionState.UNDELIVERABLE)
+        tombstone(connection, "decommission-2", "input_datetime.example_lost_service_done", "example-lost")
+        val screen = open()
+        assertEquals(
+            PublishTombstoneLine(
+                "decommission-1",
+                "ServiceTag can no longer reach input_datetime.example_gone_service_done. It may still allow starts: " +
+                    "set it to 1970-01-01 in Home Assistant.",
+                dismissible = true,
+            ),
+            screen.state.publishing.orphanTombstones.first(),
+        )
+        assertNotNull("nothing lets it go but the owner", graph.publishDecommissions.get("decommission-1"))
+
+        // A PENDING one (a race: P114-38 is never drawn on it) or one already gone: refused, re-read, no sentence.
+        screen.model.dismissTombstone("decommission-2")
+        screen.model.dismissTombstone("decommission-9")
+        advanceUntilIdle()
+        assertNotNull(graph.publishDecommissions.get("decommission-2"))
+        assertEquals(emptyList<Notice>(), screen.state.notices)
+        assertEquals(listOf("decommission-1", "decommission-2"), screen.state.publishing.orphanTombstones.map { it.id })
+
+        // P114-38: the owner's explicit acknowledgement, through the controls.
+        screen.model.dismissTombstone("decommission-1")
+        advanceUntilIdle()
+        assertNull(graph.publishDecommissions.get("decommission-1"))
+        assertFalse("decommission-1" in screen.state.publishing.orphanTombstones.map { it.id })
+    }
+
     private fun failed(kind: SyncErrorKind, detail: String? = null) = ConnectionTestOutcome.Failed(kind, detail)
 
     private companion object {
+        val HEATER = AssetId("example-heater")
+        const val STATUS = "input_select.example_heater_equipment_status"
+        const val DATE = "input_datetime.example_heater_service_done"
+        const val DISCONNECT_BODY =
+            "Disconnect Home Assistant? Linked assets stop following it and keep their current season and history. " +
+                "The token is deleted from this phone; revoke it in Home Assistant as well."
         const val BACKGROUND_OFF_LINE =
             "With background checks off, ServiceTag checks when you open or return to the app after the chosen " +
                 "interval, and when you tap Sync now. It still needs precise Location while the app is in use."
