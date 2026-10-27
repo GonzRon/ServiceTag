@@ -75,7 +75,7 @@ class CommandShapesGoldenTest {
                 "haPublishingPlan", "haPublishingAction", "haPublishingAcknowledgement",
                 // #125 (U-C7): a schedule's own season, linked or unlinked, each with the caller's own confirmation.
                 "scheduleSeason",
-                // #129 (L-C8): an asset's season link, its six actions, two with the caller's own confirmation.
+                // #129 (L-C8): an asset's season link, its six actions, three with the caller's own confirmation.
                 "seasonSync",
             ),
             shapes.keys.toList(),

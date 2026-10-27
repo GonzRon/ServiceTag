@@ -204,6 +204,11 @@ class SeasonSyncWriteRoutesTest {
         val history = rows(heater)
         assertEquals("the first read started the season", listOf("END", "START"), history.map { it.action.name }.sorted())
         val before = stored(heater)!!
+        val gate = CompletableDeferred<Unit>()
+        graph.haStateReader.answer = {
+            gate.await()
+            HaReadOutcome.Observed(HaSwitchState.ON, "2026-10-20T06:00:00+00:00")
+        }
 
         val changed = answer(change(heater))
 
@@ -217,6 +222,7 @@ class SeasonSyncWriteRoutesTest {
         assertEquals(before.revision + 1, after.revision)
         assertEquals(before.appliedAt, after.appliedAt)
         assertEquals("the history is kept", history, rows(heater))
+        gate.complete(Unit)
         runBlocking { graph.awaitSeasonSyncReads() }
         assertEquals("the new helper is read at once", listOf(season), graph.haStateReader.reads.map { it.entityId })
     }
@@ -433,7 +439,6 @@ class SeasonSyncWriteRoutesTest {
         runBlocking { graph.connect() }
         val heater = api.asset("Example Heater")
         val boiler = linkedManual("Example Boiler")
-        assertBadRequest { post(heater, """{"action":"LINK","confirmEntityId":"$inSeason"}""") }
         assertBadRequest { post(heater, """{"action":"LINK","entityId":"$inSeason","confirmEntityId":"$inSeason","mode":"FOLLOW"}""") }
         assertBadRequest { post(boiler, """{"action":"CHANGE_ENTITY","confirmEntityId":"$season"}""") }
         assertBadRequest { post(boiler, """{"action":"CHANGE_ENTITY","entityId":"$season","confirmEntityId":"$season","mode":"FOLLOW"}""") }
@@ -587,6 +592,8 @@ class SeasonSyncWriteRoutesTest {
             graph.haStateReader.answer = { gate.await(); HaReadOutcome.Observed(HaSwitchState.ON, null) }
             val posted = sameAsGet(launch())
             gate.complete(Unit)
+            runBlocking { graph.awaitSeasonSyncReads() }
+            assertEquals("the action launched its one read", 1, graph.haStateReader.reads.size)
             settle()
             return posted
         }

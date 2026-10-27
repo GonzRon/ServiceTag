@@ -191,10 +191,10 @@ internal class ApiRouter(
      * #16 added one row over one shape: the twenty-eighth `/v1/assets/{id}/…` sub-resource, the asset's Home
      * Assistant season sync, read (R16-9): the binding's non-secret state and status and the connection's settings,
      * never its address or token. Since #129 (L-C8, R16-9 narrowed for the asset link) `POST` on the same shape writes
-     * the link — link, change of helper, stop, resume, Follow or Force, and unlink, each through the phone's command
-     * and the two with the caller's own confirmation. **Sync now and the connection stay the phone's alone**: no route
-     * reaches the token, the address, the connection's save or Forget, and `PATCH`, `PUT` and `DELETE` on the shape
-     * are a 404.
+     * the link — link, change of helper, stop, resume, Follow or Force, and unlink, each through the phone's command,
+     * link, change of helper and unlink only with the caller's own confirmation. **Sync now and the connection stay
+     * the phone's alone**: no route reaches the token, the address, the connection's save or Forget, and `PATCH`, `PUT`
+     * and `DELETE` on the shape are a 404.
      *
      * #114 added one row over one shape: the twenty-ninth `/v1/assets/{id}/…` sub-resource, the asset's season
      * readiness, read only (C29): C9's answer, derived when it is read and stored nowhere. **No route writes readiness**:
