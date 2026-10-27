@@ -45,8 +45,8 @@ INSTALLED_COMPONENT_TOOLS = (
 `create_component`). The registered total was **89** after #47, **90** after #16's season sync read, **91** after
 #114's season readiness read, **93** after #114's role write and helper discovery, **95** after #113/#114's
 publishing reads, **97** after its Enable and Change target, **101** after its Disable, Check helper,
-Publish now and acknowledgement, and is **104** since #125's three schedule season tools, which
-`test_argument_guard.py` pins."""
+Publish now and acknowledgement, **104** after #125's three schedule season tools, and is **110** since #129's
+six season link tools, which `test_argument_guard.py` pins."""
 
 SIGNATURES = {
     "list_installed_components": ["asset_id"],
@@ -136,7 +136,7 @@ def test_the_five_tools_are_registered_guarded_and_listed_last() -> None:
         assert tool is not None, name
         assert tool.parameters.get("additionalProperties") is False, name
     # #16's season sync read follows them, last.
-    assert server_module.TOOL_NAMES[-len(INSTALLED_COMPONENT_TOOLS) - 15:-15] == INSTALLED_COMPONENT_TOOLS
+    assert server_module.TOOL_NAMES[-len(INSTALLED_COMPONENT_TOOLS) - 21:-21] == INSTALLED_COMPONENT_TOOLS
 
 
 def test_each_tool_takes_exactly_c23s_arguments() -> None:

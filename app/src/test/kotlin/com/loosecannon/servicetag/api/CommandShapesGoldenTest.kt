@@ -25,6 +25,11 @@ private val ERROR_CODES_1_9_0 = listOf(
     "SCHEDULE_SEASON_CONFIRMATION_REQUIRED", "SCHEDULE_ARCHIVED", "NO_SUCH_SCHEDULE",
 )
 
+/** 1.9.1: #129's three codes for an asset's season link over `/v1` (L-C8, M12). */
+private val ERROR_CODES_1_9_1 = listOf(
+    "SEASON_SYNC_REFUSED", "SEASON_SYNC_NOT_LINKED", "SEASON_SYNC_CONFIRMATION_REQUIRED",
+)
+
 /**
  * 1.4 (B09) — the two documents that describe the `/v1` wire are kept honest by the wire itself.
  *
@@ -70,12 +75,20 @@ class CommandShapesGoldenTest {
                 "haPublishingPlan", "haPublishingAction", "haPublishingAcknowledgement",
                 // #125 (U-C7): a schedule's own season, linked or unlinked, each with the caller's own confirmation.
                 "scheduleSeason",
+                // #129 (L-C8): an asset's season link, its six actions, three with the caller's own confirmation.
+                "seasonSync",
             ),
             shapes.keys.toList(),
         )
         assertEquals(keysOf("scheduleSeason"), ScheduleSeasonRequest.serializer().descriptor.names)
         assertEquals(listOf("action", "entityId", "confirmEntityId", "confirmUnlink"), keysOf("scheduleSeason"))
         assertTrue("Follow only: no mode key", "mode" !in keysOf("scheduleSeason"))
+        assertEquals(keysOf("seasonSync"), SeasonSyncRequest.serializer().descriptor.names)
+        assertEquals(listOf("action", "entityId", "confirmEntityId", "mode", "confirmUnlink"), keysOf("seasonSync"))
+        assertTrue(
+            "no season state, observation, phase or date travels (constraint 1)",
+            keysOf("seasonSync").none { it in setOf("state", "observedState", "phase", "occurredOn", "date", "value") },
+        )
         assertEquals(keysOf("haPublishingPlan"), HaPublishingPlanRequest.serializer().descriptor.names)
         assertEquals(listOf("kind", "action", "entityId", "boundaryEntityId"), keysOf("haPublishingPlan"))
         assertEquals(keysOf("haPublishingAction"), HaPublishingActionRequest.serializer().descriptor.names)
@@ -284,13 +297,17 @@ class CommandShapesGoldenTest {
             "installationId", "X-ServiceTag-Attachment", "sourcesDigest",
             // #91 (C2): the one new code, a role on a reference that is not a web link.
             "REFERENCE_ROLE_NOT_ALLOWED",
-        ) + ERROR_CODES_1_9_0) {
+        ) + ERROR_CODES_1_9_0 + ERROR_CODES_1_9_1) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }
         // 1.9.0: a code that is also a reason's name (`SCHEDULE_ARCHIVED`, `STALE_PLAN`) is named in many places, so
-        // each code is pinned by its own Errors-table row too.
-        for (code in ERROR_CODES_1_9_0) {
-            assertTrue("docs/api/v1.md has no Errors row for $code", "| `$code` |" in doc)
+        // each code is pinned by its own Errors-table row too: a line that starts `| <status> | `CODE` |`, which the
+        // #129 subsection's code-first table does not match.
+        for (code in ERROR_CODES_1_9_0 + ERROR_CODES_1_9_1) {
+            assertTrue(
+                "docs/api/v1.md has no Errors row for $code",
+                Regex("(?m)^\\| \\d{3} \\| `$code` \\|").containsMatchIn(doc),
+            )
         }
         for (path in listOf(
             "/v1/assets/{id}/season", "/v1/assets/{id}/season-mode", "/v1/assets/{id}/maintenance-break",

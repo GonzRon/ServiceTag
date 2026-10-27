@@ -7,8 +7,8 @@ import com.loosecannon.servicetag.data.room.entities.SeasonSyncBindingEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
- * #16 (C9, C11): the device-local bindings, at most one per asset. There is no delete: a binding leaves only by its
- * asset's or its connection's CASCADE (R16-14). Nothing here is exported, merged or packed.
+ * #16 (C9, C11): the device-local bindings, at most one per asset. A binding leaves by its asset's or its connection's
+ * CASCADE (R16-14), or, since #129, by [delete], Remove link's one row. Nothing here is exported, merged or packed.
  */
 @Dao
 interface SeasonSyncBindingDao {
@@ -67,4 +67,8 @@ interface SeasonSyncBindingDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM season_sync_binding WHERE enabled = 1)")
     suspend fun anyEnabled(): Boolean
+
+    /** #129 (L-C2): one asset's binding, no other row; a missing row deletes nothing. */
+    @Query("DELETE FROM season_sync_binding WHERE asset_id = :assetId")
+    suspend fun delete(assetId: String)
 }

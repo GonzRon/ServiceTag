@@ -69,6 +69,12 @@ class RecordSeasonSyncResult(
     /**
      * Records [outcome], read for [assetId] at the binding's [readRevision]. [startedAt] is when the request was
      * built; [fetchedAt] is the runner's clock when the read returned, the reader's time and not this write's.
+     *
+     * #129 (L-C3): [readEntityId] is the entity the read asked about. The runner passes it, and a result about another
+     * entity than the stored binding's is dropped after the revision check, as #125's schedule applier does: a Remove
+     * link and a relink to another helper restart at revision 1. A relink to the same helper is not told apart (#129
+     * limit 3): that late answer is a genuine reading of the helper and is recorded. Null (a caller that names none)
+     * checks the revision alone.
      */
     suspend fun run(
         assetId: AssetId,
@@ -76,9 +82,11 @@ class RecordSeasonSyncResult(
         startedAt: Long,
         fetchedAt: Long,
         outcome: HaReadOutcome,
+        readEntityId: String? = null,
     ): SeasonSyncRecorded = uow.write {
         val stored = bindings.get(assetId) ?: return@write SeasonSyncRecorded.Dropped
         if (stored.revision != readRevision || !stored.enabled) return@write SeasonSyncRecorded.Dropped
+        if (readEntityId != null && readEntityId != stored.entityId) return@write SeasonSyncRecorded.Dropped
         val asset = assets.get(assetId) ?: return@write SeasonSyncRecorded.Dropped
         val now = clock.nowMillis()
         val attempted = stored.copy(lastAttemptAt = startedAt)

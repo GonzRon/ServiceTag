@@ -66,7 +66,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Thirty-two collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Thirty-six collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -188,6 +188,11 @@ internal class ApiHandlers(
      * its route 404. Its row count is `seasonHealth`'s, so `/v1/status` reports it whatever the wiring.
      */
     internal val scheduleSeason: ScheduleSeasonHandlers? = null,
+    /**
+     * #129 (L-C8): an asset's own Home Assistant season link written — linked, changed, stopped, resumed, forced and
+     * unlinked; a suite that wires none answers its `POST` 404. Its `GET` stays `seasonHealth`'s.
+     */
+    internal val seasonSyncWrites: SeasonSyncHandlers? = null,
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles, graph.events,
@@ -209,6 +214,7 @@ internal class ApiHandlers(
         HaEntityHandlers(graph),
         HaPublishingHandlers(graph),
         ScheduleSeasonHandlers(graph),
+        SeasonSyncHandlers(graph),
     )
 
     // --- status ---------------------------------------------------------------------------

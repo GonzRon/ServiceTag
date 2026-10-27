@@ -45,8 +45,8 @@ service-case tools, is 68 after #72's five loan tools, **69** after #86's `get_a
 #92's seven, **84** after #15's eight supply tools, **89** after #47's five installed-component tools, **90** after
 #16's season sync read, **91** after #114's season readiness read, **93** after #114's role write and
 helper discovery, **95** after #113/#114's publishing reads, **97** after its Enable and Change target,
-**101** after its Disable, Check helper, Publish now and acknowledgement, and is **104** since #125's three
-schedule season tools, which `test_argument_guard.py` pins."""
+**101** after its Disable, Check helper, Publish now and acknowledgement, **104** after #125's three
+schedule season tools, and is **110** since #129's six season link tools, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:

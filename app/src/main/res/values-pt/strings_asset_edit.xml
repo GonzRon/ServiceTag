@@ -174,4 +174,10 @@
     <string name="season_sync_no_date_helpers">Nenhum auxiliar de data encontrado no Home Assistant. Crie um no Home Assistant ou insira um ID de entidade manualmente.</string>
     <string name="season_sync_no_match">Nenhuma entidade corresponde à sua busca.</string>
     <string name="season_sync_only_first_shown">Apenas os primeiros %1$d são mostrados. Busque para restringir a lista.</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">Alterar auxiliar</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">Remover o vínculo com %1$s? Este equipamento deixa de segui-lo e mantém a temporada e o histórico atuais. Sua conexão com o Home Assistant e os outros vínculos continuam.</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">O vínculo lê o auxiliar que você escolher a partir da próxima verificação. O histórico da temporada deste equipamento continua como está.</string>
 </resources>

@@ -50,12 +50,16 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
  * #16 (C27) — the setup sheet, opened by the card's Link (P16-22) or by Resume on an asset no longer MANUAL (C-4):
- * the entity (Link only), the asset's mode's sentence (P16-44/45/46), Save and Cancel (reused). Since #105 (B3) the
+ * the entity (not on Resume), the asset's mode's sentence (P16-44/45/46), Save and Cancel (reused). Since #105 (B3) the
  * entity is chosen from a browser that is a mode of this same sheet (owner ruling Q6): a Choose entity row (P105-1)
  * opens it, a tap on a row picks the exact entity, and Enter entity ID manually (P105-3) keeps the typed field
  * (P16-42/43/49). Nothing is read until Choose entity or Refresh; nothing is written before Save. A refusal keeps the sheet open with its sentence; after a write out of YEAR_ROUND
  * #78's question (P78-1a/1b, P78-2, P78-3) takes the sheet's place, and dismissing it answers P78-3, as in the
  * editor. [opening] keys a fresh model for each opening, kept across a rotation.
+ *
+ * #129 (L-C7): Change helper opens the same sheet with [SeasonSyncSheetPurpose.CHANGE_ENTITY]: the entity row on the
+ * stored helper with Change (P105-2), the browser and manual entry as for Link, P129-3 over Save, and Save held until
+ * another helper is chosen.
  */
 @Composable
 internal fun LinkSeasonSyncSheet(
@@ -164,7 +168,7 @@ private fun LinkSeasonSyncForm(
             .padding(horizontal = 16.dp)
             .padding(bottom = 24.dp),
     ) {
-        if (state.purpose == SeasonSyncSheetPurpose.LINK) {
+        if (state.choosesEntity) {
             if (state.manualEntry) {
                 OutlinedTextField(
                     value = state.entityId,

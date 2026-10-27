@@ -25,7 +25,8 @@ STATUS_22: dict = {
 STATUS_21: dict = dict(STATUS_22, schemaVersion=21, backupFormatVersion=20)
 
 SCHEDULE_SEASON_TOOLS = ("get_schedule_season", "link_schedule_season", "unlink_schedule_season")
-"""U-C7's three tools, the "#125" block, appended after the "#113/#114" block: the registered total is **104**."""
+"""U-C7's three tools, the "#125" block, appended after the "#113/#114" block: the registered total was **104**, and
+is **110** since #129's six season link tools follow them."""
 
 PATH = "/v1/schedules/s1/season-sync"
 SWITCH = "input_boolean.example_heater_winterize_season"
@@ -91,10 +92,10 @@ def phone22(paired):
 
 def test_the_three_tools_close_the_list_in_order_and_take_only_their_arguments() -> None:
     names = server_module.TOOL_NAMES
-    assert names[-3:] == SCHEDULE_SEASON_TOOLS
+    assert names[-9:-6] == SCHEDULE_SEASON_TOOLS
     assert names.index("get_schedule_season") == names.index("acknowledge_ha_decommission") + 1
-    assert len(names) == 104
-    assert len(server_module.mcp._tool_manager.list_tools()) == 104
+    assert len(names) == 110
+    assert len(server_module.mcp._tool_manager.list_tools()) == 110
     for name in SCHEDULE_SEASON_TOOLS:
         registered = server_module.mcp._tool_manager.get_tool(name)
         assert registered is not None and registered.parameters.get("additionalProperties") is False, name
@@ -114,7 +115,10 @@ def test_no_tool_name_carries_sync_or_home_assistant() -> None:
     for name in SCHEDULE_SEASON_TOOLS:
         assert "sync" not in name and "home_assistant" not in name, name
     named = {name for name in server_module.TOOL_NAMES if "sync" in name or "home_assistant" in name}
-    assert named == {"get_season_sync"}, "#16's pin: one season sync tool, read only"
+    assert named == {
+        "get_season_sync", "link_season_sync", "change_season_sync_entity", "stop_season_sync", "resume_season_sync",
+        "set_season_sync_mode", "unlink_season_sync",
+    }, "#16's pin as #129 narrows it: the asset link's read and its six writes"
 
 
 def test_the_read_reads_the_route_once_and_answers_as_sent(phone22) -> None:

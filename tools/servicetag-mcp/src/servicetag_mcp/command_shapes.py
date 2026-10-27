@@ -60,6 +60,11 @@ SCHEDULE_SEASON_KEYS: tuple[str, ...] = ("action", "entityId", "confirmEntityId"
 """#125 (U-C7): a schedule's own season, `POST /v1/schedules/{id}/season-sync` — a `LINK` sends the first three, an
 `UNLINK` the first and the last."""
 
+SEASON_SYNC_KEYS: tuple[str, ...] = ("action", "entityId", "confirmEntityId", "mode", "confirmUnlink")
+"""#129 (L-C8, L-C9): an asset's season link, `POST /v1/assets/{id}/season-sync` — a `LINK` or a `CHANGE_ENTITY` sends
+the first three, a `SET_MODE` the action and `mode`, a `STOP` or a `RESUME` the action alone, an `UNLINK` the first and
+the last."""
+
 SCHEDULE_ROW_TO_COMMAND: Mapping[str, str] = MappingProxyType(
     {"assetId": "targetAssetId", "groupId": "targetGroupId"}
 )
@@ -115,7 +120,7 @@ season pair, which the replacement fills or ignores — each is a 400 there."""
 
 
 def vendored() -> dict[str, dict[str, Any]]:
-    """The fifteen entries in the golden file's own shape, for the equality test."""
+    """The sixteen entries in the golden file's own shape, for the equality test."""
     return {
         "asset": {"keys": list(ASSET_KEYS)},
         "schedule": {
@@ -137,4 +142,5 @@ def vendored() -> dict[str, dict[str, Any]]:
         "haPublishingAction": {"keys": list(HA_PUBLISHING_ACTION_KEYS)},
         "haPublishingAcknowledgement": {"keys": list(HA_PUBLISHING_ACKNOWLEDGEMENT_KEYS)},
         "scheduleSeason": {"keys": list(SCHEDULE_SEASON_KEYS)},
+        "seasonSync": {"keys": list(SEASON_SYNC_KEYS)},
     }

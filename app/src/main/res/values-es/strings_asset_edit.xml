@@ -175,4 +175,10 @@
     <string name="season_sync_no_date_helpers">No se encontraron ayudantes de fecha en Home Assistant. Crea uno en Home Assistant o introduce un ID de entidad manualmente.</string>
     <string name="season_sync_no_match">Ninguna entidad coincide con tu búsqueda.</string>
     <string name="season_sync_only_first_shown">Solo se muestran los primeros %1$d. Busca para acotar la lista.</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">Cambiar ayudante</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">¿Quitar el vínculo con %1$s? Este equipo deja de seguirlo y conserva su temporada actual y su historial. Tu conexión con Home Assistant y los demás vínculos se mantienen.</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">El vínculo lee el ayudante que elijas a partir de su próxima comprobación. El historial de temporadas de este equipo se queda como está.</string>
 </resources>

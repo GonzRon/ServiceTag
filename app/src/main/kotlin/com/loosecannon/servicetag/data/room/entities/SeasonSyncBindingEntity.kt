@@ -10,7 +10,8 @@ import androidx.room3.PrimaryKey
  * Schema v21 (#16, C9; R16-4, R16-10): one asset's link to one Home Assistant on/off entity — **device-local, never
  * exported, merged or packed** (R16-Q-E). The asset is the key, so an asset has at most one binding. Both foreign keys
  * CASCADE: deleting the asset (`DeleteAsset`, and the replace restore's wipe) takes its binding, and deleting the
- * connection takes every binding on it (R16-14); `connection_id` is indexed for its key. The columns are the model's
+ * connection takes every binding on it (R16-14), and since #129 Remove link deletes one (the DAO's `delete`, no schema
+ * change); `connection_id` is indexed for its key. The columns are the model's
  * nineteen fields in its order; the enum columns hold the enum's name, `enabled` is 0 or 1, and `revision` moves by one
  * on every write (the conditional update, C11, C13). `last_applied_source` (C33, inside the unreleased v21) says
  * whether Home Assistant or the owner's forced season applied the last change. Whether a binding is active, stopped,

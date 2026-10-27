@@ -56,10 +56,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs190AndCode23() {
-        assertEquals("1.9.0", BuildConfig.VERSION_NAME)
-        assertEquals(23, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.9.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs191AndCode24() {
+        assertEquals("1.9.1", BuildConfig.VERSION_NAME)
+        assertEquals(24, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.9.1", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -155,7 +155,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.9.0", status.appVersion)
+        assertEquals("1.9.1", status.appVersion)
         assertEquals(22, status.schemaVersion)
         assertEquals(21, status.backupFormatVersion)
     }
@@ -543,7 +543,8 @@ class VersionAgreementTest {
      * is a MINOR, as the 1.7.0 row does. There is no 1.8.2: the 1.8.1 row no longer promises one. It
      * links release notes that exist and names its tag. Anchored at the start of the row;
      * `versionCode` 23 is claimed by this row and by nothing else, and the 1.8.1 row it follows is
-     * still there, once (`versioningRecords181` holds what that row says).
+     * still there, once (`versioningRecords181` holds what that row says; `versioningRecords191`
+     * holds the 1.9.1 row that follows this one).
      */
     @Test fun versioningRecords190() {
         val text = repoFile("docs/versioning.md").readText()
@@ -581,6 +582,53 @@ class VersionAgreementTest {
             previous.single().range.first < text.indexOf(rows.single()),
         )
         assertFalse("the 1.8.1 row must not promise a 1.8.2", previous.single().value.contains("1.8.2"))
+    }
+
+    /**
+     * The 1.9.1 / 24 row: a PATCH for #129 — an asset's Home Assistant season link changed and
+     * removed on the phone, and linked, changed, stopped, resumed, forced and unlinked over the
+     * Developer API and MCP. It ships no schema or format step, so it names the schema and the
+     * format it leaves as they were (22 and 21), links `docs/api/v1.md` and release notes that
+     * exist, and names its tag. Anchored at the start of the row; `versionCode` 24 is claimed by
+     * this row and by nothing else, and the 1.9.0 row it follows is still there, once.
+     */
+    @Test fun versioningRecords191() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.9\.1\s*\|\s*24\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.9.1 / 24 row", 1, rows.size)
+        val row = rows.single()
+        assertTrue("the row must say it is a PATCH", row.contains("PATCH"))
+        assertTrue("the row must name #129", Regex("""#129\b""").containsMatchIn(row))
+        assertTrue(
+            "the row must say what the phone and the API gained",
+            row.contains(
+                "an asset's Home Assistant season link can be changed and removed on the phone, and linked, " +
+                    "changed, stopped, resumed, forced and unlinked over the Developer API and MCP",
+            ),
+        )
+        assertTrue(
+            "the row must name the schema and the format, unchanged",
+            Regex("""schema \*\*22\*\*.*format \*\*21\*\*.*unchanged""").containsMatchIn(row),
+        )
+        assertTrue("the row must link the contract", row.contains("`docs/api/v1.md`"))
+        assertTrue(
+            "the row must link the 1.9.1 release notes, which must exist",
+            row.contains("`docs/releases/1.9.1.md`") && repoFile("docs/releases/1.9.1.md").isFile,
+        )
+        assertTrue("the row must name its tag", row.contains("`servicetag-v1.9.1`"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 24",
+            1,
+            Regex("""^\|[^\n]*\|\s*24\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        val previous = Regex("""^\|\s*1\.9\.0\s*\|\s*23\s*\|.*$""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("the 1.9.0 / 23 row must still be there, once", 1, previous.size)
+        assertTrue(
+            "the 1.9.1 row must follow the 1.9.0 row",
+            previous.single().range.first < text.indexOf(rows.single()),
+        )
     }
 
     /**

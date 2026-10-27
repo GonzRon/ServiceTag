@@ -172,4 +172,10 @@
     <string name="season_sync_no_date_helpers">Home Assistantに日付ヘルパーが見つかりません。Home Assistantで作成するか、エンティティIDを手動で入力してください。</string>
     <string name="season_sync_no_match">検索に一致するエンティティはありません。</string>
     <string name="season_sync_only_first_shown">最初の%1$d件のみ表示しています。検索して絞り込んでください。</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">ヘルパーを変更</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">%1$sとのリンクを解除しますか？この機器はこのヘルパーに従わなくなり、現在のシーズンと履歴はそのまま残ります。Home Assistantとの接続とほかのリンクはそのままです。</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">リンクは次回の確認から、選んだヘルパーを読み取ります。この機器のシーズンの履歴はそのまま残ります。</string>
 </resources>

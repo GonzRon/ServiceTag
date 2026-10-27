@@ -172,4 +172,10 @@
     <string name="season_sync_no_date_helpers">未在 Home Assistant 中找到日期辅助元素。请在 Home Assistant 中创建一个，或手动输入实体 ID。</string>
     <string name="season_sync_no_match">没有与搜索匹配的实体。</string>
     <string name="season_sync_only_first_shown">仅显示前 %1$d 个。请通过搜索缩小范围。</string>
+    <!-- P129-1 -->
+    <string name="season_sync_change_helper">更改辅助元素</string>
+    <!-- P129-2 -->
+    <string name="season_sync_remove_link_confirm">要移除与 %1$s 的关联吗？此设备将不再跟随它，并保留当前的使用季和历史。与 Home Assistant 的连接和其他关联保持不变。</string>
+    <!-- P129-3 -->
+    <string name="season_sync_change_helper_sentence">从下一次检查起，关联将读取所选的辅助元素。此设备的使用季历史保持不变。</string>
 </resources>

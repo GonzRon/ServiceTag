@@ -205,6 +205,33 @@ class ResumeSeasonSync(
     }
 }
 
+/**
+ * #129 (L-C1; R16-14 narrowed) — **Remove link**: this asset's binding deleted, nothing else written; null when it
+ * had none. One write deletes the binding and reads whether another is enabled; no activation, event, asset column,
+ * schedule, other binding, connection, token or publishing row is touched, so the asset stays MANUAL at the phase its
+ * rows give it and, the binding gone, the season guard refuses nothing. After the commit the work is ensured while a
+ * binding is enabled, else cancelled ([StopSeasonSync]'s rule; the runner's cancel keeps an enabled #125 schedule
+ * binding's work). No refusal: a binding is device-local configuration, removable on a held, archived or retired asset
+ * too. A second run answers null and writes nothing, the scheduler included.
+ */
+class UnlinkSeasonSync(
+    private val bindings: SeasonSyncRepository,
+    private val scheduler: SeasonSyncScheduler,
+    private val uow: UnitOfWork,
+) {
+    suspend fun run(assetId: AssetId): SeasonSyncBinding? {
+        var anyEnabled = false
+        val removed = uow.write {
+            bindings.get(assetId)?.also {
+                bindings.delete(assetId)
+                anyEnabled = bindings.anyEnabled()
+            }
+        } ?: return null
+        if (anyEnabled) scheduler.ensure() else scheduler.cancel()
+        return removed
+    }
+}
+
 /** #16 (C17) — why a connection was not saved, before anything was written: a code, never a sentence. */
 enum class SaveHaConnectionRefusal {
     /** [HaEndpointPolicy] refused the address, whichever rule it was (P16-12). */

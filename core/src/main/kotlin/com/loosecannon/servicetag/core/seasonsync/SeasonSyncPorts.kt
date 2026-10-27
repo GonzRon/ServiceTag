@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.flowOf
 
 /**
  * #16 (C7, C11) — the device-local `season_sync_binding` table: at most one binding per asset. The schema's
- * CASCADEs take an asset's binding with the asset and a connection's bindings with the connection (C9); there is
- * no per-binding delete (R16-14).
+ * CASCADEs take an asset's binding with the asset and a connection's bindings with the connection (C9). #129 narrows
+ * R16-14: Disconnect deletes the connection and every binding, and Remove link ([delete]) deletes one.
  */
 interface SeasonSyncRepository {
     suspend fun get(assetId: AssetId): SeasonSyncBinding?
@@ -31,6 +31,12 @@ interface SeasonSyncRepository {
      * (C11, C13).
      */
     suspend fun update(binding: SeasonSyncBinding): Boolean
+
+    /**
+     * #129 (L-C2) — Remove link: [assetId]'s binding deleted, and nothing else; a missing row is a no-op. Both read
+     * flows emit again: [observeFor] `null`, [observeAll] the shorter list.
+     */
+    suspend fun delete(assetId: AssetId)
 
     suspend fun anyEnabled(): Boolean
 }

@@ -13,6 +13,9 @@ import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefusal
 import com.loosecannon.servicetag.core.seasonsync.ScheduleSeasonRefused
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefusal
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncLinkRefused
+import com.loosecannon.servicetag.core.seasonsync.SeasonSyncNotLinked
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
 import com.loosecannon.servicetag.core.usecase.AssetCycle
@@ -579,6 +582,21 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         422, "Unprocessable Content", "SCHEDULE_SEASON_CONFIRMATION_REQUIRED", scheduleSeasonConfirmationMessage(e),
         listOf("ScheduleSeasonConfirmationRequired(field=${e.field})"), e.field,
     )
+    // #129 (L-C8): an asset's link, change of helper or resume refused by its `SeasonSyncLinkRefusal` name, nothing
+    // written.
+    is SeasonSyncLinkRefused -> errorResponse(
+        409, "Conflict", "SEASON_SYNC_REFUSED", seasonSyncRefusalMessage(e.reason),
+        listOf("SeasonSyncLinkRefused(reason=${e.reason.name})"),
+    )
+    // #129 (L-C8, M5): a change of helper, a stop, a resume or a mode on an asset with no binding; nothing written.
+    is SeasonSyncNotLinked -> errorResponse(
+        409, "Conflict", "SEASON_SYNC_NOT_LINKED", "this asset has no season link; link it first",
+    )
+    // #129 (L-C8, M1): an action without the caller's own confirmation, or with one the action does not take.
+    is SeasonSyncConfirmationRequired -> errorResponse(
+        422, "Unprocessable Content", "SEASON_SYNC_CONFIRMATION_REQUIRED", seasonSyncConfirmationMessage(e),
+        listOf("SeasonSyncConfirmationRequired(field=${e.field})"), e.field,
+    )
     // #113/#114 (C25, C25a, C29b): a publishing refusal by its `PublishRefusal` name — `STALE_PLAN` its own code.
     is PublishRefused -> publishRefusedResponse(e)
     // #113/#114 (C35b; B3 review M2): a control on a kind the asset does not publish — no binding to change. The
@@ -797,6 +815,35 @@ private fun scheduleSeasonConfirmationMessage(e: ScheduleSeasonConfirmationRequi
         else -> "LINK needs confirmEntityId, exactly entityId, the caller's own confirmation"
     }
     ScheduleSeasonAction.LINK, ScheduleSeasonAction.UNLINK -> "${action.name} takes no ${e.field}"
+}
+
+/** #129 (L-C8): one developer sentence per [SeasonSyncLinkRefusal]; nothing was written. */
+private fun seasonSyncRefusalMessage(reason: SeasonSyncLinkRefusal): String = when (reason) {
+    SeasonSyncLinkRefusal.NOT_MAINTAINED_HERE -> "the asset is archived, retired or transferred out"
+    SeasonSyncLinkRefusal.NO_CONNECTION -> "no Home Assistant connection is saved on this phone"
+    SeasonSyncLinkRefusal.NEEDS_TOKEN -> "the Home Assistant token is not on this phone; enter it on the phone first"
+    SeasonSyncLinkRefusal.BAD_ENTITY_ID -> "entityId is not a Home Assistant entity id"
+    SeasonSyncLinkRefusal.ALREADY_LINKED ->
+        "this asset already has a season link; change its entity, resume it or unlink it first"
+    SeasonSyncLinkRefusal.OUTBOUND_TARGET -> "ServiceTag writes that helper, so it cannot follow it"
+}
+
+/**
+ * #129 (L-C8, M1): what the caller must send, or that the action takes no such key — chosen by the action alone, with
+ * [SeasonSyncConfirmationRequired.taken] read by `if`, never by the field.
+ */
+private fun seasonSyncConfirmationMessage(e: SeasonSyncConfirmationRequired): String = when (e.action) {
+    SeasonSyncAction.LINK, SeasonSyncAction.CHANGE_ENTITY -> if (e.taken) {
+        "${e.action.name} takes no ${e.field}"
+    } else {
+        "${e.action.name} needs confirmEntityId, exactly entityId, the caller's own confirmation"
+    }
+    SeasonSyncAction.UNLINK -> if (e.taken) {
+        "UNLINK takes no ${e.field}"
+    } else {
+        "UNLINK needs confirmUnlink: true, the caller's own confirmation"
+    }
+    SeasonSyncAction.STOP, SeasonSyncAction.RESUME, SeasonSyncAction.SET_MODE -> "${e.action.name} takes no ${e.field}"
 }
 
 /** #114 (C2): one developer sentence per [SeasonStartStrandCause]; the remedy is always the role first. */

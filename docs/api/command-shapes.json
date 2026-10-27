@@ -70,5 +70,8 @@
   },
   "scheduleSeason": {
     "keys": ["action", "entityId", "confirmEntityId", "confirmUnlink"]
+  },
+  "seasonSync": {
+    "keys": ["action", "entityId", "confirmEntityId", "mode", "confirmUnlink"]
   }
 }
