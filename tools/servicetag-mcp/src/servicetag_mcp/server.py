@@ -1645,6 +1645,10 @@ def update_group(
     `MEMBER_NOT_ELIGIBLE`: archived, retired or transferred out, year-round, or a child with no child of its own) or
     one another role already covers (cause `MEMBER_ALREADY_COVERED`). Its `problems` name the cause and the asset
     first, then each role schedule by id and title.
+
+    #124: taking an asset out of a group a live Season Start schedule targets is refused the same way (cause
+    `HAS_DEPENDENT_SCHEDULES`, naming those schedules) while a live schedule of that asset counts from its opening
+    service and no other live role would cover it: change when they start counting first.
     """
     supplied = {"description": description, "members": members}
     to_clear = _validate_clear_fields(clear_fields, _GROUP_CLEARABLE_FIELDS, supplied)
@@ -1688,7 +1692,12 @@ def archive_group(group_id: str, archived: bool = True) -> dict[str, Any]:
     #114: restoring (`archived=False`) a group a Season Start schedule targets is refused as
     `SEASON_START_STRANDED` (409), writing nothing, when the restored role would cover a member that may not have one
     (cause `RESTORE_NOT_ELIGIBLE`) or one another live role already covers (cause `RESTORE_ALREADY_COVERED`); clear a
-    role first."""
+    role first.
+
+    #124: archiving a group a live Season Start schedule targets is refused as `SEASON_START_STRANDED` (409, cause
+    `HAS_DEPENDENT_SCHEDULES`, naming those schedules), writing nothing, while a live schedule of an open member
+    counts from that member's opening service and no other live role would cover it: change when they start
+    counting first."""
     return _call(
         "POST",
         f"/v1/groups/{_path_id(group_id, field='group_id')}/archive",
@@ -2105,6 +2114,11 @@ def archive_schedule(
     #114: restoring (`archived=False`) a Season Start schedule is refused as `SEASON_START_STRANDED` (409), writing
     nothing, when its role would cover an asset that may not have one (cause `RESTORE_NOT_ELIGIBLE`) or one another
     live role already covers (cause `RESTORE_ALREADY_COVERED`, both schedules named); clear a role first.
+
+    #124: archiving a live Season Start schedule while a live schedule of an asset it covers counts from its opening
+    service is refused as `SEASON_START_STRANDED` (409, cause `HAS_DEPENDENT_SCHEDULES`, naming those schedules),
+    writing nothing: change when they start counting first. Restoring such a dependent is `SEASON_START_REFUSED`
+    (409, `NO_SEASON_START_SERVICE` or `YEAR_ROUND`) unless a live Season Start service covers its asset.
 
     When the asset publishes to Home Assistant, the phone may set its helper within seconds of this write, while the
     Developer API screen is open.
@@ -4578,7 +4592,9 @@ def set_schedule_role(
     `SEASON_START` takes `since_on` (`YYYY-MM-DD`, not after today) as the role's commissioning boundary, today when
     omitted: only completions dated on or after it can count. Setting the role a schedule already has with the same
     day writes nothing; another day moves only the boundary. `NONE` clears the role and its boundary; clearing a
-    schedule that has none writes nothing.
+    schedule that has none writes nothing. #124: clearing a live role while a live schedule of an asset it covers
+    counts from its opening service is 409 `SEASON_START_STRANDED` (cause `HAS_DEPENDENT_SCHEDULES`, naming those
+    schedules), writing nothing: change when they start counting first.
 
     **The QUICK election.** A `QUICK` (one-tap) schedule takes the role only with
     `season_start_quick_elected=True`, the owner's explicit election that its one-tap completions count as the
@@ -4587,7 +4603,8 @@ def set_schedule_role(
     `NONE` ignore it.
 
     Refusals, each writing nothing: an unknown schedule is `NO_SUCH_SCHEDULE` (404); `SEASON_START_REFUSED` (409)
-    names its reason in `problems` as `SeasonStartRefused(reason=…)` — `SCHEDULE_ARCHIVED`, `QUICK_NOT_ELECTED`,
+    names its reason in `problems` as `SeasonStartRefused(reason=…)` — `SCHEDULE_ARCHIVED`, `COUNTS_FROM_ITSELF`
+    (the schedule counts from the opening service, #124), `QUICK_NOT_ELECTED`,
     `NOT_MAINTAINED_HERE`, `YEAR_ROUND` or `LEAF_CHILD` (with the `assetId`), `ALREADY_COVERED` (with the `assetId`
     and the covering schedule's `scheduleId` and `title`; clear that role first), `GROUP_ARCHIVED`,
     `GROUP_HAS_NO_MEMBERS` or `DATE_IN_FUTURE`; a `since_on` that is not a `YYYY-MM-DD` date is

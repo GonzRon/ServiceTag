@@ -62,7 +62,11 @@ The phone supports:
 - polling every 12 hours, daily, weekly, or monthly;
 - HTTPS on any network, or a selected home Wi-Fi mode with optional background checks.
 
-See [Home Assistant season sync](home-assistant-season-sync.md) for setup and security details.
+See [Home Assistant: season sync and publishing](home-assistant-season-sync.md) for setup and security details.
+
+### Season Start service and Home Assistant publishing
+
+One schedule can be an Asset's **Season Start service**, and the Asset is **ready for the season** once that service is recorded on this phone on or after the later of the role's start date and the day its season last ended; other schedules can start counting from it, waiting with no date until it is done. An Asset can also **publish to Home Assistant**, each turned on separately: its recorded equipment status as `UP`, `DEGRADED` or `DOWN` to a dropdown helper, and its Season Start service date (or `1970-01-01` while it is not ready) to a date helper, through two allowlisted helper changes, read back, delivered when the phone can. ServiceTag reports these facts; Home Assistant's automations decide what the equipment does. One schedule can also follow a Home Assistant on/off helper of its own while the Asset keeps its season. The Assets list marks Assets linked to Home Assistant, those in season today and their recorded condition, and filters by condition.
 
 ## Supply items
 
@@ -160,7 +164,7 @@ ServiceTag includes a deliberately narrow automation surface:
 
 Automation calls the same application use cases used by the UI rather than maintaining a second business-logic path.
 
-The API can work with Assets, maintenance, documents/references, SupplyItems, Installed Components, replacement workflows, and other released surfaces. Home Assistant connection secrets and writes remain phone-controlled; season-sync state has a read-only API/MCP view.
+The API can work with Assets, maintenance, documents/references, SupplyItems, Installed Components, replacement workflows, and other released surfaces. The Home Assistant token, the connection, an Asset's season link and Disconnect remain phone-controlled; season-sync state, readiness and publishing can be read over the API and MCP, and the Season Start role, a schedule's own season link and the publishing controls can be driven there, never with a value to publish.
 
 See [Developer API v1](api/v1.md).
 
@@ -191,7 +195,7 @@ Those boundaries keep the core product focused on durable equipment identity and
 ## Related reading
 
 - [Local-first design, privacy, and permissions](local-first-and-permissions.md)
-- [Home Assistant season sync](home-assistant-season-sync.md)
+- [Home Assistant: season sync and publishing](home-assistant-season-sync.md)
 - [Developer API v1](api/v1.md)
 - [1.8.1 release notes](releases/1.8.1.md)
 - [1.8.0 release notes](releases/1.8.0.md)
