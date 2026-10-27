@@ -54,12 +54,19 @@ class PublishTriggers(
      */
     private val readBacks = Mutex()
 
+    /**
+     * The Job [start] returned, null before it: read only. It lives as long as [scope], so a wait for the app's start-up
+     * work on that scope leaves it out by identity (`SeasonSyncPlatformProofTest`).
+     */
+    @Volatile var started: Job? = null
+        private set
+
     /** The start pass, then, for the life of [scope], the observer and the midnight tick: all children of this Job. */
     fun start(): Job = scope.launch {
         launch { guarded { startPass() } }
         launch { observeWork() }
         launch { tick.run { guarded { midnightPass() } } }
-    }
+    }.also { started = it }
 
     /** Launches the resume pass and returns at once. */
     fun onResume() {
