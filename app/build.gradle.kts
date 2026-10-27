@@ -42,17 +42,22 @@ android {
         // `targetSdk` stays 36 on purpose: `targetSdk 37` plus the `DISPATCH_NFC_MESSAGE`
         // permission on the dispatch activity is Phase 7 (spec §5.8), not 1.2.
         targetSdk = 36
-        // 1.9.0 is a MINOR: new capabilities (#113 equipment status to Home Assistant, #114 the
+        // 1.9.1 is a PATCH: #129, an asset's Home Assistant season link can be changed and
+        // removed on the phone, and linked, changed, stopped, resumed, forced and unlinked over
+        // the Developer API and MCP. No schema or backup-format change — schema 22 / format 21,
+        // as 1.9.0, so a 1.9.1 archive restores into 1.9.0 and a 1.9.0 archive into 1.9.1
+        // (docs/versioning.md).
+        // (1.9.0 was a MINOR: new capabilities (#113 equipment status to Home Assistant, #114 the
         // Season Start service and its date, #116 the Assets list's marks and Condition filter,
         // #124 counting from the Season Start service, #125 a schedule's own Home Assistant
         // season) and the fixes #119, #121 and #123, with one forward-only step — schema 22 /
         // format 21 — so a 1.8.x archive restores into 1.9.0 and 1.8.x refuses a 1.9.0 one as
-        // newer (docs/versioning.md).
+        // newer.)
         // `versionCode` is +1 on every release and is never reset; it must agree with the tag
-        // `servicetag-v1.9.0` or the release workflow refuses to publish. VersionAgreementTest
+        // `servicetag-v1.9.1` or the release workflow refuses to publish. VersionAgreementTest
         // asserts these two against the schema and format numbers.
-        versionCode = 23
-        versionName = "1.9.0"
+        versionCode = 24
+        versionName = "1.9.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ndefTagPath"] = "/$tagExternalDomain:$tagTypeName"
