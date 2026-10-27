@@ -268,7 +268,7 @@ import kotlinx.coroutines.sync.Mutex
  * builder instead and this parameter is moot.
  */
 class FakeGraph(
-    queryContext: CoroutineContext = Dispatchers.Default,
+    private val queryContext: CoroutineContext = Dispatchers.Default,
     val db: AppDatabase = inMemoryDb(queryContext),
     /**
      * #16 (C18): the token store as `AppGraph` builds it, over the JDK's AES-GCM and a temporary no-backup directory.
@@ -921,9 +921,16 @@ class FakeGraph(
     val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
     val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
 
+    /**
+     * Cancels and joins every scope this graph owns before it closes [db]: [publishScope], whose job parents
+     * `dispatchScope`'s, and [seasonSyncScope]. A cancelled job not yet finished may still be inside a SQLite call on
+     * [queryContext], and closing the database under it is a native use-after-free.
+     */
     fun close() {
-        seasonSyncReads.cancel()
-        publishJobs.cancel()
+        cancelAndJoinBeforeClose(
+            mapOf("FakeGraph.publishScope" to publishJobs, "FakeGraph.seasonSyncScope" to seasonSyncReads),
+            queryContext,
+        )
         db.close()
     }
 
