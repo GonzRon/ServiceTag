@@ -171,8 +171,10 @@ internal class LinkSeasonSyncViewModel(
                 val mode = assets.get(target.assetId)?.seasonMode
                 _state.update { it.copy(sentence = mode?.let(::seasonSyncLinkSentence)) }
             }
-            // #125: the asset's mode is not changed by a schedule's link, so there is no sentence to reconcile.
-            is SeasonSyncSheetTarget.Schedule -> Unit
+            // #125: the asset's mode is not changed by a schedule's link, so there is no sentence to reconcile; and a
+            // schedule's binding is never stopped in 1.9.0 (H-3), so its sheet only links.
+            is SeasonSyncSheetTarget.Schedule ->
+                require(purpose == SeasonSyncSheetPurpose.LINK) { "a schedule's season is never resumed" }
         }
     }
 
@@ -216,8 +218,8 @@ internal class LinkSeasonSyncViewModel(
 
     /**
      * The sheet is going away without a Save — Cancel, back, a scrim tap or a swipe: a list read still running stops,
-     * which disconnects it. Each opening's model is keyed under the asset page and outlives its sheet, so nothing else
-     * would stop it.
+     * which disconnects it. Each opening's model is keyed under its page (the asset's, or the schedule's) and outlives
+     * its sheet, so nothing else would stop it.
      */
     fun dismiss() = closeBrowse()
 
@@ -306,7 +308,7 @@ internal class LinkSeasonSyncViewModel(
                             linkSchedule(target.scheduleId, asked.entityToLink)
                             Done(SeasonSheetExit.CLOSED)
                         }
-                        // A schedule's binding is never stopped in 1.9.0 (H-3), so there is nothing to resume.
+                        // Refused at construction (`init`); the arm is the exhaustive `when`'s, never reached.
                         SeasonSyncSheetPurpose.RESUME -> Done(SeasonSheetExit.CLOSED)
                     }
                 }

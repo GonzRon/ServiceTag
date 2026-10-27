@@ -20,13 +20,16 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.scheduleOf
+import com.loosecannon.servicetag.ui.asset.LinkSeasonSyncState
 import com.loosecannon.servicetag.ui.asset.LinkSeasonSyncViewModel
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_BAD_ENTITY_ID
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_ENTITY_ID_HELP
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_NOT_MAINTAINED_HERE
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_NO_READING_YET
 import com.loosecannon.servicetag.ui.asset.SeasonSheetExit
 import com.loosecannon.servicetag.ui.asset.SeasonSyncSheetPurpose
 import com.loosecannon.servicetag.ui.asset.SeasonSyncSheetTarget
+import com.loosecannon.servicetag.ui.asset.entityHelp
 import com.loosecannon.servicetag.ui.asset.seasonSyncOutboundTarget
 import com.loosecannon.servicetag.ui.asset.seasonSyncStartedFromHa
 import com.loosecannon.servicetag.ui.homeassistant.HA_COULD_NOT_REACH
@@ -173,8 +176,8 @@ class ScheduleSeasonRowViewModelTest {
     }
 
     /**
-     * Follow Home Assistant opens the sheet with the schedule as its target, a fresh opening each time; the browser
-     * shows only on/off helpers (`INPUT_BOOLEANS`); Save links the **schedule** — its binding, source `OWN`, and the
+     * Follow Home Assistant opens the sheet with the schedule as its target, a fresh opening each time, its entity help
+     * P125-8 rather than the asset's P16-43; the browser shows only on/off helpers (`INPUT_BOOLEANS`); Save links the **schedule** — its binding, source `OWN`, and the
      * post-link check asked — while the asset gets no binding and keeps its CALENDAR season.
      */
     @Test fun followOpensTheSheetForTheScheduleAndLinksOnlyTheSchedule() = runTest {
@@ -201,6 +204,8 @@ class ScheduleSeasonRowViewModelTest {
         }
         val opened = sheet(checkNotNull(model.now.sheet))
         assertNull("no asset mode is reconciled for a schedule", opened.state.value.sentence)
+        assertEquals(ENTITY_HELP, entityHelp(opened.state.value))
+        assertEquals(SEASON_SYNC_ENTITY_ID_HELP, entityHelp(LinkSeasonSyncState(SeasonSyncSheetPurpose.LINK)))
         assertEquals("nothing is read before Choose entity", 0, listReads)
         act { opened.chooseEntity() }
         assertEquals(listOf(helper), opened.state.value.browse?.rows?.map { it.entityId })
@@ -256,14 +261,56 @@ class ScheduleSeasonRowViewModelTest {
         )
     }
 
-    /** A token that is not on this phone is the binding's state line, P16-11, drawn once. */
+    /**
+     * A token that is not on this phone is the binding's state line, P16-11, and the runner's recorded `NEEDS_TOKEN`
+     * error says the same sentence: it is drawn once.
+     */
     @Test fun aMissingTokenIsSaidOnce() = runTest {
         heaterWith()
         connect()
         graph.linkScheduleSeason.run(schedule, helper)
+        graph.recordScheduleSeasonSyncResult.run(
+            schedule, readRevision = 1, startedAt = 1_000L, fetchedAt = 1_000L,
+            outcome = HaReadOutcome.NoDecision(SyncErrorKind.NEEDS_TOKEN, null),
+        )
+        assertEquals(SyncErrorKind.NEEDS_TOKEN, graph.scheduleSeasonBindings.get(schedule)?.errorKind)
         graph.secretStore.delete(checkNotNull(graph.haConnections.get()).id)
         val model = row()
         assertEquals(1, (model.now.statusLines + model.now.errorLines).count { it == HA_ENTER_TOKEN_AGAIN })
+    }
+
+    /**
+     * Follow is offered only on a live schedule of an asset maintained here: an archived schedule on its asset's
+     * season, with a connection saved, draws P125-1 and no Follow.
+     */
+    @Test fun anArchivedScheduleIsNotOfferedFollow() = runTest {
+        heaterWith()
+        connect()
+        graph.archiveSchedule.run(schedule, archived = true)
+        val model = row()
+        assertEquals(ScheduleSeasonRowKind.ASSET, model.now.kind)
+        assertEquals("Season: Example Heater's season", model.now.headline)
+        assertFalse(model.now.offersFollow)
+        act { model.follow() }
+        assertNull(model.now.sheet)
+    }
+
+    /** A stranded schedule whose asset is retired keeps Use the asset's season, and is not offered Follow. */
+    @Test fun aStrandedScheduleOnARetiredAssetIsNotOfferedFollow() = runTest {
+        heaterWith()
+        connect()
+        graph.linkScheduleSeason.run(schedule, helper)
+        graph.forgetHaConnection.run()
+        graph.assets.upsert(
+            assetRow(
+                "heater", name = "Example Heater", seasonMode = SeasonMode.CALENDAR, seasonStart = "11-01",
+                seasonEnd = "03-31", retiredOn = "2026-02-01",
+            ),
+        )
+        val model = row()
+        assertEquals(ScheduleSeasonRowKind.STRANDED, model.now.kind)
+        assertFalse(model.now.offersFollow)
+        assertTrue(model.now.offersUseAsset)
     }
 
     /**
@@ -366,6 +413,10 @@ class ScheduleSeasonRowViewModelTest {
     }
 
     private companion object {
+        /** P125-8, in its ratified words. */
+        const val ENTITY_HELP = "An on/off helper that is on while this schedule is in season, for example " +
+            "input_boolean.example_heater_service_season. Not the appliance's own power switch."
+
         const val STRANDS_PRE_SERVICE = "This schedule is done before the season starts, and a Home Assistant season " +
             "has no start date to be ready before. Change when it should be done first."
     }

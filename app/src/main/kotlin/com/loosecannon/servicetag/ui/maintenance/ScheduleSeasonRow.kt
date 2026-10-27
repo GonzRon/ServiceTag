@@ -75,7 +75,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// #125 (U-C8, §5) — a schedule's own season on its detail screen: the ratified sentences P125-1…7, each declared once
+// #125 (U-C8, §5) — a schedule's own season on its detail screen: the ratified sentences P125-1…8, each declared once
 // here; the words live in res/values/strings_maintenance.xml (`schedule_season_*`), each beside its P125 id. #16's
 // sentences are imported from the asset sheet's and the Home Assistant screen's files, never copied.
 
@@ -101,6 +101,9 @@ internal val SCHEDULE_SEASON_REFUSED_GROUP: String get() = localized(R.string.sc
 /** P125-7 — `STRANDS_PRE_SERVICE`. */
 internal val SCHEDULE_SEASON_REFUSED_STRANDS_PRE_SERVICE: String
     get() = localized(R.string.schedule_season_refused_strands_pre_service)
+
+/** P125-8 — the link sheet's entity helper for a schedule, in P16-43's place (H4 review I1, ratified 2026-10-26). */
+internal val SCHEDULE_SEASON_ENTITY_ID_HELP: String get() = localized(R.string.schedule_season_entity_id_help)
 
 /** P114-19, reused for `SCHEDULE_ARCHIVED`: the same resource the Season Start role's refusal reads. */
 private val SCHEDULE_SEASON_REFUSED_ARCHIVED: String get() = localized(R.string.season_start_refused_schedule_archived)

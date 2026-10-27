@@ -329,7 +329,7 @@
     <!-- P141-2: runs the reminder delivery repair. -->
     <string name="maintenance_repair_fix_delivery">Fix reminder delivery</string>
 
-    <!-- ============================================================ A schedule's own season (#125, P125-1…7) -->
+    <!-- ============================================================ A schedule's own season (#125, P125-1…8) -->
 
     <!-- P125-1: the schedule detail's season row, the schedule on its asset's season. %1$s: the asset's name. -->
     <string name="schedule_season_asset">Season: %1$s\'s season</string>
@@ -345,4 +345,6 @@
     <string name="schedule_season_refused_group">A group\'s schedule follows no season of its own.</string>
     <!-- P125-7: a link refused because a schedule done before the season starts would have no date to count back from (STRANDS_PRE_SERVICE). -->
     <string name="schedule_season_refused_strands_pre_service">This schedule is done before the season starts, and a Home Assistant season has no start date to be ready before. Change when it should be done first.</string>
+    <!-- P125-8: the link sheet's entity helper for a schedule (P16-43's place). input_boolean.example_heater_service_season is an example entity ID: keep it as is. -->
+    <string name="schedule_season_entity_id_help">An on/off helper that is on while this schedule is in season, for example input_boolean.example_heater_service_season. Not the appliance\'s own power switch.</string>
 </resources>

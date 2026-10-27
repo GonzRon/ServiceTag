@@ -46,6 +46,9 @@ import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.asset.CANCEL_BUTTON
 import com.loosecannon.servicetag.ui.asset.LinkSeasonSyncViewModel
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_CHOOSE_ENTITY
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_ENTER_MANUALLY
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_ENTITY_ID
+import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_ENTITY_ID_HELP
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_FOLLOW
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_NO_READING_YET
 import com.loosecannon.servicetag.ui.asset.SEASON_SYNC_SCOPE_LINE
@@ -149,8 +152,9 @@ class ScheduleSeasonScreensTest {
 
     /**
      * Follow Home Assistant opens the sheet expanded: its Choose entity row, Save and Cancel are on screen at once,
-     * with no scroll. The browser lists only the on/off helper; the pick and Save link the **schedule** — the row
-     * then says P125-2 — the post-link check is asked for it, and the asset gets no binding.
+     * with no scroll, and P125-8, never the asset's P16-43, on the row and the typed field. The browser lists only the on/off
+     * helper; the pick and Save link the **schedule** — the row then says P125-2 — the post-link check is asked for it,
+     * and the asset gets no binding.
      */
     @Test fun followOpensTheSheetFullyExpandedAndLinksTheSchedule() {
         connect()
@@ -163,6 +167,14 @@ class ScheduleSeasonScreensTest {
         rule.onAllNodesWithText(SEASON_SYNC_CHOOSE_ENTITY)[0].assertIsDisplayed()
         rule.onNodeWithText(SAVE_LABEL).assertIsDisplayed()
         rule.onNodeWithText(CANCEL_BUTTON).assertIsDisplayed()
+        // H4 review I1: a schedule's sheet draws P125-8, never the asset's P16-43, under the Choose entity row and
+        // under the typed field.
+        rule.awaitText(SCHEDULE_SEASON_ENTITY_ID_HELP)
+        none(SEASON_SYNC_ENTITY_ID_HELP)
+        rule.onNodeWithText(SEASON_SYNC_ENTER_MANUALLY).performClick()
+        rule.awaitText(SEASON_SYNC_ENTITY_ID)
+        rule.awaitText(SCHEDULE_SEASON_ENTITY_ID_HELP)
+        none(SEASON_SYNC_ENTITY_ID_HELP)
 
         rule.onAllNodesWithText(SEASON_SYNC_CHOOSE_ENTITY)[0].performClick()
         rule.awaitText(SEASON_SYNC_SCOPE_LINE)

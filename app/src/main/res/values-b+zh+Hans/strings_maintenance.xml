@@ -155,7 +155,7 @@
     <string name="maintenance_repair_turn_reminders_on">开启提醒</string>
     <string name="maintenance_repair_open_schedule">打开该计划</string>
     <string name="maintenance_repair_fix_delivery">修复提醒发送</string>
-    <!-- #125: P125-1…7, in order. -->
+    <!-- #125: P125-1…8, in order. -->
     <string name="schedule_season_asset">使用季：%1$s 的使用季</string>
     <string name="schedule_season_follows">使用季：跟随 Home Assistant 中的 %1$s</string>
     <string name="schedule_season_use_asset">使用设备的使用季</string>
@@ -163,4 +163,5 @@
     <string name="schedule_season_stranded">已不再关联到 Home Assistant：此保养计划保持其自身的使用季不变。请重新跟随 Home Assistant，或使用设备的使用季。</string>
     <string name="schedule_season_refused_group">组的保养计划没有自己的使用季。</string>
     <string name="schedule_season_refused_strands_pre_service">此保养计划需在使用季开始前完成，而 Home Assistant 的使用季没有可提前准备的开始日期。请先更改它应完成的时间。</string>
+    <string name="schedule_season_entity_id_help">一个开关型辅助元素，在此保养计划处于使用季内时为开启状态，例如 input_boolean.example_heater_service_season。不是电器本身的电源开关。</string>
 </resources>

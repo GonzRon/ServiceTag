@@ -43,6 +43,7 @@ import com.loosecannon.servicetag.core.seasonsync.MAX_LISTED_ENTITIES
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.attachments.SAVE_LABEL
 import com.loosecannon.servicetag.ui.components.QuietLine
+import com.loosecannon.servicetag.ui.maintenance.SCHEDULE_SEASON_ENTITY_ID_HELP
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
@@ -167,7 +168,7 @@ private fun LinkSeasonSyncForm(
                     value = state.entityId,
                     onValueChange = onEntityId,
                     label = { Text(SEASON_SYNC_ENTITY_ID) },
-                    supportingText = { Text(state.entityLine ?: SEASON_SYNC_ENTITY_ID_HELP) },
+                    supportingText = { Text(state.entityLine ?: entityHelp(state)) },
                     isError = state.entityLine != null,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
@@ -180,7 +181,12 @@ private fun LinkSeasonSyncForm(
                 )
                 TextButton(onClick = onChooseEntity) { Text(SEASON_SYNC_CHOOSE_ENTITY) }
             } else {
-                ChosenEntityRow(chosen = state.chosen, entityLine = state.entityLine, onChooseEntity = onChooseEntity)
+                ChosenEntityRow(
+                    chosen = state.chosen,
+                    help = entityHelp(state),
+                    entityLine = state.entityLine,
+                    onChooseEntity = onChooseEntity,
+                )
                 TextButton(onClick = onEnterManually) { Text(SEASON_SYNC_ENTER_MANUALLY) }
             }
         }
@@ -195,12 +201,26 @@ private fun LinkSeasonSyncForm(
 }
 
 /**
- * #105 — the form's entity row. Nothing chosen: Choose entity (P105-1) over P16-43's helper, the whole row a tap.
- * Chosen: the friendly name over the exact id (the id alone when Home Assistant gave no name) and Change (P105-2).
- * A shape refusal (P16-49) under it, as under the field, though a picked id cannot earn one.
+ * The entity's help under the field and the Choose entity row: P16-43 for an asset; for a schedule (#125, H4 review I1)
+ * P125-8, since P16-43 names the asset's own in-season helper, the wrong one for a schedule's own switch.
+ */
+internal fun entityHelp(state: LinkSeasonSyncState): String = when (state.scheduleTarget) {
+    false -> SEASON_SYNC_ENTITY_ID_HELP
+    true -> SCHEDULE_SEASON_ENTITY_ID_HELP
+}
+
+/**
+ * #105 — the form's entity row. Nothing chosen: Choose entity (P105-1) over [help] (P16-43, or P125-8), the whole row
+ * a tap. Chosen: the friendly name over the exact id (the id alone when Home Assistant gave no name) and Change
+ * (P105-2). A shape refusal (P16-49) under it, as under the field, though a picked id cannot earn one.
  */
 @Composable
-private fun ChosenEntityRow(chosen: HaEntityCandidate?, entityLine: String?, onChooseEntity: () -> Unit) {
+private fun ChosenEntityRow(
+    chosen: HaEntityCandidate?,
+    help: String,
+    entityLine: String?,
+    onChooseEntity: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -211,7 +231,7 @@ private fun ChosenEntityRow(chosen: HaEntityCandidate?, entityLine: String?, onC
         Column(modifier = Modifier.weight(1f)) {
             if (chosen == null) {
                 Text(SEASON_SYNC_CHOOSE_ENTITY, style = MaterialTheme.typography.titleSmall)
-                QuietLine(SEASON_SYNC_ENTITY_ID_HELP)
+                QuietLine(help)
             } else {
                 Text(chosen.friendlyName ?: chosen.entityId, style = MaterialTheme.typography.titleSmall)
                 if (chosen.friendlyName != null) QuietLine(chosen.entityId)
