@@ -331,6 +331,8 @@ class HaPublishPlatformProofTest {
         val fake = listen { serviceAnswer() }
         runBlocking { graph.secretStore.put(RUNNER_ID, Secret(TOKEN)) }
         storedConnectionIds += RUNNER_ID
+        val readable = runBlocking { graph.secretStore.get(RUNNER_ID) }?.value
+        assertEquals("the token is readable before its key goes", TOKEN, readable)
         androidKeyStore().deleteEntry(KeystoreSecretStore.ALIAS_PREFIX + RUNNER_ID)
         assertFalse("the key is gone, so the store holds no token", runBlocking { graph.secretStore.has(RUNNER_ID) })
         assertTrue(

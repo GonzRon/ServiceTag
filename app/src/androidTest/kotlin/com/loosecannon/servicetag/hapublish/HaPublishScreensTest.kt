@@ -147,6 +147,8 @@ class HaPublishScreensTest {
         // The connection's CASCADE takes the bindings and their deliveries; obligations have no foreign key.
         step { runBlocking { graph.uow.write { graph.haConnections.delete(CONNECTION_ID) } } }
         step { runBlocking { graph.uow.write { tombstoneIds.forEach { graph.publishDecommissions.delete(it) } } } }
+        // The works' rule again, with nothing stored: NONE, so a reconcile work a case's delivery request ensured goes.
+        step { runBlocking { graph.publishDispatch.reschedule() } }
         step { clearInstall() }
         failures.firstOrNull()?.let { throw it }
     }
@@ -291,6 +293,50 @@ class HaPublishScreensTest {
         rule.onAllNodesWithText(text(R.string.ha_publish_date_not_yet_cleared, DATE_ENTITY, INVALID_SERVICE_DATE))
             .assertCountEquals(0)
         rule.onAllNodesWithText(text(R.string.ha_publish_date_cannot_reach, DATE_ENTITY, INVALID_SERVICE_DATE))
+            .assertCountEquals(0)
+    }
+
+    /**
+     * Pins (F-16, C36): `1970-01-01` already in Home Assistant, read back at the current pair, draws the verified line
+     * (P113-11) for the invalid date and neither obligation sentence (P114-36, P114-37): nothing is owed. Stable under the
+     * app's own work: the projector computes the same value, and a current delivery is selected by no change pass.
+     */
+    @Test fun dateBlockMatchesDrawsTheVerifiedInvalidDateAndNoObligationLine() {
+        val at = millisOf(SEEN_AT)
+        val asset = dateBound {
+            PublishDelivery(
+                it.id, desiredValue = INVALID_SERVICE_DATE, desiredRevision = 1, desiredAt = at,
+                lastVerifiedValue = INVALID_SERVICE_DATE, lastVerifiedAt = at, verifiedBindingRevision = 1,
+                verifiedDesiredRevision = 1,
+            )
+        }
+        block(asset, PublishKind.SEASON_SERVICE_DATE)
+
+        rule.awaitText(text(R.string.ha_publish_matches, INVALID_SERVICE_DATE, localizedDateTime(SEEN_AT)))
+        rule.onAllNodesWithText(text(R.string.ha_publish_date_not_yet_cleared, DATE_ENTITY, INVALID_SERVICE_DATE))
+            .assertCountEquals(0)
+        rule.onAllNodesWithText(text(R.string.ha_publish_date_cannot_reach, DATE_ENTITY, INVALID_SERVICE_DATE))
+            .assertCountEquals(0)
+    }
+
+    /**
+     * Pins (F-16): a current error the owner must answer (`WRITE_FORBIDDEN`, NEEDS_OWNER) on a `1970-01-01` not yet read
+     * back draws the error's sentence (P113-18) and P114-37, never P114-36: the gate is open, the error holds the send.
+     * Stable: a change or scheduled pass skips a NEEDS_OWNER error at its pair, and a reconcile stops at the token gate.
+     */
+    @Test fun dateBlockErrorNeedingTheOwnerDrawsCannotReach() {
+        val asset = dateBound {
+            PublishDelivery(
+                it.id, desiredValue = INVALID_SERVICE_DATE, desiredRevision = 1, desiredAt = now(),
+                errorKind = PublishErrorKind.WRITE_FORBIDDEN, errorAt = now(), errorBindingRevision = 1,
+                errorDesiredRevision = 1,
+            )
+        }
+        block(asset, PublishKind.SEASON_SERVICE_DATE)
+
+        awaitText(R.string.ha_publish_write_forbidden)
+        rule.awaitText(text(R.string.ha_publish_date_cannot_reach, DATE_ENTITY, INVALID_SERVICE_DATE))
+        rule.onAllNodesWithText(text(R.string.ha_publish_date_not_yet_cleared, DATE_ENTITY, INVALID_SERVICE_DATE))
             .assertCountEquals(0)
     }
 
@@ -573,7 +619,10 @@ class HaPublishScreensTest {
         )
     }
 
-    /** The one connection: https on any network, background checks off; its token in the double only. */
+    /**
+     * The one connection: https on any network (the works' rule answers PERIODIC; the teardown applies it again with
+     * nothing stored); its token in the double only.
+     */
     private fun connect() = runBlocking {
         val now = now()
         graph.uow.write {
@@ -635,14 +684,19 @@ class HaPublishScreensTest {
 
     /**
      * A connection, a manual-season asset with no Season Start service (so C9 answers not ready and the desired value
-     * is `1970-01-01`), and its enabled, validated date binding on [installation], `1970-01-01` desired and not read back.
+     * is `1970-01-01`), and its enabled, validated date binding on [installation], with the delivery [delivery] makes —
+     * by default `1970-01-01` desired and not read back. Every delivery here desires `1970-01-01`, what the projector
+     * computes, so it writes nothing over the seed.
      */
-    private fun dateBound(installation: String = here()): AssetId {
+    private fun dateBound(
+        installation: String = here(),
+        delivery: (PublishBinding) -> PublishDelivery = {
+            PublishDelivery(it.id, desiredValue = INVALID_SERVICE_DATE, desiredRevision = 1, desiredAt = now())
+        },
+    ): AssetId {
         connect()
         val asset = heater(MANUAL_IN)
-        bind(binding(asset, PublishKind.SEASON_SERVICE_DATE, DATE_ENTITY, installation)) {
-            PublishDelivery(it.id, desiredValue = INVALID_SERVICE_DATE, desiredRevision = 1, desiredAt = now())
-        }
+        bind(binding(asset, PublishKind.SEASON_SERVICE_DATE, DATE_ENTITY, installation), delivery)
         return asset
     }
 
