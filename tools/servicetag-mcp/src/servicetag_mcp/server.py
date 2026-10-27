@@ -2090,7 +2090,10 @@ def update_schedule(
 @mcp.tool()
 def pause_schedule(schedule_id: str, paused: bool = True) -> dict[str, Any]:
     """Pause or resume a schedule. A paused one never notifies and never counts as due; it keeps its
-    history and its rule, and resuming picks the rule back up where it stands."""
+    history and its rule, and resuming picks the rule back up where it stands.
+
+    An archived schedule is refused as `SCHEDULE_ARCHIVED` (409), writing nothing: restore it with
+    `archive_schedule(archived=False)` first."""
     return _call(
         "POST",
         f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/pause",
@@ -4972,7 +4975,7 @@ def get_schedule_season(schedule_id: str) -> dict[str, Any]:
     `{scheduleId, seasonSource, seasonPhase, connection, binding, activations}`, answered as the phone sends it.
 
     On the phone an asset's season can be its calendar while one of its schedules follows its own Home Assistant
-    switch — a Season Start service due the day a "winterize season" switch turns on. `seasonSource` is `OWN` for such
+    switch — a Season Start service due the day a season switch turns on with the first frost. `seasonSource` is `OWN` for such
     a schedule and `ASSET` otherwise; only that schedule's due date moves, and readiness, publishing and the asset's
     season never read it. `seasonPhase` is `IN_SEASON` or `OUT_OF_SEASON`, the phase the schedule's due rules read
     today (its own season's, or its asset's), `null` for a group's schedule. `connection` is `get_season_sync`'s,

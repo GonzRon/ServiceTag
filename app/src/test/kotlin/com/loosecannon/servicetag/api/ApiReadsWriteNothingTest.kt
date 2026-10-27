@@ -187,16 +187,16 @@ class ApiReadsWriteNothingTest {
             graph.publishBindings.insert(
                 PublishBinding(
                     id = "example-binding-2", assetId = AssetId(tub), connectionId = "example-connection",
-                    kind = PublishKind.SEASON_SERVICE_DATE, entityId = "input_datetime.example_hot_tub_service_done",
+                    kind = PublishKind.SEASON_SERVICE_DATE, entityId = "input_datetime.example_heater_service_done",
                     enabled = true, revision = 2, activatedInstallationId = "example-installation", validatedAt = 1L,
-                    validatedRevision = 2, boundaryEntityId = "input_datetime.example_hot_tub_season_ended",
+                    validatedRevision = 2, boundaryEntityId = "input_datetime.example_heater_season_ended",
                     createdAt = 1L, updatedAt = 1L,
                 ),
             )
             graph.publishDeliveries.upsert(PublishDelivery("example-binding-2", null, 0, 1L))
             graph.seasonSyncBindings.insert(
                 SeasonSyncBinding(
-                    AssetId(tub), "example-connection", "input_boolean.example_hot_tub_in_season", SyncMode.FOLLOW,
+                    AssetId(tub), "example-connection", "input_boolean.example_heater_in_season", SyncMode.FOLLOW,
                     enabled = true, revision = 1, observedState = null, observedChangedAt = null, lastSuccessAt = null,
                     lastAttemptAt = null, errorKind = null, errorDetail = null, errorAt = null, appliedAction = null,
                     appliedOn = null, appliedAt = null, lastAppliedSource = null, createdAt = 1L, updatedAt = 1L,

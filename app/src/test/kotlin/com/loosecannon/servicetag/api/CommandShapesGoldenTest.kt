@@ -273,6 +273,12 @@ class CommandShapesGoldenTest {
             "installationId", "X-ServiceTag-Attachment", "sourcesDigest",
             // #91 (C2): the one new code, a role on a reference that is not a web link.
             "REFERENCE_ROLE_NOT_ALLOWED",
+            // 1.9.0: #114's role codes (C2, C10a), #113/#114's publishing codes (C29b, C35b), O-16's completion date
+            // (C39), #125's schedule-season codes (U-C7), and the schedule codes their routes answer.
+            "SEASON_START_STRANDED", "SEASON_START_REFUSED", "SEASON_START_DATE_INVALID", "HA_PUBLISH_REFUSED",
+            "STALE_PLAN", "HA_HELPER_READ_FAILED", "HA_PUBLISH_CONFIRMATION_REQUIRED", "NO_SUCH_DECOMMISSION",
+            "DECOMMISSION_STILL_PENDING", "COMPLETION_DATE_IN_FUTURE", "SCHEDULE_SEASON_REFUSED",
+            "SCHEDULE_SEASON_CONFIRMATION_REQUIRED", "SCHEDULE_ARCHIVED", "NO_SUCH_SCHEDULE",
         )) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }
