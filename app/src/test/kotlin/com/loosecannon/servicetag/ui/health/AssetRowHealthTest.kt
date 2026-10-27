@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.cancelAndJoinBeforeClose
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.replacementOf
@@ -23,6 +24,7 @@ import com.loosecannon.servicetag.testing.subjectRow
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,7 +55,13 @@ class AssetRowHealthTest {
     private val graph = FakeGraph().also { it.today = T }
     private val refreshes = MutableStateFlow(0)
 
-    @After fun tearDown() = graph.close()
+    /** The `backgroundScope` [collect] launched into; joined before the graph closes its database. */
+    private var background: CoroutineScope? = null
+
+    @After fun tearDown() {
+        background?.let { cancelAndJoinBeforeClose("AssetRowHealthTest.backgroundScope", it) }
+        graph.close()
+    }
 
     // --- seeding ---------------------------------------------------------------------------------
 
@@ -77,6 +85,7 @@ class AssetRowHealthTest {
     /** Every emission of [model]'s row health, for the length of the test. */
     private fun TestScope.collect(model: AssetHealthReadModel = graph.assetHealthReadModel): StateFlow<List<Map<AssetId, AssetHealthView>>> {
         val seen = MutableStateFlow(emptyList<Map<AssetId, AssetHealthView>>())
+        background = backgroundScope
         backgroundScope.launch { model.observeRowHealth(refreshes).collect { map -> seen.update { it + listOf(map) } } }
         return seen
     }

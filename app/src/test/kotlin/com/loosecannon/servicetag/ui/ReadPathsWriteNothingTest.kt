@@ -69,6 +69,7 @@ import com.loosecannon.servicetag.core.warranty.WarrantyStatus
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.cancelAndJoinBeforeClose
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.fakeContactReader
@@ -97,6 +98,7 @@ import com.loosecannon.servicetag.ui.service.ServiceCaseEditViewModel
 import com.loosecannon.servicetag.ui.service.ServiceCaseViewModel
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -129,7 +131,13 @@ class ReadPathsWriteNothingTest {
     private val graph = FakeGraph()
     private val writes = mutableListOf<String>()
 
-    @After fun tearDown() = graph.close()
+    /** The `backgroundScope` a test's collectors run in; joined before the graph closes its database. */
+    private var background: CoroutineScope? = null
+
+    @After fun tearDown() {
+        background?.let { cancelAndJoinBeforeClose("ReadPathsWriteNothingTest.backgroundScope", it) }
+        graph.close()
+    }
 
     /**
      * Yesterday's world: a mower on a calendar season that opens today, with an IN_SERVICE
@@ -205,6 +213,7 @@ class ReadPathsWriteNothingTest {
      * through `readState`, never rebuilt.
      */
     @Test fun observeRowHealthWritesNothing() = runTest {
+        background = backgroundScope
         seedAStaleWorld()
         graph.tags.upsert(
             TagBinding(
@@ -288,6 +297,7 @@ class ReadPathsWriteNothingTest {
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun theAssetDetailAndEditorLoadsWriteNothing() = runTest {
+        background = backgroundScope
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         // The two view models live in a store the test clears before Main goes back: this graph's
         // queries run on real threads, and a scope left running would resume on a Main that is gone.
@@ -363,6 +373,7 @@ class ReadPathsWriteNothingTest {
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun theServiceCaseLoadsWriteNothing() = runTest {
+        background = backgroundScope
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val store = ViewModelStore()
         fun <T : ViewModel> held(model: T): T = ViewModelProvider(
@@ -459,6 +470,7 @@ class ReadPathsWriteNothingTest {
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun theLoanLoadsWriteNothing() = runTest {
+        background = backgroundScope
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val store = ViewModelStore()
         fun <T : ViewModel> held(model: T): T = ViewModelProvider(

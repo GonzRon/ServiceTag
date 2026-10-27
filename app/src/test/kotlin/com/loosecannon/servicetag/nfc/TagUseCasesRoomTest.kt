@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.nfc
 
 import com.loosecannon.servicetag.testing.FakeTransferRecords
+import com.loosecannon.servicetag.testing.cancelAndJoinBeforeClose
 import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.model.Asset
@@ -125,6 +126,7 @@ class TagUseCasesRoomTest {
             tags.delete(row.id)
             latest.await("a delete") { it == emptyList<TagBinding>() }
         } finally {
+            cancelAndJoinBeforeClose("TagUseCasesRoomTest.backgroundScope", backgroundScope)
             db.close()
         }
     }

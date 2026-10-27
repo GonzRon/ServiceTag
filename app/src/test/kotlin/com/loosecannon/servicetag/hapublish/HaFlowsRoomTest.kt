@@ -12,9 +12,10 @@ import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomHaConnectionRepository
 import com.loosecannon.servicetag.data.room.RoomSeasonSyncRepository
 import com.loosecannon.servicetag.data.room.inMemoryDb
+import com.loosecannon.servicetag.testing.cancelAndJoinBeforeClose
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -41,7 +42,7 @@ class HaFlowsRoomTest {
     private val scope = CoroutineScope(Dispatchers.Default)
 
     @After fun close() {
-        scope.cancel()
+        cancelAndJoinBeforeClose(mapOf("HaFlowsRoomTest.scope" to scope.coroutineContext.job))
         db.close()
     }
 
