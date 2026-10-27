@@ -127,7 +127,10 @@ internal class SeasonSyncBlockViewModel(
     /** Android's own label for the background option, asked on API 30+ only. */
     private val backgroundOptionLabel: () -> String,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
-    /** #129 (L-C6): Remove link, core's `UnlinkSeasonSync`. A construction without it fails loudly when asked. */
+    /**
+     * #129 (L-C6): Remove link, core's `UnlinkSeasonSync`. Without it, reaching it is a wiring fault: it throws, and
+     * [command] reads it as a failed store (nothing written, nothing drawn).
+     */
     private val unlink: suspend (AssetId) -> Unit = NO_UNLINK,
 ) : ViewModel() {
 
@@ -196,10 +199,10 @@ internal class SeasonSyncBlockViewModel(
     /**
      * The confirm: the ask goes and this asset's binding is deleted through the shipped [command] (one in flight; a
      * store failure draws nothing). The binding flow then emits null, so the card offers Link again and Start and End
-     * return. A second tap finds no ask and does nothing.
+     * return. A second tap finds no ask and does nothing; a tap while another command runs leaves the ask up.
      */
     fun confirmRemoveLink() {
-        if (!pending.value.removeAsked) return
+        if (!pending.value.removeAsked || pending.value.busy) return
         pending.update { it.copy(removeAsked = false) }
         command { unlink(assetId) }
     }
@@ -360,7 +363,10 @@ internal class SeasonSyncBlockViewModel(
         /** API 30: background location is granted on the app's settings page, no longer in a dialog (C32). */
         const val SETTINGS_PAGE_API = 30
 
-        /** A card built without Remove link (#16's constructions): reaching it is a wiring fault, not a fallback. */
+        /**
+         * A card built without Remove link (#16's constructions): reaching it is a wiring fault: it throws, and
+         * [command] reads it as a failed store (nothing written, nothing drawn).
+         */
         val NO_UNLINK: suspend (AssetId) -> Unit = { error("this card was built without Remove link") }
     }
 }

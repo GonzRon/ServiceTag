@@ -274,6 +274,32 @@ class ChangeEntitySheetTest {
         }
     }
 
+    /**
+     * A stopped link's helper changes too: the edit stores it, the link stays stopped with its mode (nothing is read
+     * until Resume), no season row is written, and #78 is not asked.
+     */
+    @Test fun aStoppedLinksHelperChangesAndTheLinkStaysStopped() = runTest {
+        connect()
+        linked()
+        graph.stopSeasonSync.run(heater)
+        advanceUntilIdle()
+        val before = checkNotNull(binding())
+        val rowsBefore = graph.seasonActivations.forAsset(heater)
+        val sheet = open()
+        assertEquals(changeSentence, sheet.now.sentence)
+        act { sheet.enterManually() }
+        act { sheet.onEntityId(newHelper) }
+        act { sheet.save() }
+
+        val after = checkNotNull(binding())
+        assertEquals(newHelper, after.entityId)
+        assertFalse("the link stays stopped", after.enabled)
+        assertEquals("the mode is kept", before.mode, after.mode)
+        assertEquals("no season row written", rowsBefore, graph.seasonActivations.forAsset(heater))
+        assertNull(sheet.now.prompt)
+        assertEquals(SeasonSheetExit.CLOSED, sheet.now.finished)
+    }
+
     /** I2: under Force in season the sheet says the same P129-3, and the change keeps the stored mode. */
     @Test fun aForcedInLinksSheetShowsTheSameSentenceAndTheChangeKeepsItsMode() = runTest {
         connect()

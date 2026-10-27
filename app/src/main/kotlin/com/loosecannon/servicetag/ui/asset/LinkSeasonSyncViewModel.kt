@@ -78,12 +78,12 @@ internal data class EntityBrowseState(
 
 /**
  * #16 (C27) — the setup sheet as drawn, one immutable value. [sentence] is the asset's mode's reconciliation sentence
- * (P16-44/45/46), null until the asset is read; Save is held until it is there, so nothing is written before the owner
- * has seen it. [entityLine] is P16-49 under the field; [refusal] is S55 or another refusal's sentence, the sheet open;
+ * (P16-44/45/46), or for Change helper (#129) P129-3, null until the asset (or its stored helper) is read; Save is held
+ * until it is there, so nothing is written before the owner has seen it. [entityLine] is P16-49 under the field; [refusal] is S55 or another refusal's sentence, the sheet open;
  * [prompt] is #78's question after a written link or resume out of YEAR_ROUND; [finished] tells the screen to close.
  * #105: [chosen] is the candidate picked in the browser, [manualEntry] whether the typed field is shown instead of the
  * Choose entity row, and [browse] the browser while it is open; [entityToLink] is what Save sends — the picked id,
- * else the trimmed text — through the shipped link, unchanged.
+ * else the trimmed text — through the shipped link, unchanged, or, for Change helper, through the shipped edit.
  */
 internal data class LinkSeasonSyncState(
     val purpose: SeasonSyncSheetPurpose,
@@ -115,9 +115,13 @@ internal data class LinkSeasonSyncState(
         SeasonSyncSheetPurpose.CHANGE_ENTITY -> entityToLink.isNotEmpty() && entityToLink != storedEntityId
     }
 
-    /** The entity row, the browser and manual entry: Link and Change helper choose a helper; Resume names none. */
+    /**
+     * The entity row, the browser and manual entry: Link and Change helper choose a helper; Resume names none. Change
+     * helper draws them once the stored helper is read, so a pick or typed text is never overwritten by that read.
+     */
     val choosesEntity: Boolean get() = when (purpose) {
-        SeasonSyncSheetPurpose.LINK, SeasonSyncSheetPurpose.CHANGE_ENTITY -> true
+        SeasonSyncSheetPurpose.LINK -> true
+        SeasonSyncSheetPurpose.CHANGE_ENTITY -> storedEntityId != null
         SeasonSyncSheetPurpose.RESUME -> false
     }
 
@@ -126,7 +130,8 @@ internal data class LinkSeasonSyncState(
 
 /**
  * #16 (C27; R16-Q-C, R16-Q-G, R16-19) — the setup sheet's model. It reads the asset once for its sentence and writes
- * only through the shipped [LinkSeasonSync] or [ResumeSeasonSync] on Save; each refusal comes back as a code or a
+ * only through the shipped [LinkSeasonSync] or [ResumeSeasonSync] on Save, or, for Change helper (#129),
+ * `EditSeasonSyncEntity` through [changeEntity]; each refusal comes back as a code or a
  * shipped exception and is drawn as its ratified sentence. After a write that left YEAR_ROUND it asks #78's question
  * with core's [liveContinuousCount], never silently; the answer writes nothing.
  *
@@ -163,8 +168,9 @@ internal class LinkSeasonSyncViewModel(
 
     /**
      * #125's construction, as shipped: no Change helper. Kept as its own constructor, not as defaults on the two seams
-     * above, so a call passing [listEntities] last — positionally or as a trailing lambda — still binds it; reaching
-     * either seam from here is a wiring fault and fails loudly.
+     * above, so a call passing [listEntities] last — positionally or as a trailing lambda — still binds it. Reaching
+     * either seam from here is a wiring fault: [storedEntity] throws on opening; [changeEntity] throws inside Save,
+     * which reads it as a failed store (nothing written, nothing drawn).
      */
     constructor(
         target: SeasonSyncSheetTarget,
@@ -469,7 +475,10 @@ internal class LinkSeasonSyncViewModel(
         /** The asset sheet's constructions link no schedule; reaching this is a wiring fault, never a fallback. */
         val NO_SCHEDULE_LINK: suspend (ScheduleId, String) -> Unit = { _, _ -> error("this sheet links an asset") }
 
-        /** #125's construction has no Change helper; reaching either seam is a wiring fault, never a fallback. */
+        /**
+         * #125's construction has no Change helper; reaching either seam is a wiring fault, never a fallback: the first
+         * throws on opening, the second inside Save, which reads it as a failed store (nothing written, nothing drawn).
+         */
         val NO_STORED_ENTITY: suspend (AssetId) -> String? = { error("this sheet was built without Change helper") }
 
         val NO_CHANGE_ENTITY: suspend (AssetId, String) -> Unit =

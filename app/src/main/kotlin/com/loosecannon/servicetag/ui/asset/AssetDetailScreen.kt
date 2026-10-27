@@ -294,7 +294,8 @@ fun AssetDetailScreen(
         publishSheetOpening += 1
         publishSheet = kind
     }
-    // #16 (C27): the setup sheet, for Link or for Resume on an asset no longer MANUAL; each opening a fresh model.
+    // #16 (C27): the setup sheet, for Link or for Resume on an asset no longer MANUAL, or for Change helper (#129);
+    // each opening a fresh model.
     var syncSheet by rememberSaveable { mutableStateOf<SeasonSyncSheetPurpose?>(null) }
     var syncSheetOpening by rememberSaveable { mutableIntStateOf(0) }
     val openSyncSheet: (SeasonSyncSheetPurpose) -> Unit = { purpose ->

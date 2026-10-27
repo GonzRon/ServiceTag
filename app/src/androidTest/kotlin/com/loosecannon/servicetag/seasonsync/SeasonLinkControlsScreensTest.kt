@@ -179,7 +179,9 @@ class SeasonLinkControlsScreensTest {
     /**
      * (2) Pins: Change helper opens the setup sheet fully expanded on the stored helper — its id with Change (P105-2),
      * P129-3, Save and Cancel on screen with no scroll — Save held on the stored id and enabled once another is typed;
-     * Save changes the graph's binding and closes the sheet onto the card, which then follows the new helper.
+     * Save changes the graph's binding and closes the sheet onto the card, which then follows the new helper. Then
+     * Change helper again: the second opening is not seeded, so the screen builds the sheet from the graph with its own
+     * purpose — it must open as Change helper on the new helper (Save held), never as Link; Cancel writes nothing.
      */
     @Test fun changeHelperOpensTheSheetOnTheStoredHelperAndSavesAnother() {
         connect()
@@ -206,6 +208,17 @@ class SeasonLinkControlsScreensTest {
         rule.waitUntil(TIMEOUT_MS) { binding(heater)?.entityId == NEW_ENTITY_ID }
         rule.waitUntil(TIMEOUT_MS) { none(SEASON_SYNC_CHANGE_HELPER_SENTENCE) }
         rule.awaitText(seasonSyncFollows(NEW_ENTITY_ID))
+
+        // The screen's own wiring: opening 2 is the graph's sheet, built with the purpose the card asked for. It reads
+        // Room only; nothing is listed before Choose entity and nothing is written before Save.
+        rule.onNode(cardButton(SEASON_SYNC_CHANGE_HELPER)).performScrollTo().performClick()
+        rule.awaitText(SEASON_SYNC_CHANGE_HELPER_SENTENCE)
+        rule.onNodeWithText(NEW_ENTITY_ID).assertIsDisplayed()
+        rule.onNodeWithText(SEASON_SYNC_CHANGE_ENTITY).assertIsDisplayed()
+        rule.onNodeWithText(SAVE_LABEL).assertIsNotEnabled()
+        rule.onNodeWithText(CANCEL_BUTTON).performClick()
+        rule.waitUntil(TIMEOUT_MS) { none(SEASON_SYNC_CHANGE_HELPER_SENTENCE) }
+        assertEquals("Cancel writes nothing", NEW_ENTITY_ID, binding(heater)?.entityId)
     }
 
     /** (3) Pins: a helper this phone writes keeps the sheet open with P113-43 under the entity, and writes nothing. */

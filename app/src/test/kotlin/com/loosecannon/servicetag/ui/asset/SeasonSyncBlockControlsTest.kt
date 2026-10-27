@@ -163,15 +163,24 @@ class SeasonSyncBlockControlsTest {
         connect()
         linked()
         hold(heater)
-        val enabled = open().now
+        val enabledCard = open()
+        val enabled = enabledCard.now
         assertEquals(SeasonSyncBlockKind.ENABLED, enabled.kind)
         assertFalse(enabled.offersStop)
         assertTrue("held, enabled: neither", enabled.offersNeither())
+        act { enabledCard.askRemoveLink() }
+        assertNull("held: Remove link is never asked", enabledCard.now.removeAsk)
         graph.stopSeasonSync.run(heater)
-        val stopped = open().now
+        val stoppedCard = open()
+        val stopped = stoppedCard.now
         assertEquals(SeasonSyncBlockKind.STOPPED, stopped.kind)
         assertFalse(stopped.offersResume)
         assertTrue("held, stopped: neither", stopped.offersNeither())
+        act { stoppedCard.askRemoveLink() }
+        act { stoppedCard.confirmRemoveLink() }
+        assertNull("held, stopped: never asked", stoppedCard.now.removeAsk)
+        assertEquals("nothing removed", 0, unlinks)
+        assertNotNull(graph.seasonSyncBindings.get(heater))
 
         graph.assets.upsert(assetRow("example-sprinkler", name = "Example Sprinkler", seasonMode = SeasonMode.MANUAL))
         val none = open(AssetId("example-sprinkler")).now
