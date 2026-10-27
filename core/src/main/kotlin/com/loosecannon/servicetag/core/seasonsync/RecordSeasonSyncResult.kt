@@ -72,8 +72,9 @@ class RecordSeasonSyncResult(
      *
      * #129 (L-C3): [readEntityId] is the entity the read asked about. The runner passes it, and a result about another
      * entity than the stored binding's is dropped after the revision check, as #125's schedule applier does: a Remove
-     * link and a relink to another helper restart at revision 1. Null (a caller that names none) checks the revision
-     * alone.
+     * link and a relink to another helper restart at revision 1. A relink to the same helper is not told apart (#129
+     * limit 3): that late answer is a genuine reading of the helper and is recorded. Null (a caller that names none)
+     * checks the revision alone.
      */
     suspend fun run(
         assetId: AssetId,

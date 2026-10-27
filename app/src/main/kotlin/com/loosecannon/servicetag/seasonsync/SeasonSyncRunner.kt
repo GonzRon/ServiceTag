@@ -278,7 +278,9 @@ class SeasonSyncRunner(
             val fetchedAt = clock.nowMillis()
             // #129 (L-C3): the entity read rides with the revision, so a relink to another helper drops this answer.
             database {
-                record.run(binding.assetId, binding.revision, startedAt, fetchedAt, outcome, readEntityId = binding.entityId)
+                record.run(
+                    binding.assetId, binding.revision, startedAt, fetchedAt, outcome, readEntityId = binding.entityId,
+                )
             }
             outcomes += outcome
         }
