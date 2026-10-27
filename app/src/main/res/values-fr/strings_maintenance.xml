@@ -155,4 +155,12 @@
     <string name="maintenance_repair_turn_reminders_on">Activer les rappels</string>
     <string name="maintenance_repair_open_schedule">Ouvrir le plan</string>
     <string name="maintenance_repair_fix_delivery">Réparer l\'envoi des rappels</string>
+    <!-- #125: P125-1…7, in order. -->
+    <string name="schedule_season_asset">Saison : saison de %1$s</string>
+    <string name="schedule_season_follows">Saison : suit %1$s dans Home Assistant</string>
+    <string name="schedule_season_use_asset">Utiliser la saison de l\'équipement</string>
+    <string name="schedule_season_use_asset_confirm">Ne plus suivre Home Assistant ? Ce plan utilisera de nouveau la saison de %1$s, et son propre historique des saisons est conservé.</string>
+    <string name="schedule_season_stranded">N\'est plus lié à Home Assistant : ce plan garde sa propre saison telle qu\'elle était. Suivez de nouveau Home Assistant, ou utilisez la saison de l\'équipement.</string>
+    <string name="schedule_season_refused_group">Le plan d\'un groupe ne suit aucune saison qui lui soit propre.</string>
+    <string name="schedule_season_refused_strands_pre_service">Ce plan se fait avant le début de la saison, et une saison Home Assistant n\'a pas de date de début avant laquelle être prêt. Modifiez d\'abord quand il doit être fait.</string>
 </resources>

@@ -328,4 +328,21 @@
     <string name="maintenance_repair_open_schedule">Open the schedule</string>
     <!-- P141-2: runs the reminder delivery repair. -->
     <string name="maintenance_repair_fix_delivery">Fix reminder delivery</string>
+
+    <!-- ============================================================ A schedule's own season (#125, P125-1…7) -->
+
+    <!-- P125-1: the schedule detail's season row, the schedule on its asset's season. %1$s: the asset's name. -->
+    <string name="schedule_season_asset">Season: %1$s\'s season</string>
+    <!-- P125-2: the season row, the schedule following its own Home Assistant helper. %1$s: the entity ID. -->
+    <string name="schedule_season_follows">Season: follows %1$s in Home Assistant</string>
+    <!-- P125-3: the season row's action that returns the schedule to its asset's season. -->
+    <string name="schedule_season_use_asset">Use the asset\'s season</string>
+    <!-- P125-4: the confirm of P125-3. %1$s: the asset's name. -->
+    <string name="schedule_season_use_asset_confirm">Stop following Home Assistant? This schedule will use %1$s\'s season again, and its own season history is kept.</string>
+    <!-- P125-5: the season row, the schedule on its own season with no link (after Forget, or after an import). -->
+    <string name="schedule_season_stranded">No longer linked to Home Assistant: this schedule keeps its own season as it was. Follow Home Assistant again, or use the asset\'s season.</string>
+    <!-- P125-6: a link refused because the schedule is a group's (GROUP_TARGET). -->
+    <string name="schedule_season_refused_group">A group\'s schedule follows no season of its own.</string>
+    <!-- P125-7: a link refused because a schedule done before the season starts would have no date to count back from (STRANDS_PRE_SERVICE). -->
+    <string name="schedule_season_refused_strands_pre_service">This schedule is done before the season starts, and a Home Assistant season has no start date to be ready before. Change when it should be done first.</string>
 </resources>

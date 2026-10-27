@@ -54,7 +54,6 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
  * #78's question (P78-1a/1b, P78-2, P78-3) takes the sheet's place, and dismissing it answers P78-3, as in the
  * editor. [opening] keys a fresh model for each opening, kept across a rotation.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LinkSeasonSyncSheet(
     graph: AppGraph,
@@ -63,10 +62,29 @@ internal fun LinkSeasonSyncSheet(
     opening: Int,
     onReviewSchedules: () -> Unit,
     onDone: () -> Unit,
+) = LinkSeasonSyncSheet(
+    graph, SeasonSyncSheetTarget.Asset(AssetId(assetId)), purpose, opening, onReviewSchedules, onDone,
+)
+
+/**
+ * The same sheet for [target] (#125, U-C8): an asset's season, keyed as #16 keys it, or a schedule's own season, keyed
+ * under the schedule. Nothing else differs: the form, the browser, its `INPUT_BOOLEANS` scope and the expanded sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun LinkSeasonSyncSheet(
+    graph: AppGraph,
+    target: SeasonSyncSheetTarget,
+    purpose: SeasonSyncSheetPurpose,
+    opening: Int,
+    onReviewSchedules: () -> Unit,
+    onDone: () -> Unit,
 ) {
-    val model: LinkSeasonSyncViewModel = viewModel(key = "season-sync-sheet:$assetId:$opening") {
-        LinkSeasonSyncViewModel(graph, AssetId(assetId), purpose)
+    val key = when (target) {
+        is SeasonSyncSheetTarget.Asset -> "season-sync-sheet:${target.assetId.value}:$opening"
+        is SeasonSyncSheetTarget.Schedule -> "season-sync-sheet:schedule:${target.scheduleId.value}:$opening"
     }
+    val model: LinkSeasonSyncViewModel = viewModel(key = key) { LinkSeasonSyncViewModel(graph, target, purpose) }
     val state by model.state.collectAsStateWithLifecycle()
     val review by rememberUpdatedState(onReviewSchedules)
     val done by rememberUpdatedState(onDone)

@@ -155,4 +155,12 @@
     <string name="maintenance_repair_turn_reminders_on">रिमाइंडर चालू करें</string>
     <string name="maintenance_repair_open_schedule">शेड्यूल खोलें</string>
     <string name="maintenance_repair_fix_delivery">रिमाइंडर डिलीवरी ठीक करें</string>
+    <!-- #125: P125-1…7, in order. -->
+    <string name="schedule_season_asset">मौसम: %1$s का मौसम</string>
+    <string name="schedule_season_follows">मौसम: Home Assistant में %1$s के अनुसार चलता है</string>
+    <string name="schedule_season_use_asset">उपकरण का मौसम इस्तेमाल करें</string>
+    <string name="schedule_season_use_asset_confirm">Home Assistant के अनुसार चलना बंद करें? यह शेड्यूल फिर से %1$s का मौसम इस्तेमाल करेगा, और इसके अपने मौसम का इतिहास रखा रहेगा।</string>
+    <string name="schedule_season_stranded">अब Home Assistant से लिंक नहीं है: यह शेड्यूल अपना मौसम जैसा था वैसा ही रखता है। फिर से Home Assistant के अनुसार चलें, या उपकरण का मौसम इस्तेमाल करें।</string>
+    <string name="schedule_season_refused_group">किसी समूह के शेड्यूल का अपना कोई मौसम नहीं होता।</string>
+    <string name="schedule_season_refused_strands_pre_service">यह शेड्यूल मौसम शुरू होने से पहले किया जाता है, और Home Assistant के मौसम की कोई शुरुआती तारीख नहीं होती जिससे पहले तैयार रहा जा सके। पहले बदलें कि इसे कब किया जाना चाहिए।</string>
 </resources>

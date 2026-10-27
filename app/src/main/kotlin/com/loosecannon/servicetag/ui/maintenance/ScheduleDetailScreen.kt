@@ -349,6 +349,12 @@ fun ScheduleDetailScreen(
                 }
             }
 
+            // #125 (U-C8): the season this schedule's due dates read, and Follow Home Assistant; none on a group's.
+            if (!state.isGroup) {
+                Spacer(Modifier.height(12.dp))
+                ScheduleSeasonRow(graph = graph, scheduleId = scheduleId, editable = state.editable)
+            }
+
             if (state.isGroup && state.members.isNotEmpty()) {
                 MaintenanceSectionTitle(GROUPS_SECTION)
                 state.members.forEach { member ->

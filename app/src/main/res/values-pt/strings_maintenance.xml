@@ -155,4 +155,12 @@
     <string name="maintenance_repair_turn_reminders_on">Ativar lembretes</string>
     <string name="maintenance_repair_open_schedule">Abrir o plano</string>
     <string name="maintenance_repair_fix_delivery">Corrigir entrega de lembretes</string>
+    <!-- #125: P125-1…7, in order. -->
+    <string name="schedule_season_asset">Temporada: temporada de %1$s</string>
+    <string name="schedule_season_follows">Temporada: segue %1$s no Home Assistant</string>
+    <string name="schedule_season_use_asset">Usar a temporada do equipamento</string>
+    <string name="schedule_season_use_asset_confirm">Parar de seguir o Home Assistant? Este plano voltará a usar a temporada de %1$s, e o histórico de temporadas dele é mantido.</string>
+    <string name="schedule_season_stranded">Não está mais vinculado ao Home Assistant: este plano mantém a própria temporada como estava. Siga o Home Assistant de novo ou use a temporada do equipamento.</string>
+    <string name="schedule_season_refused_group">O plano de um grupo não segue uma temporada própria.</string>
+    <string name="schedule_season_refused_strands_pre_service">Este plano é feito antes do início da temporada, e uma temporada do Home Assistant não tem data de início para estar pronto antes dela. Primeiro, altere quando ele deve ser feito.</string>
 </resources>

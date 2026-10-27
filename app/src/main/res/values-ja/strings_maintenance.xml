@@ -155,4 +155,12 @@
     <string name="maintenance_repair_turn_reminders_on">リマインダーをオンにする</string>
     <string name="maintenance_repair_open_schedule">スケジュールを開く</string>
     <string name="maintenance_repair_fix_delivery">リマインダーの配信を修正</string>
+    <!-- #125: P125-1…7, in order. -->
+    <string name="schedule_season_asset">シーズン：%1$sのシーズン</string>
+    <string name="schedule_season_follows">シーズン：Home Assistantの%1$sに従っています</string>
+    <string name="schedule_season_use_asset">機器のシーズンを使う</string>
+    <string name="schedule_season_use_asset_confirm">Home Assistantに従うのをやめますか？このスケジュールは再び%1$sのシーズンを使います。このスケジュール独自のシーズンの履歴は残ります。</string>
+    <string name="schedule_season_stranded">Home Assistantとの連携はなくなりました。このスケジュールは独自のシーズンをそのまま保ちます。もう一度Home Assistantに従うか、機器のシーズンを使ってください。</string>
+    <string name="schedule_season_refused_group">グループのスケジュールは独自のシーズンに従いません。</string>
+    <string name="schedule_season_refused_strands_pre_service">このスケジュールはシーズン開始前に行うものですが、Home Assistantのシーズンには、それまでに準備する開始日がありません。先に、いつ行うかを変更してください。</string>
 </resources>

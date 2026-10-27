@@ -155,4 +155,12 @@
     <string name="maintenance_repair_turn_reminders_on">Erinnerungen einschalten</string>
     <string name="maintenance_repair_open_schedule">Plan öffnen</string>
     <string name="maintenance_repair_fix_delivery">Erinnerungszustellung reparieren</string>
+    <!-- #125: P125-1…7, in order. -->
+    <string name="schedule_season_asset">Saison: Saison von %1$s</string>
+    <string name="schedule_season_follows">Saison: folgt %1$s in Home Assistant</string>
+    <string name="schedule_season_use_asset">Saison des Geräts verwenden</string>
+    <string name="schedule_season_use_asset_confirm">Home Assistant nicht mehr folgen? Dieser Plan verwendet wieder die Saison von %1$s, und sein eigener Saisonverlauf bleibt erhalten.</string>
+    <string name="schedule_season_stranded">Nicht mehr mit Home Assistant verknüpft: Dieser Plan behält seine eigene Saison, wie sie war. Folge Home Assistant wieder oder verwende die Saison des Geräts.</string>
+    <string name="schedule_season_refused_group">Der Plan einer Gruppe folgt keiner eigenen Saison.</string>
+    <string name="schedule_season_refused_strands_pre_service">Dieser Plan wird vor Saisonbeginn erledigt, und eine Saison aus Home Assistant hat kein Startdatum, vor dem er fertig sein könnte. Ändere zuerst, wann er erledigt werden soll.</string>
 </resources>

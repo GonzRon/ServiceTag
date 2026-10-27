@@ -155,4 +155,12 @@
     <string name="maintenance_repair_turn_reminders_on">Включить напоминания</string>
     <string name="maintenance_repair_open_schedule">Открыть график</string>
     <string name="maintenance_repair_fix_delivery">Исправить доставку напоминаний</string>
+    <!-- #125: P125-1…7, in order. -->
+    <string name="schedule_season_asset">Сезон: сезон объекта %1$s</string>
+    <string name="schedule_season_follows">Сезон: следует за %1$s в Home Assistant</string>
+    <string name="schedule_season_use_asset">Использовать сезон объекта</string>
+    <string name="schedule_season_use_asset_confirm">Перестать следовать Home Assistant? Этот график снова будет использовать сезон объекта %1$s, а его собственная история сезонов сохранится.</string>
+    <string name="schedule_season_stranded">Больше не связан с Home Assistant: этот график сохраняет свой сезон таким, каким он был. Снова следуйте Home Assistant или используйте сезон объекта.</string>
+    <string name="schedule_season_refused_group">График группы не следует собственному сезону.</string>
+    <string name="schedule_season_refused_strands_pre_service">Этот график выполняется до начала сезона, а у сезона из Home Assistant нет даты начала, к которой можно подготовиться. Сначала измените, когда его нужно выполнять.</string>
 </resources>
