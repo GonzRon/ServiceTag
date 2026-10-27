@@ -195,7 +195,7 @@ def test_the_entity_tools_send_nothing_unless_the_confirmation_equals_the_entity
         with pytest.raises(ToolError, match="nothing was sent"):
             tool(name)(asset_id="a1", entity_id=HELPER, confirm_entity_id=confirmation)
     # Through the server, as a client calls it: a missing confirmation is never filled from the entity.
-    with pytest.raises(Exception):
+    with pytest.raises(ToolError):
         asyncio.run(server_module.mcp.call_tool(name, {"asset_id": "a1", "entity_id": HELPER}))
     assert paired.requests == []
 
@@ -210,7 +210,7 @@ def test_the_unlink_sends_nothing_unless_its_argument_is_true(paired) -> None:
         {"asset_id": "a1", "confirm_unlink": 1},
         {"asset_id": "a1", "confirm_unlink": False},
     ):
-        with pytest.raises(Exception):
+        with pytest.raises(ToolError):
             asyncio.run(server_module.mcp.call_tool("unlink_season_sync", arguments))
     assert paired.requests == []
 
@@ -325,7 +325,7 @@ def test_the_docstrings_name_their_route_body_answer_codes_and_limits() -> None:
         ),
         "unlink_season_sync": (
             '`{action: "UNLINK", confirmUnlink: true}`', "never fills it", "`SEASON_SYNC_CONFIRMATION_REQUIRED`",
-            "keeps its season and its history", "the connection and the other links stay",
+            "keeps its current season and history", "the connection and the other links stay",
         ),
     }
     for name, words in expectations.items():

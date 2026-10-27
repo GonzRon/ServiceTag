@@ -5227,8 +5227,8 @@ def set_season_sync_mode(asset_id: str, mode: str) -> dict[str, Any]:
 def unlink_season_sync(asset_id: str, confirm_unlink: Annotated[bool, Strict()]) -> dict[str, Any]:
     """Remove one asset's Home Assistant season link, the phone's **Remove link**: `POST /v1/assets/{id}/season-sync`
     with exactly `{action: "UNLINK", confirmUnlink: true}`. Only this asset's link is deleted, with its record of the
-    last change it made: the asset keeps its season and its history (the season rows the link recorded stay), stays
-    `MANUAL`, and its own season controls answer again; the connection and the other links stay. An asset with no link
+    last change it made: the asset keeps its current season and history (the season rows the link recorded stay), and
+    its own season controls answer again; the connection and the other links stay. An asset with no link
     answers the same, with nothing written.
 
     **`confirm_unlink` must be the caller's own `true`, given once the owner has said so.** Anything else is refused

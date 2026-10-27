@@ -151,7 +151,7 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_one_hundred_and_four() -> None:
+def test_tool_names_are_one_hundred_and_ten() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
     repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
     tools to sixty-three, #72's five loan tools to sixty-eight, #86's succession read to sixty-nine,

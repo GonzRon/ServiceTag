@@ -25,7 +25,7 @@ STATUS_21: dict = {
 STATUS_20: dict = dict(STATUS_21, schemaVersion=20)
 
 SEASON_SYNC_TOOLS = ("get_season_sync",)
-"""C25's one tool, the #16 block, appended after the shipped tools (R16-17) and followed only by #113/#114's block.
+"""C25's one tool, the #16 block, appended after the shipped tools (R16-17) and followed by #113/#114's block, #125's schedule season tools and #129's season link tools.
 The registered total was **90** after #16, **91** after #114's season readiness read, **93** after #114's
 role write and helper discovery, **95** after #113/#114's publishing reads, **97** after its Enable and Change
 target, **101** since its Disable, Check helper, Publish now and acknowledgement, **104** after #125's three

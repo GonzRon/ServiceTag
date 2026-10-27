@@ -198,7 +198,8 @@ is read-only until syncing stops, and the Developer API's season start, end and 
 - **Remove link** asks first: "Remove the link to %s? This asset stops following it and keeps its current season
   and history. Your Home Assistant connection and other links stay." It then deletes this Asset's link only. No
   season entry is written: the Asset stays started or ended by hand at the season it has, its season history stays,
-  and the card offers Start season, End season and Link to Home Assistant again. The connection, the token, the
+  and the card shows Start season or End season, according to the season's phase. It offers Link to Home Assistant
+  again only on an Asset maintained here, so not on an archived or retired one. The connection, the token, the
   other links and the publications stay; Disconnect is what removes them all. A date publication on the Asset then
   takes its season end from the phone, as after Stop syncing.
 - Change helper and Remove link are not offered on an Asset transferred out to another phone, just as Stop and

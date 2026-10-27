@@ -301,9 +301,13 @@ class CommandShapesGoldenTest {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }
         // 1.9.0: a code that is also a reason's name (`SCHEDULE_ARCHIVED`, `STALE_PLAN`) is named in many places, so
-        // each code is pinned by its own Errors-table row too.
+        // each code is pinned by its own Errors-table row too: a line that starts `| <status> | `CODE` |`, which the
+        // #129 subsection's code-first table does not match.
         for (code in ERROR_CODES_1_9_0 + ERROR_CODES_1_9_1) {
-            assertTrue("docs/api/v1.md has no Errors row for $code", "| `$code` |" in doc)
+            assertTrue(
+                "docs/api/v1.md has no Errors row for $code",
+                Regex("(?m)^\\| \\d{3} \\| `$code` \\|").containsMatchIn(doc),
+            )
         }
         for (path in listOf(
             "/v1/assets/{id}/season", "/v1/assets/{id}/season-mode", "/v1/assets/{id}/maintenance-break",

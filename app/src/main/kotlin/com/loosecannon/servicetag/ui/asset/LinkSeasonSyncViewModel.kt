@@ -79,7 +79,8 @@ internal data class EntityBrowseState(
 /**
  * #16 (C27) — the setup sheet as drawn, one immutable value. [sentence] is the asset's mode's reconciliation sentence
  * (P16-44/45/46), or for Change helper (#129) P129-3, null until the asset (or its stored helper) is read; Save is held
- * until it is there, so nothing is written before the owner has seen it. [entityLine] is P16-49 under the field; [refusal] is S55 or another refusal's sentence, the sheet open;
+ * until it is there, so nothing is written before the owner has seen it. [entityLine] is P16-49 under the field;
+ * [refusal] is S55 or another refusal's sentence, the sheet open;
  * [prompt] is #78's question after a written link or resume out of YEAR_ROUND; [finished] tells the screen to close.
  * #105: [chosen] is the candidate picked in the browser, [manualEntry] whether the typed field is shown instead of the
  * Choose entity row, and [browse] the browser while it is open; [entityToLink] is what Save sends — the picked id,
