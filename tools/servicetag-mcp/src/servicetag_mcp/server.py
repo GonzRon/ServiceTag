@@ -203,6 +203,14 @@ TOOL_NAMES: tuple[str, ...] = (
     "get_schedule_season",
     "link_schedule_season",
     "unlink_schedule_season",
+    # #129 (L-C9) — an asset's Home Assistant season link, each at the schema-22 minimum, after the "#125" block: link,
+    # change of helper, stop, resume, Follow or Force, and unlink, taking the total to 110.
+    "link_season_sync",
+    "change_season_sync_entity",
+    "stop_season_sync",
+    "resume_season_sync",
+    "set_season_sync_mode",
+    "unlink_season_sync",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -305,6 +313,15 @@ _HA_PUBLISHING_FEATURE = "season readiness and Home Assistant publishing"
 
 _SCHEDULE_SEASON_FEATURE = "a schedule's own Home Assistant season"
 """The feature a "#125" tool names when it refuses a phone below schema 22, the schema that carries it (U-C1)."""
+
+_MIN_SEASON_LINK_SCHEMA_VERSION = 22
+"""The lowest Room schema whose app can carry #129's write, `POST /v1/assets/{id}/season-sync`: #129 adds no schema,
+so every tool of the "#129" block refuses a phone below 22, with nothing sent. A 1.9.0 phone is at 22 too and has no
+such route: it answers the asset sub-resource's 404 `not_found` and writes nothing. No `appVersion` comparison is made
+(the owner's ruling D2): the 404 is the answer such a phone gives. The global write minimum stays 8."""
+
+_SEASON_LINK_FEATURE = "an asset's Home Assistant season link"
+"""The feature a "#129" tool names when it refuses a phone below schema 22."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan", "/v1/assets/{id}/ha-publishing-plan"}
@@ -446,6 +463,11 @@ def _require_ha_publishing_schema(tool: str) -> None:
 def _require_schedule_season_schema(tool: str) -> None:
     """A tool of the "#125" block, the read included, on a phone below schema 22."""
     _require_tool_schema(tool, _MIN_HA_PUBLISHING_SCHEMA_VERSION, _SCHEDULE_SEASON_FEATURE)
+
+
+def _require_season_link_schema(tool: str) -> None:
+    """A tool of the "#129" block, each a write, on a phone below schema 22."""
+    _require_tool_schema(tool, _MIN_SEASON_LINK_SCHEMA_VERSION, _SEASON_LINK_FEATURE)
 
 
 def _carries_supply_id(lines: Any) -> bool:
@@ -4505,8 +4527,9 @@ def replace_installed_component(
 #
 # One read-only route a phone below schema 21 does not have, so the tool refuses such a phone by name before anything
 # is sent. On the phone an asset can follow one Home Assistant on/off entity; the route shows that link's non-secret
-# state and status. Linking, the follow and force modes, Sync now, stopping, resuming and the connection itself are
-# the phone's alone: no tool writes any of them, and none returns the address, the home Wi-Fi's name or the token.
+# state and status. Since #129 the link itself — linking, the helper, stopping, resuming, Follow or Force and unlinking
+# — is written by the "#129" block below; Sync now, the connection, the token and Forget stay the phone's alone, and
+# no tool returns the address, the home Wi-Fi's name or the token.
 
 
 @mcp.tool()
@@ -4539,6 +4562,10 @@ def get_season_sync(asset_id: str) -> dict[str, Any]:
     While a binding is enabled the phone refuses `start_season`, `end_season` and a `set_season_mode` change on
     that asset. An unknown asset is `no_such_asset`. Needs a phone at schema 21 or later: an older one is refused
     with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+
+    This tool only reads. Since #129 the link is written by `link_season_sync`, `change_season_sync_entity`,
+    `stop_season_sync`, `resume_season_sync`, `set_season_sync_mode` and `unlink_season_sync`; Sync now, the
+    connection, the token and Forget stay the phone's alone.
     """
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-sync"
     _require_season_sync_schema("get_season_sync")
@@ -4961,8 +4988,9 @@ def acknowledge_ha_decommission(
 #
 # One path shape a phone below schema 22 does not have, read and written. On the phone a schedule may follow its own
 # Home Assistant switch while its asset keeps its season: only that schedule's due date moves. These three tools read
-# it, link it (Follow only) and unlink it, each with the caller's own confirmation; the asset's link, Force, the token,
-# the connection and Forget stay the phone's alone, and no answer carries the address, the Wi-Fi name or the token.
+# it, link it (Follow only) and unlink it, each with the caller's own confirmation; the token, the connection and Forget
+# stay the phone's alone, an asset's own link travels through the "#129" block below, and no answer carries the
+# address, the Wi-Fi name or the token.
 
 
 def _schedule_season_path(schedule_id: str) -> str:
@@ -5045,6 +5073,178 @@ def unlink_schedule_season(schedule_id: str, confirm_unlink: Annotated[bool, Str
     values = {"action": "UNLINK", "confirmUnlink": confirm_unlink}
     body = {key: values[key] for key in command_shapes.SCHEDULE_SEASON_KEYS if key in values}
     return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+# --- #129, an asset's Home Assistant season link (docs/api/v1.md, **An asset's season link over `/v1` (#129)**) ------
+#
+# The write beside #16's read: `POST /v1/assets/{id}/season-sync`, which a phone below schema 22 does not have, and
+# which a 1.9.0 phone, at schema 22 too, answers 404 `not_found` with nothing written. These six tools link an asset,
+# point its link at another helper, stop it, resume it, set Follow or Force, and unlink it, each through the phone's
+# own command. The link and the change take the caller's own `confirm_entity_id`, the unlink the caller's own
+# `confirm_unlink`; no tool fills either, and stop, resume and the mode take none, as the phone asks none. Each body is
+# built from the vendored golden keys alone. Sync now, the token, the connection and Forget stay the phone's alone, and
+# no answer carries the address, the Wi-Fi name or the token.
+
+
+def _season_link_path(asset_id: str) -> str:
+    return f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-sync"
+
+
+def _post_season_link(tool: str, path: str, values: dict[str, Any]) -> dict[str, Any]:
+    """The gate, then the one POST of a "#129" tool: the body in the golden file's order, from its keys alone, and never
+    re-sent on a dropped connection."""
+    _require_season_link_schema(tool)
+    body = {key: values[key] for key in command_shapes.SEASON_SYNC_KEYS if key in values}
+    return _call("POST", path, json_body=body, content_type="application/json", retry_on_connect=False)
+
+
+def _require_entity_confirmation(entity_id: str, confirm_entity_id: str | None) -> None:
+    if confirm_entity_id is None or confirm_entity_id != entity_id:
+        raise ToolError(
+            "confirm_entity_id must be exactly entity_id, the helper the owner confirmed; nothing was sent"
+        )
+
+
+@mcp.tool()
+def link_season_sync(asset_id: str, entity_id: str, confirm_entity_id: str | None = None) -> dict[str, Any]:
+    """Link one asset's season to a Home Assistant on/off helper, the phone's **Link to Home Assistant**:
+    `POST /v1/assets/{id}/season-sync` with exactly `{action: "LINK", entityId, confirmEntityId}`. The link starts in
+    `FOLLOW`: the helper's `on` starts the asset's season and `off` ends it, each dated the day the phone applies it.
+    A `CALENDAR` or `YEAR_ROUND` asset is switched into `MANUAL` at the season it has today, the switch dated today;
+    a `MANUAL` asset keeps its season and its history.
+
+    **`confirm_entity_id` must be the caller's own, exactly `entity_id`, given once the owner has confirmed that
+    helper.** Without it, or with another id, this tool sends nothing; it never fills it, and the phone refuses a link
+    without it (`SEASON_SYNC_CONFIRMATION_REQUIRED`, 422).
+
+    Answers `get_season_sync`'s shape plus `switchedFrom`: `CALENDAR` or `YEAR_ROUND` when the link switched the asset
+    into `MANUAL`, else `null`. The phone reads the helper at once and answers without waiting for it: read
+    `get_season_sync` for the check's outcome.
+
+    Refusals, each writing nothing: `SEASON_SYNC_REFUSED` (409) with `SeasonSyncLinkRefused(reason=…)` in `problems`
+    — `NOT_MAINTAINED_HERE` (archived, retired or transferred out), `NO_CONNECTION`, `NEEDS_TOKEN` (enter the token on
+    the phone), `BAD_ENTITY_ID`, `OUTBOUND_TARGET` (a helper the phone writes) or `ALREADY_LINKED` (a stopped link
+    too: change, resume or unlink it instead); `SEASON_MODE_STRANDS_POLICY` (409) when the switch into `MANUAL` would
+    strand a `PRE_SERVICE` schedule, naming it; `SEASON_START_STRANDED` (409) for any other refusal of that switch. An
+    unknown asset is `no_such_asset` (404). A 1.9.0 phone, at schema 22 too, has no such route: it answers 404
+    `not_found` and writes nothing. It is never re-sent on a dropped connection: read `get_season_sync` before running
+    it again. Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is
+    sent.
+    """
+    path = _season_link_path(asset_id)
+    _require_entity_confirmation(entity_id, confirm_entity_id)
+    values = {"action": "LINK", "entityId": entity_id, "confirmEntityId": confirm_entity_id}
+    return _post_season_link("link_season_sync", path, values)
+
+
+@mcp.tool()
+def change_season_sync_entity(asset_id: str, entity_id: str, confirm_entity_id: str | None = None) -> dict[str, Any]:
+    """Point one asset's Home Assistant season link at another helper, the phone's **Change helper**:
+    `POST /v1/assets/{id}/season-sync` with exactly `{action: "CHANGE_ENTITY", entityId, confirmEntityId}`. The old
+    helper's reading and error are cleared, the mode and the last change the link made are kept, the season history is
+    kept, and the phone reads the new helper at once when the link is not stopped. The change itself records no season
+    row; the new helper's first reading decides as any reading does, dated the day it is applied.
+
+    **`confirm_entity_id` must be the caller's own, exactly `entity_id`, given once the owner has confirmed that
+    helper.** Without it, or with another id, this tool sends nothing; it never fills it, and the phone refuses a
+    change without it (`SEASON_SYNC_CONFIRMATION_REQUIRED`, 422).
+
+    Answers `get_season_sync`'s shape plus `switchedFrom` (always `null` here). Refusals, each writing nothing:
+    `SEASON_SYNC_REFUSED` (409) with `SeasonSyncLinkRefused(reason=…)` in `problems` — `BAD_ENTITY_ID` or
+    `OUTBOUND_TARGET` (a helper the phone writes); `SEASON_SYNC_NOT_LINKED` (409) when the asset has no link, so link
+    it first. An unknown asset is `no_such_asset` (404). A 1.9.0 phone, at schema 22 too, has no such route: it
+    answers 404 `not_found` and writes nothing. It is never re-sent on a dropped connection: read `get_season_sync`
+    before running it again. Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD`
+    and nothing is sent.
+    """
+    path = _season_link_path(asset_id)
+    _require_entity_confirmation(entity_id, confirm_entity_id)
+    values = {"action": "CHANGE_ENTITY", "entityId": entity_id, "confirmEntityId": confirm_entity_id}
+    return _post_season_link("change_season_sync_entity", path, values)
+
+
+@mcp.tool()
+def stop_season_sync(asset_id: str) -> dict[str, Any]:
+    """Stop one asset's Home Assistant season link, the phone's **Stop syncing**: `POST /v1/assets/{id}/season-sync`
+    with exactly `{action: "STOP"}`. The link stays, stopped, with its helper, its mode and its last change; the asset
+    keeps its season as it is and nothing is recorded. From then on `start_season`, `end_season` and `set_season_mode`
+    no longer answer `SEASON_SYNC_ENABLED` on that asset. Stopping a stopped link writes nothing. The phone asks no
+    confirmation, and neither does this tool.
+
+    Answers `get_season_sync`'s shape plus `switchedFrom` (always `null` here). Refused, writing nothing, with
+    `SEASON_SYNC_NOT_LINKED` (409) when the asset has no link. An unknown asset is `no_such_asset` (404). A 1.9.0
+    phone, at schema 22 too, has no such route: it answers 404 `not_found` and writes nothing. It is never re-sent on
+    a dropped connection: read `get_season_sync` before running it again. Needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _season_link_path(asset_id)
+    return _post_season_link("stop_season_sync", path, {"action": "STOP"})
+
+
+@mcp.tool()
+def resume_season_sync(asset_id: str) -> dict[str, Any]:
+    """Resume one asset's stopped Home Assistant season link, the phone's **Resume syncing**:
+    `POST /v1/assets/{id}/season-sync` with exactly `{action: "RESUME"}`. An asset no longer `MANUAL` — set to
+    `CALENDAR` or `YEAR_ROUND` while the link was stopped — is switched back into `MANUAL` at the season it has today,
+    the switch dated today; then the link is enabled and the phone reads the helper at once, answering without waiting
+    for it. Resuming an enabled link writes nothing. The phone asks no confirmation, and neither does this tool.
+
+    Answers `get_season_sync`'s shape plus `switchedFrom`: `CALENDAR` or `YEAR_ROUND` when the resume switched the
+    asset into `MANUAL`, else `null`. Refusals, each writing nothing and leaving the link stopped:
+    `SEASON_SYNC_REFUSED` (409) with `SeasonSyncLinkRefused(reason=…)` in `problems` — `NOT_MAINTAINED_HERE`
+    (archived, retired or transferred out), `NO_CONNECTION` or `NEEDS_TOKEN` (enter the token on the phone);
+    `SEASON_SYNC_NOT_LINKED` (409) when the asset has no link; `SEASON_MODE_STRANDS_POLICY` (409) when the switch
+    into `MANUAL` would strand a `PRE_SERVICE` schedule, naming it; `SEASON_START_STRANDED` (409) for any other refusal
+    of that switch. An unknown asset is `no_such_asset` (404). A 1.9.0 phone, at schema 22 too, has no such route: it
+    answers 404 `not_found` and writes nothing. It is never re-sent on a dropped connection: read `get_season_sync`
+    before running it again. Needs a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD`
+    and nothing is sent.
+    """
+    path = _season_link_path(asset_id)
+    return _post_season_link("resume_season_sync", path, {"action": "RESUME"})
+
+
+@mcp.tool()
+def set_season_sync_mode(asset_id: str, mode: str) -> dict[str, Any]:
+    """Set how one asset's Home Assistant season link decides, the phone's three-way control:
+    `POST /v1/assets/{id}/season-sync` with exactly `{action: "SET_MODE", mode}`. `mode` is sent as given: `FOLLOW`
+    (Home Assistant's answer decides, from a fresh reading the phone asks for at once; a stored answer is never
+    reused), `FORCE_IN` or `FORCE_OUT` (the owner's forced season, applied now through the ordinary activation only when
+    today's season differs, and held whatever Home Assistant answers); any other name is the phone's 400, nothing
+    written. The same mode again writes nothing; a stopped link keeps the mode and acts on it once resumed. The phone
+    asks no confirmation, and neither does this tool.
+
+    Answers `get_season_sync`'s shape plus `switchedFrom` (always `null` here). Refused, writing nothing, with
+    `SEASON_SYNC_NOT_LINKED` (409) when the asset has no link. An unknown asset is `no_such_asset` (404). A 1.9.0
+    phone, at schema 22 too, has no such route: it answers 404 `not_found` and writes nothing. It is never re-sent on
+    a dropped connection: read `get_season_sync` before running it again. Needs a phone at schema 22 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _season_link_path(asset_id)
+    return _post_season_link("set_season_sync_mode", path, {"action": "SET_MODE", "mode": mode})
+
+
+@mcp.tool()
+def unlink_season_sync(asset_id: str, confirm_unlink: Annotated[bool, Strict()]) -> dict[str, Any]:
+    """Remove one asset's Home Assistant season link, the phone's **Remove link**: `POST /v1/assets/{id}/season-sync`
+    with exactly `{action: "UNLINK", confirmUnlink: true}`. Only this asset's link is deleted, with its record of the
+    last change it made: the asset keeps its season and its history (the season rows the link recorded stay), stays
+    `MANUAL`, and its own season controls answer again; the connection and the other links stay. An asset with no link
+    answers the same, with nothing written.
+
+    **`confirm_unlink` must be the caller's own `true`, given once the owner has said so.** Anything else is refused
+    here and nothing is sent; this tool never fills it, and the phone refuses an unlink without it
+    (`SEASON_SYNC_CONFIRMATION_REQUIRED`, 422).
+
+    Answers `get_season_sync`'s shape plus `switchedFrom`, with `binding` and `switchedFrom` `null`. An unknown asset
+    is `no_such_asset` (404). A 1.9.0 phone, at schema 22 too, has no such route: it answers 404 `not_found` and
+    writes nothing. It is never re-sent on a dropped connection: read `get_season_sync` before running it again. Needs
+    a phone at schema 22 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = _season_link_path(asset_id)
+    if confirm_unlink is not True:
+        raise ToolError("confirm_unlink must be true, the owner's own word; nothing was sent")
+    values = {"action": "UNLINK", "confirmUnlink": confirm_unlink}
+    return _post_season_link("unlink_season_sync", path, values)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

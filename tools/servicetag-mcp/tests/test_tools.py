@@ -131,6 +131,13 @@ EXPECTED_TOOLS = (
     "get_schedule_season",
     "link_schedule_season",
     "unlink_schedule_season",
+    # #129 (L-C9): an asset's Home Assistant season link, linked, changed, stopped, resumed, set and unlinked.
+    "link_season_sync",
+    "change_season_sync_entity",
+    "stop_season_sync",
+    "resume_season_sync",
+    "set_season_sync_mode",
+    "unlink_season_sync",
 )
 
 
@@ -152,14 +159,14 @@ def test_tool_names_are_one_hundred_and_four() -> None:
     tools to eighty-four, #47's five installed-component tools to eighty-nine, #16's season sync read to ninety, and
     #114's season readiness read to ninety-one, #114's role write and helper discovery to ninety-three, and #113/#114's
     publishing read to ninety-four, its collection read to ninety-five, its Enable and Change target to
-    ninety-seven, its Disable, Check helper, Publish now and acknowledgement to one hundred and one, and #125's
-    schedule season read, link and unlink take it to one hundred and four; `TOOL_NAMES`, the registered tools and the
-    guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 104
-    assert len(server_module.TOOL_NAMES) == 104
+    ninety-seven, its Disable, Check helper, Publish now and acknowledgement to one hundred and one, #125's
+    schedule season read, link and unlink to one hundred and four, and #129's six season link tools take it to one
+    hundred and ten; `TOOL_NAMES`, the registered tools and the guard's `expected_count` all agree."""
+    assert len(EXPECTED_TOOLS) == 110
+    assert len(server_module.TOOL_NAMES) == 110
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 104
+    assert len(registered) == 110
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -1032,11 +1039,11 @@ def test_import_merge_docs_say_formats_1_to_21_twenty_four_tables_and_the_four_r
 
 
 def test_the_readme_names_every_tool_the_supply_gate_and_the_installed_component_gate() -> None:
-    """#15's C28, #47's C24, #16's C25 and #114's C29: the README's tool list counts one hundred and four and names each tool,
+    """#15's C28, #47's C24, #16's C25 and #114's C29: the README's tool list counts one hundred and ten and names each tool,
     the schema-18 gate and the line key, the schema-19 gate, and the schema-21 and schema-22 gates."""
     readme = " ".join(README.read_text(encoding="utf-8").split())
     tools = readme.split("## The tools", 1)[1]
-    assert tools.lstrip().startswith("One hundred and four:"), tools[:40]
+    assert tools.lstrip().startswith("One hundred and ten:"), tools[:40]
     for name in EXPECTED_TOOLS:
         assert f"`{name}`" in readme, name
     assert "The supply tools need schema 18." in readme

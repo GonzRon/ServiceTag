@@ -67,7 +67,8 @@ the one body key it is about, then the `problems` in parentheses.
   `asset_id`, each keeps exactly the minimum it had. The minima are therefore 8 for every write, 11 for the warranty
   tools, 12 for the case tools, 13 for the loan tools, 15 for the succession tool, 16 for the #92 tools, 18 for the
   supply tools and a linked line, 19 for the installed component tools, 20 for a supply item or installed
-  component owner on the five resource tools, 21 for the season sync tool and 22 for the #113/#114 tools.
+  component owner on the five resource tools, 21 for the season sync tool and 22 for the #113/#114, #125 and #129
+  tools.
 - **The season sync tool needs schema 21.** `get_season_sync` — a read — refuses an app whose `schemaVersion` is
   below 21 the same way, from the same read, naming the feature "Home Assistant season sync".
 - **The season readiness tool needs schema 22.** `get_season_readiness` — a read, and the first of the #113/#114
@@ -79,6 +80,11 @@ the one body key it is about, then the `problems` in parentheses.
 - **The schedule season tools need schema 22.** `get_schedule_season`, `link_schedule_season` and
   `unlink_schedule_season` (#125) refuse an app whose `schemaVersion` is below 22 the same way, from the same read,
   naming the feature "a schedule's own Home Assistant season".
+- **The season link tools need schema 22.** `link_season_sync`, `change_season_sync_entity`, `stop_season_sync`,
+  `resume_season_sync`, `set_season_sync_mode` and `unlink_season_sync` (#129) refuse an app whose `schemaVersion` is
+  below 22 the same way, from the same read, naming the feature "an asset's Home Assistant season link". ServiceTag
+  1.9.0 is at schema 22 too but has no such route: it answers each of them `404 not_found` and writes nothing. No
+  app version is compared.
 
 ## Using it
 
@@ -121,7 +127,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-One hundred and four: `pair` plus one per API operation.
+One hundred and ten: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -341,8 +347,9 @@ by the id a caller sends, and adding one writes no applicability row and no even
 only. On the phone an asset can follow one Home Assistant on/off entity; this shows that link's non-secret state and
 status — the connection's settings, the binding's mode and state, its last valid answer, the latest check that
 decided nothing and the last activation it recorded — and never the address, the home Wi-Fi's name or the token.
-Linking, the modes, Sync now, stopping and the connection are the phone's alone; while a binding is enabled,
-`start_season`, `end_season` and a `set_season_mode` change on that asset answer `SEASON_SYNC_ENABLED` (409).
+Since #129, linking, the helper, the modes, stopping, resuming and unlinking are the "#129" tools below; Sync now and
+the connection stay the phone's alone. While a binding is enabled, `start_season`, `end_season` and a
+`set_season_mode` change on that asset answer `SEASON_SYNC_ENABLED` (409).
 `docs/api/v1.md`'s **Home Assistant season sync (#16)** section is the contract.
 
 **Season readiness (#114; needs schema 22)** — `get_season_readiness`: `GET /v1/assets/{id}/season-readiness`, read
@@ -413,9 +420,27 @@ moves, and readiness and publishing never read it. `get_schedule_season` reads i
 its phase today, the connection's settings, its link and its own season rows. `link_schedule_season` sends
 `{action: "LINK", entityId, confirmEntityId}` only when `confirm_entity_id` is the caller's own, exactly `entity_id`;
 `unlink_schedule_season` sends `{action: "UNLINK", confirmUnlink: true}` only when `confirm_unlink` is the caller's own
-`true`. Neither fills its confirmation, and neither is re-sent on a dropped connection. Follow only: Force, the asset's
-own link, the token, the connection and Forget stay the phone's alone. `docs/api/v1.md`'s **A schedule's own Home
-Assistant season (#125)** section is the contract.
+`true`. Neither fills its confirmation, and neither is re-sent on a dropped connection. Follow only: Force, the token,
+the connection and Forget stay the phone's alone, and the asset's own link travels through the "#129" tools below.
+`docs/api/v1.md`'s **A schedule's own Home Assistant season (#125)** section is the contract.
+
+**An asset's Home Assistant season link (#129; needs schema 22)** — `link_season_sync`, `change_season_sync_entity`,
+`stop_season_sync`, `resume_season_sync`, `set_season_sync_mode` and `unlink_season_sync`, each one
+`POST /v1/assets/{id}/season-sync` through the phone's own command, answering `get_season_sync`'s shape plus
+`switchedFrom`. `link_season_sync` sends `{action: "LINK", entityId, confirmEntityId}` and
+`change_season_sync_entity` `{action: "CHANGE_ENTITY", entityId, confirmEntityId}`, each only when
+`confirm_entity_id` is the caller's own, exactly `entity_id`; `unlink_season_sync` sends
+`{action: "UNLINK", confirmUnlink: true}` only when `confirm_unlink` is the caller's own `true`. `stop_season_sync`
+sends `{action: "STOP"}`, `resume_season_sync` `{action: "RESUME"}` and `set_season_sync_mode`
+`{action: "SET_MODE", mode}` (`FOLLOW`, `FORCE_IN` or `FORCE_OUT`, passed as given): the phone asks no confirmation
+for those, and no tool adds one. No tool fills a confirmation, and none is re-sent on a dropped connection. A link or
+a resume of a `CALENDAR` or `YEAR_ROUND` asset switches it into `MANUAL` at today's season, and `switchedFrom` says
+so; a change of helper reads the new helper at once and keeps the season history; an unlink deletes that asset's
+link only, the asset keeping its season and its history. Refusals write nothing: `SEASON_SYNC_REFUSED` (409, by
+reason), `SEASON_SYNC_NOT_LINKED` (409), `SEASON_SYNC_CONFIRMATION_REQUIRED` (422), and for a link or a resume the
+shipped `SEASON_MODE_STRANDS_POLICY` and `SEASON_START_STRANDED`. A 1.9.0 phone answers each `404 not_found`, nothing
+written. Sync now, the token, the connection and Forget stay the phone's alone. `docs/api/v1.md`'s **An asset's
+season link over `/v1` (#129)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 

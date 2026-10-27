@@ -477,8 +477,8 @@ def test_b5w2s_four_tools_follow_b5w1s_in_order() -> None:
     names = server_module.TOOL_NAMES
     at = names.index("change_ha_publishing_target")
     assert names[at + 1:at + 5] == B5W2_TOOLS
-    assert names[-7:-3] == B5W2_TOOLS, "#125's three schedule season tools follow"
-    assert len(names) == 104
+    assert names[-13:-9] == B5W2_TOOLS, "#125's three schedule season tools and #129's six season link tools follow"
+    assert len(names) == 110
     for name in B5W2_TOOLS:
         registered = server_module.mcp._tool_manager.get_tool(name)
         assert registered is not None and registered.parameters.get("additionalProperties") is False, name

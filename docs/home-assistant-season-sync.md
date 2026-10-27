@@ -147,7 +147,8 @@ Open Settings › Utilities › **Home Assistant**.
   Wi-Fi. Refused or taken back later, background checks pause and the phone works as with Off, saying so on the
   screen.
 - **Disconnect** deletes the connection, every link, every publication and the token from this phone; linked Assets
-  keep their season and history. When a Season Start date is published, the screen first says how many date
+  keep their season and history. To unlink one Asset and keep everything else, use **Remove link** on its season
+  card (below). When a Season Start date is published, the screen first says how many date
   helpers still hold one, and Disconnect sets each to `1970-01-01` where it can; any it cannot reach keep their date
   until you clear them in Home Assistant, and stay listed on this screen until you do. Home Assistant cannot be told
   about the token from the phone, so delete the token in Home Assistant as well.
@@ -187,6 +188,21 @@ is read-only until syncing stops, and the Developer API's season start, end and 
   Home Assistant's answer, but it does not change the season until you choose Follow Home Assistant, which waits for
   a fresh check rather than reusing an old one.
 - **Stop syncing** leaves the season as it is, records nothing, and keeps the link for **Resume syncing**.
+- **Change helper** (beside Stop syncing, or beside Resume syncing on a stopped link) opens the same sheet on the
+  stored entity ID, with **Change** beside it, and says "The link reads the helper you choose from its next check.
+  This asset's season history stays as it is." Choose or type another helper and save: the old helper's answer and
+  problem are cleared, the mode and the last change are kept, and nothing is written to the season until the new
+  helper's first check, which decides as any check does, dated the day it is applied. Save waits until the helper
+  differs from the stored one. A stopped link reads nothing until Resume syncing, and a forced season holds whichever
+  helper is linked.
+- **Remove link** asks first: "Remove the link to %s? This asset stops following it and keeps its current season
+  and history. Your Home Assistant connection and other links stay." It then deletes this Asset's link only. No
+  season entry is written: the Asset stays started or ended by hand at the season it has, its season history stays,
+  and the card offers Start season, End season and Link to Home Assistant again. The connection, the token, the
+  other links and the publications stay; Disconnect is what removes them all. A date publication on the Asset then
+  takes its season end from the phone, as after Stop syncing.
+- Change helper and Remove link are not offered on an Asset transferred out to another phone, just as Stop and
+  Resume syncing are not; an archived or retired Asset offers both.
 - **An Asset no longer maintained here** (archived, retired or transferred out) is left alone; its link wakes up
   by itself when the Asset is maintained here again. A replaced Asset's successor has no link. An Asset that comes
   back from a transfer through its Transfer Pack returns without its link: link it again.
@@ -617,6 +633,12 @@ The [Developer API](api/v1.md) and the MCP show and drive the same things, never
 - **Season sync:** `GET /v1/assets/{id}/season-sync` and the MCP tool `get_season_sync` show a link's non-secret
   state: the connection's settings, the mode, the last check and problem, and the last change with where it came
   from.
+- **An Asset's link** (since #129): the same path's `POST` links (`link_season_sync`), changes the helper
+  (`change_season_sync_entity`), stops (`stop_season_sync`), resumes (`resume_season_sync`), sets Follow or Force
+  (`set_season_sync_mode`) and removes (`unlink_season_sync`) it, each through the phone's own command. Linking and
+  changing the helper need the caller's own confirmation of the entity, and removing it the caller's own `true`;
+  nothing fills either. A link or a resume reports in `switchedFrom` whether it switched a calendar or year-round
+  Asset to started and ended by hand. A phone running 1.9.0 answers these with a 404 and writes nothing.
 - **A schedule's own season:** `GET /v1/schedules/{id}/season-sync` (`get_schedule_season`) reads it, and the same
   path's `POST` links (Follow only, with the caller's own confirmation of the entity) and unlinks it
   (`link_schedule_season`, `unlink_schedule_season`).
@@ -631,8 +653,8 @@ The [Developer API](api/v1.md) and the MCP show and drive the same things, never
 
 No route and no tool takes a value, a date to publish or a ready flag: what is published is always worked out from
 the phone's own records. Phone-only, with no route or tool: the token, the address, Test connection, saving the
-connection, the home Wi-Fi's name and its capture, the location asks, Disconnect and what it sends first, an Asset's
-season link with Follow, Force, Sync now, Stop and Resume syncing, and which phone a publication was turned on on. No
+connection, the home Wi-Fi's name and its capture, the location asks, Disconnect and what it sends first, Sync now,
+and which phone a publication was turned on on. No
 answer carries the address, the home Wi-Fi's name or the token, and every route needs the Developer API screen open
 on the phone.
 
@@ -656,7 +678,7 @@ on the phone.
 - **A merge or a Transfer Pack can bring in another season change** for a linked Asset; the next check corrects it
   with at most one change.
 - **The last change is kept only on the link.** Season history lists the starts and ends like any other. Disconnect
-  deletes the link's record of its last change; the season history stays.
+  and Remove link delete the link's record of its last change; the season history keeps its entries.
 - **Proven on an emulator, not yet on a phone.** A phone's own Wi-Fi, its private DNS and Android's battery saving
   (Doze) have not been observed, and a background check's read of the Wi-Fi name is proven only on an emulator.
 - **The entity list shows one kind of helper at a time**, read through the REST states list: `input_boolean` for a

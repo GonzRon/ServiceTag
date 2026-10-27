@@ -40,10 +40,16 @@ HA_PUBLISHING_TOOLS = (
 one tool, taking the registered total to **91**, A4w appends two, taking it to **93**, and B5 appends the publishing
 read, taking it to **94**, B5r's collection read, **95**, B5w1's Enable and Change target, **97**, and B5w2's
 Disable, Check helper, Publish now and acknowledgement, **101**; #125's three schedule season tools follow the block,
-taking it to **104**."""
+taking it to **104**, and #129's six season link tools follow them, taking it to **110**."""
 
 SCHEDULE_SEASON_TOOLS = ("get_schedule_season", "link_schedule_season", "unlink_schedule_season")
 """#125's block (U-C7), appended after this one."""
+
+SEASON_LINK_TOOLS = (
+    "link_season_sync", "change_season_sync_entity", "stop_season_sync", "resume_season_sync", "set_season_sync_mode",
+    "unlink_season_sync",
+)
+"""#129's block (L-C9), appended after #125's."""
 
 READINESS_KEYS = {
     "assetId", "readyForSeason", "seasonServiceDoneOn", "reason", "roleScheduleId", "roleTarget", "roleSinceOn",
@@ -106,7 +112,9 @@ def test_the_block_is_appended_last_in_c1s_order() -> None:
     names = server_module.TOOL_NAMES
     at = names.index("get_season_sync") + 1
     assert names[at:at + len(HA_PUBLISHING_TOOLS)] == HA_PUBLISHING_TOOLS
-    assert names[at + len(HA_PUBLISHING_TOOLS):] == SCHEDULE_SEASON_TOOLS, "#125's block follows, closing the list"
+    after = at + len(HA_PUBLISHING_TOOLS)
+    assert names[after:after + len(SCHEDULE_SEASON_TOOLS)] == SCHEDULE_SEASON_TOOLS, "#125's block follows"
+    assert names[after + len(SCHEDULE_SEASON_TOOLS):] == SEASON_LINK_TOOLS, "#129's block closes the list"
 
 
 def test_it_reads_the_route_once_and_answers_the_body_as_sent(phone22) -> None:
@@ -443,11 +451,11 @@ def test_list_ha_publishing_is_registered_guarded_listed_last_and_takes_nothing(
     assert tool is not None and tool.parameters.get("additionalProperties") is False
     assert list(inspect.signature(server_module.list_ha_publishing).parameters) == []
     assert set(tool.parameters.get("properties", {})) == set()
-    assert server_module.TOOL_NAMES[-10] == "list_ha_publishing"
-    assert server_module.TOOL_NAMES[-11] == "get_ha_publishing"
-    assert server_module.TOOL_NAMES[-14:-3] == HA_PUBLISHING_TOOLS
+    assert server_module.TOOL_NAMES[-16] == "list_ha_publishing"
+    assert server_module.TOOL_NAMES[-17] == "get_ha_publishing"
+    assert server_module.TOOL_NAMES[-20:-9] == HA_PUBLISHING_TOOLS
     assert len(HA_PUBLISHING_TOOLS) == 11, "the block's tail pin"
-    assert len(server_module.TOOL_NAMES) == 104
+    assert len(server_module.TOOL_NAMES) == 110
 
 
 def test_the_collection_read_reads_the_route_once_and_answers_the_body_as_sent(phone22) -> None:

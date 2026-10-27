@@ -58,6 +58,8 @@ The phone supports:
 - **Force in season**
 - **Force out of season**
 - **Sync now**
+- **Change helper**, pointing the link at another helper while its season history stays;
+- **Remove link**, removing one Asset's link while its season, its history, the connection and the other links stay;
 - choosing the helper from a searchable list of Home Assistant's `input_boolean` entities, or entering its entity ID by hand;
 - polling every 12 hours, daily, weekly, or monthly;
 - HTTPS on any network, or a selected home Wi-Fi mode with optional background checks.
@@ -164,7 +166,7 @@ ServiceTag includes a deliberately narrow automation surface:
 
 Automation calls the same application use cases used by the UI rather than maintaining a second business-logic path.
 
-The API can work with Assets, maintenance, documents/references, SupplyItems, Installed Components, replacement workflows, and other released surfaces. The Home Assistant token, the connection, an Asset's season link and Disconnect remain phone-controlled; season-sync state, readiness and publishing can be read over the API and MCP, and the Season Start role, a schedule's own season link and the publishing controls can be driven there, never with a value to publish.
+The API can work with Assets, maintenance, documents/references, SupplyItems, Installed Components, replacement workflows, and other released surfaces. The Home Assistant token, the connection, Disconnect and Sync now remain phone-controlled; season-sync state, readiness and publishing can be read over the API and MCP, and an Asset's season link (link, change helper, stop, resume, Follow or Force, remove), the Season Start role, a schedule's own season link and the publishing controls can be driven there, each confirmation the caller's own and never with a value to publish.
 
 See [Developer API v1](api/v1.md).
 

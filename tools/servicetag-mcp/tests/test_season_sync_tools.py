@@ -28,8 +28,14 @@ SEASON_SYNC_TOOLS = ("get_season_sync",)
 """C25's one tool, the #16 block, appended after the shipped tools (R16-17) and followed only by #113/#114's block.
 The registered total was **90** after #16, **91** after #114's season readiness read, **93** after #114's
 role write and helper discovery, **95** after #113/#114's publishing reads, **97** after its Enable and Change
-target, **101** since its Disable, Check helper, Publish now and acknowledgement, and is **104** since #125's three
-schedule season tools, which `test_argument_guard.py` pins."""
+target, **101** since its Disable, Check helper, Publish now and acknowledgement, **104** after #125's three
+schedule season tools, and is **110** since #129's six season link tools, which `test_argument_guard.py` pins."""
+
+SEASON_LINK_TOOLS = (
+    "link_season_sync", "change_season_sync_entity", "stop_season_sync", "resume_season_sync", "set_season_sync_mode",
+    "unlink_season_sync",
+)
+"""#129's six writes of the asset's link (L-C9), the "#129" block; `test_season_link_tools.py` proves them."""
 
 CONNECTION_KEYS = {
     "configured", "needsToken", "cadence", "networkEligibility", "backgroundChecks", "backgroundAllowed",
@@ -86,13 +92,14 @@ def test_get_season_sync_is_registered_guarded_listed_last_and_takes_only_an_ass
     assert tool is not None and tool.parameters.get("additionalProperties") is False
     assert list(inspect.signature(server_module.get_season_sync).parameters) == ["asset_id"]
     assert set(tool.parameters.get("properties", {})) == {"asset_id"}
-    assert server_module.TOOL_NAMES[-len(SEASON_SYNC_TOOLS) - 14:-14] == SEASON_SYNC_TOOLS
+    assert server_module.TOOL_NAMES[-len(SEASON_SYNC_TOOLS) - 20:-20] == SEASON_SYNC_TOOLS
 
 
 def test_no_other_tool_speaks_of_season_sync_or_home_assistant() -> None:
-    """R16-9: one read and no write — no tool links, stops, resumes or checks a binding, or sets the connection."""
+    """R16-9, narrowed by #129 for the asset link: this read and #129's six writes, and no tool checks a binding (Sync
+    now) or sets the connection."""
     named = {name for name in server_module.TOOL_NAMES if "sync" in name or "home_assistant" in name}
-    assert named == set(SEASON_SYNC_TOOLS)
+    assert named == set(SEASON_SYNC_TOOLS) | set(SEASON_LINK_TOOLS)
 
 
 def test_it_reads_the_route_once_and_answers_the_body_as_sent(phone21) -> None:

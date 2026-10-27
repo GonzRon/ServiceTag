@@ -57,7 +57,7 @@ def test_the_vendored_key_lists_equal_the_golden_file() -> None:
     assert set(vendored) == {
         "asset", "schedule", "healthSubject", "serviceCase", "loan", "attachmentUpdate", "attachmentUpload",
         "materialize", "replaceDraft", "replaceSuccessor", "scheduleRole", "haPublishingPlan", "haPublishingAction",
-        "haPublishingAcknowledgement", "scheduleSeason",
+        "haPublishingAcknowledgement", "scheduleSeason", "seasonSync",
     }
     for name, entry in vendored.items():
         assert entry == shapes[name], name
