@@ -41,6 +41,7 @@ import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.maintenance.THE_SUBJECT_HEALTH_FOLLOWS
+import com.loosecannon.servicetag.ui.settleKeyboard
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -139,6 +140,9 @@ class HealthSubjectEditorTest {
         // Blank, the name's label carries the required mark.
         field("$NAME *").performTextInput("Engine")
         field(NAME).assertExists()
+        // The name keeps the focus, so a keyboard left up hides under each menu and dialog and comes back after it,
+        // late, shrinking the form under the next scroll and click: put it away before scrolling.
+        rule.settleKeyboard()
         rule.onNodeWithText(THE_WHOLE_ASSET).performScrollTo().performClick()
         rule.onNodeWithText(OVERDUE_MAINTENANCE).performScrollTo().performClick()
         rule.onNodeWithText("Oil change").performScrollTo().performClick()
